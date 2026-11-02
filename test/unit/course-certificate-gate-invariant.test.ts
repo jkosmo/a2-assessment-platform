@@ -64,6 +64,10 @@ function createFakeClient(certifications: CertRow[]) {
     courseSectionRead: {
       findMany: async () => [],
     },
+    // #934 skive 3: ingen hovedversjon er laget — alle lesinger teller.
+    courseVersion: {
+      findMany: async () => [],
+    },
     courseCompletion: {
       findUnique: async ({ where }: { where: unknown }) => {
         lookups.push(where);

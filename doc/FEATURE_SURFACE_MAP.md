@@ -143,6 +143,46 @@ are two distinct code paths + a relocated singleton to keep in sync when touchin
 
 **Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts test/e2e/participant-course-sequence.spec.ts test/e2e/participant-course-focus.spec.ts test/e2e/participant-section-advance.spec.ts` (~10s, no Docker/Postgres). `participant-inline-open` is the consistency guard (section + module both inline, one open, workspace relocated); `participant-course-sequence` guards the serial presentation; `participant-course-focus` guards list-vs-course state (#921/#922); `participant-section-advance` guards the combined advance button and the absent item-level discussion (#923/#924).
 
+## 6b. Course versions — minor or major (#934, 2.129.0)
+
+A certificate applies to the course's **major** version (`Course.versionMajor`/`versionMinor`,
+`CourseCompletion.versionMajor`); design and decisions in `doc/DESIGN_934.md`. The version rules live
+in `src/modules/course/courseVersioning.ts`. **Every** way content goes live in a course, or its version
+changes, calls ONE function — `applyCourseVersionChange` (or `applyMinorVersionToCoursesContaining`, which
+calls it) — that owns the holder check, the `course_version_required` rule, the row lock, the snapshot and
+the bump (product owner 2026-11-02: shared code, not duplicated logic). `test/course-version-write-guard.test.js`
+fails if anything else writes `Course.versionMajor/versionMinor` or `CourseVersion` rows. The three dialogs
+(form, «Publiser nye versjoner», «Publiser kurs») share one client helper, `mountCourseVersionChoice`.
+
+**Ways in:**
+
+| Surface | Code | Version |
+|---|---|---|
+| Course form, content changed (added / taken out / moved) | `admin-content-courses.js` `saveCourse` → `askCourseVersion` (`#courseVersionDialog`) → `PUT /courses/:id/content` `{ …, items, version }` → `updateCourse` → `setCourseItems` (one transaction) | The author's answer. Asked only when `certificateHolders > 0`; default minor; Cancel/Esc saves nothing. Title and content in ONE call to a separate endpoint (an old server answers 404 during a rollout). Unchanged content: `PUT /courses/:id` + `PUT …/items` as before. A new course: `POST` then `PUT …/items` |
+| Course form, only title/description | `PUT /courses/:id` → `updateCourse` | Minor, no question (compared as content, `sameLocalizedText`) |
+| «Publiser nye versjoner» | `#pendingPublishDialog` (`#pendingPublishVersion`) → `publishCoursePendingVersions` | The author's answer, one for the course; items + version in ONE transaction (all or nothing) |
+| Legacy `PUT …/modules` | `setCourseModules` | Minor |
+| Import `updateExisting` | `contentImportService.ts` | Minor — an update never adds required content to a published course (new modules become drafts outside it, new versions are laid ready and asked about when published). Title/description changed counts too; one bump per import |
+| Import `replaceExisting` | `importCourseFromEnvelope` (`version`) → `setCourseItems`/`setCourseModules` | With certificate holders: `version` required, else `400 course_version_required` before anything is written (product owner 2026-11-02). Without: minor, as before |
+| «Publiser kurs» with new (draft) items | `#cascadePublishDialog` (`#cascadePublishVersion`) → `POST …/publish` `{ publishItems, courseVersion }` → `publishCourseCascade` | The author's answer when the course has been out and has certificate holders; one transaction. First publish: 1.0, no question |
+| Section saved / published / renamed on its own page | `updateSectionContent`, `publishSection`, `updateSectionTitle` → `applyMinorVersionToCoursesContaining` | Minor for every course it is in (design: «Ingen — mindre for kursene») |
+| Module published on its own page, module import, calibration thresholds | `publishModuleVersion`, `publishModuleVersionWithThresholds` → `applyMinorVersionToCoursesContaining` | Minor for every course it is in — interim; the per-course major/minor choice is slice 5 |
+| Unpublish, archive, restore, plain republish with nothing new | — | No content goes live: no version |
+
+A course that has **never** been published gets no version (it becomes 1.0 at first publish). One that
+has been out — published now, has a slug, or has certificates — is versioned also while unpublished.
+A major version with nobody holding a certificate for the current major version becomes minor.
+
+**Section rule:** a major version writes `CourseVersion` rows (N−1: the section versions just before
+the change; N: just after). Every reader of «which sections has the participant read» goes through
+`courseRepository` (`findReadSectionIds`, `findReadSectionIdsForCourses`,
+`findReadSectionIdsForCourseParticipants`), which applies `readCountsForCurrentVersion`: the certificate
+gate, the course detail's `read`, progress in «Mine kurs» and the course report must agree.
+`markSectionRead` gives a read that no longer counts a new timestamp.
+**Guards:** `test/m2-course-versions-934.test.ts` (through the routes),
+`test/e2e/admin-content-course-version-934.spec.ts` (dialogs), `test/e2e/course-versions-934.spec.ts`
+(participant, certificate, profile, results).
+
 ## 6a. Course import — three modes (#433 / #1095)
 
 `POST /api/admin/content/courses/import` (`src/routes/adminCourses.ts` → `importCourseFromEnvelope`

@@ -174,8 +174,10 @@
         border-radius: var(--radius-card);
         box-shadow: 0 8px 32px rgba(0,0,0,.18);
         padding: var(--space-3);
-        max-width: 420px;
+        max-width: min(420px, calc(100vw - 24px));
         width: 100%;
+        /* #934 skive 3: bredde 100 % + utfylling fløt over på en telefon (QA-porten). */
+        box-sizing: border-box;
       }
       dialog::backdrop { background: rgba(0,0,0,.4); }
       .dialog-title { font-size: 18px; font-weight: 700; margin: 0 0 var(--space-1); }
@@ -190,6 +192,19 @@
       .course-theme-option { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--color-border-soft); border-radius: 999px; background: var(--color-surface); font-size: 14px; font-weight: 400; cursor: pointer; }
       .course-theme-option:has(input:checked) { border-color: var(--color-primary); background: var(--color-primary-tint); font-weight: 600; }
       .course-theme-option input { width: 18px; height: 18px; margin: 0; accent-color: var(--color-primary); }
+      /* #934 skive 3: «Hva slags endring er dette?» — to valg med konsekvensen skrevet ut under. */
+      #courseVersionDialog { max-width: min(620px, calc(100vw - 24px)); }
+      .course-version-choices { border: none; padding: 0; margin: var(--space-2) 0; min-width: 0; display: grid; gap: 8px; }
+      .course-version-legend { font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 4px; }
+      .course-version-choice { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--color-border-soft); border-radius: 10px; background: var(--color-surface); font-weight: 400; cursor: pointer; }
+      .course-version-choice:has(input:checked) { border: 2px solid var(--color-primary); padding: 11px 13px; background: var(--color-primary-tint); }
+      .course-version-choice input { width: 18px; height: 18px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--color-primary); }
+      .course-version-hint { display: block; margin-top: 2px; font-size: 13px; color: var(--color-meta); }
+      .course-version-consequence { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--color-border-soft); background: var(--color-module-summary-bg); font-size: 14px; }
+      .course-version-consequence.is-major { border-color: var(--color-link-hover-border); }
+      .course-version-consequence p { margin: 0; }
+      .course-version-consequence ul { margin: 6px 0 0; padding-left: 20px; }
+      .course-version-consequence li + li { margin-top: 4px; }
       .cascade-delete-heading { font-size: 13px; font-weight: 700; margin: var(--space-2) 0 4px; }
       .cascade-delete-body .cascade-publish-blocker { display: block; color: var(--color-meta); font-size: 12px; }
 
@@ -263,6 +278,8 @@
       <h2 class="dialog-title" id="cascadePublishTitle">Publiser kurs og innhold</h2>
       <p class="dialog-text" id="cascadePublishText">Kurset har upublisert innhold.</p>
       <div id="cascadePublishList" class="cascade-publish-list-wrap"></div>
+      <!-- #934 skive 3: mindre eller hovedversjon — bare når kurset har kursbevis (samme valg som i skjemaet). -->
+      <div id="cascadePublishVersion" hidden></div>
       <div class="dialog-actions">
         <button type="button" id="cascadePublishConfirmBtn" class="btn btn-primary">Publiser kurset og alt innhold</button>
         <button type="button" class="dialog-cancel" id="cascadePublishCancelBtn">Avbryt</button>
@@ -279,11 +296,25 @@
       <div id="pendingPublishRevision" hidden>
         <p class="dialog-text"><strong id="pendingPublishRevisionHeading"></strong><br><span id="pendingPublishRevisionBody"></span></p>
       </div>
+      <!-- #934 skive 3: mindre eller hovedversjon for kurset — bare når kurset er publisert og noen har kursbevis. -->
+      <div id="pendingPublishVersion" hidden></div>
       <div class="dialog-actions">
         <button type="button" id="pendingPublishConfirmBtn" class="btn btn-primary"></button>
         <button type="button" id="pendingPublishKeepBtn" class="btn btn-primary" hidden></button>
         <button type="button" id="pendingPublishSupersedeBtn" class="btn btn-secondary" hidden></button>
         <button type="button" class="dialog-cancel" id="pendingPublishCancelBtn"></button>
+      </div>
+    </dialog>
+
+    <!-- #934 skive 3: «Hva slags endring er dette?» når innholdet i et publisert kurs med kursbevis lagres.
+         Standard er mindre versjon; hovedversjon krever et bevisst valg. -->
+    <dialog id="courseVersionDialog" aria-labelledby="courseVersionTitle">
+      <h2 class="dialog-title" id="courseVersionTitle"></h2>
+      <p class="dialog-text" id="courseVersionText"></p>
+      <div id="courseVersionChoiceHost"></div>
+      <div class="dialog-actions">
+        <button type="button" id="courseVersionSaveBtn" class="btn btn-primary"></button>
+        <button type="button" class="dialog-cancel" id="courseVersionCancelBtn"></button>
       </div>
     </dialog>
 

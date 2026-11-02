@@ -114,6 +114,8 @@ export const auditActions = {
     // #762: destruktiv opprydding — slett kurs + dets eksklusivt-eide moduler/seksjoner.
     cascadeDeleted: "course_cascade_deleted",
     completionIssued: "course_completion_issued",
+    // #934 skive 3: kursets versjon økte (mindre eller hoved), med fra/til og hva forfatteren ba om.
+    versionChanged: "course_version_changed",
     // #497: automatiske frist-påminnelser (frist nærmer seg / forfalt) fra bakgrunnsjobben.
     reminderSent: "course_reminder_sent",
     reminderFailed: "course_reminder_failed",
@@ -426,6 +428,13 @@ export type AuditMetadataByAction = {
     userId: string;
     courseId: string;
     certificateId: string;
+  }>;
+  [auditActions.course.versionChanged]: EventMetadata<{
+    courseId: string;
+    kind: "major" | "minor";
+    requested: "major" | "minor";
+    from: string;
+    to: string;
   }>;
   // #497: frist-påminnelse sendt/feilet. `daysBefore` er kun satt for kind="due_soon".
   [auditActions.course.reminderSent]: EventMetadata<{

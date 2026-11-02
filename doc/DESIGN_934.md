@@ -1,6 +1,6 @@
 # #934 — hovedversjon og mindre versjon for kurs og moduler
 
-Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0, skive 2 i 2.128.0; skive 3–5 gjenstår.
+Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0, skive 2 i 2.128.0, skive 3 i 2.129.0; skive 4–5 gjenstår.
 Skisse: https://claude.ai/artifact/AyQpYXMQSDHW8WL8YPe34n
 
 ## Hva produkteier har bestemt (2026-11-01)
@@ -154,6 +154,101 @@ Så lenge alle kurs er 1.x, svarer de likt. Når hovedversjon 2 finnes, må hver
 | `courseCommands.ts`/`courseCascadeDeleteService.ts` (kurs med bevis kan ikke slettes) | **hvilken som helst** | uendret |
 | `activityReport.ts` (fullføringer over tid) | **hver utstedelse** er en hendelse | uendret |
 | Profilsiden og kursbeviset | alle bevis, med versjon | gjort i skive 2 (versjon vises fra 2) |
+
+### Skive 3 — bygget (2.129.0)
+
+- **Hvor spørsmålet stilles:**
+  - i kursskjemaet når innholdet i et publisert kurs med kursbevis endres (lagt til, tatt ut, flyttet);
+  - i «Publiser nye versjoner», ett svar for kurset.
+
+  Mindre er standard. Tjeneren gjør en hovedversjon uten kursbevis til mindre. Diskusjonsbryteren per
+  element er ikke innhold.
+- **Upubliserte kurs:**
+  - Et kurs som aldri har vært publisert, får ingen versjon; det blir 1.0 ved første publisering.
+  - Et kurs som har vært ute, versjoneres også mens det er avpublisert. «Har vært ute» betyr publisert
+    nå, delingslenke (satt ved første publisering) eller kursbevis.
+  - Ellers kunne innholdet endres mens kurset var nede, og publiseres igjen uten versjon (QA-porten,
+    2.129.0).
+- **Uten spørsmål:**
+  - Navn eller beskrivelse endret gir mindre.
+  - Kursskjemaet lagrer navn og innhold i ÉTT kall til et eget endepunkt (`PUT /courses/:id/content` med
+    `items` og `version`), i én transaksjon. Under rullering svarer en gammel server 404 i stedet for å
+    lagre halvt; den gamle `PUT /courses/:id` står som før for gamle faner.
+  - Versjonen regnes ut med kursraden låst (`SELECT … FOR UPDATE`), og «Publiser nye versjoner» leser
+    settet på nytt etter låsen: samtidige endringer mister ingen økning og gir ingen dobbel (QA-runde 4). Serveren avgjør versjonen én gang: endret innhold gir forfatterens svar, ellers gir
+    et endret navn mindre. Ingen klient kan slå økningen av (QA-porten, runde 2).
+  - En seksjon som importen bytter ut med en kopi, tar øyeblikksbildet med seg
+    (`renameSectionInVersionSnapshots`), så de kopierte lesingene teller som før.
+  - Legacy-ruta `PUT …/modules` gir alltid mindre.
+  - Import `updateExisting` gir mindre. En oppdatering legger aldri nytt påkrevd innhold inn i et
+    publisert kurs:
+    - nye moduler blir utkast utenfor kurset;
+    - nye versjoner legges klar, og spørsmålet stilles når de publiseres;
+    - utbyttede elementer er kopier av den levende versjonen.
+
+    Navn eller beskrivelse teller også, med én økning per import.
+- **`CourseVersion` og regelen for endrede seksjoner:** se `src/modules/course/courseVersioning.ts`. Når
+  hovedversjon N lages:
+  - raden for N−1 skrives med seksjonsversjonene rett før endringen (slutten av N−1);
+  - raden for N skrives med versjonene rett etter.
+
+  Regelen sammenligner slutten av N−1 med starten av N. En seksjon som fikk ny versjon innenfor N−1, i
+  en mindre versjon (#1095), telles derfor ikke som endret en gang til. En lesing teller for N når
+  seksjonen er uendret, eller er lest etter `publishedAt` for N. Kurs uten rader (alle 1.x) har ingen
+  regel.
+- **Én funksjon for alle veier inn (produkteier 2026-11-02: «felles kode, ikke duplisert logikk»):**
+  - Alt som setter innhold live i et kurs, eller endrer versjonen, kaller `applyCourseVersionChange`.
+    Det gjelder skjemaet (`/content` og `/items`), «Publiser nye versjoner», «Publiser kurs», importen,
+    seksjon og modul fra egen side, og navnet.
+  - Funksjonen eier sjekken av kursbevis, regelen for manglende svar (`course_version_required`),
+    låsen, øyeblikksbildet og økningen.
+  - `test/course-version-write-guard.test.js` nekter andre skrivere.
+  - De tre dialogene deler `mountCourseVersionChoice`.
+- **«Publiser kurs» med nytt innhold** spør det samme når kurset har vært ute og har kursbevis. Det
+  skjer i én transaksjon, og versjonen avgjøres før kurset publiseres, så en første publisering blir 1.0.
+- **OVERGANG, fjernes i neste utgivelse etter 2.129.0:** en fane som var åpen fra før utrullingen, lagrer
+  navn og innhold i to kall og kjenner ikke spørsmålet. `PUT …/items` uten markøren `versionAware: true` og
+  uten svar gir derfor en mindre versjon i stedet for avvisning, ellers ville navnet stått lagret og innholdet
+  avvist. Kursskjemaet fra 2.129.0 sender markøren, og der gjelder regelen under.
+- **Uten svar, når noen har kursbevis,** avvises endringen. Det gjelder alle veier som stiller spørsmålet
+  (skjema, «Publiser nye versjoner», «Publiser kurs», `replaceExisting`). Dialogene har alltid et svar.
+- **Ett sted for regelen:** alle som spør «hvilke seksjoner har deltakeren lest» går gjennom
+  kursrepositoriet, som bruker regelen. Det gjelder kursbevisporten, kursdetaljen, fremdriften i
+  «Mine kurs» og kursrapporten.
+- **Ny lesing:** en lesing som ikke teller, får nytt tidspunkt når deltakeren leser seksjonen på nytt.
+  En lesing som teller, står urørt, for aktivitetsrapporten bygger på tidspunktet.
+- **«Publiser nye versjoner»:** elementene, kursets versjon og øyeblikksbildet publiseres i ÉN
+  transaksjon, alt eller ingenting. `publishSection` fikk en `tx` som `publishModuleVersion`. Stopper
+  noe, er ingenting publisert, og et nytt forsøk ser det samme settet (QA-porten, 2.129.0).
+
+Står igjen:
+- **Til skive 4:** e-post. Dialogen sier ingenting om e-post før den finnes.
+- **Til skive 5:**
+  - modulenes eget hoved/mindre-valg per kurs (til da gir en modul publisert fra egen side kursene en
+    mindre versjon);
+  - versjonen i modullista.
+- **Uten skive:** versjonen i kurseksporten.
+- **Import med `replaceExisting`** (bare API; skillet bruker den ikke) bytter ut hele innholdet. Produkteier
+  2026-11-02: på et kurs med kursbevis kreves `version` (mindre/hoved), ellers `400 course_version_required`
+  før noe skrives. Uten kursbevis: som før.
+- **Deling mellom fagansvarlige:** kursdetaljen viser `certificateHolders` også til en fagansvarlig som ikke
+  eier kurset. Det er ønsket (produkteier 2026-09-07, bekreftet 2026-11-02); se `doc/DECISIONS.md`.
+
+### Kjente hull etter 2.129.0
+
+QA-porten, runde 6 (2026-11-02). Ingen kan miste innhold, gi feil kursbevis eller la innhold gå live uten
+versjonsregelen. Etter produkteiers regel er de registrert her og ikke rettet før stage:
+
+1. **En gammel fane gir to mindre versjoner** når den endrer både navn og innhold i én lagring. Det er to kall
+   (`PUT /:courseId`, så `PUT …/items` i overgangen), og hvert gir en mindre versjon. Forsvinner med
+   overgangen i neste utgivelse.
+2. **Ferske oppslag i publiseringstransaksjonen går via den globale klienten.** `getCoursePendingVersions` og
+   `getCoursePublishPreview` bruker `prisma`, ikke `tx`, mens transaksjonen holder en forbindelse og
+   kurslåsen. Mange samtidige publiseringer med en liten forbindelsespool kan gå tom og rulles tilbake med
+   500. Ingenting blir halvt publisert. Rettingen er å gi oppslagene klienten som parameter.
+3. **Låserekkefølge ved delte elementer.** To samtidige publiseringer av to kurs som deler et element,
+   låser først eget kurs og så det andre. PostgreSQL avbryter den ene med 500, og den rulles tilbake. Rettingen
+   er å låse alle berørte kursrader i én fast rekkefølge (sortert id) før noe publiseres.
 
 ## Det som må holdes rett (fra DECISIONS)
 

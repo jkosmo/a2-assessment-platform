@@ -82,6 +82,20 @@ const setCourseItemsBodySchema = z.object({
   ),
   // AA-5 (#653): stamped into the items-update's audit event (source: agent_authoring).
   agentRunId: agentRunIdSchema.optional(),
+  // #934 skive 3: forfatterens svar når et publisert kurs endres.
+  version: z.enum(["major", "minor"]).optional(),
+  // #934 skive 3 — OVERGANG, fjernes i neste utgivelse etter 2.129.0: kursskjemaet fra 2.129.0 sender
+  // markøren. Uten den er det en fane som var åpen fra før utrullingen, og den kjenner ikke spørsmålet.
+  versionAware: z.literal(true).optional(),
+});
+
+// #934 skive 3: `PUT /:courseId/content` — kursskjemaet lagrer navnet og innholdet i ÉN lagring: `items`
+// (samme form som `PUT …/items`, påkrevd) og forfatterens svar `version` skrives i samme transaksjon som
+// navnet, og serveren avgjør versjonen én gang. Et EGET endepunkt, ikke nye felt på `PUT /:courseId`: under
+// rullering svarer en gammel server 404 på dette i stedet for å fjerne `items` stille og svare OK (QA-porten).
+const saveCourseContentBodySchema = courseBodySchema.partial().extend({
+  items: setCourseItemsBodySchema.shape.items,
+  version: z.enum(["major", "minor"]).optional(),
 });
 
 const courseLocalizationBodySchema = z.object({
@@ -187,6 +201,8 @@ adminCoursesRouter.get("/", async (request, response, next) => {
       inProgressCount: inProgressCounts[i],
       canManage: manageable.has(c.id),
       themes: themesByCourse.get(c.id) ?? [],
+      versionMajor: c.versionMajor,
+      versionMinor: c.versionMinor,
     }));
     response.json({ courses: items });
   } catch (error) {
@@ -251,6 +267,8 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       targetCourseId: data.targetId,
       // #1095: eierskapet sjekkes per element i tjenesten (seksjoner og moduler kan ha andre eiere enn kurset).
       actorRoles: request.context?.roles ?? [],
+      // #934 skive 3: kreves for `replaceExisting` når kurset har kursbevis.
+      version: data.version,
     });
     // AA-2 (#650): links + clientRef echo make the response agent-orchestrable.
     response.status(201).json({
@@ -364,6 +382,9 @@ adminCoursesRouter.get("/:courseId/export-package", async (request, response, ne
 // allerede hver rad med `canManage` — «Rediger» rendres ikke for den som ville fått 403.
 // Samme grep som seksjonene fikk i #916, og linja går der: LISTA er åpen (du må kunne finne dine
 // egne), DETALJEN er ikke.
+// ⚠️ Ingen eierskapsvakt, med vilje: produkteier ønsker størst mulig deling mellom fagansvarlige i
+// organisasjonen (2026-09-07, bekreftet 2026-11-02). Også `certificateHolders` (#934) er åpent for dem.
+// Blir det flere organisasjoner, må lesevaktene på plass. Se doc/DECISIONS.md.
 adminCoursesRouter.get("/:courseId", async (request, response, next) => {
   try {
     const course = await courseRepository.findCourseById(request.params.courseId);
@@ -384,6 +405,9 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       updatedAt: course.updatedAt.toISOString(),
       publishedAt: course.publishedAt?.toISOString() ?? null,
       archivedAt: course.archivedAt?.toISOString() ?? null,
+      versionMajor: course.versionMajor,
+      versionMinor: course.versionMinor,
+      certificateHolders: await courseRepository.countCertificateHolders(course.id, course.versionMajor),
       modules: course.modules.map((cm) => ({
         moduleId: cm.moduleId,
         sortOrder: cm.sortOrder,
@@ -421,6 +445,30 @@ adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId
   }
 });
 
+// #934 skive 3: navn og innhold i ÉN lagring, i én transaksjon (se skjemaet over).
+adminCoursesRouter.put("/:courseId/content", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = saveCourseContentBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const course = await updateCourse(request.params.courseId, {
+      title: parsed.data.title ? localizedTextCodec.serialize(parsed.data.title) : undefined,
+      description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : undefined,
+      certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : undefined,
+      enrollmentPolicy: parsed.data.enrollmentPolicy,
+      discussionsEnabled: parsed.data.discussionsEnabled,
+      discussionOwnerNotifications: parsed.data.discussionOwnerNotifications,
+      sortOrder: parsed.data.sortOrder,
+      themeIds: parsed.data.themeIds,
+    }, request.context?.userId, { items: parsed.data.items, version: parsed.data.version });
+    response.json({ course });
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminCoursesRouter.put("/:courseId/modules", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = setCourseModulesBodySchema.safeParse(request.body);
   if (!parsed.success) {
@@ -429,7 +477,7 @@ adminCoursesRouter.put("/:courseId/modules", requireContentOwnership("COURSE", "
   }
 
   try {
-    await setCourseModules(request.params.courseId, parsed.data.modules);
+    await setCourseModules(request.params.courseId, parsed.data.modules, undefined, request.context?.userId);
     response.status(204).send();
   } catch (error) {
     next(error);
@@ -486,6 +534,12 @@ adminCoursesRouter.put("/:courseId/items", requireContentOwnership("COURSE", "co
     await setCourseItems(request.params.courseId, parsed.data.items, {
       actorId: request.context?.userId,
       agent: { agentRunId: parsed.data.agentRunId },
+      // ⚠️ OVERGANG (fjernes i neste utgivelse etter 2.129.0): en gammel fane sender verken svar eller markør.
+      // Den lagret navnet i et eget kall rett før; en avvisning her ville gitt en halv lagring. Den får en
+      // mindre versjon i stedet. Med markøren gjelder regelen: uten svar avvises endringen når noen har kursbevis.
+      versionRequest: !parsed.data.versionAware && !parsed.data.version
+        ? { kind: "minor" }
+        : { kind: "question", answer: parsed.data.version },
     });
     response.status(204).send();
   } catch (error) {
@@ -513,7 +567,11 @@ adminCoursesRouter.get("/:courseId/publish-preview", async (request, response, n
 // ask the author to confirm. If any unpublished item cannot be published we return 422 with the
 // blockers and publish nothing. Agent tokens cannot publish (publish endpoints are outside the
 // agent-token allowlist — this route is unchanged in that respect).
-const publishCourseBodySchema = z.object({ publishItems: z.boolean().optional() });
+const publishCourseBodySchema = z.object({
+  publishItems: z.boolean().optional(),
+  // #934 skive 3: mindre eller hovedversjon når nytt innhold går live i et kurs som har vært ute og har kursbevis.
+  courseVersion: z.enum(["major", "minor"]).optional(),
+});
 
 adminCoursesRouter.post("/:courseId/publish", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = publishCourseBodySchema.safeParse(request.body ?? {});
@@ -546,7 +604,7 @@ adminCoursesRouter.post("/:courseId/publish", requireContentOwnership("COURSE", 
 
     // Cascade requested: publish items then the course. publishCourseCascade throws a 422 AppError if
     // any item is un-publishable, and never publishes the course unless every item succeeded.
-    const result = await publishCourseCascade(request.params.courseId, request.context?.userId);
+    const result = await publishCourseCascade(request.params.courseId, request.context?.userId, parsed.data.courseVersion);
     response.json(result);
   } catch (error) {
     next(error);
@@ -573,6 +631,8 @@ adminCoursesRouter.get("/:courseId/pending-versions", requireContentOwnership("C
 const publishPendingBodySchema = z.object({
   versionIds: z.array(z.string().min(1)).max(1000),
   supersedesEarlierPasses: z.boolean().optional(),
+  // #934 skive 3: mindre eller hovedversjon for kurset. Utelatt = mindre (standarden).
+  courseVersion: z.enum(["major", "minor"]).optional(),
 });
 
 adminCoursesRouter.post("/:courseId/publish-pending", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {

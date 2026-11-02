@@ -296,6 +296,8 @@ describe("#958 bevisporten og deltakersekvensen får radene fra samme dør", () 
       },
       certificationStatus: { count: async () => 0 },
       courseSectionRead: { findMany: async () => reads.map((sectionId) => ({ sectionId })) },
+      // #934 skive 3: ingen hovedversjon er laget — alle lesinger teller.
+      courseVersion: { findMany: async () => [] },
       courseCompletion: {
         findUnique: async ({ where }: { where: { userId_courseId_versionMajor?: { versionMajor?: unknown } } }) => {
           // #934: oppslaget skal bære kursets hovedversjon; ekte Prisma avviser `undefined` her.

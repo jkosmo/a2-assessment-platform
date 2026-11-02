@@ -22,7 +22,8 @@ const deleteModuleRecord = vi.fn();
 const recordAuditEvent = vi.fn();
 
 vi.mock("../../src/db/prisma.js", () => ({
-  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
+  // #934 skive 3: en modul publisert fra egen side gir kursene den ligger i en mindre versjon — her ligger den i ingen.
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ course: { findMany: async () => [] } })) },
 }));
 
 const adminContentRepositoryMock = {

@@ -3,10 +3,12 @@ import { AppError, NotFoundError } from "../../errors/AppError.js";
 import { publishCourse } from "./courseCommands.js";
 import { publishSection, evaluateSectionTranslationGate } from "./sectionCommands.js";
 import { publishModuleVersion } from "../adminContent/adminContentCommands.js";
-import { courseRepository } from "./courseRepository.js";
+import { courseRepository, createCourseRepository } from "./courseRepository.js";
 import { evaluateModulePublishGate, flattenStoredLocalized } from "../adminContent/modulePublishGate.js";
 import { listManageableContentIds } from "../content/contentOwnershipService.js";
 import { certificationRepository } from "../certification/index.js";
+import { runInTransaction } from "../../db/transaction.js";
+import { applyCourseVersionChange, applyMinorVersionToCoursesContaining, countCertificateHolders, lockCourseRow, type CourseVersionBump, type CourseVersionChoice } from "./courseVersioning.js";
 
 // Cascade-publish (#734): when an author publishes a COURSE, its modules/sections must already be
 // published — otherwise the published course contains unavailable content (violates content-
@@ -63,13 +65,23 @@ export type CoursePublishPreview = {
   allPublished: boolean;
   /** True when every unpublished item is publishable (cascade publish may proceed). */
   publishable: boolean;
+  /** #934 skive 3: kursets versjon og antall kursbevis for den nåværende hovedversjonen. Dialogen spør
+   *  mindre/hoved når det publiseres nytt innhold og tallet er over null. */
+  course: { published: boolean; versionMajor: number; versionMinor: number; certificateHolders: number };
 };
 
 export type PublishedItemRef = { type: "MODULE" | "SECTION"; id: string };
 
+/** #934 skive 3: elementene som referanser for `applyMinorVersionToCoursesContaining`. */
+function itemRefs(items: PublishedItemRef[]): Array<{ sectionId: string } | { moduleId: string }> {
+  return items.map((item) => (item.type === "SECTION" ? { sectionId: item.id } : { moduleId: item.id }));
+}
+
 export type CoursePublishResult = {
   course: Awaited<ReturnType<typeof publishCourse>>;
   publishedItems: PublishedItemRef[];
+  /** #934 skive 3: kursets nye versjon, eller `null` (ingen endring, eller kurset har aldri vært ute). */
+  version?: CourseVersionBump | null;
 };
 
 // #956: tittelen til visning i kaskadeforhåndsvisningen — én representativ tekst. Selve gaten
@@ -364,11 +376,21 @@ export async function getCoursePublishPreview(courseId: string): Promise<CourseP
     }
   }
 
+  const versionRow = await prisma.course.findUniqueOrThrow({
+    where: { id: courseId },
+    select: { publishedAt: true, versionMajor: true, versionMinor: true },
+  });
   return {
     courseId,
     unpublishedItems,
     allPublished: unpublishedItems.length === 0,
     publishable: unpublishedItems.every((item) => item.publishable),
+    course: {
+      published: versionRow.publishedAt != null,
+      versionMajor: versionRow.versionMajor,
+      versionMinor: versionRow.versionMinor,
+      certificateHolders: await countCertificateHolders(prisma, courseId, versionRow.versionMajor),
+    },
   };
 }
 
@@ -380,7 +402,9 @@ export async function getCoursePublishPreview(courseId: string): Promise<CourseP
 // published in sequence and the course is published only after ALL items succeed. If an item publish
 // throws mid-way we stop immediately (a 500 AppError reports what was published and which item failed)
 // and never publish the course — so a published-with-broken-content course can never result.
-export async function publishCourseCascade(courseId: string, actorId?: string): Promise<CoursePublishResult> {
+// #934 skive 3: `courseVersion` er forfatterens svar når kurset har vært ute og noen har kursbevis — nytt
+// innhold går live, og det er samme spørsmål som i skjemaet (produkteier 2026-11-02).
+export async function publishCourseCascade(courseId: string, actorId?: string, courseVersion?: CourseVersionChoice): Promise<CoursePublishResult> {
   const preview = await getCoursePublishPreview(courseId);
 
   if (preview.allPublished) {
@@ -435,31 +459,48 @@ export async function publishCourseCascade(courseId: string, actorId?: string): 
     throw new AppError("internal_error", 500, "Publishing course items requires an actor; the caller passed none.");
   }
 
-  const publishedItems: PublishedItemRef[] = [];
+  // #934 skive 3: alt i ÉN transaksjon — låst kursrad, øyeblikksbildet FØR, elementene, kursets versjon, og
+  // så selve publiseringen. Versjonen avgjøres FØR `publishCourse`: et kurs som aldri har vært ute, er da
+  // fortsatt uten delingslenke og blir 1.0; et som har vært ute, får spørsmålet. Stopper noe, er ingenting
+  // publisert (I1, og ingen ny tekst uten versjon).
   try {
-    for (const item of plan) {
-      if (item.type === "SECTION") {
-        await publishSection(item.id, actorId);
-      } else {
-        await publishModuleVersion(item.id, item.versionId, actorId);
+    return await runInTransaction(async (tx) => {
+      await lockCourseRow(tx, courseId);
+      // To samtidige «Publiser kurs» kan begge ha laget planen. Den andre venter på låsen; så leses det
+      // upubliserte på nytt, og har den første publisert det, er svaret gitt på noe annet (409).
+      const fresh = await getCoursePublishPreview(courseId);
+      const freshIds = fresh.unpublishedItems.map((item) => `${item.type}:${item.id}`).sort();
+      const planIds = plan.map((item) => `${item.type}:${item.id}`).sort();
+      if (freshIds.length !== planIds.length || freshIds.some((id, index) => id !== planIds[index])) {
+        throw new AppError("course_publish_items_changed", 409, "The course changed since publishing was requested. Reload and try again.");
       }
-      publishedItems.push({ type: item.type, id: item.id });
-    }
+      const repo = createCourseRepository(tx);
+      const before = await repo.findSectionVersions(courseId);
+      const publishedItems: PublishedItemRef[] = [];
+      for (const item of plan) {
+        if (item.type === "SECTION") {
+          await publishSection(item.id, actorId, tx, { courseVersionHandledByCaller: true });
+        } else {
+          await publishModuleVersion(item.id, item.versionId, actorId, tx, { courseVersionHandledByCaller: true });
+        }
+        publishedItems.push({ type: item.type, id: item.id });
+      }
+      await applyMinorVersionToCoursesContaining(tx, itemRefs(publishedItems), actorId, { exceptCourseId: courseId });
+      const version = await applyCourseVersionChange(
+        tx,
+        courseId,
+        { kind: "question", answer: courseVersion },
+        { before, after: () => repo.findSectionVersions(courseId) },
+        actorId,
+      );
+      const course = await publishCourse(courseId, actorId, tx);
+      return { course, publishedItems, version };
+    }, { timeout: PENDING_PUBLISH_TX_TIMEOUT_MS });
   } catch (error) {
-    // An item publish failed mid-cascade. The course is deliberately NOT published (I1). Report what
-    // was already published and which item failed so the author can reconcile.
     if (error instanceof AppError) throw error;
     const message = error instanceof Error ? error.message : "Unknown error";
-    throw new AppError(
-      "course_publish_partial_failure",
-      500,
-      `Publishing course items failed before the course could be published: ${message}`,
-      { publishedItems },
-    );
+    throw new AppError("course_publish_failed", 500, `Publishing the course failed; nothing was published: ${message}`);
   }
-
-  const course = await publishCourse(courseId, actorId);
-  return { course, publishedItems };
 }
 
 // ---------------------------------------------------------------------------
@@ -508,12 +549,18 @@ export type CoursePendingVersions = {
   passedTotal: number;
   /** How many modules in `items` someone has passed. */
   modulesWithPasses: number;
+  /** #934 skive 3: kursets versjon nå, og hvor mange som har kursbevis for den nåværende hovedversjonen.
+   *  Dialogen spør «mindre eller hovedversjon?» bare når kurset er publisert og tallet er over null. */
+  course: { published: boolean; versionMajor: number; versionMinor: number; certificateHolders: number };
 };
 
 export type PendingVersionsActor = { userId: string; roles: string[] };
 
 export async function getCoursePendingVersions(courseId: string, actor: PendingVersionsActor): Promise<CoursePendingVersions> {
-  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: { id: true, publishedAt: true, versionMajor: true, versionMinor: true },
+  });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 
   const courseItems = await courseRepository.findAllCourseItems(courseId);
@@ -572,14 +619,21 @@ export async function getCoursePendingVersions(courseId: string, actor: PendingV
     publishable: items.every((item) => item.publishable),
     passedTotal: items.reduce((sum, item) => sum + item.passedCount, 0),
     modulesWithPasses: items.filter((item) => item.passedCount > 0).length,
+    course: {
+      published: course.publishedAt != null,
+      versionMajor: course.versionMajor,
+      versionMinor: course.versionMinor,
+      certificateHolders: await countCertificateHolders(prisma, courseId, course.versionMajor),
+    },
   };
 }
 
 export async function publishCoursePendingVersions(
   courseId: string,
   actor: PendingVersionsActor,
-  input: { versionIds: string[]; supersedesEarlierPasses?: boolean },
-): Promise<{ publishedItems: PublishedItemRef[] }> {
+  // #934 skive 3: `courseVersion` er forfatterens svar for kurset — ett svar, som for modulene. Utelatt = mindre.
+  input: { versionIds: string[]; supersedesEarlierPasses?: boolean; courseVersion?: CourseVersionChoice },
+): Promise<{ publishedItems: PublishedItemRef[]; version: CourseVersionBump | null }> {
   const pending = await getCoursePendingVersions(courseId, actor);
 
   // Det forfatteren så, er det som publiseres. Et annet sett (noen lagret en ny versjon, eller
@@ -589,7 +643,7 @@ export async function publishCoursePendingVersions(
   if (current.length !== seen.length || current.some((id, index) => id !== seen[index])) {
     throw new AppError("pending_versions_changed", 409, "The versions ready to publish changed since they were shown. Reload and try again.");
   }
-  if (pending.items.length === 0) return { publishedItems: [] };
+  if (pending.items.length === 0) return { publishedItems: [], version: null };
 
   if (!pending.publishable) {
     throw new AppError(
@@ -604,22 +658,49 @@ export async function publishCoursePendingVersions(
     throw new AppError("revision_answer_required", 400, "Participants have passed some of these modules: say whether this is a revision (supersedesEarlierPasses).");
   }
 
-  const publishedItems: PublishedItemRef[] = [];
+  // #934 skive 3: alt i ÉN transaksjon — elementene, kursets versjon og øyeblikksbildet. Stopper noe, er
+  // ingenting publisert: en ny tekst skal aldri stå levende uten versjonen som hører til, og et nytt forsøk
+  // ser det samme settet som det første. Seksjonsversjonene RETT FØR leses først i transaksjonen.
   try {
-    for (const item of pending.items) {
-      if (item.type === "SECTION") {
-        await publishSection(item.id, actor.userId);
-      } else {
-        await publishModuleVersion(item.id, item.versionId as string, actor.userId, undefined, {
-          supersedesEarlierPasses: input.supersedesEarlierPasses === true && item.passedCount > 0,
-        });
+    return await runInTransaction(async (tx) => {
+      // To samtidige «Publiser» kan begge ha passert sjekken over. Låsen gjør at den andre venter; så leses
+      // settet på nytt, og har den første publisert det, er svaret gitt på noe annet (409) — ikke en ny økning.
+      await lockCourseRow(tx, courseId);
+      const fresh = await getCoursePendingVersions(courseId, actor);
+      const now = fresh.items.map((item) => item.versionId ?? "").sort();
+      if (now.length !== seen.length || now.some((id, index) => id !== seen[index])) {
+        throw new AppError("pending_versions_changed", 409, "The versions ready to publish changed since they were shown. Reload and try again.");
       }
-      publishedItems.push({ type: item.type, id: item.id });
-    }
+      const repo = createCourseRepository(tx);
+      const before = await repo.findSectionVersions(courseId);
+      const publishedItems: PublishedItemRef[] = [];
+      for (const item of fresh.items) {
+        if (item.type === "SECTION") {
+          await publishSection(item.id, actor.userId, tx, { courseVersionHandledByCaller: true });
+        } else {
+          await publishModuleVersion(item.id, item.versionId as string, actor.userId, tx, {
+            supersedesEarlierPasses: input.supersedesEarlierPasses === true && item.passedCount > 0,
+            courseVersionHandledByCaller: true,
+          });
+        }
+        publishedItems.push({ type: item.type, id: item.id });
+      }
+      await applyMinorVersionToCoursesContaining(tx, itemRefs(publishedItems), actor.userId || undefined, { exceptCourseId: courseId });
+      const version = await applyCourseVersionChange(
+        tx,
+        courseId,
+        { kind: "question", answer: input.courseVersion },
+        { before, after: () => repo.findSectionVersions(courseId) },
+        actor.userId || undefined,
+      );
+      return { publishedItems, version };
+    }, { timeout: PENDING_PUBLISH_TX_TIMEOUT_MS });
   } catch (error) {
     if (error instanceof AppError) throw error;
     const message = error instanceof Error ? error.message : "Unknown error";
-    throw new AppError("course_pending_partial_failure", 500, `Publishing new versions stopped part way: ${message}`, { publishedItems });
+    throw new AppError("course_pending_failed", 500, `Publishing new versions failed; nothing was published: ${message}`);
   }
-  return { publishedItems };
 }
+
+// Som importen (#796): mange elementer i én transaksjon kan ta lenger tid enn Prismas 5 sekunder.
+const PENDING_PUBLISH_TX_TIMEOUT_MS = 30_000;

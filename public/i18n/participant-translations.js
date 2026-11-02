@@ -159,6 +159,9 @@ export const translations = {
     "errors.api.user_not_found": "That user was not found.",
     "errors.api.publish_blocked_by_validation": "Publishing is blocked. Fix the points listed below, then try again.",
     "errors.api.course_has_unpublished_items": "The course contains items that are not published. Publish them together with the course.",
+    // #934 skive 3: noen har fått kursbevis siden kurset ble åpnet — svaret mindre/hoved trengs.
+    "errors.api.course_version_required": "Someone has a course certificate for this course now. Reload the course and choose a minor or a major version.",
+    "errors.api.course_publish_items_changed": "The course changed while you were publishing. Reload the course and try again.",
     "errors.api.item_archived": "The item is archived. Restore it before you publish.",
     // #914: innholdsvalideringens meldinger. Serveren skrev dem ferdig paa ENGELSK, mens
     // kurspubliseringens meldinger var hardkodet NORSK — saa begge spraakgrupper fikk feil tekst,
@@ -693,6 +696,9 @@ export const translations = {
     "errors.api.user_not_found": "Fant ikke den brukeren.",
     "errors.api.publish_blocked_by_validation": "Publiseringen er blokkert. Rett opp punktene under, og prøv igjen.",
     "errors.api.course_has_unpublished_items": "Kurset inneholder elementer som ikke er publisert. Publiser dem sammen med kurset.",
+    // #934 skive 3: noen har fått kursbevis siden kurset ble åpnet — svaret mindre/hoved trengs.
+    "errors.api.course_version_required": "Noen har kursbevis for dette kurset nå. Last kurset på nytt og velg mindre versjon eller hovedversjon.",
+    "errors.api.course_publish_items_changed": "Kurset ble endret mens du publiserte. Last kurset på nytt og prøv igjen.",
     "errors.api.item_archived": "Elementet er arkivert. Gjenopprett det før du publiserer.",
     "errors.api.DISTRACTOR_ELIMINATION_RISK_HIGH": "Spørsmål {questionNumber}: ett eller flere alternativer kan utelukkes uten fagkunnskap. Lag spørsmålet på nytt eller revider det.",
     "errors.api.DISTRACTOR_ELIMINATION_RISK_MEDIUM": "Spørsmål {questionNumber}: minst ett alternativ kan trolig utelukkes uten full fagkunnskap. Vurder å revidere.",
@@ -1220,6 +1226,9 @@ export const translations = {
     "errors.api.user_not_found": "Fann ikkje den brukaren.",
     "errors.api.publish_blocked_by_validation": "Publiseringa er blokkert. Rett opp punkta under, og prøv igjen.",
     "errors.api.course_has_unpublished_items": "Kurset inneheld element som ikkje er publiserte. Publiser dei saman med kurset.",
+    // #934 skive 3: nokon har fått kursbevis sidan kurset vart opna — svaret mindre/hovud trengst.
+    "errors.api.course_version_required": "Nokon har kursbevis for dette kurset no. Last kurset på nytt og vel mindre versjon eller hovudversjon.",
+    "errors.api.course_publish_items_changed": "Kurset vart endra medan du publiserte. Last kurset på nytt og prøv igjen.",
     "errors.api.item_archived": "Elementet er arkivert. Gjenopprett det før du publiserer.",
     "errors.api.DISTRACTOR_ELIMINATION_RISK_HIGH": "Spørsmål {questionNumber}: eitt eller fleire alternativ kan utelukkast utan fagkunnskap. Lag spørsmålet på nytt eller revider det.",
     "errors.api.DISTRACTOR_ELIMINATION_RISK_MEDIUM": "Spørsmål {questionNumber}: minst eitt alternativ kan truleg utelukkast utan full fagkunnskap. Vurder å revidere.",

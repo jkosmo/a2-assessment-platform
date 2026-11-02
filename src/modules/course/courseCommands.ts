@@ -7,6 +7,14 @@ import { assertCourseHasNoInProgressParticipants } from "./contentLifecycle.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import { setCourseThemes } from "./courseThemeService.js";
 import { assignCourseSlugIfMissing } from "./courseSlug.js";
+import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, sameLocalizedText, type CourseVersionBump, type CourseVersionChoice, type CourseVersionRequest } from "./courseVersioning.js";
+import { createCourseRepository } from "./courseRepository.js";
+
+// #934 skive 3: kursets innhold er rekkefølgen av moduler og seksjoner. Diskusjonsbryteren per element er
+// ikke innhold — å slå den av eller på gir ingen ny versjon.
+function itemSequenceKey(rows: Array<{ itemType: string; moduleId: string | null; sectionId: string | null }>) {
+  return rows.map((r) => `${r.itemType}:${r.itemType === "MODULE" ? r.moduleId : r.sectionId}`).join("|");
+}
 
 // #938/#992: inngangsdøra til «arkivert innhold i et kurs» — ÉN gang, for alle innganger.
 //
@@ -135,12 +143,31 @@ export async function updateCourse(
     themeIds?: string[];
   },
   actorId?: string,
+  // #934 skive 3: kursskjemaet lagrer navnet og innholdet i ÉN lagring. Med `items` skrives innholdet i samme
+  // transaksjon, med forfatterens svar (`version`), og serveren avgjør versjonen én gang: endret innhold gir
+  // forfatterens svar; bare navn eller beskrivelse endret gir mindre. Ingen klient kan slå økningen av.
+  options?: { items?: CourseItemInput[]; version?: CourseVersionChoice },
 ) {
   // #805: a course-metadata edit is a state change and must leave a trail. Record which fields changed.
   // #803: update + audit commit atomically.
   return runInTransaction(async (tx) => {
     const { themeIds, ...fields } = input;
-    const course = await tx.course.update({ where: { id: courseId }, data: fields });
+    const previous = await tx.course.findUnique({ where: { id: courseId }, select: { title: true, description: true } });
+    let course = await tx.course.update({ where: { id: courseId }, data: fields });
+    const itemsBump = options?.items
+      ? await setCourseItems(courseId, options.items, { actorId, versionRequest: { kind: "question", answer: options.version } }, tx)
+      : null;
+    // #934 skive 3: navn eller beskrivelse endret på et kurs som har vært ute er en mindre versjon
+    // (produkteier 2026-11-01: «endrer ikke kravet»). Ingen spørsmål — og ingen ekstra økning når innholdet
+    // i samme lagring allerede ga versjonen. Nivå, tilgang, diskusjon, plassering og tema er innstillinger,
+    // ikke innhold, og gir ingen ny versjon.
+    const textChanged =
+      previous != null &&
+      ((fields.title !== undefined && !sameLocalizedText(fields.title, previous.title)) ||
+        (fields.description !== undefined && !sameLocalizedText(fields.description, previous.description)));
+    const textBump = textChanged && !itemsBump ? await applyCourseVersionChange(tx, courseId, { kind: "minor" }, NO_SECTION_SNAPSHOT, actorId) : null;
+    // Svaret skal vise versjonen etter økningen, ikke raden fra før den.
+    if (itemsBump || textBump) course = await tx.course.findUniqueOrThrow({ where: { id: courseId } });
     if (themeIds !== undefined) await setCourseThemes(tx, courseId, themeIds);
     await recordAuditEvent(
       {
@@ -349,9 +376,11 @@ export async function setCourseItems(
   courseId: string,
   items: CourseItemInput[],
   // AA-5 (#653): audited write; agent runs stamp source/agentRunId into the metadata.
-  options?: { actorId?: string; agent?: AgentAuthoringContext },
+  // #934 skive 3: hvordan endringen spør om versjonen (courseVersioning.ts). Utelatt = spørsmålet uten svar:
+  // avvises når noen har kursbevis og innholdet er endret (`course_version_required`).
+  options?: { actorId?: string; agent?: AgentAuthoringContext; versionRequest?: CourseVersionRequest },
   tx?: DbTransactionClient,
-) {
+): Promise<CourseVersionBump | null> {
   // #796: when composing an import, existence checks must run on the tx client so they see the course,
   // modules, and sections created earlier in the SAME transaction.
   const reader = tx ?? prisma;
@@ -378,6 +407,11 @@ export async function setCourseItems(
 
   // #502: CourseItem er eneste sannhetskilde — ingen dual-write til CourseModule lenger.
   const run = async (client: DbTransactionClient) => {
+    // #934 skive 3: det som gjaldt FØR endringen, lest i samme transaksjon som den skrives. Er kurset
+    // publisert og innholdet endret, øker versjonen her — med seksjonsversjonene fra før som øyeblikksbilde.
+    const repo = createCourseRepository(client);
+    const previous = await repo.findAllCourseItems(courseId);
+    const before = await repo.findSectionVersions(courseId);
     await client.courseItem.deleteMany({ where: { courseId } });
     if (items.length > 0) {
       await client.courseItem.createMany({
@@ -405,6 +439,13 @@ export async function setCourseItems(
       },
       client,
     );
+    const next = items.map((item) => ({
+      itemType: item.type,
+      moduleId: item.type === "MODULE" ? item.moduleId : null,
+      sectionId: item.type === "SECTION" ? item.sectionId : null,
+    }));
+    if (itemSequenceKey(previous) === itemSequenceKey(next)) return null;
+    return applyCourseVersionChange(client, courseId, options?.versionRequest ?? { kind: "question" }, { before, after: () => repo.findSectionVersions(courseId) }, options?.actorId);
   };
   const result = await (tx ? run(tx) : runInTransaction(run));
   return result;
@@ -417,6 +458,11 @@ export async function setCourseModules(
   courseId: string,
   modules: Array<{ moduleId: string; sortOrder: number }>,
   tx?: DbTransactionClient,
+  // #934 skive 3: hvem endringen gjelder, til revisjonssporet for versjonsøkningen.
+  actorId?: string,
+  // #934 skive 3: hvordan endringen spør. Utelatt = mindre (legacy-ruta har ingen dialog); importen som
+  // bytter ut alt sender spørsmålet med forfatterens svar.
+  versionRequest?: CourseVersionRequest,
 ) {
   // #992: samme dør som `setCourseItems`. Denne ruta er dokumentert som legacy, men den er ikke
   // stengt — importklienter og `PUT /api/admin/content/courses/:id/modules` bruker den — og uten
@@ -424,6 +470,11 @@ export async function setCourseModules(
   await assertContentUsableInCourse(tx ?? prisma, { moduleIds: modules.map((m) => m.moduleId) });
 
   const run = async (client: DbTransactionClient) => {
+    // #934 skive 3: samme regel som `setCourseItems` — denne inngangen har ingen dialog, så en endring av
+    // et publisert kurs blir en mindre versjon.
+    const repo = createCourseRepository(client);
+    const previous = await repo.findAllCourseItems(courseId);
+    const before = await repo.findSectionVersions(courseId);
     const sections = await client.courseItem.findMany({
       where: { courseId, itemType: "SECTION" },
       orderBy: { sortOrder: "asc" },
@@ -453,6 +504,12 @@ export async function setCourseModules(
       where: { id: courseId },
       data: { updatedAt: new Date() },
     });
+    const next = [...moduleRows, ...sectionRows]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((r) => ({ itemType: r.itemType, moduleId: "moduleId" in r ? r.moduleId : null, sectionId: "sectionId" in r ? (r.sectionId ?? null) : null }));
+    if (itemSequenceKey(previous) !== itemSequenceKey(next)) {
+      await applyCourseVersionChange(client, courseId, versionRequest ?? { kind: "minor" }, { before, after: () => repo.findSectionVersions(courseId) }, actorId);
+    }
   };
   return tx ? run(tx) : runInTransaction(run);
 }

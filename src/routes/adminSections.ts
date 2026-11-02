@@ -484,6 +484,7 @@ adminSectionsRouter.patch("/:sectionId/title", requireContentOwnership("SECTION"
     const section = await updateSectionTitle(
       request.params.sectionId,
       localizedTextCodec.serialize(parsed.data.title),
+      request.context?.userId,
     );
     response.json({ section: toDetail(section) });
   } catch (error) {

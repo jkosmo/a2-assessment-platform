@@ -1045,6 +1045,32 @@ export async function mockCommonApis(page: Page, {
     });
   });
 
+  // #934 skive 3: endret innhold lagres med navnet i ett kall til PUT …/content.
+  await page.route("**/api/admin/content/courses/*/content", async (route: Route) => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    const courseId = decodeURIComponent(new URL(route.request().url()).pathname.split("/").slice(-2)[0] ?? "");
+    const course = mutableCourses.find((item) => item.id === courseId);
+    if (!course) {
+      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
+      return;
+    }
+    const body = route.request().postDataJSON() as { title?: Record<string, string> | string; description?: Record<string, string> | string; certificationLevel?: string };
+    course.title = body.title ?? course.title;
+    course.description = body.description ?? course.description;
+    course.certificationLevel = body.certificationLevel ?? course.certificationLevel;
+    course.updatedAt = "2026-04-23T12:00:00.000Z";
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course }) });
+  });
+
+  // #934 skive 3: kursskjemaet lagrer innholdet (PUT …/items) FØR navnet, så en endring aldri står levende
+  // uten versjon. Uten et svar her feilet lagringen av innholdet i mockmiljøet, og navnet ble aldri sendt.
+  // Bare PUT: GET faller videre, så spesifikasjoner som bruker modul-fallbacken (course.modules) er urørt.
+  // Spesifikasjoner som registrerer sin egen items-rute, vinner (registrert senere).
+  await page.route("**/api/admin/content/courses/*/items", async (route: Route) => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    await route.fulfill({ status: 204, body: "" });
+  });
+
   // #734: the courses page GETs a publish-preview before publishing. Default to "everything already
   // published" so the plain publish path applies; specs that exercise the cascade dialog register
   // their own publish-preview route (which wins, being registered later).

@@ -113,6 +113,9 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     expect(kursRad.publishedAt).not.toBeNull();
     expect(JSON.parse(kursRad.title).nb).toBe(`Justert kurs ${stempel} (v2)`);
     expect(kursRad.sortOrder).toBe(2);
+    // #934 skive 3: innholdet og navnet endret i samme import gir ÉN mindre versjon — en oppdatering legger
+    // aldri nytt innhold inn i et publisert kurs, så den spør ikke.
+    expect(await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { versionMajor: true, versionMinor: true } })).toEqual({ versionMajor: 1, versionMinor: 1 });
 
     // Første seksjon: to versjoner, den levende er fortsatt den første.
     const s1Rad = await prisma.courseSection.findUniqueOrThrow({ where: { id: s1 }, select: { activeVersionId: true, versions: { orderBy: { versionNo: "asc" }, select: { versionNo: true, publishedAt: true, bodyMarkdown: true } } } });
@@ -187,9 +190,36 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     // Seksjonen eksporteres som nyeste versjon, og sier det.
     expect(fil.course.course.items[0].origin).toEqual({ sectionId: s1, versionNo: 3 });
     modulItem.module.activeVersion.taskText = tre("Reflekter — justert.");
+    const versjonFør = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { versionMajor: true, versionMinor: true } });
 
     const svar = await request(app).post("/api/admin/content/courses/import").set(admin).send({ payload: fil, mode: "updateExisting", targetId: courseId });
     expect(svar.status, JSON.stringify(svar.body).slice(0, 400)).toBe(201);
+    // #934 skive 3: bare en ny versjon lagt klar — navn og rekkefølge uendret, ingen ny kursversjon ennå.
+    expect(await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { versionMajor: true, versionMinor: true } })).toEqual(versjonFør);
+
+    // Bare navnet endret: én mindre versjon.
+    const navnUt = await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(admin);
+    const navnFil = JSON.parse(JSON.stringify(navnUt.body.envelope ?? navnUt.body));
+    navnFil.course.course.title = tre(`Justert kurs ${stempel} (v3)`);
+    const navn = await request(app).post("/api/admin/content/courses/import").set(admin).send({ payload: navnFil, mode: "updateExisting", targetId: courseId });
+    expect(navn.status, JSON.stringify(navn.body).slice(0, 400)).toBe(201);
+    expect(await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { versionMajor: true, versionMinor: true } })).toEqual({
+      versionMajor: versjonFør.versionMajor,
+      versionMinor: versjonFør.versionMinor + 1,
+    });
+
+    // En fil uten beskrivelse lar beskrivelsen stå — og er ingen endring (QA-porten, runde 3).
+    await prisma.course.update({ where: { id: courseId }, data: { description: JSON.stringify(tre("Kursets beskrivelse")) } });
+    const utenUt = await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(admin);
+    const utenFil = JSON.parse(JSON.stringify(utenUt.body.envelope ?? utenUt.body));
+    delete utenFil.course.course.description;
+    const versjonUten = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { versionMajor: true, versionMinor: true } });
+    const uten = await request(app).post("/api/admin/content/courses/import").set(admin).send({ payload: utenFil, mode: "updateExisting", targetId: courseId });
+    expect(uten.status, JSON.stringify(uten.body).slice(0, 400)).toBe(201);
+    expect(await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { versionMajor: true, versionMinor: true, description: true } })).toEqual({
+      ...versjonUten,
+      description: JSON.stringify(tre("Kursets beskrivelse")),
+    });
     expect(svar.body.summary).toMatchObject({ updatedSections: 0, updatedModules: 1, unchangedIds: [s1] });
     expect(await prisma.moduleVersion.count({ where: { moduleId: m1 } })).toBe(2);
     expect(await prisma.courseSectionVersion.count({ where: { sectionId: s1 } })).toBe(3);

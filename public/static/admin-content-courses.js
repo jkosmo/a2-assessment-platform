@@ -404,11 +404,12 @@ async function publishCourseInAdmin(courseId, triggerButton = null) {
 
 // POST the publish. `publishItems` cascades the unpublished modules/sections; false is the plain
 // publish (used when everything is already live).
-async function commitCoursePublish(courseId, publishItems, triggerButton = null) {
+async function commitCoursePublish(courseId, publishItems, triggerButton = null, courseVersion = undefined) {
   try {
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/publish`, getHeaders, {
       method: "POST",
-      body: JSON.stringify({ publishItems }),
+      // #934 skive 3: svaret sendes bare når dialogen spurte (kursbevis finnes).
+      body: JSON.stringify({ publishItems, ...(courseVersion ? { courseVersion } : {}) }),
     });
     showToast(t("adminContent.courses.message.published") || t("courses.published"), "success");
 
@@ -511,6 +512,23 @@ function openCascadePublishDialog(courseId, preview, triggerButton) {
   pendingCascadePublish = { courseId, triggerButton };
   const blocked = !preview?.publishable;
   const items = preview?.unpublishedItems ?? [];
+  // #934 skive 3: nytt innhold går live i et kurs med kursbevis — samme valg som i skjemaet og «Publiser nye
+  // versjoner» (én felles hjelper). Mindre er standard, så dialogen har alltid et svar.
+  const versionHost = document.getElementById("cascadePublishVersion");
+  const asksVersion = !blocked && Number(preview?.course?.certificateHolders) > 0;
+  pendingCascadePublish.asksVersion = asksVersion;
+  if (versionHost) {
+    setHidden(versionHost, !asksVersion);
+    if (asksVersion) {
+      mountCourseVersionChoice(versionHost, "cascadeCourseVersion", preview.course);
+      const heading = document.createElement("p");
+      heading.className = "dialog-text";
+      heading.innerHTML = `<strong>${escapeHtml(t("courses.version.pendingHeading"))}</strong><br>${escapeHtml(courseVersionHoldersText(preview.course))}`;
+      versionHost.prepend(heading);
+    } else {
+      versionHost.innerHTML = "";
+    }
+  }
 
   const titleEl = document.getElementById("cascadePublishTitle");
   const textEl = document.getElementById("cascadePublishText");
@@ -551,11 +569,12 @@ function initCascadePublishDialog() {
   const cancelBtn = document.getElementById("cascadePublishCancelBtn");
   confirmBtn?.addEventListener("click", async () => {
     if (!pendingCascadePublish) return;
-    const { courseId, triggerButton } = pendingCascadePublish;
+    const { courseId, triggerButton, asksVersion } = pendingCascadePublish;
+    const courseVersion = asksVersion ? selectedCourseVersion(document.getElementById("cascadePublishVersion"), "cascadeCourseVersion") : undefined;
     pendingCascadePublish = null;
     confirmBtn.disabled = true;
     cascadePublishDialog.close();
-    await commitCoursePublish(courseId, true, triggerButton);
+    await commitCoursePublish(courseId, true, triggerButton, courseVersion);
     confirmBtn.disabled = false;
   });
   cancelBtn?.addEventListener("click", () => {
@@ -632,6 +651,23 @@ async function openPendingPublishDialog(courseId) {
   notOwnedEl.textContent = notOwned.length > 0 ? tf("adminContent.courses.pendingPublish.notOwned", { count: notOwned.length }) : "";
   setHidden(notOwnedEl, notOwned.length === 0);
 
+  // #934 skive 3: mindre eller hovedversjon for kurset — bare når noen har kursbevis (da har kurset vært ute).
+  const versionHost = document.getElementById("pendingPublishVersion");
+  const asksVersion = !blocked && Number(pending.course?.certificateHolders) > 0;
+  pendingPublishTarget.asksVersion = asksVersion;
+  if (versionHost) {
+    setHidden(versionHost, !asksVersion);
+    if (asksVersion) {
+      mountCourseVersionChoice(versionHost, "pendingCourseVersion", pending.course);
+      const heading = document.createElement("p");
+      heading.className = "dialog-text";
+      heading.innerHTML = `<strong>${escapeHtml(t("courses.version.pendingHeading"))}</strong><br>${escapeHtml(courseVersionHoldersText(pending.course))}`;
+      versionHost.prepend(heading);
+    } else {
+      versionHost.innerHTML = "";
+    }
+  }
+
   setHidden(document.getElementById("pendingPublishRevision"), !asksRevision);
   if (asksRevision) {
     document.getElementById("pendingPublishRevisionHeading").textContent = t("adminContent.courses.pendingPublish.revisionHeading");
@@ -667,6 +703,8 @@ async function commitPendingPublish(supersedesEarlierPasses) {
       body: JSON.stringify({
         versionIds: target.versionIds,
         ...(supersedesEarlierPasses === undefined ? {} : { supersedesEarlierPasses }),
+        // #934 skive 3: svaret sendes bare når spørsmålet ble stilt; ellers bestemmer tjeneren (mindre).
+        ...(target.asksVersion ? { courseVersion: selectedCourseVersion(document.getElementById("pendingPublishVersion"), "pendingCourseVersion") } : {}),
       }),
     }));
     pendingPublishTarget = null;
@@ -693,6 +731,158 @@ function initPendingPublishDialog() {
   buttons.cancel?.addEventListener("click", () => {
     pendingPublishTarget = null;
     document.getElementById("pendingPublishDialog")?.close();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// #934 skive 3: mindre eller hovedversjon
+// ---------------------------------------------------------------------------
+//
+// Produkteier 2026-11-01 (doc/DESIGN_934.md): når innholdet i et publisert kurs endres, velger
+// forfatteren mindre versjon (rettelser — kursbevisene gjelder som før) eller hovedversjon (nytt innhold
+// deltakerne må ta). Standard er mindre; hovedversjon krever et bevisst klikk. Har ingen kursbevis for
+// kursets nåværende hovedversjon, stilles ikke spørsmålet. Tjeneren eier reglene (og gjør en hovedversjon
+// uten kursbevis til mindre); dialogen viser konsekvensen.
+
+function courseVersionLabel(course) {
+  if (!Number.isInteger(course?.versionMajor)) return "";
+  return `v${course.versionMajor}.${Number.isInteger(course.versionMinor) ? course.versionMinor : 0}`;
+}
+
+function courseVersionChipHtml(course) {
+  const label = courseVersionLabel(course);
+  return label ? ` <span class="status-chip course-version-chip" title="${escapeHtml(t("courses.version.chipTitle"))}">${escapeHtml(label)}</span>` : "";
+}
+
+/** Kursets innhold er rekkefølgen av moduler og seksjoner (diskusjonsbryteren er ikke innhold). */
+function courseItemsKey(list) {
+  return (list ?? []).map((item) => `${item.type}:${item.refId}`).join("|");
+}
+
+/** Hva lagringen endrer: lagt til, tatt ut, og flyttet (det som må flyttes for å gå fra før til nå). */
+function courseItemChanges(beforeKey, afterList) {
+  const afterKey = courseItemsKey(afterList);
+  const before = beforeKey ? beforeKey.split("|") : [];
+  const after = afterKey ? afterKey.split("|") : [];
+  const beforeSet = new Set(before);
+  const afterSet = new Set(after);
+  const a = before.filter((key) => afterSet.has(key));
+  const b = after.filter((key) => beforeSet.has(key));
+  // Lengste felles delsekvens: det som står i samme innbyrdes rekkefølge. Resten er flyttet.
+  const lcs = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      lcs[i][j] = a[i - 1] === b[j - 1] ? lcs[i - 1][j - 1] + 1 : Math.max(lcs[i - 1][j], lcs[i][j - 1]);
+    }
+  }
+  return {
+    added: after.filter((key) => !beforeSet.has(key)).length,
+    removed: before.filter((key) => !afterSet.has(key)).length,
+    moved: a.length - lcs[a.length][b.length],
+  };
+}
+
+function courseVersionHoldersText(course) {
+  const n = Number(course?.certificateHolders) || 0;
+  return n === 1
+    ? tf("courses.version.holdersOne", { major: course.versionMajor })
+    : tf("courses.version.holdersMany", { n, major: course.versionMajor });
+}
+
+function courseVersionChoiceHtml(name, course) {
+  const major = course.versionMajor;
+  const minor = Number.isInteger(course.versionMinor) ? course.versionMinor : 0;
+  return `<fieldset class="course-version-choices">
+      <legend class="course-version-legend">${escapeHtml(t("courses.version.legend"))}</legend>
+      <label class="course-version-choice"><input type="radio" name="${name}" value="minor" checked>
+        <span><strong>${escapeHtml(tf("courses.version.minor", { next: `${major}.${minor + 1}` }))}</strong>
+        <span class="course-version-hint">${escapeHtml(t("courses.version.minorHint"))}</span></span></label>
+      <label class="course-version-choice"><input type="radio" name="${name}" value="major">
+        <span><strong>${escapeHtml(tf("courses.version.major", { next: `${major + 1}.0` }))}</strong>
+        <span class="course-version-hint">${escapeHtml(tf("courses.version.majorHint", { major }))}</span></span></label>
+    </fieldset>
+    <div class="course-version-consequence" data-version-consequence aria-live="polite"></div>`;
+}
+
+function selectedCourseVersion(host, name) {
+  return host?.querySelector(`input[name="${name}"]:checked`)?.value === "major" ? "major" : "minor";
+}
+
+function renderCourseVersionConsequence(host, course, choice) {
+  const box = host?.querySelector("[data-version-consequence]");
+  if (!box) return;
+  const major = course.versionMajor;
+  const next = `${major + 1}.0`;
+  box.classList.toggle("is-major", choice === "major");
+  box.innerHTML = choice === "major"
+    ? `<p><strong>${escapeHtml(tf("courses.version.majorConsequenceTitle", { next }))}</strong></p>
+      <ul>
+        <li>${escapeHtml(tf("courses.version.majorKeep", { major, next }))}</li>
+        <li>${escapeHtml(tf("courses.version.majorCounts", { major }))}</li>
+        <li>${escapeHtml(t("courses.version.majorReport"))}</li>
+      </ul>`
+    : `<p>${escapeHtml(t("courses.version.minorConsequence"))}</p>`;
+}
+
+/** Tegn valget i `host` og hold konsekvensen (og ev. en knappetekst) i takt med det. */
+function mountCourseVersionChoice(host, name, course, onChange) {
+  host.innerHTML = courseVersionChoiceHtml(name, course);
+  const update = () => {
+    const choice = selectedCourseVersion(host, name);
+    renderCourseVersionConsequence(host, course, choice);
+    onChange?.(choice);
+  };
+  for (const input of host.querySelectorAll(`input[name="${name}"]`)) input.addEventListener("change", update);
+  update();
+}
+
+/**
+ * Spør forfatteren før et publisert kurs med kursbevis lagres med endret innhold.
+ * Gir "major", "minor", eller null når forfatteren avbryter (da lagres ingenting).
+ */
+function askCourseVersion(course, changes) {
+  const dialog = document.getElementById("courseVersionDialog");
+  const host = document.getElementById("courseVersionChoiceHost");
+  const saveBtn = document.getElementById("courseVersionSaveBtn");
+  const cancelBtn = document.getElementById("courseVersionCancelBtn");
+  if (!dialog || !host || !saveBtn || !cancelBtn || typeof dialog.showModal !== "function") return Promise.resolve("minor");
+
+  const parts = [];
+  if (changes.added > 0) parts.push(tf("courses.version.added", { n: changes.added }));
+  if (changes.removed > 0) parts.push(tf("courses.version.removed", { n: changes.removed }));
+  if (changes.moved > 0) parts.push(tf("courses.version.moved", { n: changes.moved }));
+  document.getElementById("courseVersionTitle").textContent = t("courses.version.dialogTitle");
+  document.getElementById("courseVersionText").textContent = [
+    tf("courses.version.intro", { title: localizedText(course.title) || course.id, version: courseVersionLabel(course).slice(1) }),
+    courseVersionHoldersText(course),
+    parts.length > 0 ? tf("courses.version.changes", { list: parts.join(", ") }) : "",
+  ].filter(Boolean).join(" ");
+  cancelBtn.textContent = t("courses.version.cancel");
+  const minor = Number.isInteger(course.versionMinor) ? course.versionMinor : 0;
+  mountCourseVersionChoice(host, "courseVersionChoice", course, (choice) => {
+    saveBtn.textContent = tf("courses.version.save", { next: choice === "major" ? `${course.versionMajor + 1}.0` : `${course.versionMajor}.${minor + 1}` });
+  });
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      saveBtn.removeEventListener("click", onSave);
+      cancelBtn.removeEventListener("click", onCancel);
+      dialog.removeEventListener("close", onClose);
+      if (dialog.open) dialog.close();
+      resolve(value);
+    };
+    const onSave = () => finish(selectedCourseVersion(host, "courseVersionChoice"));
+    const onCancel = () => finish(null);
+    // Esc lukker dialogen: det er et nei, ikke et «mindre».
+    const onClose = () => finish(null);
+    saveBtn.addEventListener("click", onSave);
+    cancelBtn.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onClose);
+    dialog.showModal();
+    host.querySelector("input[value='minor']")?.focus();
   });
 }
 
@@ -760,7 +950,8 @@ function getListPage() {
         + (Number.isInteger(c.sortOrder) ? ` <span class="status-chip course-placement-chip" title="${escapeHtml(t("courses.sortOrder"))}">${escapeHtml(tf("courses.list.placement", { n: c.sortOrder }))}</span>` : "")
         // Alfabetisk står temaene under navnet; etter tema sier overskriften det.
         + (view === "alphabetical" && (c.themes ?? []).length > 0 ? `<span class="list-group-themes">${escapeHtml(c.themes.map((theme) => theme.name).join(" · "))}</span>` : "") },
-      { key: "status", label: t("ui.status"), className: "col-status", render: (c) => lifecycleBadge(c, t) },
+      // #934 skive 3: versjonen ved statusen («v3.2») — et merke, ikke en kolonne (#1084).
+      { key: "status", label: t("ui.status"), className: "col-status", render: (c) => lifecycleBadge(c, t) + courseVersionChipHtml(c) },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (c) => certBadge(c.certificationLevel) },
       { key: "moduleCount", label: t("courses.col.moduleCount"), className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
       { key: "inProgress", label: t("courses.col.inProgress"), className: "col-inprogress", title: t("courses.col.inProgressHint"), sortValue: (c) => c.inProgressCount ?? 0, render: (c) => (c.inProgressCount > 0 ? String(c.inProgressCount) : "–") },
@@ -1348,6 +1539,8 @@ async function renderDetailView(courseId) {
   } else {
     courseModules = [];
   }
+  // #934 skive 3: innholdet slik det står nå — lagringen sammenligner med dette.
+  initialCourseItemsKey = courseItemsKey(courseModules);
 
   // Init locale values from existing course or empty
   const titleValues = parseLocalizedFieldValues(course?.title);
@@ -1544,6 +1737,7 @@ function bindCourseDetail() {
 // ---------------------------------------------------------------------------
 
 let courseDetail = null; // { courseId, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled }
+let initialCourseItemsKey = ""; // #934 skive 3: kursets innhold da det ble lastet
 let courseFormPage = null;
 
 const courseFormTexts = () => formPageTexts(t, { back: t("courses.back"), typeLabel: t("courses.typeLabel"), untitled: t("courses.untitled") });
@@ -1567,6 +1761,11 @@ function getCourseFormPage() {
       return courseDetail?.course ? (localizedText(courseDetail.course.title) || "") : "";
     },
     item: () => courseDetail?.course ?? null,
+    // #934 skive 3: versjonen («v3.2») ved statusmerket. Et nytt kurs har ingen ennå.
+    statusHtml: () => {
+      const course = courseDetail?.course ?? null;
+      return course ? lifecycleBadge(course, t) + courseVersionChipHtml(course) : "";
+    },
     t,
     actions: () => courseDetailActions(),
     languages: {
@@ -2059,8 +2258,33 @@ async function saveCourse(courseId) {
   }
 
   if (errorBanner) errorBanner.hidden = true;
+
+  // #934 skive 3: endres innholdet i et kurs som noen har kursbevis for, spør først — også når kurset er
+  // avpublisert (kursbevis betyr at det har vært ute). Avbryter forfatteren, lagres ingenting. Uten
+  // kursbevis spørres det ikke — tjeneren gir en mindre versjon.
+  const loadedCourse = courseId ? courseDetail?.course ?? null : null;
+  const itemsChanged = Boolean(courseId) && courseItemsKey(courseModules) !== initialCourseItemsKey;
+  let versionChoice;
+  if (itemsChanged && Number(loadedCourse?.certificateHolders) > 0) {
+    versionChoice = await askCourseVersion(loadedCourse, courseItemChanges(initialCourseItemsKey, courseModules));
+    if (versionChoice === null) return false;
+  }
+
   if (saveBtn) saveBtn.disabled = true;
   applyCourseLocaleValuesToForm(effectiveValues);
+
+  // Save the mixed module/section sequence (#490). PUT /items also re-syncs
+  // CourseModule server-side (B2) so legacy read paths stay correct.
+  const items = courseModules.map(m =>
+    m.type === "SECTION"
+      ? { type: "SECTION", sectionId: m.refId, discussionsEnabled: m.discussionsEnabled !== false }
+      : { type: "MODULE", moduleId: m.refId, discussionsEnabled: m.discussionsEnabled !== false },
+  );
+  const saveItems = (id) => apiFetch(`/api/admin/content/courses/${encodeURIComponent(id)}/items`, getHeaders, {
+    method: "PUT",
+    // #934 skive 3: markøren sier at dette skjemaet kjenner versjonsspørsmålet (overgangen i PUT …/items).
+    body: JSON.stringify({ items, versionAware: true, ...(versionChoice ? { version: versionChoice } : {}) }),
+  });
 
   try {
     let savedCourseId = courseId;
@@ -2082,9 +2306,12 @@ async function saveCourse(courseId) {
       });
       savedCourseId = body.course?.id;
       if (!savedCourseId) throw new Error(t("courses.noIdReturned"));
+      await saveItems(savedCourseId);
     } else {
-      // Update
-      await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, getHeaders, {
+      // Update. #934 skive 3: er innholdet endret, går navn og innhold i ÉTT kall til et eget endepunkt, i én
+      // transaksjon, med forfatterens svar — serveren avgjør versjonen én gang. En gammel server svarer 404 på
+      // det endepunktet i stedet for å lagre halvt (QA-porten). Uendret innhold: som før.
+      await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}${itemsChanged ? "/content" : ""}`, getHeaders, {
         method: "PUT",
         body: JSON.stringify({
           title: normalizedTitle,
@@ -2095,21 +2322,11 @@ async function saveCourse(courseId) {
           discussionOwnerNotifications,
           sortOrder,
           themeIds,
+          ...(itemsChanged ? { items, ...(versionChoice ? { version: versionChoice } : {}) } : {}),
         }),
       });
+      if (!itemsChanged) await saveItems(courseId);
     }
-
-    // Save the mixed module/section sequence (#490). PUT /items also re-syncs
-    // CourseModule server-side (B2) so legacy read paths stay correct.
-    const items = courseModules.map(m =>
-      m.type === "SECTION"
-        ? { type: "SECTION", sectionId: m.refId, discussionsEnabled: m.discussionsEnabled !== false }
-        : { type: "MODULE", moduleId: m.refId, discussionsEnabled: m.discussionsEnabled !== false },
-    );
-    await apiFetch(`/api/admin/content/courses/${encodeURIComponent(savedCourseId)}/items`, getHeaders, {
-      method: "PUT",
-      body: JSON.stringify({ items }),
-    });
 
     showToast(t("courses.saved"), "success");
     initialDetailLocaleValues = cloneCourseLocaleValues(effectiveValues);

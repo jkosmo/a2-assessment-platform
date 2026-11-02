@@ -3954,7 +3954,10 @@ test.describe("admin content browser coverage", () => {
     );
     await page.locator("#formSaveBtn").click();
     await saveResponse;
-    await expect(page.locator("#formSaveBtn")).toBeEnabled();
+    // #934 skive 3: lagringen er ferdig — innholdet og navnet er lagret, og skjemaet står som lagret.
+    // (Før ventet testen på at Lagre ble aktiv igjen; det skjedde bare fordi PUT …/items feilet i
+    // mockmiljøet og feilgrenen slo knappen på igjen.)
+    await expect(page.locator(".toast__message").first()).toContainText("Course saved.");
 
     await page.goto("/admin-content/courses");
     await expect(page.locator("#coursesTableBody")).toContainText("23 Apr 2026");

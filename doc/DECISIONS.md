@@ -362,6 +362,15 @@ begge før du konkluderer**, og ikke betal for et problem som ikke finnes.
 
 ## Roller og innsyn
 
+### Fagansvarlige deler innsyn — manglende eierskapsvakt på leseruter er med vilje (2026-11-02)
+
+Produkteier ønsker størst mulig deling mellom fagansvarlige (SUBJECT_MATTER_OWNER) i organisasjonen
+(avgjort 2026-09-07, bekreftet 2026-11-02). En leserute uten eierskapsvakt — for eksempel
+kursdetaljen `GET /api/admin/content/courses/:courseId`, som fra 2.129.0 (#934) også viser hvor mange som
+har kursbevis — er derfor et valg, ikke et hull, og skal ikke meldes som funn. Skriveruter er fortsatt
+eierskapsvaktet. Dette blir først relevant om plattformen får flere organisasjoner; da må lesevaktene på
+plass.
+
 ### Revisjonssporet leses av alle med et oppfølgingsforhold til kandidaten
 
 `SUBMISSION_AUDIT_READERS` (`src/auth/roleSets.ts`) inneholder fem roller: ADMINISTRATOR,

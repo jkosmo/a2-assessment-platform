@@ -27,11 +27,12 @@ import { runInTransaction, type DbTransactionClient } from "../../db/transaction
 import { prisma } from "../../db/prisma.js";
 import { courseRepository } from "../course/courseRepository.js";
 import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
+import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, renameSectionInVersionSnapshots, sameLocalizedText, type CourseVersionChoice } from "../course/courseVersioning.js";
 import { randomUUID } from "node:crypto";
 import { createSection, evaluateSectionTranslationGate } from "../course/sectionCommands.js";
 import { moduleExportPayloadSchema, sectionExportPayloadSchema } from "./adminContentSchemas.js";
 import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "../course/assetCommands.js";
-import { DomainRuleError, ForbiddenError, ValidationError } from "../../errors/AppError.js";
+import { AppError, DomainRuleError, ForbiddenError, ValidationError } from "../../errors/AppError.js";
 import { assertContentOwnership } from "../content/contentOwnershipService.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -639,6 +640,9 @@ export async function importCourseFromEnvelope(
     // vakta trenger rollene (administrator går forbi). Uten roller behandles kalleren som vanlig
     // forfatter — strengt, ikke åpent.
     actorRoles?: string[];
+    // #934 skive 3: `replaceExisting` bytter ut alt innholdet. Har noen kursbevis for kursets nåværende
+    // hovedversjon, kreves forfatterens svar (mindre eller hovedversjon), som i dialogen. Uten kursbevis: som før.
+    version?: CourseVersionChoice;
   },
   // #957: samme form som søsterfunksjonene — `importModulePayload` (:336) og `persistStagedSection`
   // (:169) rapporterer begge `heldBackByTranslationGate` oppover. Kursimporten regnet ut flagget,
@@ -850,16 +854,25 @@ export async function importCourseFromEnvelope(
     return await runInTransaction(
       async (tx) => {
         let courseId: string;
+        let courseTextChanged = false;
         if (options.mode === "updateExisting") {
-          const existing = await tx.course.findUnique({ where: { id: options.targetCourseId! }, select: { id: true } });
+          const existing = await tx.course.findUnique({ where: { id: options.targetCourseId! }, select: { id: true, title: true, description: true } });
           if (!existing) throw new DomainRuleError("import_target_not_found", "Target course not found for updateExisting.");
           courseId = options.targetCourseId!;
+          // #934 skive 3: navn eller beskrivelse endret er en mindre versjon, som i kursskjemaet. Økningen
+          // gjøres etter innholdet under: endres også rekkefølgen, er det den som gir versjonen (én per import).
+          const newTitle = serializeRequired(payload.course.title);
+          const newDescription = serializeLocalized(payload.course.description);
+          // En fil uten beskrivelse lar beskrivelsen stå (Prisma hopper over `undefined`) — ingen endring.
+          courseTextChanged =
+            !sameLocalizedText(newTitle, existing.title) ||
+            (newDescription !== undefined && !sameLocalizedText(newDescription, existing.description));
           // Kursets egne felt følger fila; publiseringstilstanden rører vi ikke.
           await tx.course.update({
             where: { id: courseId },
             data: {
-              title: serializeRequired(payload.course.title),
-              description: serializeLocalized(payload.course.description),
+              title: newTitle,
+              description: newDescription,
               certificationLevel: payload.course.certificationLevel ? serializeLocalized(payload.course.certificationLevel as LocalizedText) : null,
               ...(payload.course.sortOrder !== undefined ? { sortOrder: payload.course.sortOrder } : {}),
             },
@@ -872,6 +885,9 @@ export async function importCourseFromEnvelope(
           if (!existing) {
             throw new Error("Target course not found for replaceExisting.");
           }
+          // #934 skive 3 (produkteier 2026-11-02): å bytte ut alt innholdet i et kurs noen har kursbevis for,
+          // krever forfatterens svar. Regelen bor i `applyCourseVersionChange` (spørsmålet sendes med
+          // innholdet under); uten svar avvises importen, og transaksjonen ruller alt tilbake.
           courseId = options.targetCourseId;
         } else {
           const newCourse = await createCourse(
@@ -947,6 +963,8 @@ export async function importCourseFromEnvelope(
               if (reads.length > 0) {
                 await tx.courseSectionRead.createMany({ data: reads.map((r) => ({ userId: r.userId, courseId, sectionId: newId, readAt: r.readAt })), skipDuplicates: true });
               }
+              // #934 skive 3: øyeblikksbildet følger med til kopien, så de kopierte lesingene teller som før.
+              await renameSectionInVersionSnapshots(tx, courseId, target.targetId, newId);
               courseItemInputs.push({ type: "SECTION", sectionId: newId });
               sectionCount += 1;
               summary.replacedUnownedIds.push({ type: "SECTION", oldId: target.targetId, newId, oldArchived: false });
@@ -1035,7 +1053,14 @@ export async function importCourseFromEnvelope(
           }
           summary.removedSections = updatePlan.removed.sectionIds.length;
           summary.removedModules = updatePlan.removed.moduleIds.length;
-          await setCourseItems(courseId, courseItemInputs, undefined, tx);
+          // #934 skive 3: en oppdatering legger aldri nytt innhold inn i et publisert kurs (nye moduler blir
+          // utkast utenfor kurset, nye versjoner legges klar). Den kan ta ut, flytte og bytte ut elementer
+          // med en kopi av den levende versjonen — ingenting deltakerne må ta på nytt. Derfor mindre versjon
+          // her; de nye versjonene får spørsmålet når de publiseres («Publiser nye versjoner»).
+          const itemsBump = await setCourseItems(courseId, courseItemInputs, { actorId: options.actorId, versionRequest: { kind: "minor" } }, tx);
+          if (courseTextChanged && !itemsBump) {
+            await applyCourseVersionChange(tx, courseId, { kind: "minor" }, NO_SECTION_SNAPSHOT, options.actorId);
+          }
           // Det som ble byttet ut, er nå ute av dette kurset. Bruker ingen andre kurs det, arkiveres
           // det (som «Arkiver» i biblioteket: avpublisert + arkivert, I3) — det er bevart, ikke slettet.
           // Brukes det et annet sted, blir det liggende hos eieren sin.
@@ -1075,7 +1100,7 @@ export async function importCourseFromEnvelope(
               importedModuleIds.push(imported.moduleId);
             }
           }
-          await setCourseItems(courseId, courseItemInputs, undefined, tx);
+          await setCourseItems(courseId, courseItemInputs, { actorId: options.actorId, versionRequest: { kind: "question", answer: options.version } }, tx);
         } else {
           const importedModules: Array<{ moduleId: string; sortOrder: number }> = [];
           for (const item of payload.course.modules ?? []) {
@@ -1090,6 +1115,8 @@ export async function importCourseFromEnvelope(
             courseId,
             importedModules.map((m) => ({ moduleId: m.moduleId, sortOrder: m.sortOrder })),
             tx,
+            options.actorId,
+            { kind: "question", answer: options.version },
           );
         }
 

@@ -4,6 +4,7 @@ import { AppError, DomainRuleError, NotFoundError, ValidationError } from "../..
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertSectionNotInAnyCourse, assertSectionNotInIssuedCertificate } from "./contentLifecycle.js";
+import { applyMinorVersionToCoursesContaining, sameLocalizedText } from "./courseVersioning.js";
 import { randomUUID } from "node:crypto";
 import { stageSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs, type IncomingSectionAsset } from "./assetCommands.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
@@ -221,12 +222,19 @@ export async function createSectionWithAssets(input: {
   };
 }
 
-export async function updateSectionTitle(sectionId: string, title: string) {
+export async function updateSectionTitle(sectionId: string, title: string, actorId?: string) {
   await assertSectionExists(sectionId);
-  return prisma.courseSection.update({
-    where: { id: sectionId },
-    data: { title },
-    include: { activeVersion: true },
+  // #934 skive 3: seksjonens navn står i kursene den ligger i — en endring er levende innhold der, og gir
+  // dem en mindre versjon. Samme tekst lagret på nytt er ingen endring.
+  return runInTransaction(async (tx) => {
+    const previous = await tx.courseSection.findUniqueOrThrow({ where: { id: sectionId }, select: { title: true } });
+    const section = await tx.courseSection.update({
+      where: { id: sectionId },
+      data: { title },
+      include: { activeVersion: true },
+    });
+    if (!sameLocalizedText(previous.title, title)) await applyMinorVersionToCoursesContaining(tx, { sectionId }, actorId);
+    return section;
   });
 }
 
@@ -272,6 +280,9 @@ export async function updateSectionContent(sectionId: string, bodyMarkdown: stri
       // med den aktive (gamle) kroppen, og `hasUnpublishedChanges` blir false.
       include: { activeVersion: true, versions: { orderBy: { versionNo: "desc" }, take: 1 } },
     });
+    // #934 skive 3: lagring ER publisering (latest-wins) — den nye teksten er levende i hvert kurs seksjonen
+    // ligger i, og de får en mindre versjon. Holdt tilbake av språkporten: ingenting gikk live.
+    if (!heldBackByTranslationGate) await applyMinorVersionToCoursesContaining(client, { sectionId }, actorId);
     return { ...section, heldBackByTranslationGate, translationGateIssues: gate.issues };
   };
   return tx ? run(tx) : runInTransaction(run);
@@ -305,10 +316,20 @@ export function listSections() {
 // ved lagring; disse handlingene gir samme Publiser/Avpubliser/Arkiver/Gjenopprett-vokabular.
 
 // Publiser: re-pek activeVersionId til siste versjon (krever at det finnes en versjon med innhold).
-export async function publishSection(sectionId: string, actorId?: string) {
-  const section = await prisma.courseSection.findUnique({
+// #934 skive 3: `tx` lar «Publiser nye versjoner» publisere alle elementene og øke kursets versjon i ÉN
+// transaksjon — alt eller ingenting, så en levende ny tekst aldri står uten versjonen som hører til.
+export async function publishSection(
+  sectionId: string,
+  actorId?: string,
+  tx?: DbTransactionClient,
+  // #934 skive 3: «Publiser nye versjoner» og «Publiser kurs» avgjør kursets versjon selv, med forfatterens
+  // svar. Alle andre (seksjonens egen side) gir kursene seksjonen ligger i en mindre versjon.
+  options?: { courseVersionHandledByCaller?: boolean },
+) {
+  const reader = tx ?? prisma;
+  const section = await reader.courseSection.findUnique({
     where: { id: sectionId },
-    select: { id: true, title: true, archivedAt: true },
+    select: { id: true, title: true, archivedAt: true, activeVersionId: true },
   });
   if (!section) {
     throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
@@ -325,7 +346,7 @@ export async function publishSection(sectionId: string, actorId?: string) {
       "Restore the section before publishing it.",
     );
   }
-  const latest = await prisma.courseSectionVersion.findFirst({
+  const latest = await reader.courseSectionVersion.findFirst({
     where: { sectionId },
     orderBy: { versionNo: "desc" },
     select: { id: true, bodyMarkdown: true, publishedAt: true },
@@ -350,7 +371,10 @@ export async function publishSection(sectionId: string, actorId?: string) {
       { issues: gate.issues },
     );
   }
-  const updated = await runInTransaction(async (tx) => {
+  // #934 skive 3: et nytt forsøk på en versjon som alt er aktiv, setter ingenting live — ingen ny kursversjon
+  // (QA-porten). Leses FØR skrivingen: inne i den er `section` den oppdaterte raden.
+  const changed = section.activeVersionId !== latest.id;
+  const write = async (tx: DbTransactionClient) => {
     // 2.101.0: versjonen merkes publisert. Bare pekeren ble flyttet før, så eksporten meldte en
     // levende seksjon som upublisert (`audit.publishedAt: null`) — funnet av stage-testen for
     // «Publiser alle». Står datoen alt (publisert ved lagring, eller tidligere), beholdes den.
@@ -375,9 +399,10 @@ export async function publishSection(sectionId: string, actorId?: string) {
       },
       tx,
     );
+    if (changed && !options?.courseVersionHandledByCaller) await applyMinorVersionToCoursesContaining(tx, { sectionId }, actorId);
     return section;
-  });
-  return updated;
+  };
+  return tx ? write(tx) : runInTransaction(write);
 }
 
 // Avpubliser: nullstill activeVersionId. G2 — kan ikke avpublisere en seksjon som ligger i et kurs.

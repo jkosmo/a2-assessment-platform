@@ -6,7 +6,7 @@ import type { DbTransactionClient } from "../../db/transaction.js";
 
 type CompletionTxClient = Pick<
   DbTransactionClient,
-  "course" | "courseItem" | "courseCompletion" | "courseSectionRead" | "certificationStatus" | "auditEvent" | "submission"
+  "course" | "courseItem" | "courseCompletion" | "courseSectionRead" | "courseVersion" | "certificationStatus" | "auditEvent" | "submission" | "$queryRaw"
 >;
 
 type CourseRepo = ReturnType<typeof createCourseRepository>;

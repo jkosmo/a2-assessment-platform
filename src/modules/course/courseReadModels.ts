@@ -89,6 +89,9 @@ export interface AdminCourseListItem {
   canManage: boolean;
   /** 2.102.0: lokalisert og alfabetisk, for filteret i kursoversikten. */
   themes: LocalizedTheme[];
+  /** #934 skive 3: kursets versjon, vist som «v3.2» i lista. */
+  versionMajor: number;
+  versionMinor: number;
 }
 
 export interface AdminCourseDetail {
@@ -109,6 +112,11 @@ export interface AdminCourseDetail {
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;
+  /** #934 skive 3: kursets versjon, og hvor mange som har kursbevis for den nåværende hovedversjonen —
+   *  dem en ny hovedversjon gjelder. Forfatterdialogen viser tallet og spør bare når det er over null. */
+  versionMajor: number;
+  versionMinor: number;
+  certificateHolders: number;
   modules: Array<{
     moduleId: string;
     sortOrder: number;

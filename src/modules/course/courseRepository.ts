@@ -2,6 +2,7 @@ import { prisma } from "../../db/prisma.js";
 import type { ReportFilters } from "../reporting/types.js";
 import { CERTIFICATION_PASSED_STATUSES } from "../certification/certificationRepository.js";
 import { sectionAvailableWhere } from "./sectionAvailability.js";
+import { countCertificateHolders, loadSectionReadRules, lockCourseRowShared, readCountsForCurrentVersion } from "./courseVersioning.js";
 
 function buildSubmissionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
   return {
@@ -47,7 +48,7 @@ function buildCertificationWhere(filters: Pick<ReportFilters, "dateFrom" | "date
 
 type CourseRepositoryClient = Pick<
   typeof prisma,
-  "course" | "courseItem" | "courseCompletion" | "courseSectionRead" | "certificationStatus" | "submission"
+  "course" | "courseItem" | "courseCompletion" | "courseSectionRead" | "courseVersion" | "certificationStatus" | "submission" | "$queryRaw"
 >;
 
 export function createCourseRepository(client: CourseRepositoryClient = prisma) {
@@ -128,28 +129,54 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       return courses.map(({ _count, ...rest }) => ({ ...rest, _count: { modules: _count.items } }));
     },
 
-    markSectionRead(userId: string, courseId: string, sectionId: string) {
-      return client.courseSectionRead.upsert({
+    // #934 skive 3: en lesing som ikke teller for kursets nåværende hovedversjon (seksjonen er endret
+    // siden forrige), får nytt tidspunkt når deltakeren leser den på nytt — ellers kunne den aldri telle.
+    // En lesing som teller, står urørt: tidspunktet er når hen leste, og aktivitetsrapporten bygger på det.
+    async markSectionRead(userId: string, courseId: string, sectionId: string) {
+      // Venter på en åpen versjonsendring, så tidspunktet aldri havner på feil side av grensen (se låsen).
+      await lockCourseRowShared(client, courseId);
+      const read = await client.courseSectionRead.upsert({
         where: { userId_courseId_sectionId: { userId, courseId, sectionId } },
         update: {},
         create: { userId, courseId, sectionId },
       });
+      const rule = (await loadSectionReadRules(client, [courseId])).get(courseId);
+      if (readCountsForCurrentVersion(rule, sectionId, read.readAt)) return read;
+      return client.courseSectionRead.update({ where: { id: read.id }, data: { readAt: new Date() } });
     },
 
-    findReadSectionIds(userId: string, courseId: string) {
-      return client.courseSectionRead
-        .findMany({ where: { userId, courseId }, select: { sectionId: true } })
-        .then((rows) => rows.map((r) => r.sectionId));
+    // #934 skive 3: bare lesinger som teller for kursets nåværende hovedversjon (courseVersioning.ts).
+    // Porten for kursbevis og lesemerket i kursdetaljen spør her, og må svare likt.
+    async findReadSectionIds(userId: string, courseId: string) {
+      const [rows, rules] = await Promise.all([
+        client.courseSectionRead.findMany({ where: { userId, courseId }, select: { sectionId: true, readAt: true } }),
+        loadSectionReadRules(client, [courseId]),
+      ]);
+      const rule = rules.get(courseId);
+      return rows.filter((r) => readCountsForCurrentVersion(rule, r.sectionId, r.readAt)).map((r) => r.sectionId);
     },
 
     // #799: batch variants of the per-course reads above, so the participant course listing does a fixed
     // number of queries instead of ~4 per visible course. Each returns rows the caller groups in memory.
-    findReadSectionIdsForCourses(userId: string, courseIds: string[]) {
-      if (courseIds.length === 0) return Promise.resolve([] as Array<{ courseId: string; sectionId: string }>);
-      return client.courseSectionRead.findMany({
-        where: { userId, courseId: { in: courseIds } },
-        select: { courseId: true, sectionId: true },
-      });
+    // #934 skive 3: dem en ny hovedversjon gjelder — kursbevis for kursets nåværende hovedversjon.
+    countCertificateHolders(courseId: string, versionMajor: number) {
+      return countCertificateHolders(client, courseId, versionMajor);
+    },
+
+    // #934 skive 3: samme regel som `findReadSectionIds` — fremdriften i «Mine kurs» skal ikke si «lest»
+    // om en seksjon porten for kursbevis ikke teller.
+    async findReadSectionIdsForCourses(userId: string, courseIds: string[]): Promise<Array<{ courseId: string; sectionId: string }>> {
+      if (courseIds.length === 0) return [];
+      const [rows, rules] = await Promise.all([
+        client.courseSectionRead.findMany({
+          where: { userId, courseId: { in: courseIds } },
+          select: { courseId: true, sectionId: true, readAt: true },
+        }),
+        loadSectionReadRules(client, courseIds),
+      ]);
+      return rows
+        .filter((r) => readCountsForCurrentVersion(rules.get(r.courseId), r.sectionId, r.readAt))
+        .map(({ courseId, sectionId }) => ({ courseId, sectionId }));
     },
 
     // The set of the user's PASSED module ids among the given modules (one query across every course's
@@ -306,6 +333,19 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
+    // #934 skive 3: seksjon → aktiv seksjonsversjon for seksjonene kurset inneholder nå. Øyeblikksbildet en
+    // ny hovedversjon lagrer i `CourseVersion` (courseVersioning.ts). Alle seksjoner, også arkiverte og
+    // tilbakeholdte: det er hva kurset INNEHOLDER som sammenlignes, ikke hva en deltaker kan lese.
+    async findSectionVersions(courseId: string): Promise<Record<string, string | null>> {
+      const items = await client.courseItem.findMany({
+        where: { courseId, itemType: "SECTION", sectionId: { not: null } },
+        select: { sectionId: true, section: { select: { activeVersionId: true } } },
+      });
+      const map: Record<string, string | null> = {};
+      for (const item of items) if (item.sectionId) map[item.sectionId] = item.section?.activeVersionId ?? null;
+      return map;
+    },
+
     // #502 contract-fase: `modules` deriveres nå fra CourseItem (MODULE-elementer) i stedet for den
     // gamle CourseModule-join-en, så CourseItem er eneste sannhetskilde. Retur-shapen beholdes
     // ({ moduleId, sortOrder, module }) så konsumentene er uendret.
@@ -418,15 +458,15 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
-    findReadSectionIdsForCourseParticipants(
+    // #934 skive 3: kursrapportens «leste seksjoner» følger samme regel som porten for kursbevis.
+    async findReadSectionIdsForCourseParticipants(
       courseId: string,
       userIds: string[],
       filters: Pick<ReportFilters, "dateFrom" | "dateTo"> = {},
-    ) {
-      if (userIds.length === 0) {
-        return Promise.resolve([] as Array<{ userId: string; sectionId: string; readAt: Date }>);
-      }
-      return client.courseSectionRead.findMany({
+    ): Promise<Array<{ userId: string; sectionId: string; readAt: Date }>> {
+      if (userIds.length === 0) return [];
+      const rule = (await loadSectionReadRules(client, [courseId])).get(courseId);
+      const rows = await client.courseSectionRead.findMany({
         where: {
           courseId,
           userId: { in: userIds },
@@ -441,6 +481,7 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
         },
         select: { userId: true, sectionId: true, readAt: true },
       });
+      return rows.filter((r) => readCountsForCurrentVersion(rule, r.sectionId, r.readAt));
     },
 
     findUserCourseCompletions(userId: string) {

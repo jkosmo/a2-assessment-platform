@@ -1,0 +1,308 @@
+// #934 skive 3: kursets versjon økes, og hva en ny hovedversjon betyr for lesingene.
+//
+// Produkteier 2026-11-01 (doc/DESIGN_934.md):
+//   - Innholdsansvarlig velger hovedversjon eller mindre versjon når et publisert kurs endres.
+//     Standarden er mindre: et feiltrykk skal ikke ta kursbeviset fra noen.
+//   - Har ingen kursbevis for kursets nåværende hovedversjon, stilles ikke spørsmålet: versjonen øker
+//     som mindre. Tjeneren håndhever det samme — en hovedversjon uten noen å gjelde blir mindre.
+//   - Et kurs som aldri er publisert, får ingen ny versjon: det blir 1.0 når det publiseres første gang.
+//     Et kurs som HAR vært publisert (avpublisert, eller med kursbevis), versjoneres som et publisert —
+//     ellers kunne innholdet endres mens kurset var nede og publiseres igjen uten versjon (QA-porten).
+//   - Det som allerede er gjort, teller: en seksjon som er lest, står som lest — unntatt en seksjon som
+//     er endret siden forrige hovedversjon. Den leses på nytt.
+//
+// Regelen for seksjoner bor her, og ALLE som spør «hvilke seksjoner har deltakeren lest i dette kurset»
+// går gjennom `filterReadsForCurrentVersion` (kursrepositoriet). Porten for kursbevis, fremdriften i
+// «Mine kurs», lesemerket i kursdetaljen og kursrapporten må svare likt — ellers står kurset som lest
+// i lista mens beviset aldri kommer.
+import { recordAuditEvent } from "../../services/auditService.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import type { DbTransactionClient } from "../../db/transaction.js";
+import { AppError } from "../../errors/AppError.js";
+
+export type CourseVersionChoice = "major" | "minor";
+
+/** Seksjon → aktiv seksjonsversjon. Lages av kursrepositoriet (`findSectionVersions`), kursets innhold-dør. */
+export type SectionVersions = Record<string, string | null>;
+
+/**
+ * Øyeblikksbildet en hovedversjon trenger: seksjonsversjonene RETT FØR endringen (tatt av kalleren før den
+ * skrev noe), og en måte å lese dem etter på. `after` kalles bare for en hovedversjon.
+ */
+export type SectionSnapshot = { before: SectionVersions; after: () => Promise<SectionVersions> };
+
+/** Navn og beskrivelse er ikke seksjoner: endringen gir alltid mindre, og trenger ikke noe øyeblikksbilde. */
+export const NO_SECTION_SNAPSHOT: SectionSnapshot = { before: {}, after: async () => ({}) };
+
+type VersionClient = Pick<DbTransactionClient, "course" | "courseCompletion" | "courseVersion" | "auditEvent" | "$queryRaw">;
+
+/**
+ * Lås kursraden ut transaksjonen (`SELECT … FOR UPDATE`). To endringer som overlapper, leser ellers samme
+ * versjon og skriver samme neste — én økning går tapt, og revisjonssporets «fra» blir feil (QA-porten).
+ * Den andre venter til den første er ferdig, og leser så versjonen den første skrev.
+ */
+export async function lockCourseRow(client: Pick<DbTransactionClient, "$queryRaw">, courseId: string): Promise<void> {
+  await client.$queryRaw`SELECT "id" FROM "Course" WHERE "id" = ${courseId} FOR UPDATE`;
+}
+
+/**
+ * Delt lås på kursraden (`SELECT … FOR SHARE`) for en deltakers lesing (QA-porten, runde 5). Lesinger hindrer
+ * ikke hverandre, men venter på en åpen versjonsendring (`FOR UPDATE`), og den venter på dem. Dermed er
+ * grensen `publishedAt` for en ny hovedversjon ekte: en lesing gjort mens den gamle teksten var aktiv, er
+ * ferdig før versjonsendringen tar låsen (og får et tidligere tidspunkt); en lesing etter, ser den nye teksten.
+ */
+export async function lockCourseRowShared(client: Pick<DbTransactionClient, "$queryRaw">, courseId: string): Promise<void> {
+  await client.$queryRaw`SELECT "id" FROM "Course" WHERE "id" = ${courseId} FOR SHARE`;
+}
+
+/** Hvor mange som har kursbevis for kursets nåværende hovedversjon — dem en ny hovedversjon gjelder. */
+export function countCertificateHolders(
+  client: Pick<DbTransactionClient, "courseCompletion">,
+  courseId: string,
+  versionMajor: number,
+): Promise<number> {
+  return client.courseCompletion.count({ where: { courseId, versionMajor } });
+}
+
+export type CourseVersionBump = {
+  kind: CourseVersionChoice;
+  from: { major: number; minor: number };
+  to: { major: number; minor: number };
+};
+
+/**
+ * Hvordan en endring spør om versjonen (produkteier 2026-11-01/02, doc/DESIGN_934.md):
+ *   - `question`: forfatteren svarer mindre eller hoved — kursskjemaet, «Publiser nye versjoner», «Publiser
+ *     kurs» med nytt innhold, import som bytter ut alt. UTEN svar avvises endringen når noen har kursbevis
+ *     for kursets nåværende hovedversjon (`course_version_required`); dialogene har alltid et svar.
+ *   - `minor`: designet stiller ikke spørsmålet — navn/beskrivelse, seksjon eller modul publisert fra sin egen
+ *     side, import «Oppdater dette kurset», legacy `PUT …/modules`.
+ */
+export type CourseVersionRequest = { kind: "question"; answer?: CourseVersionChoice } | { kind: "minor" };
+
+/**
+ * ⚠️ DEN ENE VEIEN til en ny kursversjon. Alle måter innhold går live på i et kurs, eller kursets versjon
+ * endres, kaller denne (eller `applyMinorVersionToCoursesContaining`, som kaller denne) — produkteier
+ * 2026-11-02: «felles kode, ikke duplisert logikk». Den eier sjekken av kursbevis, regelen for manglende
+ * svar, låsen, øyeblikksbildet og økningen. `test/course-version-write-guard.test.js` nekter andre skrivere.
+ *
+ * `snapshot.before` er seksjonsversjonene RETT FØR endringen; `snapshot.after` leser dem etter. Kalles i samme
+ * transaksjon som endringen, så øyeblikksbildet og versjonen ikke kan skilles — og en avvisning ruller
+ * endringen tilbake. Returnerer `null` når kurset aldri har vært publisert (det blir 1.0 ved første
+ * publisering) — da økes ingenting.
+ */
+export async function applyCourseVersionChange(
+  client: VersionClient,
+  courseId: string,
+  request: CourseVersionRequest,
+  snapshot: SectionSnapshot,
+  actorId?: string,
+): Promise<CourseVersionBump | null> {
+  const { before } = snapshot;
+  await lockCourseRow(client, courseId);
+  const course = await client.course.findUnique({
+    where: { id: courseId },
+    select: { publishedAt: true, slug: true, versionMajor: true, versionMinor: true },
+  });
+  if (!course) return null;
+  // «Har vært publisert»: publisert nå, eller fikk delingslenka ved første publisering (2.121.0), eller har
+  // kursbevis (eldre kurs uten lenke). Et kurs som aldri har vært ute, har ingen versjon å endre.
+  const everPublished =
+    course.publishedAt != null || course.slug != null || (await client.courseCompletion.count({ where: { courseId } })) > 0;
+  if (!everPublished) return null;
+
+  const from = { major: course.versionMajor, minor: course.versionMinor };
+  const holders = request.kind === "question" ? await countCertificateHolders(client, courseId, course.versionMajor) : 0;
+  if (request.kind === "question" && !request.answer && holders > 0) {
+    throw new AppError(
+      "course_version_required",
+      400,
+      'Participants have a course certificate for this course: say whether this is a minor or a major version (version: "minor" | "major").',
+      { certificateHolders: holders },
+    );
+  }
+  const choice: CourseVersionChoice = request.kind === "question" && request.answer ? request.answer : "minor";
+  // Hovedversjon er et valg som gjelder kursbevis. Har ingen bevis for denne hovedversjonen, finnes det
+  // ingen å gjelde for — og en hovedversjon ville bare krevd ny lesing av dem som er midt i kurset.
+  const kind: CourseVersionChoice = choice === "major" && holders > 0 ? "major" : "minor";
+
+  let to: { major: number; minor: number };
+  if (kind === "minor") {
+    to = { major: from.major, minor: from.minor + 1 };
+    await client.course.update({ where: { id: courseId }, data: { versionMinor: to.minor } });
+  } else {
+    to = { major: from.major + 1, minor: 0 };
+    const now = new Date();
+    const after = await snapshot.after();
+    // Raden for versjonen som slutter: det som gjaldt rett før endringen. Fantes den (kurset har hatt en
+    // hovedversjon før), skrives slutten av den over starten — regelen sammenligner slutten av N−1 med
+    // starten av N, så en seksjon som fikk ny versjon INNENFOR N−1 (mindre versjon, #1095) ikke telles
+    // som endret en gang til.
+    await client.courseVersion.upsert({
+      where: { courseId_versionMajor: { courseId, versionMajor: from.major } },
+      update: { sectionVersionsJson: JSON.stringify(before) },
+      create: {
+        courseId,
+        versionMajor: from.major,
+        publishedAt: course.publishedAt ?? now,
+        sectionVersionsJson: JSON.stringify(before),
+      },
+    });
+    await client.courseVersion.create({
+      data: { courseId, versionMajor: to.major, publishedAt: now, sectionVersionsJson: JSON.stringify(after) },
+    });
+    await client.course.update({ where: { id: courseId }, data: { versionMajor: to.major, versionMinor: 0 } });
+  }
+
+  await recordAuditEvent(
+    {
+      entityType: auditEntityTypes.course,
+      entityId: courseId,
+      action: auditActions.course.versionChanged,
+      actorId,
+      metadata: { courseId, kind, requested: choice, from: `${from.major}.${from.minor}`, to: `${to.major}.${to.minor}` },
+    },
+    client,
+  );
+  return { kind, from, to };
+}
+
+/**
+ * En seksjon eller modul går live fra sin EGEN side (publisert, lagret med alle språk, ny terskel). Den er
+ * levende innhold i hvert kurs den ligger i; designet stiller ikke spørsmålet der («Ingen — mindre for
+ * kursene»), så hvert kurs som har vært ute får en mindre versjon. Modulens eget hoved/mindre-valg per kurs
+ * kommer i skive 5. Kursene låses i id-rekkefølge, så to slike endringer ikke kan låse hverandre fast.
+ */
+export async function applyMinorVersionToCoursesContaining(
+  client: VersionClient,
+  ref: { sectionId: string } | { moduleId: string } | Array<{ sectionId: string } | { moduleId: string }>,
+  actorId?: string,
+  // «Publiser nye versjoner» og «Publiser kurs» avgjør versjonen for kurset de står i, med forfatterens svar.
+  // De delte elementene er levende også i ANDRE kurs — de får en mindre versjon her, én gang hvert.
+  options?: { exceptCourseId?: string },
+): Promise<void> {
+  const refs = Array.isArray(ref) ? ref : [ref];
+  if (refs.length === 0) return;
+  const courses = await client.course.findMany({
+    where: {
+      OR: refs.map((one) => ({ items: { some: one } })),
+      ...(options?.exceptCourseId ? { id: { not: options.exceptCourseId } } : {}),
+    },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+  for (const course of courses) {
+    await applyCourseVersionChange(client, course.id, { kind: "minor" }, NO_SECTION_SNAPSHOT, actorId);
+  }
+}
+
+/**
+ * Navn og beskrivelse lagres som språkkart i JSON. Samme tekst med nøklene i en annen rekkefølge, et tomt
+ * språk med eller uten nøkkel, eller ren tekst mot `{"nb": …}` med samme tekst, er ingen endring og skal ikke
+ * gi ny versjon. Ren tekst er bokmål — slik klienten leser den (`parseLocalizedFieldValues`). Kursskjemaet og
+ * importen sender hele kartet ved hver lagring.
+ */
+export function sameLocalizedText(a: string | null | undefined, b: string | null | undefined) {
+  const canonical = (value: string | null | undefined) => {
+    if (value == null) return "[]";
+    let map: Record<string, unknown> = { nb: value };
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) map = parsed as Record<string, unknown>;
+      else if (typeof parsed === "string") map = { nb: parsed };
+    } catch {
+      // Ren tekst, ikke et språkkart: bokmål.
+    }
+    return JSON.stringify(
+      Object.keys(map).sort().map((key) => [key, typeof map[key] === "string" ? (map[key] as string).trim() : (map[key] ?? "")]).filter(([, v]) => v !== ""),
+    );
+  };
+  return canonical(a) === canonical(b);
+}
+
+/**
+ * En seksjon byttes ut med en kopi under ny id (import «Oppdater dette kurset», #1095: et fremmed element
+ * byttes med forfatterens kopi av den LEVENDE versjonen, og lesingene kopieres med samme tidspunkt). For
+ * regelen er det samme seksjon: øyeblikksbildene for nåværende og forrige hovedversjon flytter nøkkelen til
+ * den nye id-en, og en seksjon som var uendret, forblir uendret — ellers ville de kopierte lesingene ikke telle.
+ */
+export async function renameSectionInVersionSnapshots(
+  client: Pick<DbTransactionClient, "courseVersion">,
+  courseId: string,
+  oldSectionId: string,
+  newSectionId: string,
+): Promise<void> {
+  const rows = await client.courseVersion.findMany({ where: { courseId }, orderBy: { versionMajor: "desc" }, take: 2 });
+  const [current, previous] = rows;
+  if (!current) return;
+  const now = parseSectionVersions(current.sectionVersionsJson);
+  if (!Object.prototype.hasOwnProperty.call(now, oldSectionId)) return;
+  const then = previous ? parseSectionVersions(previous.sectionVersionsJson) : {};
+  const hadBefore = Object.prototype.hasOwnProperty.call(then, oldSectionId);
+  const unchanged = hadBefore && then[oldSectionId] === now[oldSectionId];
+  if (hadBefore) {
+    then[newSectionId] = then[oldSectionId];
+    delete then[oldSectionId];
+  }
+  // Uendret: begge sider sier det samme. Endret (eller ny i denne versjonen): forskjellig, som før byttet.
+  now[newSectionId] = unchanged ? then[newSectionId] : `erstattet:${newSectionId}`;
+  delete now[oldSectionId];
+  await client.courseVersion.update({ where: { id: current.id }, data: { sectionVersionsJson: JSON.stringify(now) } });
+  if (previous && hadBefore) {
+    await client.courseVersion.update({ where: { id: previous.id }, data: { sectionVersionsJson: JSON.stringify(then) } });
+  }
+}
+
+/** Regelen for én hovedversjon: lesinger fra før `since` teller bare for seksjonene i `unchanged`. */
+export type SectionReadRule = { since: Date; unchanged: Set<string> };
+
+/**
+ * Regelen for kursenes NÅVÆRENDE hovedversjon, per kurs. Et kurs uten rader har ingen regel (`null`):
+ * alle lesinger teller, som før skive 3. Raden med høyest hovedversjon er den nåværende — rader lages
+ * bare når en hovedversjon lages, i samme transaksjon som kursets versjon økes.
+ */
+export async function loadSectionReadRules(
+  client: Pick<DbTransactionClient, "courseVersion">,
+  courseIds: string[],
+): Promise<Map<string, SectionReadRule | null>> {
+  const rules = new Map<string, SectionReadRule | null>();
+  if (courseIds.length === 0) return rules;
+  const rows = await client.courseVersion.findMany({
+    where: { courseId: { in: courseIds } },
+    select: { courseId: true, versionMajor: true, publishedAt: true, sectionVersionsJson: true },
+  });
+  const byCourse = new Map<string, typeof rows>();
+  for (const row of rows) byCourse.set(row.courseId, [...(byCourse.get(row.courseId) ?? []), row]);
+  for (const courseId of courseIds) {
+    const own = byCourse.get(courseId) ?? [];
+    if (own.length === 0) {
+      rules.set(courseId, null);
+      continue;
+    }
+    const current = own.reduce((a, b) => (b.versionMajor > a.versionMajor ? b : a));
+    const previous = own.find((row) => row.versionMajor === current.versionMajor - 1);
+    const now = parseSectionVersions(current.sectionVersionsJson);
+    const then = previous ? parseSectionVersions(previous.sectionVersionsJson) : {};
+    const unchanged = new Set(
+      Object.keys(now).filter((sectionId) => Object.prototype.hasOwnProperty.call(then, sectionId) && then[sectionId] === now[sectionId]),
+    );
+    rules.set(courseId, { since: current.publishedAt, unchanged });
+  }
+  return rules;
+}
+
+/** Teller denne lesingen for kursets nåværende hovedversjon? */
+export function readCountsForCurrentVersion(rule: SectionReadRule | null | undefined, sectionId: string, readAt: Date | null | undefined): boolean {
+  if (!rule) return true;
+  if (rule.unchanged.has(sectionId)) return true;
+  return readAt != null && readAt.getTime() >= rule.since.getTime();
+}
+
+function parseSectionVersions(json: string): SectionVersions {
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as SectionVersions) : {};
+  } catch {
+    return {};
+  }
+}

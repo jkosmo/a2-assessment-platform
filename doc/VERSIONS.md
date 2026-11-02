@@ -2,6 +2,76 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.129.0 - 2026-11-02
+
+### Kursversjoner, skive 3 av 5: forfatteren velger mindre versjon eller hovedversjon — #934
+
+Produkteier 2026-11-01 (`doc/DESIGN_934.md`): innholdsansvarlig velger, og grensesnittet skal gjøre
+konsekvensen tydelig. Nå kan hovedversjon 2 lages for første gang.
+
+- **Kursskjemaet:** lagrer forfatteren et publisert kurs der noe er lagt til, tatt ut eller flyttet, og
+  noen har kursbevis for kursets nåværende hovedversjon, kommer spørsmålet «Hva slags endring er dette?».
+  - Dialogen viser:
+    - versjonen nå («er publisert som versjon 3.1»);
+    - hvor mange som har kursbevis;
+    - hva endringen er («1 lagt til, 1 flyttet»);
+    - to valg: «Mindre versjon — blir 3.2» og «Hovedversjon — blir 4.0», med konsekvensen skrevet ut.
+  - **Mindre er standard**, og hovedversjon krever et bevisst klikk.
+  - Avbryt eller Esc lagrer ingenting.
+  - Ingen kursbevis: ingen spørsmål, og versjonen øker som mindre.
+- **«Publiser nye versjoner»** stiller det samme spørsmålet, ett svar for kurset, ved siden av
+  revisjonsspørsmålet for modulene (det slås sammen i skive 5).
+  - Elementene og versjonen publiseres nå i én transaksjon, alt eller ingenting. Før ble hvert element
+    publisert for seg, og en feil midt i kunne la noen stå publisert.
+- **Avpubliserte kurs:** et kurs som har vært ute, versjoneres også mens det er avpublisert. Et kurs som
+  aldri er publisert, blir 1.0 ved første publisering.
+- **Lagringen:** kursskjemaet lagrer navn og innhold i ett kall og én transaksjon. Hver lagring får én
+  versjon, og serveren avgjør den.
+- **Dialogene på kurssiden** passer nå på en telefon. Grunnstilen fløt over på 390 px, også for de
+  dialogene som fantes fra før.
+- **Import «Oppdater dette kurset»:** gir en mindre versjon. Den legger aldri nytt påkrevd innhold inn i
+  et publisert kurs. En fil uten beskrivelse lar beskrivelsen stå, og regnes ikke som endring.
+- **Import som bytter ut alt innholdet** (`replaceExisting`, bare API): på et kurs med kursbevis kreves et
+  svar, mindre eller hovedversjon (produkteier 2026-11-02). Uten svar avvises importen, og ingenting
+  skrives. Uten kursbevis: som før.
+- **«Publiser kurs»** på et kurs som har vært ute og har kursbevis, der nytt innhold går live, stiller samme
+  spørsmål som skjemaet. Det skjer i én transaksjon, og første publisering blir 1.0.
+- **Uten svar, når noen har kursbevis,** avvises endringen, og ingenting lagres. Dialogene har alltid et
+  svar, siden mindre er valgt fra start.
+- **En seksjon eller modul fra sin egen side:** når den lagres, publiseres, omdøpes eller får nye terskler,
+  får kursene den ligger i en mindre versjon. For moduler er det midlertidig: valget per kurs kommer i
+  skive 5.
+- **Overgang under utrullingen:** en fane som var åpen fra før 2.129.0, får en mindre versjon når den lagrer
+  innhold, i stedet for at lagringen avvises. Overgangen fjernes i neste utgivelse.
+- **Felles kode:** alle veier inn til en ny kursversjon går gjennom én funksjon
+  (`applyCourseVersionChange`), og en vakt-test nekter nye skrivere.
+- **Navn lagret som ren tekst** regnes som bokmål. Samme navn sendt som språkkart er ingen endring.
+- **Deling mellom fagansvarlige:** at en fagansvarlig kan se antall kursbevis i kurs hen ikke eier, er
+  ønsket. Det står nå i `doc/DECISIONS.md`.
+- **Versjonen vises:** «v3.2» står ved statusen i kurslista og i hodet på kursskjemaet.
+- **Navn eller beskrivelse** endret på et publisert kurs gir en mindre versjon, uten spørsmål.
+  Innstillinger (nivå, tilgang, diskusjon, plassering, tema) gir ingen ny versjon.
+- **Det som allerede er gjort, teller:**
+  - Ved en hovedversjon står beståtte moduler og leste seksjoner.
+  - Unntaket er en seksjon som er endret siden forrige hovedversjon. Den leses på nytt, og
+    lesingen får da nytt tidspunkt.
+  - Kursbevisporten, fremdriften i «Mine kurs», lesemerket i kursdetaljen og kursrapporten følger samme
+    regel.
+- **Ny tabell `CourseVersion`:** én rad per hovedversjon, med seksjonsversjonene. Den skrives i samme
+  transaksjon som versjonen økes, med det som gjaldt rett før endringen.
+Kjente hull (doc/DESIGN_934.md, «Kjente hull etter 2.129.0»):
+- en gammel fane som endrer både navn og innhold, gir to mindre versjoner;
+- mange samtidige publiseringer kan gi 500 og rulles tilbake (forbindelsespool, låserekkefølge ved delte
+  elementer). Ingenting blir halvt publisert.
+
+Kjent fra før, ikke rettet: på 360 px flyter handlingsraden øverst i kursskjemaet 13 px over på bokmål.
+
+Ikke med ennå:
+- e-post til dem med eldre kursbevis (skive 4) — derfor sier dialogen ikke noe om e-post;
+- moduler med hovedversjon og mindre versjon (skive 5);
+- versjonen i kurseksporten.
+
+
 ## 2.128.0 - 2026-11-01
 
 ### Kursversjoner, skive 2 av 5: alt som leser kursbevis skiller versjonene — #934

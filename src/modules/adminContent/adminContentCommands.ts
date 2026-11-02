@@ -22,6 +22,7 @@ import { createCertificationRepository } from "../certification/certificationRep
 import { recipientLocale } from "../../i18n/recipientLocale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
+import { applyMinorVersionToCoursesContaining } from "../course/courseVersioning.js";
 
 type CreateRubricVersionInput = {
   moduleId: string;
@@ -983,7 +984,10 @@ export async function publishModuleVersion(
   moduleVersionId: string,
   actorId: string,
   tx?: DbTransactionClient,
-  options?: { supersedesEarlierPasses?: boolean },
+  // #934 skive 3: `courseVersionHandledByCaller` — «Publiser nye versjoner» og «Publiser kurs» avgjør kursets
+  // versjon selv. Alle andre (modulens egen side, modulimport) gir kursene modulen ligger i en mindre versjon;
+  // modulens eget hoved/mindre-valg per kurs kommer i skive 5.
+  options?: { supersedesEarlierPasses?: boolean; courseVersionHandledByCaller?: boolean },
 ) {
   // #796: the read runs on the tx client when composing an import, so it sees the just-created module.
   const module = await ensureModuleExists(moduleId, tx ? createAdminContentRepository(tx) : adminContentRepository);
@@ -996,6 +1000,10 @@ export async function publishModuleVersion(
       actorId,
       now,
     );
+    // Et nytt forsøk på en versjon som alt er aktiv, setter ingenting live — ingen ny kursversjon (QA-porten).
+    if (module.activeVersionId !== moduleVersionId && !options?.courseVersionHandledByCaller) {
+      await applyMinorVersionToCoursesContaining(client, { moduleId }, actorId);
+    }
 
     if (options?.supersedesEarlierPasses) {
       const certRepo = createCertificationRepository(client);
@@ -1292,6 +1300,8 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
       assessmentPolicyJson: assessmentPolicyCodec.serialize(newPolicy),
     });
     const published = await repo.publishModuleVersion(input.moduleId, newVersion.id, input.actorId, now);
+    // #934 skive 3: nye terskler er levende i kursene modulen ligger i — mindre versjon for dem.
+    await applyMinorVersionToCoursesContaining(tx, { moduleId: input.moduleId }, input.actorId);
 
     await recordAuditEvent(
       {

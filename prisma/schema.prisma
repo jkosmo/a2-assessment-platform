@@ -673,6 +673,8 @@ model Course {
   updatedAt          DateTime                @updatedAt
   items              CourseItem[]
   completions        CourseCompletion[]
+  // #934 skive 3: én rad per hovedversjon, for regelen om endrede seksjoner.
+  versions           CourseVersion[]
   sectionReads       CourseSectionRead[]
   enrollments        CourseEnrollment[]
   groupAssignments   CourseGroupAssignment[]
@@ -730,6 +732,28 @@ model CourseCompletion {
   // 2.128.0 (skive 2), i samme utrulling som leserne lærte å skille versjonene.
   @@unique([userId, courseId, versionMajor])
   @@index([courseId, completedAt])
+}
+
+// #934 skive 3: én rad per hovedversjon av et kurs. Brukes bare til regelen om endrede seksjoner
+// (produkteier 2026-11-01): en seksjon som er endret siden forrige hovedversjon, leses på nytt.
+//
+// `sectionVersionsJson` er seksjon → aktiv seksjonsversjon (id, eller null). Når hovedversjon N lages,
+// skrives raden for N−1 med det som gjaldt RETT FØR endringen (slutten av N−1), og raden for N med det
+// som gjelder rett etter, i samme transaksjon som versjonen økes. En seksjon er endret i N når de to
+// radene sier ulik versjon; en lesing teller for N når seksjonen er uendret, eller lesingen er gjort
+// etter `publishedAt` for N. Kursets innhold lagres ikke her — det står i kursbevisets øyeblikksbilde.
+// Kurs uten rader (alle på 1.x) har ingen slik regel: alle lesinger teller, som før.
+model CourseVersion {
+  id                  String   @id @default(cuid())
+  courseId            String
+  versionMajor        Int
+  publishedAt         DateTime
+  sectionVersionsJson String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  course              Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, versionMajor])
 }
 
 // #496/EN-1: assignment of a course to a participant (individual, department, or self-enrollment),
