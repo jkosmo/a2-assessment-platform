@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.130.1 - 2026-11-02
+
+QA-sjekken (kjørt på 2.130.0 da Codex var tilbake) fant fire mindre feil i seilbåten (#1137):
+
+- **Flere kurs fullført samtidig:** én bestått modul kan fullføre flere kurs. Bare det siste kurset,
+  og bare dets første temakopi, fikk båten som kommer i mål. Nå feirer hvert kort. Skjer det mens
+  deltakeren står inne i et kurs (lista er skjult), venter båtene til lista vises igjen.
+- **Fartsstripa ved første steg av mange:** med 1 av 300 steg sto båten helt til høyre, og stripa bak
+  den ble klippet bort. Båten stopper nå så langt inne at stripa alltid synes.
+- **Fullført med «5 av 6 steg»:** et fullført kurs der en mindre versjon har lagt til et steg (beviset
+  gjelder fortsatt), viste hel grønn linje med etiketten «5 av 6 steg». Linja heter nå «Fullført», så
+  verdi, bredde, etikett og verktøytips er enige. Raden viser heller ikke «Seksjoner 5/6» lenger; en
+  telling står bare der når den er full.
+- **Kjent og ikke rettet** (står i #1137):
+  - En linje smalere enn 56 px setter båten helt til venstre. Det skjer ikke i dagens layout, der linja
+    er rundt 300 px selv på 360 px.
+  - Språkbytte midt i feiringen (4 sekunder) avbryter den. Feilen fantes fra før: lista tegnes på nytt.
+  - Ventende båter (kurs fullført mens et annet kurs var åpent) kan feire utenfor synsfeltet i en lang
+    liste, og vises ikke hvis lista ikke klarer å laste på nytt når deltakeren går tilbake.
+- **Flatekartet** (`FEATURE_SURFACE_MAP.md`) sa fortsatt at fullførte kurs ikke har linje.
+
 ## 2.130.0 - 2026-11-02
 
 Første synlige del av gamifiseringen (`doc/design/GAMIFISERING_DESIGN.md`). Alt bestemt av produkteier

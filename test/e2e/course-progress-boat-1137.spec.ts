@@ -9,7 +9,7 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 
 const json = (body: unknown) => ({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 
-type Course = { id: string; title: string; done: number; total: number; status: string };
+type Course = { id: string; title: string; done: number; total: number; status: string; themes?: Array<{ id: string; name: string }> };
 
 function apiCourse(c: Course) {
   return {
@@ -18,6 +18,7 @@ function apiCourse(c: Course) {
     description: null,
     moduleCount: 0,
     progress: { completed: c.done, total: c.total, sectionCompleted: c.done, sectionTotal: c.total, courseStatus: c.status },
+    themes: c.themes ?? [],
   };
 }
 
@@ -36,7 +37,10 @@ async function mockBase(page: Page, getCourses: () => Course[], completions: () 
   await page.route("**/version", (r: Route) => r.fulfill(json({ version: "test" })));
   await page.route("**/api/me", (r: Route) => r.fulfill(json({ user: { roles: ["PARTICIPANT"] }, consent: { accepted: true, currentVersion: "1.0" } })));
   await page.route("**/api/queue-counts", (r: Route) => r.fulfill(json({ counts: {} })));
-  await page.route("**/api/courses", (r: Route) => r.fulfill(json({ courses: getCourses().map(apiCourse) })));
+  await page.route("**/api/courses", (r: Route) => r.fulfill(json({
+    courses: getCourses().map(apiCourse),
+    themes: [...new Map(getCourses().flatMap((c) => c.themes ?? []).map((th) => [th.id, th])).values()],
+  })));
   await page.route("**/api/courses/completions", (r: Route) => r.fulfill(json({ completions: completions() })));
   await page.route(/\/api\/courses\/c(?!ompletions)[^/?]*$/, (r: Route) => {
     const id = new URL(r.request().url()).pathname.split("/").pop()!;
@@ -181,6 +185,136 @@ test.describe("#1137 seilbåten på fremdriftslinja", () => {
     expect(await page.evaluate(() => (window as unknown as { sawBoat: boolean }).sawBoat)).toBe(false);
     await expect(item(page, "cGo").locator(".course-boat")).toHaveCount(0);
     await expect(item(page, "cGo").locator(".course-progress-fill")).toHaveClass(/completed/);
+  });
+
+  // QA 2.130.0, funn 1: én bestått modul kan fullføre flere kurs samtidig. Bare det siste — og bare den
+  // første temakopien — fikk båten; de andre hoppet rett til grønt.
+  test("flere kurs fullført samtidig: hvert kort feirer, også temakopiene", async ({ page }) => {
+    let finished = false;
+    const t1 = { id: "t1", name: "Etikk" };
+    const t2 = { id: "t2", name: "Sikkerhet" };
+    await mockBase(
+      page,
+      () => [
+        { id: "cA", title: "Kurs A", done: finished ? 2 : 1, total: 2, status: finished ? "COMPLETED" : "IN_PROGRESS", themes: [t1, t2] },
+        { id: "cB", title: "Kurs B", done: finished ? 2 : 1, total: 2, status: finished ? "COMPLETED" : "IN_PROGRESS", themes: [t1] },
+        { id: "cC", title: "Kurs C", done: 1, total: 4, status: "IN_PROGRESS", themes: [t2] },
+      ],
+      () => (finished ? ["cA", "cB"].map((courseId) => ({ courseId, certificateId: `cert-${courseId}`, completedAt: "2026-11-02T10:00:00.000Z", courseTitle: courseId })) : []),
+    );
+    await page.goto("/participant");
+    await expect(page.locator('.course-accordion-item[data-course-id="cA"]')).toHaveCount(2);
+    await item(page, "cC").locator(".course-accordion-header").click();
+    await page.evaluate(() => {
+      const w = window as unknown as { feiret: string[] };
+      w.feiret = [];
+      new MutationObserver((records) => {
+        for (const r of records) for (const n of r.addedNodes) {
+          if (n instanceof Element && n.matches(".course-boat--feirer")) {
+            const card = n.closest(".course-accordion-item") as HTMLElement | null;
+            w.feiret.push(`${card?.dataset.courseId}${card?.dataset.courseCopy ? "-kopi" : ""}`);
+          }
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+    finished = true;
+    await page.locator("#courseBackBtn").click();
+    await expect(page.locator('.course-accordion-item--done[data-course-id="cB"]')).toHaveCount(1);
+    await expect.poll(async () => (await page.evaluate(() => (window as unknown as { feiret: string[] }).feiret)).sort())
+      .toEqual(["cA", "cA-kopi", "cB"]);
+  });
+
+  // QA 2.130.1: en delt modul bestås INNE i et kurs. Lista lastes på nytt mens kurset er åpent og lista er
+  // skjult; søsterkursene ble «feiret» der ingen så det, og kunne ikke feires igjen. Båtene skal vente til
+  // deltakeren går tilbake til lista. (Omtegningen mens kurset er åpent utløses her med et språkbytte, som
+  // laster lista på nytt slik en bestått modul gjør.)
+  test("kurs fullført mens et kurs er åpent: båtene venter, og feirer når lista vises igjen", async ({ page }) => {
+    let finished = false;
+    const t1 = { id: "t1", name: "Etikk" };
+    const t2 = { id: "t2", name: "Sikkerhet" };
+    await mockBase(
+      page,
+      () => [
+        { id: "cA", title: "Kurs A", done: finished ? 2 : 1, total: 2, status: finished ? "COMPLETED" : "IN_PROGRESS", themes: [t1, t2] },
+        { id: "cB", title: "Kurs B", done: finished ? 2 : 1, total: 2, status: finished ? "COMPLETED" : "IN_PROGRESS", themes: [t1] },
+        { id: "cC", title: "Kurs C", done: 1, total: 4, status: "IN_PROGRESS", themes: [t2] },
+      ],
+      () => (finished ? ["cA", "cB"].map((courseId) => ({ courseId, certificateId: `cert-${courseId}`, completedAt: "2026-11-02T10:00:00.000Z", courseTitle: courseId })) : []),
+    );
+    await page.goto("/participant");
+    await item(page, "cC").locator(".course-accordion-header").click();
+    await expect(page.locator("#courseBackBtn")).toBeVisible();
+    await page.evaluate(() => {
+      const w = window as unknown as { feiret: string[] };
+      w.feiret = [];
+      new MutationObserver((records) => {
+        for (const r of records) for (const n of r.addedNodes) {
+          if (n instanceof Element && n.matches(".course-boat--feirer")) {
+            const card = n.closest(".course-accordion-item") as HTMLElement | null;
+            w.feiret.push(`${card?.dataset.courseId}${card?.dataset.courseCopy ? "-kopi" : ""}`);
+          }
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+
+    finished = true;
+    const reloaded = page.waitForResponse((r) => r.url().endsWith("/api/courses"));
+    await page.selectOption("#localeSelect", "nn");
+    await reloaded;
+    await expect(page.locator('.course-accordion-item--done[data-course-id="cB"]')).toHaveCount(1);
+    await page.waitForTimeout(300);
+    // Lista er skjult: ingen båt har feiret ennå.
+    expect(await page.evaluate(() => (window as unknown as { feiret: string[] }).feiret)).toEqual([]);
+
+    await page.locator("#courseBackBtn").click();
+    await expect.poll(async () => (await page.evaluate(() => (window as unknown as { feiret: string[] }).feiret)).sort())
+      .toEqual(["cA", "cA-kopi", "cB"]);
+  });
+
+  // QA 2.130.0, funn 3: med 1 av 300 steg sto båten helt til høyre, og stripa bak den falt utenfor linja,
+  // der den ble klippet bort.
+  test("fartsstripa er alltid inne på linja, også ved første steg av mange", async ({ page }) => {
+    await mockBase(page, () => [
+      { id: "cMany", title: "Mange steg", done: 1, total: 300, status: "IN_PROGRESS" },
+      { id: "cHalf", title: "Halvveis", done: 30, total: 100, status: "IN_PROGRESS" },
+    ]);
+    await page.goto("/participant");
+    for (const id of ["cMany", "cHalf"]) {
+      const stripe = await item(page, id).locator(".cb-stripes").boundingBox();
+      const track = await item(page, id).locator(".course-progress").boundingBox();
+      expect(stripe, id).not.toBeNull();
+      expect(stripe!.x + stripe!.width, id).toBeLessThanOrEqual(track!.x + track!.width);
+      expect(stripe!.x, id).toBeGreaterThanOrEqual(track!.x);
+    }
+  });
+
+  // QA 2.130.0, funn 4: et fullført kurs med 5 av 6 steg (en mindre versjon la til et steg; beviset står)
+  // viste hel linje men etiketten «5 av 6 steg».
+  test("fullført med 5 av 6 steg: verdi, bredde, etikett og verktøytips sier alle «fullført»", async ({ page }) => {
+    await mockBase(page, () => [{ id: "cGrown", title: "Vokste", done: 5, total: 6, status: "IN_PROGRESS" }],
+      () => [{ courseId: "cGrown", certificateId: "cert-g", completedAt: "2026-10-01T10:00:00.000Z", courseTitle: "Vokste" }]);
+    await page.goto("/participant");
+    const bar = item(page, "cGrown").locator(".course-progress-bar");
+    await expect(bar).toHaveAttribute("aria-valuenow", "100");
+    await expect(bar).toHaveAttribute("aria-label", "Fullført");
+    await expect(bar).toHaveAttribute("title", "Fullført");
+    await expect(item(page, "cGrown").locator(".course-progress-fill")).toHaveAttribute("style", /width:100%/);
+    // QA 2.130.1: raden selv må heller ikke si «5/6» ved siden av den grønne «Fullført»-linja.
+    await expect(item(page, "cGrown")).not.toContainText("5/6");
+    await expect(item(page, "cGrown").locator(".course-accordion-progress")).toHaveCount(0);
+  });
+
+  test("kontroll: et fullført kurs med full telling viser tellingen i raden", async ({ page }) => {
+    await mockBase(page, () => [{ id: "cFull", title: "Ferdig", done: 6, total: 6, status: "COMPLETED" }],
+      () => [{ courseId: "cFull", certificateId: "cert-f", completedAt: "2026-10-01T10:00:00.000Z", courseTitle: "Ferdig" }]);
+    await page.goto("/participant");
+    await expect(item(page, "cFull").locator(".course-accordion-progress")).toContainText("6/6");
+  });
+
+  test("kontroll: et kurs i gang har stegtellingen som etikett", async ({ page }) => {
+    await mockBase(page, () => [{ id: "cRun", title: "I gang", done: 5, total: 6, status: "IN_PROGRESS" }]);
+    await page.goto("/participant");
+    await expect(item(page, "cRun").locator(".course-progress-bar")).toHaveAttribute("aria-label", /5 av 6 steg/);
   });
 
   for (const width of [360, 390]) {

@@ -3776,6 +3776,9 @@ let participantEarlierCompletions = {};
 // participant just passed the last module / read the last section), not for already-completed
 // courses on first load.
 const celebratedCompletedCourses = new Set();
+// #1137 (QA 2.130.1): kurs som er fullført, men der båten ennå ikke har fått komme i mål fordi lista var
+// skjult (deltakeren sto inne i et kurs). Feires når lista vises igjen.
+const pendingBoatCelebrations = new Set();
 
 
 async function loadParticipantCourses() {
@@ -4038,31 +4041,36 @@ function renderParticipantCourseAccordion() {
   if (focusedCourseId) loadCourseDetail(focusedCourseId);
 
   // #550: confetti when a course becomes completed during this session.
-  let newlyCompleted = false;
-  let newlyCompletedId = null;
+  // 2.130.1 (QA): én bestått modul kan fullføre FLERE kurs på én gang. Alle skal feire, ikke bare det siste.
+  const newlyCompletedIds = [];
   for (const course of participantCourses) {
     if (!isCourseCompleted(course)) continue;
     if (!celebratedCompletedCourses.has(course.id)) {
       celebratedCompletedCourses.add(course.id);
-      if (courseAccordionInitialized) {
-        newlyCompleted = true;
-        newlyCompletedId = course.id;
-      }
+      if (courseAccordionInitialized) newlyCompletedIds.push(course.id);
     }
   }
-  if (newlyCompleted) {
+  if (newlyCompletedIds.length > 0) {
     launchConfetti();
     showToast(t("courses.celebrateComplete"), "success");
     // #936/#929: kurset har nettopp flyttet seg ned under «Fullført». Uten dette skjer flyttingen
     // utenfor synsfeltet, og deltakeren står igjen med inntrykket av at ingenting hendte — som er
     // nøyaktig klagen #929 kom fra. Handlingen fortjener et synlig resultat.
-    const moved = container.querySelector(`.course-accordion-item[data-course-id="${newlyCompletedId}"]`);
+    const moved = container.querySelector(`.course-accordion-item[data-course-id="${newlyCompletedIds[0]}"]`);
     moved?.scrollIntoView({ behavior: "smooth", block: "center" });
-    // #1137: båten kommer i mål på den grønne linja, feirer og glir ut. Med redusert bevegelse vises den
-    // ikke — linja er bare grønn.
-    launchCourseBoatCelebration(moved?.querySelector(".course-progress"), {
-      reducedMotion: Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches),
-    });
+  }
+  // #1137: båten kommer i mål på den grønne linja, feirer og glir ut — på hvert kort for hvert kurs som ble
+  // fullført, også temakopiene. Står deltakeren inne i et kurs, er lista skjult (en delt modul fullfører ofte
+  // flere kurs der), så båtene venter til lista vises igjen. Med redusert bevegelse vises de ikke.
+  for (const id of newlyCompletedIds) pendingBoatCelebrations.add(id);
+  if (!focusedCourseId && pendingBoatCelebrations.size > 0) {
+    const reducedMotion = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+    for (const id of pendingBoatCelebrations) {
+      for (const card of container.querySelectorAll(`.course-accordion-item[data-course-id="${id}"]`)) {
+        launchCourseBoatCelebration(card.querySelector(".course-progress"), { reducedMotion });
+      }
+    }
+    pendingBoatCelebrations.clear();
   }
   courseAccordionInitialized = true;
 
@@ -4188,12 +4196,15 @@ function buildCourseAccordionItem(course, options = {}) {
   const completion = participantCompletions[course.id];
   // #1137: seilbåten. Fullført = hel grønn linje uten båt (produkteier 2026-11-02 — opphever #939s
   // «ingen linje»); ikke påbegynt = tom linje; bare kurs i gang har båt.
+  // 2.130.1 (QA): et fullført kurs kan ha «5 av 6 steg» — en mindre versjon la til et steg, og beviset
+  // gjelder fortsatt. Linja er da hel og grønn, så verdien, etiketten og verktøytipset må si det samme.
   const progressPct = completed ? 100 : pct;
+  const barLabel = completed ? t("courses.status.completed") : stepsLabel;
   const progressHtml = renderCourseProgress({
     completed,
     stepsDone: passedCount,
     pct,
-    barAttrs: `role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPct}" aria-label="${escapeHtmlP(stepsLabel)}" title="${escapeHtmlP(stepsLabel)}"`,
+    barAttrs: `role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPct}" aria-label="${escapeHtmlP(barLabel)}" title="${escapeHtmlP(barLabel)}"`,
   });
 
   const item = document.createElement("div");
@@ -4215,6 +4226,12 @@ function buildCourseAccordionItem(course, options = {}) {
     : `<div id="courseDetail_${course.id}" class="course-detail-slot"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>`;
 
   if (completed) {
+    // 2.130.1 (QA): et fullført kurs kan stå på 5 av 6 steg — en mindre versjon la til et steg, og beviset
+    // gjelder. Raden sier «fullført» (hake, grønn linje, skjermlesertekst), så en ufullstendig telling ved
+    // siden av ville motsagt den, for øyet og for skjermleseren. Tellingen vises bare når den er full.
+    const doneRowCountHtml = passedCount >= totalCount
+      ? `<span class="course-accordion-progress">${escapeHtmlP(formatCourseProgressLabel(course.progress))}</span>`
+      : "";
     // #939: ett fullført kurs = én grønn rad. Statuspillen er droppet — hakemerket og gruppegrensen
     // sier det allerede, og pillen ville vært det tredje stedet på samme rad.
     item.classList.add("course-accordion-item--done");
@@ -4224,7 +4241,7 @@ function buildCourseAccordionItem(course, options = {}) {
           <span class="course-done-tick" aria-hidden="true">&#10003;</span>
           <span>
             <span class="course-accordion-title">${escapeHtmlP(localizePreviewText(course.title))}</span>
-            <span class="course-accordion-progress">${escapeHtmlP(formatCourseProgressLabel(course.progress))}</span>
+            ${doneRowCountHtml}
             <!-- ⚠️ Statuspillen bar ordet «Fullført» og lå inne i knappen; #939 fjernet den til fordel
                  for hakemerket og gruppegrensen. Men hakemerket er aria-hidden og grensen er en
                  naken div utenfor tabb-rekkefølgen — så en skjermleserbruker som tabber gjennom lista

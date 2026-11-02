@@ -164,9 +164,8 @@
       .course-copy-link-btn:hover { background: var(--color-primary-tint); }
       .course-copy-link-btn:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 1px; }
       .course-link-notice { margin: 0 0 var(--space-2); padding: 4px 0 4px var(--space-1); border-left: 3px solid var(--color-warning); color: var(--color-warning); font-size: 14px; }
-      /* #936/#939: et fullført kurs er ÉN grønn rad. Framdriftslinja er droppet — en linje som
-         alltid er 100 % full bærer null informasjon, og den brukte den kraftigste visuelle
-         ressursen i lista på å gjenta «Fullført» som allerede står to andre steder.
+      /* #936/#939: et fullført kurs er ÉN grønn rad. #939 droppet framdriftslinja; #1137 (produkteier
+         2026-11-02) ga den tilbake som én hel GRØNN linje uten båt, under raden.
          ⚠ Sertifikatlenka er en ankertagg og kan derfor IKKE ligge inne i
          .course-accordion-header, som er en knapp — en lenke inni en knapp er ugyldig HTML og
          bryter tastaturnavigasjonen.

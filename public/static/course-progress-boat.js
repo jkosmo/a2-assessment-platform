@@ -71,9 +71,14 @@ function boatSvg(mood) {
     </svg>`;
 }
 
-/** Venstrekanten til båten: hekken på grensa, men aldri utenfor linja. */
-function boatLeft(pct) {
-  return `clamp(0px, calc(${100 - pct}% - ${STERN_PX}px), calc(100% - ${BOAT_W}px))`;
+// Hvor langt til høyre fra båtens venstrekant fartsstripene rekker (px). QA 2.130.0: med 1 av 300 steg sto
+// båten ved `100% - 32px`, og stripa havnet utenfor linja, der foreldren klipper den bort.
+const STRIPE_REACH_PX = { sulten: 48, mett: 56 };
+
+/** Venstrekanten til båten: hekken på grensa, men aldri så langt til høyre at stripene klippes. */
+function boatLeft(pct, mood) {
+  const reach = Math.max(BOAT_W, STRIPE_REACH_PX[mood] ?? BOAT_W);
+  return `clamp(0px, calc(${100 - pct}% - ${STERN_PX}px), calc(100% - ${reach}px))`;
 }
 
 /**
@@ -86,7 +91,7 @@ export function renderCourseProgress({ completed, stepsDone, pct, barAttrs }) {
   const fillClass = state.variant === "done" ? "course-progress-fill completed" : "course-progress-fill";
   const bar = `<div class="course-progress-bar" ${barAttrs}><div class="${fillClass}" style="width:${width}%"></div></div>`;
   const boat = state.variant === "boat"
-    ? `<span class="course-boat course-boat--${state.mood}" data-boat-mood="${state.mood}" style="left:${boatLeft(pct)}" aria-hidden="true">${boatSvg(state.mood)}</span>`
+    ? `<span class="course-boat course-boat--${state.mood}" data-boat-mood="${state.mood}" style="left:${boatLeft(pct, state.mood)}" aria-hidden="true">${boatSvg(state.mood)}</span>`
     : "";
   return `<div class="course-progress course-progress--${state.variant}">${bar}${boat}</div>`;
 }
