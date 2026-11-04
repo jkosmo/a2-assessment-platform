@@ -3,6 +3,7 @@ import {
   buildModuleCardViewModels,
   deriveParticipantFlowGateState,
   findMatchingPreset,
+  orphanedDraftTexts,
   parseDraftEnvelope,
   pruneExpiredModuleDrafts,
   resolveRoleSwitchState,
@@ -15,6 +16,17 @@ import {
 } from "../public/participant-console-state.js";
 
 describe("participant console state helpers", () => {
+  it("#934 5a-1: finner teksten i kladden som ikke har noe felt på siden", () => {
+    const draft = { gammeltFelt: "Svaret mitt", tomtFelt: "  ", nyttFelt: "Nytt", mcq: { questions: [] }, updatedAt: "2026-11-04T00:00:00Z" };
+    expect(orphanedDraftTexts(draft, ["nyttFelt"])).toEqual([{ id: "gammeltFelt", text: "Svaret mitt" }]);
+    expect(orphanedDraftTexts(draft, ["nyttFelt", "gammeltFelt"])).toEqual([]);
+  });
+
+  it("#934 5a-1: et svar som er levert, trenger ikke reddes, og uten kladd er det ingenting", () => {
+    expect(orphanedDraftTexts({ gammeltFelt: "Svaret mitt", submittedAs: "s1" }, [])).toEqual([]);
+    expect(orphanedDraftTexts(undefined, [])).toEqual([]);
+  });
+
   it("sanitizes and de-duplicates configured presets", () => {
     const presets = sanitizeMockRolePresets([
       "participant",

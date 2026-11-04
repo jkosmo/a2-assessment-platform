@@ -270,6 +270,28 @@ export function upsertModuleDraft(moduleDrafts, moduleId, draftData, nowMs = Dat
   return Object.fromEntries(ordered);
 }
 
+// #934 skive 5a-1: nøkler i en kladd som ikke er svarfelt.
+const DRAFT_META_KEYS = new Set(["mcq", "submittedAs", "updatedAt"]);
+
+/**
+ * Tekst i kladden til felt siden ikke lenger har. Kladden lagres per felt-id. Har oppgaven fått en ny versjon med andre
+ * felt, eller blitt ren flervalg, ville teksten verken vises eller overleve neste lagring, rett etter at siden sa at
+ * svaret var lagret som kladd.
+ *
+ * En kladd med `submittedAs` er restene av et svar som er levert. Den teksten trenger ikke reddes.
+ *
+ * @returns {{ id: string, text: string }[]}
+ */
+export function orphanedDraftTexts(draft, renderedFieldIds) {
+  if (!draft || typeof draft !== "object" || draft.submittedAs) {
+    return [];
+  }
+  const rendered = new Set(renderedFieldIds);
+  return Object.entries(draft)
+    .filter(([id, text]) => !DRAFT_META_KEYS.has(id) && !rendered.has(id) && typeof text === "string" && text.trim().length > 0)
+    .map(([id, text]) => ({ id, text }));
+}
+
 /** Vurderingen er ferdig nok til at resultatet kan vises (også mens en sensor ser på den). */
 export function isAssessmentResultReady(status) {
   const normalized = typeof status === "string" ? status.toUpperCase() : "";

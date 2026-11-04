@@ -205,7 +205,9 @@ looks due, stops on `content_busy`). The participant page sends the version it s
 /api/submissions` (`participant.js`, the create-submission handler) and `sectionVersionId` on `POST …/read`
 (`postSectionRead`; both reader buttons stay disabled until the text has loaded). `409 module_version_changed`,
 `section_version_changed`, `client_outdated`: texts in `participant-translations.js`; the draft stands (autosave and `beforeunload`).
-`apiFetch` (`api-client.js`) retries `503 content_busy` after 1, 2 and 4 seconds, on every call outside `/api/admin/`. Guards:
+Text in a draft for fields the module no longer has is carried along and shown read-only in `#orphanedDraftTexts`
+(`orphanedDraftTexts` in `participant-console-state.js`, 2.133.1) until the learner submits or clears the draft.
+`apiFetch` (`api-client.js`) retries `503 content_busy` after 1, 2 and 4 seconds, on every call outside `/api/admin/` and `/api/calibration/`. Guards:
 `test/content-lock-write-guard.test.js`, `test/m2-learner-lock-934-5a1.test.ts`,
 `test/e2e/participant-seen-version-934-5a1.spec.ts`, `test/dom/api-client-content-busy.dom.test.js`.
 

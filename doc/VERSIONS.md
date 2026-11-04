@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.133.1 - 2026-11-04
+
+#934 skive 5a-1, retting etter en uavhengig gjennomlesing. Codex-sjekken er ikke kjørt (utgiftstaket).
+
+- **Et svar kunne gå tapt rett etter at siden sa at det var lagret.** Fikk oppgaven en ny versjon med andre felt, eller ble
+  den ren flervalg, ble ikke kladden vist, og neste lagring skrev over den. Nå står teksten urørt i et eget felt med
+  forklaring, til deltakeren har levert på den nye versjonen eller tømt kladden.
+- **Kalibreringens publisering prøves ikke igjen ved 503.** Den skriver innhold og har allerede ventet i 15 sekunder.
+- **Tester som ikke kunne feile:** tekstsjekkene i vakta prøver nå selve sjekken, og rå SQL mot deltakertabellene har
+  kontrollcase. Ny test med tvunget rekkefølge for kursbevis og hovedversjon.
+- **Kjente mangler:** nr. 30 er rettet til det den faktisk er; nr. 34–38 er nye.
+
 ## 2.133.0 - 2026-11-04
 
 #934 skive 5a-1: deltakerlåsen, kursbevis utstedt under låsene, og versjonen deltakeren så (`doc/DESIGN_934.md`,

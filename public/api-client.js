@@ -211,10 +211,11 @@ async function parseResponseBody(response) {
 // går gjennom `apiFetch`, så ingen ny side kan glemme det. Gir den opp, får kalleren feilen som før, og siden sier «prøv
 // igjen om et øyeblikk».
 //
-// ⚠️ IKKE forfatterflatene (`/api/admin/`): de har allerede ventet i 15 sekunder bak låsen, og noen av rutene gjør flere
-// transaksjoner etter hverandre, så der betyr svaret ikke alltid at ingenting er skrevet. Der avgjør forfatteren selv.
+// ⚠️ IKKE dem som skriver innhold (`/api/admin/`, og kalibreringens publisering under `/api/calibration/`): de har
+// allerede ventet i 15 sekunder bak låsen, og noen av rutene gjør flere transaksjoner etter hverandre, så der betyr
+// svaret ikke alltid at ingenting er skrevet. Der avgjør forfatteren selv.
 export const CONTENT_BUSY_RETRY_DELAYS_MS = [1000, 2000, 4000];
-const retriesWhenBusy = (url) => !String(url).startsWith("/api/admin/");
+const retriesWhenBusy = (url) => !/^\/api\/(admin|calibration)\//.test(String(url));
 
 export async function apiFetch(url, getHeadersOrOptions = {}, maybeOptions = {}) {
   const getHeaders = typeof getHeadersOrOptions === "function" ? getHeadersOrOptions : null;

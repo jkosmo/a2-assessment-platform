@@ -51,6 +51,7 @@ import {
   resolveWorkspaceNavigationItems,
   resolveSelectedModule,
   upsertModuleDraft,
+  orphanedDraftTexts,
   // #992: kurssekvensens tilgjengelighets- og ferdig-predikater. Se modulen for hvorfor de
   // bor der og ikke her: de er rene funksjoner, og skal kunne testes som det.
   isEntryAvailable,
@@ -100,6 +101,7 @@ const createSubmissionButton = document.getElementById("createSubmission");
 const submitMcqButton = document.getElementById("submitMcq");
 const loadHistoryButton = document.getElementById("loadHistory");
 const submissionFieldsContainer = document.getElementById("submissionFields");
+const orphanedDraftPanel = document.getElementById("orphanedDraftTexts");
 const ackCheckbox = document.getElementById("ack");
 // #475: pre-submit attestation group — responsibility tile + KI declaration (config-gated).
 const attestGroup = document.getElementById("attestGroup");
@@ -1206,7 +1208,9 @@ function activateParticipantModule(moduleId, options = {}) {
   const earlierSubmissionId = previewModeEnabled ? null : earlierResultToShow(
     nextModule.participantStatus,
     readModuleDraftMap()[nextModule.id],
-    hasMeaningfulStoredDraft(readModuleDraftMap()[nextModule.id]),
+    // #934 skive 5a-1: å vise forrige resultat ville merket kladden som levert, og teksten som ikke passer i feltene, ville gått tapt.
+    hasMeaningfulStoredDraft(readModuleDraftMap()[nextModule.id])
+      || orphanedDraftTexts(readModuleDraftMap()[nextModule.id], renderedSubmissionFieldIds()).length > 0,
   );
   if (earlierSubmissionId) {
     showEarlierResult(nextModule.id, earlierSubmissionId).catch((error) => logApiError(error));
@@ -1700,7 +1704,13 @@ function persistCurrentModuleDraft(showStatus = false) {
     return { saved: false, meaningful: false, title: selectedModule.title };
   }
 
-  const data = {};
+  const settings = getDraftSettings();
+  const existing = readModuleDraftMap();
+
+  // #934 skive 5a-1: tekst til felt siden ikke har lenger, følger med videre. Lagringen erstatter hele kladden.
+  const data = Object.fromEntries(
+    orphanedDraftTexts(existing[selectedModule.id], renderedSubmissionFieldIds()).map(({ id, text }) => [id, text]),
+  );
   for (const field of currentSubmissionFields) {
     const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
     data[field.id] = element?.value ?? "";
@@ -1711,8 +1721,6 @@ function persistCurrentModuleDraft(showStatus = false) {
   const submittedAs = submissionIdLabel.textContent;
   if (flowState.hasSubmission && submittedAs && submittedAs !== "-") data.submittedAs = submittedAs;
 
-  const settings = getDraftSettings();
-  const existing = readModuleDraftMap();
   const updated = upsertModuleDraft(existing, selectedModule.id, data, Date.now(), settings.maxModules);
   writeModuleDraftMap(updated);
 
@@ -1741,15 +1749,47 @@ function scheduleDraftAutosave() {
   }, 250);
 }
 
+function renderedSubmissionFieldIds() {
+  return [...submissionFieldsContainer.querySelectorAll("[data-field-id]")].map((element) => element.dataset.fieldId);
+}
+
+// #934 skive 5a-1: teksten står urørt ved siden av de nye feltene. Deltakeren avgjør selv hva som kan brukes; de nye
+// feltene kan spørre om noe annet, så den fylles ikke inn i dem.
+function renderOrphanedDraftTexts(draft) {
+  const texts = orphanedDraftTexts(draft, renderedSubmissionFieldIds());
+  orphanedDraftPanel.replaceChildren();
+  orphanedDraftPanel.hidden = texts.length === 0;
+  if (texts.length === 0) {
+    return;
+  }
+  const heading = document.createElement("div");
+  heading.className = "module-brief-label";
+  heading.textContent = t("draft.orphaned.heading");
+  const hint = document.createElement("p");
+  hint.className = "small";
+  hint.textContent = t("draft.orphaned.hint");
+  orphanedDraftPanel.append(heading, hint);
+  for (const { text } of texts) {
+    const textarea = document.createElement("textarea");
+    textarea.readOnly = true;
+    textarea.rows = 6;
+    textarea.value = text;
+    textarea.setAttribute("aria-label", t("draft.orphaned.heading"));
+    orphanedDraftPanel.append(textarea);
+  }
+}
+
 function restoreDraftForSelectedModule(showStatus = true) {
   const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
   if (!selectedModule) {
+    renderOrphanedDraftTexts(null);
     setDraftStatus("none", "");
     return;
   }
 
   const moduleDrafts = readModuleDraftMap();
   const draft = moduleDrafts[selectedModule.id];
+  renderOrphanedDraftTexts(draft);
 
   if (!draft) {
     resetModuleDraftInputsToDefaultLocaleValues();
@@ -2995,6 +3035,7 @@ function clearCurrentModuleDraft() {
   const moduleDrafts = readModuleDraftMap();
   delete moduleDrafts[selectedModule.id];
   writeModuleDraftMap(moduleDrafts);
+  renderOrphanedDraftTexts(null);
 
   resetModuleDraftInputsToDefaultLocaleValues();
   currentQuestions = [];

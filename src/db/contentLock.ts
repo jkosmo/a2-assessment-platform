@@ -26,7 +26,8 @@
 //   - Vedtakene trenger ikke innholdslåsen: `runLearnerWrite` tar bare deltakerlåsen. Kontrollen av kursbevis etter
 //     et vedtak går på outboxen og kjører i en egen transaksjon.
 // Fast rekkefølge: innholdslåsen, deltakerlåsen, revisjonssporets lås. En transaksjon som har tatt deltakerlåsen, tar
-// aldri innholdslåsen etterpå; `assertNotNested` stopper det. Med én rekkefølge kan låsene ikke låse hverandre fast.
+// aldri innholdslåsen etterpå; `assertNotNested` stopper det. Med én rekkefølge kan disse låsene ikke låse hverandre
+// fast. Radlåser er noe annet: revisjonssporets lås og en rad kan tas i ulik rekkefølge («Kjente mangler» nr. 34).
 // Samme merke-tanke som over: funksjonene som skriver det deltakeren har gjort, tar bare imot `LearnerTx`.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "../errors/AppError.js";
@@ -233,7 +234,8 @@ export function runContentReadForLearner<T>(
 
 /**
  * Bare deltakerlåsen, som første setning i transaksjonen. For vedtakene (automatisk, flervalg, manuell vurdering og
- * anke): de leser ingen fast versjon av innholdet, og skal ikke vente på en som skriver innhold.
+ * anke): de leser ingen fast versjon av innholdet, og venter ikke på innholdslåsen. De kan likevel vente på
+ * revisjonssporets lås bak en som skriver innhold («Kjente mangler» nr. 35).
  */
 export function runLearnerWrite<T>(
   userId: string,

@@ -542,6 +542,39 @@ describe("#934 5a-1: kursbeviset måles og skrives under låsene, fra alle tre v
       expect(notices.length, `runde ${round}: ${own.length} bevis, ${notices.length} rader`).toBe(own.length);
     }
   }, 60_000);
+
+  it("beviset først, så hovedversjonen, begge bak en lås som holdes: personen har beviset og står på e-postlista", async () => {
+    // Runden over kan ende med null bevis og null rader. Her er rekkefølgen tvunget: utstedelsen står i kø først.
+    const holder = await learner();
+    const u = await learner();
+    const course = await createCourse("bevis først");
+    await prisma.courseCompletion.create({ data: { userId: holder.userId, courseId: course.courseId, versionMajor: 1, versionMinor: 0, moduleSnapshotJson: "[]" } });
+    await ready(course, u.userId);
+    const extra = await createSection(tag("ny seksjon"));
+    const detail = await request(app).get(`/api/admin/content/courses/${course.courseId}`).set(ADMIN);
+
+    const lock = holdContent();
+    await lock.held;
+    const issuing = fromWorker(u.userId, course.module.moduleId);
+    expect(await stillWaiting(issuing), "utstedelsen skal vente på innholdslåsen").toBe(true);
+    const save = request(app).put(`/api/admin/content/courses/${course.courseId}/content`).set(ADMIN).send({
+      items: [
+        { type: "MODULE", moduleId: course.module.moduleId },
+        { type: "SECTION", sectionId: course.section.sectionId },
+        { type: "SECTION", sectionId: extra.sectionId },
+      ],
+      version: "major",
+      expectedRevision: detail.body.course.contentRevision,
+    }).then((r) => r);
+    await pause(300);
+    lock.release();
+    await lock.done;
+    const [saved] = await Promise.all([save, issuing]);
+
+    expect(saved.status, JSON.stringify(saved.body).slice(0, 300)).toBe(200);
+    expect((await certificates(u.userId, course.courseId)).map((c) => c.versionMajor)).toEqual([1]);
+    expect(await prisma.courseVersionNotice.count({ where: { courseId: course.courseId, userId: u.userId } })).toBe(1);
+  }, 30_000);
 });
 
 describe("#934 5a-1: vedtakene tar deltakerlåsen", () => {

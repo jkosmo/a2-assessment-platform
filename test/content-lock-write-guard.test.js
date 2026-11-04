@@ -189,11 +189,13 @@ function unlockedWrites(program, files) {
 }
 
 function textViolations(files) {
+  return files.flatMap((fileName) => textViolationsIn(rel(fileName), readFileSync(fileName, "utf8")));
+}
+
+function textViolationsIn(file, text) {
   const out = [];
-  for (const fileName of files) {
-    const file = rel(fileName);
-    const text = readFileSync(fileName, "utf8");
-    if (file === LOCK_FILE) continue;
+  {
+    if (file === LOCK_FILE) return out;
     if (/__content(Write|Read)Lock/.test(text)) out.push(`${file} nevner merket direkte — bare ${LOCK_FILE} lager det`);
     if (/as\s+Content(Write|Read)Tx\b|<Content(Write|Read)Tx>/.test(text)) out.push(`${file} gjør en klient om til Content…Tx med en typekonvertering`);
     if (/pg_advisory_xact_lock(_shared)?\s*\(\s*\$\{\s*CONTENT_LOCK_KEY/.test(text) || /\bwithContentLock\s*\(/.test(text)) {
@@ -204,7 +206,7 @@ function textViolations(files) {
     if (/\bLEARNER_LOCK_NAMESPACE\b/.test(text) || /\bwithLearnerLock\s*\(/.test(text)) {
       out.push(`${file} tar deltakerlåsen selv — bruk runLearnerWrite/runContentReadForLearner, så rekkefølgen holder`);
     }
-    for (const match of text.matchAll(/\$(executeRaw|queryRaw)(Unsafe)?\s*[`(]/g)) {
+    for (const match of text.matchAll(/\$(executeRaw|queryRaw)(Unsafe)?\s*(<[^>]*>)?\s*[`(]/g)) {
       const snippet = text.slice(match.index, match.index + 400);
       if (/\b(INSERT|UPDATE|DELETE)\b/i.test(snippet) && CONTENT_TABLES_SQL.test(snippet)) {
         out.push(`${file}:${text.slice(0, match.index).split("\n").length} skriver en innholdstabell med rå SQL`);
@@ -278,8 +280,11 @@ describe("#934 skive 4a: alt som skriver innhold, holder innholdslåsen", () => 
   }, 120_000);
 
   it("KONTROLLCASE: tekstsjekkene fanger en egen typekonvertering og et eget låsekall", () => {
-    expect(/as\s+Content(Write|Read)Tx\b/.test("const t = tx as ContentWriteTx;")).toBe(true);
-    expect(/\bwithContentLock\s*\(/.test("await withContentLock(tx, 'exclusive')")).toBe(true);
+    const caught = (text) => textViolationsIn("modules/probe.ts", text);
+    expect(caught("const t = tx as ContentWriteTx;")).toHaveLength(1);
+    expect(caught("await withContentLock(tx, 'exclusive')")).toHaveLength(1);
+    expect(caught('await tx.$executeRaw`UPDATE "CourseItem" SET x = 1`')).toHaveLength(1);
+    expect(caught("const t = tx as DbTransactionClient;")).toEqual([]);
   });
 });
 
@@ -346,8 +351,13 @@ describe("#934 skive 5a-1: det en deltaker har gjort, skrives under deltakerlås
   }, 120_000);
 
   it("KONTROLLCASE: tekstsjekkene fanger en egen typekonvertering og et eget låsekall", () => {
-    expect(/as\s+Learner(Content)?Tx\b/.test("const t = tx as LearnerTx;")).toBe(true);
-    expect(/as\s+Learner(Content)?Tx\b/.test("const t = tx as LearnerContentTx;")).toBe(true);
-    expect(/\bwithLearnerLock\s*\(/.test("await withLearnerLock(tx, userId)")).toBe(true);
+    const caught = (text) => textViolationsIn("modules/probe.ts", text);
+    expect(caught("const t = tx as LearnerTx;")).toHaveLength(1);
+    expect(caught("const t = tx as LearnerContentTx;")).toHaveLength(1);
+    expect(caught("await withLearnerLock(tx, userId)")).toHaveLength(1);
+    expect(caught('await tx.$executeRaw`UPDATE "CourseCompletion" SET x = 1`')).toHaveLength(1);
+    expect(caught('await tx.$executeRawUnsafe(\'INSERT INTO "Submission" VALUES (1)\')')).toHaveLength(1);
+    expect(caught('await tx.$queryRaw<Row[]>`DELETE FROM "CertificationStatus"`')).toHaveLength(1);
+    expect(caught('await tx.$queryRaw`SELECT * FROM "CourseCompletion"`')).toEqual([]);
   });
 });

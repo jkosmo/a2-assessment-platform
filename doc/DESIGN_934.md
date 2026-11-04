@@ -1030,10 +1030,13 @@ e-post eller lekke data, med unntak av de korte utrullingsvinduene i nr. 1, som 
     utrulling. Azure kan da strupe, og outboxen prøver igjen.
 29. **En fane fra før 2.133.0** får en generell feilmelding (409) ved innlevering og lesing, for den gamle siden kjenner
     ikke kodene. Kladden står, for autolagringen var der allerede. Etter én innlasting er det over.
-30. **#997 tar ikke deltakerlåsen** (`supersedeCertificationsForModule`, under den eksklusive innholdslåsen). Et vedtak holder
-    bare deltakerlåsen, så et vedtak samtidig med en revisjon kan skrive `ACTIVE` rett etter `SUPERSEDED`. Slik har det vært
-    siden #997, og det gjelder en innlevering på den gamle versjonen. Faller bort i 5a-3, der versjonen avgjør og
-    `SUPERSEDED` ikke skrives.
+30. **En bestått på en gammel versjon etter en revisjon gir fortsatt kursbevis** (`upsertCertificationStatusFromDecision`
+    skriver `ACTIVE` uten å se på versjonen; #997 rører bare dem som har bestått da revisjonen publiseres). Dette er ikke
+    et kappløp, slik denne teksten først sa: vinduet er hele levetiden til innleveringen. Eksempel: deltakeren åpner en
+    flervalgsmodul på v1 (innleveringen lages med en gang), forfatteren publiserer v2 med #997, og deltakeren svarer på de
+    gamle spørsmålene en time etter. Flervalgsinnsendingen har ingen versjonssjekk, så det kommer ingen 409. Det samme
+    gjelder vurderingskøen og en manuell vurdering eller anke som ender med bestått uker etter. Ingen lås kan rette dette.
+    Slik har det vært siden #997, også i prod. Faller bort i 5a-3, der versjonen avgjør (sannhetstabellen: «Nei i C»).
 31. **Workeren finner kursene uten lås** (`checkAndIssueCourseCompletions`). Får et kurs modulen i det øyeblikket, sjekkes ikke
     det kurset. Kravet måles riktig; beviset kommer når deltakeren åpner kursbevissiden. Gjelder også et kurs som
     publiseres i det øyeblikket.
@@ -1042,6 +1045,19 @@ e-post eller lekke data, med unntak av de korte utrullingsvinduene i nr. 1, som 
 33. **Et admin-overtak før en deltakerlås som ikke ble ledig** (`manualReviewService`, `appealService`). Revisjonsraden for
     overtaket skrives før transaksjonen. Får vedtaket `503`, og siden prøver igjen, står det to rader om overtaket. Saken
     selv er rett; bare sporet er dobbelt. Krever en administrator som tar over en annens sak i de samme sekundene.
+34. **Revisjonssporets lås og en rad kan låse hverandre fast** (uavhengig gjennomlesing 2.133.0; lest i koden, ikke kjørt).
+    En innlevering tar revisjonssporets lås og så sakene den erstatter; å ta en sak tar raden og så låsen. En publisering av
+    flere moduler og et vedtak har samme mønster. PostgreSQL stopper den ene: 500 og tilbakerulling, ingenting tapt. Et
+    vedtak i en jobb prøves igjen, og vurderingen kjøres da på nytt. Rekkefølgen er eldre enn 5a-1.
+35. **Et vedtak kan vente på revisjonssporets lås bak en lang publisering eller import.** Den låsen har ingen egen ventegrense,
+    så vedtaket stopper på transaksjonens grense (8 sekunder) med 500, ikke 503, og siden prøver ikke igjen. Mens det står,
+    holder det deltakerlåsen, så samme deltakers andre handlinger kan få 503. Ingenting tapt. Varigheten er ikke målt.
+36. **Bytte av modul mens siden prøver igjen** (opptil om lag 31 sekunder ved 503). Svaret på modul A brukes da på modul B: A
+    sin innleverings-id og spørsmål vises der. Å sende dem gir en feil, og innleveringen på A står uten vurdering. Ingen tekst går tapt.
+37. **Småting på deltakersiden.** Etter `section_version_changed` er knappen aktiv, men gir 409 igjen til panelet åpnes på nytt.
+    Hvert nytt forsøk teller mot grensen på 10 innleveringer, så et tredje klikk i en lang travel periode kan gi 429.
+38. **`assertNotNested` ser bare de låste veiene.** `runInTransaction` eller `recordAuditEvent` uten `tx` inne i en lås stoppes
+    ikke. Gjennomlesingen fant ingen slike kall i vedtaks- og vurderingsveiene den leste.
 
 ### Gjennomgang av planen
 

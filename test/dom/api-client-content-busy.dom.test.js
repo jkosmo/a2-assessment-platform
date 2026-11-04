@@ -61,6 +61,13 @@ describe("apiFetch ved 503 content_busy", () => {
     expect(error.body.error).toBe("content_busy");
   });
 
+  it("kalibreringens publisering prøves heller ikke igjen: den skriver innhold, og har ventet i 15 sekunder", async () => {
+    global.fetch = vi.fn().mockResolvedValue(response(503, BUSY));
+    const { error } = await settle(apiFetch("/api/calibration/workspace/publish-thresholds", () => ({}), { method: "POST" }));
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(error.body.error).toBe("content_busy");
+  });
+
   it("deltaker- og behandlerrutene prøves igjen", async () => {
     for (const url of ["/api/submissions", "/api/courses/c1/sections/s1/read", "/api/reviews/r1/override", "/api/appeals/a1/resolve"]) {
       global.fetch = vi.fn().mockResolvedValueOnce(response(503, BUSY)).mockResolvedValueOnce(response(200, {}));

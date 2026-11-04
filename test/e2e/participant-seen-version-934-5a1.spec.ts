@@ -94,6 +94,83 @@ test.describe("#934 5a-1: innleveringen", () => {
     });
   }
 
+  for (const [name, nextVersion] of [
+    ["andre felt", { submissionSchema: { fields: [{ id: "nyttFelt", label: "Nytt felt", type: "textarea", required: true }] } }],
+    ["ren flervalg", { assessmentMode: "MCQ_ONLY" }],
+  ] as const) {
+    test(`ny versjon med ${name}: teksten som ble lagret som kladd, vises og overlever neste lagring`, async ({ page }) => {
+      let current: Record<string, unknown> = MODULE;
+      await mockBase(page);
+      await page.route("**/api/modules**", (route: Route) => route.fulfill(json({ modules: [current] })));
+      await page.route("**/api/submissions", (route: Route) => route.fulfill(json(CHANGED, 409)));
+      await openModuleAndWrite(page);
+      await page.locator("#createSubmission").click();
+      await expect(page.locator(".toast").last()).toContainText("lagret som kladd");
+
+      current = { ...MODULE, ...nextVersion, activeVersion: { id: "mv-2", versionNo: 2 } };
+      const reopen = async () => {
+        await page.reload();
+        await page.locator("#loadModules").click();
+        await page.locator(".module-card", { hasText: "Essay Modul" }).click();
+      };
+      await reopen();
+      const saved = page.locator("#orphanedDraftTexts textarea").first();
+      await expect(page.locator("#orphanedDraftTexts")).toContainText("Det du skrev til forrige versjon");
+      await expect(saved).toHaveValue(ANSWER);
+      await expect(saved).not.toBeEditable();
+
+      // Lagringen ved neste innlasting (`beforeunload`) skal ikke ta den bort.
+      const newField = page.locator('#submissionFields [data-field-id="nyttFelt"]');
+      if (await newField.count()) {
+        await expect(newField).toHaveValue("");
+        await newField.fill("Et nytt svar.");
+      }
+      await reopen();
+      await expect(page.locator("#orphanedDraftTexts textarea").first()).toHaveValue(ANSWER);
+    });
+  }
+
+  test("med et tidligere resultat: teksten vises, ikke resultatet, for det ville merket kladden som levert", async ({ page }) => {
+    let current: Record<string, unknown> = MODULE;
+    await mockBase(page);
+    await page.route("**/api/modules**", (route: Route) => route.fulfill(json({ modules: [current] })));
+    await page.route("**/api/submissions", (route: Route) => route.fulfill(json(CHANGED, 409)));
+    let earlierResultRequests = 0;
+    await page.route("**/api/submissions/s0**", (route: Route) => {
+      earlierResultRequests += 1;
+      return route.fulfill(json({ status: "COMPLETED" }));
+    });
+    await openModuleAndWrite(page);
+    await page.locator("#createSubmission").click();
+    await expect(page.locator(".toast").last()).toContainText("lagret som kladd");
+
+    current = {
+      ...MODULE,
+      submissionSchema: { fields: [{ id: "nyttFelt", label: "Nytt felt", type: "textarea", required: true }] },
+      activeVersion: { id: "mv-2", versionNo: 2 },
+      participantStatus: { latestSubmissionId: "s0", latestStatus: "COMPLETED", latestDecision: null },
+    };
+    await page.reload();
+    await page.locator("#loadModules").click();
+    await page.locator(".module-card", { hasText: "Essay Modul" }).click();
+    await expect(page.locator("#orphanedDraftTexts textarea").first()).toHaveValue(ANSWER);
+    await page.waitForTimeout(300);
+    expect(earlierResultRequests).toBe(0);
+  });
+
+  test("uten endring i feltene vises ikke teksten to ganger", async ({ page }) => {
+    await mockModule(page);
+    await page.route("**/api/submissions", (route: Route) => route.fulfill(json(CHANGED, 409)));
+    await openModuleAndWrite(page);
+    await page.locator("#createSubmission").click();
+    await expect(page.locator(".toast").last()).toContainText("lagret som kladd");
+    await page.reload();
+    await page.locator("#loadModules").click();
+    await page.locator(".module-card", { hasText: "Essay Modul" }).click();
+    await expect(page.locator("#submissionFields textarea").first()).toHaveValue(ANSWER);
+    await expect(page.locator("#orphanedDraftTexts")).toBeHidden();
+  });
+
   test("503 content_busy: siden prøver igjen av seg selv, og deltakeren ser ingen feil", async ({ page }) => {
     await mockModule(page);
     let attempts = 0;
