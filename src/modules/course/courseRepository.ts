@@ -2,7 +2,7 @@ import { prisma } from "../../db/prisma.js";
 import type { ReportFilters } from "../reporting/types.js";
 import { CERTIFICATION_PASSED_STATUSES } from "../certification/certificationRepository.js";
 import { sectionAvailableWhere } from "./sectionAvailability.js";
-import { countCertificateHolders, loadSectionReadRules, readCountsForCurrentVersion } from "./courseVersioning.js";
+import { countCertificateHolders, loadSectionReadRules, readCountsForCurrentVersion, type SectionSnapshot } from "./courseVersioning.js";
 import type { ContentReadTx } from "../../db/contentLock.js";
 
 function buildSubmissionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
@@ -51,6 +51,28 @@ type CourseRepositoryClient = Pick<
   typeof prisma,
   "course" | "courseItem" | "courseCompletion" | "courseSectionRead" | "courseVersion" | "certificationStatus" | "submission" | "$queryRaw"
 >;
+
+// #934 skive 3: seksjon → aktiv seksjonsversjon for seksjonene kurset inneholder nå. Øyeblikksbildet en
+// ny hovedversjon lagrer i `CourseVersion` (courseVersioning.ts). Alle seksjoner, også arkiverte og
+// tilbakeholdte: det er hva kurset INNEHOLDER som sammenlignes, ikke hva en deltaker kan lese.
+async function findSectionVersions(client: Pick<CourseRepositoryClient, "courseItem">, courseId: string): Promise<Record<string, string | null>> {
+  const items = await client.courseItem.findMany({
+    where: { courseId, itemType: "SECTION", sectionId: { not: null } },
+    select: { sectionId: true, section: { select: { activeVersionId: true } } },
+  });
+  const map: Record<string, string | null> = {};
+  for (const item of items) if (item.sectionId) map[item.sectionId] = item.section?.activeVersionId ?? null;
+  return map;
+}
+
+// #934 skive 4b: modulene i kurset som har en aktiv versjon — de deltakeren kan ta nå.
+async function findLiveModuleIds(client: Pick<CourseRepositoryClient, "courseItem">, courseId: string): Promise<string[]> {
+  const items = await client.courseItem.findMany({
+    where: { courseId, itemType: "MODULE", module: { activeVersionId: { not: null } } },
+    select: { moduleId: true },
+  });
+  return items.flatMap((item) => (item.moduleId ? [item.moduleId] : []));
+}
 
 export function createCourseRepository(client: CourseRepositoryClient = prisma) {
   return {
@@ -164,7 +186,6 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
     countCertificateHolders(courseId: string, versionMajor: number) {
       return countCertificateHolders(client, courseId, versionMajor);
     },
-
     // #934 skive 3: samme regel som `findReadSectionIds` — fremdriften i «Mine kurs» skal ikke si «lest»
     // om en seksjon porten for kursbevis ikke teller.
     async findReadSectionIdsForCourses(userId: string, courseIds: string[]): Promise<Array<{ courseId: string; sectionId: string }>> {
@@ -335,17 +356,21 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
-    // #934 skive 3: seksjon → aktiv seksjonsversjon for seksjonene kurset inneholder nå. Øyeblikksbildet en
-    // ny hovedversjon lagrer i `CourseVersion` (courseVersioning.ts). Alle seksjoner, også arkiverte og
-    // tilbakeholdte: det er hva kurset INNEHOLDER som sammenlignes, ikke hva en deltaker kan lese.
-    async findSectionVersions(courseId: string): Promise<Record<string, string | null>> {
-      const items = await client.courseItem.findMany({
-        where: { courseId, itemType: "SECTION", sectionId: { not: null } },
-        select: { sectionId: true, section: { select: { activeVersionId: true } } },
-      });
-      const map: Record<string, string | null> = {};
-      for (const item of items) if (item.sectionId) map[item.sectionId] = item.section?.activeVersionId ?? null;
-      return map;
+    // #934 skive 3: se `findSectionVersions` over.
+    findSectionVersions(courseId: string): Promise<Record<string, string | null>> {
+      return findSectionVersions(client, courseId);
+    },
+
+    // #934 skive 4b: øyeblikksbildet før en endring som kan gi ny versjon — seksjonsversjonene og modulene som er
+    // levende i kurset — og hvordan de leses etterpå. `applyCourseVersionChange` bruker det til regelen for seksjoner
+    // og til tallet i e-posten (`changedItemCount`). Tas i samme transaksjon, før noe skrives.
+    async snapshotContent(courseId: string): Promise<SectionSnapshot> {
+      return {
+        before: await findSectionVersions(client, courseId),
+        after: () => findSectionVersions(client, courseId),
+        modulesBefore: await findLiveModuleIds(client, courseId),
+        modulesAfter: () => findLiveModuleIds(client, courseId),
+      };
     },
 
     // #502 contract-fase: `modules` deriveres nå fra CourseItem (MODULE-elementer) i stedet for den

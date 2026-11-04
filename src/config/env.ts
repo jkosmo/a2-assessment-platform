@@ -115,6 +115,17 @@ const envSchema = z.object({
   // #497: daglig bakgrunnsjobb for kurs-frist-påminnelser. Kjører kun i worker-rollen når
   // varselkanalen er aktiv (PARTICIPANT_NOTIFICATION_CHANNEL !== "disabled").
   COURSE_REMINDER_INTERVAL_MS: z.coerce.number().int().positive().default(86_400_000),
+  // #934 skive 4b: e-post når et kurs får en ny hovedversjon. Radene lages alltid (én per mottaker, i samme
+  // transaksjon som hovedversjonen); jobben som sender dem, kjører bare i worker-rollen når denne er "true". Slås på
+  // etter at app og worker begge viser den nye versjonen — før det finnes ingen outbox-rad av den nye typen, så en
+  // gammel worker møter den aldri. Av: radene venter og sendes når den slås på (hvis versjonen fortsatt er kursets nyeste).
+  COURSE_MAJOR_EMAIL_ENABLED: z
+    .string()
+    .transform((value) => value.toLowerCase() === "true")
+    .default("false"),
+  // Hvor ofte jobben ser etter rader som venter. Hver runde legger høyst 20 i outboxen, med tre sekunders mellomrom
+  // (om lag 20 i minuttet, så Azure ikke struper, #900).
+  COURSE_MAJOR_EMAIL_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
   // #497-incident: ms mellom oppstart av hver bakgrunns-monitor i worker-rollen, slik at deres
   // første DB-spørring ikke treffer samtidig (unngår connection-pool-storm ved oppstart). 0 = ingen
   // spredning (start alle samtidig).

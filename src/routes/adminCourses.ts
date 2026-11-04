@@ -40,6 +40,8 @@ import { localizeCourseCopy } from "../modules/adminContent/llmContentGeneration
 import { NotFoundError, AppError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
 import { countCourseInProgressParticipants } from "../modules/course/contentLifecycle.js";
+import { countMajorVersionRecipients } from "../modules/course/courseVersioning.js";
+import { prisma } from "../db/prisma.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
@@ -92,7 +94,14 @@ const setCourseItemsBodySchema = z.object({
   versionAware: z.literal(true).optional(),
   // #934 skive 4a: telleren skjemaet lastet. Uten den godtas lagringen bare for et kurs som aldri har vært ute.
   expectedRevision: z.number().int().min(0).optional(),
+  // #934 skive 4b: se `confirmEmailRecipientsSchema`.
+  confirmEmailRecipients: z.number().int().min(0).optional(),
 });
+
+// #934 skive 4b: tallet dialogen viste da forfatteren sa ja til at en hovedversjon sender e-post til over 200
+// deltakere. Serveren teller på nytt; over grensen og ikke bekreftet (eller bekreftet lavere): `409
+// major_email_confirm_required`, og ingenting er skrevet. En gammel klient sender det aldri.
+const confirmEmailRecipientsSchema = setCourseItemsBodySchema.shape.confirmEmailRecipients;
 
 // #934 skive 4a: telleren kursskjemaet lastet (`contentRevision` i kursdetaljen). Kreves av `PUT /:courseId` og
 // `PUT …/content`: uten den er det en fane fra før denne utgivelsen, og den avvises før noe skrives.
@@ -107,6 +116,7 @@ const saveCourseContentBodySchema = courseBodySchema.partial().extend({
   items: setCourseItemsBodySchema.shape.items,
   version: z.enum(["major", "minor"]).optional(),
   expectedRevision: expectedRevisionSchema,
+  confirmEmailRecipients: confirmEmailRecipientsSchema,
 });
 
 const courseLocalizationBodySchema = z.object({
@@ -280,6 +290,8 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       actorRoles: request.context?.roles ?? [],
       // #934 skive 3: kreves for `replaceExisting` når kurset har kursbevis.
       version: data.version,
+      // #934 skive 4b: kreves når hovedversjonen sender e-post til over 200.
+      confirmEmailRecipients: data.confirmEmailRecipients,
     });
     // AA-2 (#650): links + clientRef echo make the response agent-orchestrable.
     response.status(201).json({
@@ -419,6 +431,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       versionMajor: course.versionMajor,
       versionMinor: course.versionMinor,
       certificateHolders: await courseRepository.countCertificateHolders(course.id, course.versionMajor),
+      majorEmailRecipients: await countMajorVersionRecipients(prisma, course.id),
       contentRevision: course.contentRevision,
       modules: course.modules.map((cm) => ({
         moduleId: cm.moduleId,
@@ -481,7 +494,12 @@ adminCoursesRouter.put("/:courseId/content", requireContentOwnership("COURSE", "
       discussionOwnerNotifications: parsed.data.discussionOwnerNotifications,
       sortOrder: parsed.data.sortOrder,
       themeIds: parsed.data.themeIds,
-    }, request.context?.userId, { items: parsed.data.items, version: parsed.data.version, expectedRevision: parsed.data.expectedRevision });
+    }, request.context?.userId, {
+      items: parsed.data.items,
+      version: parsed.data.version,
+      expectedRevision: parsed.data.expectedRevision,
+      confirmEmailRecipients: parsed.data.confirmEmailRecipients,
+    });
     response.json({ course });
   } catch (error) {
     next(error);
@@ -558,7 +576,7 @@ adminCoursesRouter.put("/:courseId/items", requireContentOwnership("COURSE", "co
       actorId: request.context?.userId,
       agent: { agentRunId: parsed.data.agentRunId },
       // #934 skive 4a: overgangen fra 2.129.0 er borte. Uten svar avvises endringen når noen har kursbevis.
-      versionRequest: { kind: "question", answer: parsed.data.version },
+      versionRequest: { kind: "question", answer: parsed.data.version, confirmEmailRecipients: parsed.data.confirmEmailRecipients },
       // #934 skive 4a: uten telleren bare på et kurs som aldri har vært ute — agent-tokenet, og et nytt kurs fra
       // skjemaet. En gammel fane på et kurs som har vært ute, avvises før noe skrives.
       revision: { expected: parsed.data.expectedRevision, requireUnlessDraft: true },
@@ -593,9 +611,10 @@ const publishCourseBodySchema = z.object({
   publishItems: z.boolean().optional(),
   // #934 skive 3: mindre eller hovedversjon når nytt innhold går live i et kurs som har vært ute og har kursbevis.
   courseVersion: z.enum(["major", "minor"]).optional(),
+  confirmEmailRecipients: confirmEmailRecipientsSchema,
 });
 
-adminCoursesRouter.post("/:courseId/publish", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+adminCoursesRouter.post("/:courseId/publish",requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = publishCourseBodySchema.safeParse(request.body ?? {});
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -641,7 +660,9 @@ adminCoursesRouter.post("/:courseId/publish", requireContentOwnership("COURSE", 
 
     // Cascade requested: publish items then the course. publishCourseCascade throws a 422 AppError if
     // any item is un-publishable, and never publishes the course unless every item succeeded.
-    const result = await publishCourseCascade(request.params.courseId, request.context?.userId, parsed.data.courseVersion);
+    const result = await publishCourseCascade(request.params.courseId, request.context?.userId, parsed.data.courseVersion, {
+      confirmEmailRecipients: parsed.data.confirmEmailRecipients,
+    });
     response.json(result);
   } catch (error) {
     next(error);
@@ -670,6 +691,7 @@ const publishPendingBodySchema = z.object({
   supersedesEarlierPasses: z.boolean().optional(),
   // #934 skive 3: mindre eller hovedversjon for kurset. Utelatt = mindre (standarden).
   courseVersion: z.enum(["major", "minor"]).optional(),
+  confirmEmailRecipients: confirmEmailRecipientsSchema,
 });
 
 adminCoursesRouter.post("/:courseId/publish-pending", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {

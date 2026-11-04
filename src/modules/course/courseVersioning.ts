@@ -29,11 +29,89 @@ export type SectionVersions = Record<string, string | null>;
 /**
  * Øyeblikksbildet en hovedversjon trenger: seksjonsversjonene RETT FØR endringen (tatt av kalleren før den
  * skrev noe), og en måte å lese dem etter på. `after` kalles bare for en hovedversjon.
+ * #934 skive 4b: også modulene som var levende i kurset før (`modulesBefore`), og etter — så e-posten kan si hvor
+ * mange elementer som er nye eller endret (`changedItemCount`). Lages av kursrepositoriet (`snapshotContent`).
  */
-export type SectionSnapshot = { before: SectionVersions; after: () => Promise<SectionVersions> };
+export type SectionSnapshot = {
+  before: SectionVersions;
+  after: () => Promise<SectionVersions>;
+  modulesBefore: string[];
+  modulesAfter: () => Promise<string[]>;
+};
 
 /** Navn og beskrivelse er ikke seksjoner: endringen gir alltid mindre, og trenger ikke noe øyeblikksbilde. */
-export const NO_SECTION_SNAPSHOT: SectionSnapshot = { before: {}, after: async () => ({}) };
+export const NO_SECTION_SNAPSHOT: SectionSnapshot = { before: {}, after: async () => ({}), modulesBefore: [], modulesAfter: async () => [] };
+
+/**
+ * #934 skive 4b: hvor mange elementer som er nye eller endret i en ny hovedversjon — det e-posten forteller.
+ * Seksjoner med ny versjon eller nye i kurset, og moduler som er levende i kurset nå, men ikke var det før. En modul
+ * med ny versjon telles ikke her; fra 5a-3 telles moduler med hevet krav (doc/DESIGN_934.md).
+ */
+export function countChangedItems(
+  before: SectionVersions,
+  after: SectionVersions,
+  modulesBefore: string[],
+  modulesAfter: string[],
+): number {
+  const sections = Object.keys(after).filter(
+    (sectionId) => !Object.prototype.hasOwnProperty.call(before, sectionId) || before[sectionId] !== after[sectionId],
+  ).length;
+  const wasLive = new Set(modulesBefore);
+  const modules = new Set(modulesAfter.filter((moduleId) => !wasLive.has(moduleId))).size;
+  return sections + modules;
+}
+
+// ---------------------------------------------------------------------------
+// #934 skive 4b: hvem som får e-post om en ny hovedversjon
+// ---------------------------------------------------------------------------
+
+/**
+ * Over så mange mottakere krever dialogen et ekstra «ja», og serveren et bekreftet tall (produkteier 2026-11-03).
+ */
+export const MAJOR_EMAIL_CONFIRM_THRESHOLD = 200;
+
+type RecipientReader = Pick<DbTransactionClient, "user">;
+
+/** Hvem en ny hovedversjon av kurset sender e-post til — se `findMajorVersionRecipients`. */
+function majorVersionRecipientWhere(courseId: string) {
+  return { activeStatus: true, isAnonymized: false, courseCompletions: { some: { courseId } } };
+}
+
+/**
+ * ⚠️ DEN ENE REGELEN for hvem som får e-post om en ny hovedversjon (doc/DESIGN_934.md, «4b»): har kursbevis for
+ * kurset (for en eldre hovedversjon — den nye har ingen ennå), er aktiv og ikke anonymisert. Én per person, uansett
+ * hvor mange bevis hen har. Radene i `CourseVersionNotice` lages fra denne, og dialogene viser tallet fra
+ * `countMajorVersionRecipients`, som bruker det samme vilkåret — så tallet forfatteren ser, og antall e-poster,
+ * er det samme. Tallet kan være høyere enn `certificateHolders`, som bare teller nåværende hovedversjon.
+ */
+export async function findMajorVersionRecipients(client: RecipientReader, courseId: string): Promise<string[]> {
+  const users = await client.user.findMany({ where: majorVersionRecipientWhere(courseId), select: { id: true }, orderBy: { id: "asc" } });
+  return users.map((user) => user.id);
+}
+
+/** Tallet dialogene viser (`majorEmailRecipients`): det samme vilkåret som `findMajorVersionRecipients`. */
+export function countMajorVersionRecipients(client: RecipientReader, courseId: string): Promise<number> {
+  return client.user.count({ where: majorVersionRecipientWhere(courseId) });
+}
+
+/**
+ * Lager én rad per mottaker for hovedversjonen, i transaksjonen som lager den (bare med innholdslåsen). Et nytt
+ * forsøk på samme versjon lager ingen nye rader: den unike nøkkelen (kurs, hovedversjon, person) hopper over dem som
+ * finnes. Radene venter (`waiting`) til workeren sender dem — også når e-posten er slått av, så ingen går tapt.
+ */
+export async function createMajorVersionNotices(
+  client: ContentWriteTx,
+  courseId: string,
+  versionMajor: number,
+  recipients: string[],
+): Promise<number> {
+  if (recipients.length === 0) return 0;
+  const created = await client.courseVersionNotice.createMany({
+    data: recipients.map((userId) => ({ courseId, versionMajor, userId })),
+    skipDuplicates: true,
+  });
+  return created.count;
+}
 
 // #934 skive 4a: kurslåsene (`lockCourseRow`, `lockCourseRowShared`) er borte. Innholdslåsen (src/db/contentLock.ts)
 // gjør jobben: alle som endrer versjonen, holder den eksklusivt (typen `ContentWriteTx` krever det), og en
@@ -109,8 +187,13 @@ export type CourseVersionBump = {
  *     for kursets nåværende hovedversjon (`course_version_required`); dialogene har alltid et svar.
  *   - `minor`: designet stiller ikke spørsmålet — navn/beskrivelse, seksjon eller modul publisert fra sin egen
  *     side, import «Oppdater dette kurset», legacy `PUT …/modules`.
+ *
+ * #934 skive 4b: `confirmEmailRecipients` er tallet dialogen viste da forfatteren sa ja til å sende e-post til
+ * over `MAJOR_EMAIL_CONFIRM_THRESHOLD` mottakere. Se `applyCourseVersionChange`.
  */
-export type CourseVersionRequest = { kind: "question"; answer?: CourseVersionChoice } | { kind: "minor" };
+export type CourseVersionRequest =
+  | { kind: "question"; answer?: CourseVersionChoice; confirmEmailRecipients?: number }
+  | { kind: "minor" };
 
 /**
  * ⚠️ DEN ENE VEIEN til en ny kursversjon. Alle måter innhold går live på i et kurs, eller kursets versjon
@@ -122,6 +205,10 @@ export type CourseVersionRequest = { kind: "question"; answer?: CourseVersionCho
  * transaksjon som endringen, så øyeblikksbildet og versjonen ikke kan skilles — og en avvisning ruller
  * endringen tilbake. Returnerer `null` når kurset aldri har vært publisert (det blir 1.0 ved første
  * publisering) — da økes ingenting.
+ *
+ * #934 skive 4b: en hovedversjon lager også e-postradene (`CourseVersionNotice`), i samme transaksjon, og avvises
+ * med `409 major_email_confirm_required` når mottakerne er over grensen og tallet ikke er bekreftet. Alle veier til
+ * en hovedversjon går hit, så ingen av dem kan lage en hovedversjon uten e-post, eller e-post uten regelen.
  */
 export async function applyCourseVersionChange(
   // #934 skive 4a: bare en transaksjon som holder innholdslåsen eksklusivt, kan endre versjonen. Låsen gjør det
@@ -156,13 +243,27 @@ export async function applyCourseVersionChange(
   const kind: CourseVersionChoice = choice === "major" && holders > 0 ? "major" : "minor";
 
   let to: { major: number; minor: number };
+  let emailRecipients: number | undefined;
   if (kind === "minor") {
     to = { major: from.major, minor: from.minor + 1 };
     await client.course.update({ where: { id: courseId }, data: { versionMinor: to.minor } });
   } else {
     to = { major: from.major + 1, minor: 0 };
+    // #934 skive 4b: mottakerne regnes ut etter låsen, i denne transaksjonen — tallet dialogen viste, er bare et
+    // forslag. Over grensen må forfatteren ha bekreftet minst så mange; ellers avvises endringen, og ingenting er
+    // skrevet (transaksjonen rulles tilbake). En gammel klient sender aldri bekreftelsen og avvises over grensen.
+    const recipients = await findMajorVersionRecipients(client, courseId);
+    const confirmed = request.kind === "question" ? request.confirmEmailRecipients : undefined;
+    if (recipients.length > MAJOR_EMAIL_CONFIRM_THRESHOLD && (confirmed === undefined || confirmed < recipients.length)) {
+      throw new ConflictError(
+        "major_email_confirm_required",
+        `A major version e-mails ${recipients.length} participants. Confirm the number (confirmEmailRecipients) to go ahead; nothing was saved.`,
+        { majorEmailRecipients: recipients.length, confirmEmailRecipients: confirmed ?? null, threshold: MAJOR_EMAIL_CONFIRM_THRESHOLD },
+      );
+    }
     const now = new Date();
     const after = await snapshot.after();
+    const changedItemCount = countChangedItems(before, after, snapshot.modulesBefore, await snapshot.modulesAfter());
     // Raden for versjonen som slutter: det som gjaldt rett før endringen. Fantes den (kurset har hatt en
     // hovedversjon før), skrives slutten av den over starten — regelen sammenligner slutten av N−1 med
     // starten av N, så en seksjon som fikk ny versjon INNENFOR N−1 (mindre versjon, #1095) ikke telles
@@ -178,9 +279,12 @@ export async function applyCourseVersionChange(
       },
     });
     await client.courseVersion.create({
-      data: { courseId, versionMajor: to.major, publishedAt: now, sectionVersionsJson: JSON.stringify(after) },
+      data: { courseId, versionMajor: to.major, publishedAt: now, sectionVersionsJson: JSON.stringify(after), changedItemCount },
     });
     await client.course.update({ where: { id: courseId }, data: { versionMajor: to.major, versionMinor: 0 } });
+    // #934 skive 4b: e-posten, én rad per mottaker, i samme transaksjon som hovedversjonen.
+    await createMajorVersionNotices(client, courseId, to.major, recipients);
+    emailRecipients = recipients.length;
   }
 
   await recordAuditEvent(
@@ -189,7 +293,14 @@ export async function applyCourseVersionChange(
       entityId: courseId,
       action: auditActions.course.versionChanged,
       actorId,
-      metadata: { courseId, kind, requested: choice, from: `${from.major}.${from.minor}`, to: `${to.major}.${to.minor}` },
+      metadata: {
+        courseId,
+        kind,
+        requested: choice,
+        from: `${from.major}.${from.minor}`,
+        to: `${to.major}.${to.minor}`,
+        ...(emailRecipients !== undefined ? { emailRecipients } : {}),
+      },
     },
     client,
   );

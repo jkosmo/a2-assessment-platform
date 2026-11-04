@@ -173,7 +173,9 @@ export async function updateCourse(
   // forfatterens svar; bare navn eller beskrivelse endret gir mindre. Ingen klient kan slå økningen av.
   // #934 skive 4a: `expectedRevision` er telleren skjemaet lastet. Er den endret siden, har noen andre lagret
   // kurset: `409 course_changed`, og ingenting er skrevet. Rutene krever den (en gammel fane sender den ikke).
-  options?: { items?: CourseItemInput[]; version?: CourseVersionChoice; expectedRevision?: number },
+  // #934 skive 4b: `confirmEmailRecipients` — tallet dialogen viste da forfatteren sa ja til e-post til mange
+  // (se `applyCourseVersionChange`).
+  options?: { items?: CourseItemInput[]; version?: CourseVersionChoice; expectedRevision?: number; confirmEmailRecipients?: number },
 ) {
   // #805: a course-metadata edit is a state change and must leave a trail. Record which fields changed.
   // #803: update + audit commit atomically.
@@ -185,7 +187,10 @@ export async function updateCourse(
     await claimCourseRevision(tx, courseId, options?.expectedRevision);
     let course = await tx.course.update({ where: { id: courseId }, data: fields });
     const itemsBump = options?.items
-      ? await writeCourseItems(tx, courseId, options.items, { actorId, versionRequest: { kind: "question", answer: options.version } })
+      ? await writeCourseItems(tx, courseId, options.items, {
+          actorId,
+          versionRequest: { kind: "question", answer: options.version, confirmEmailRecipients: options.confirmEmailRecipients },
+        })
       : null;
     // #934 skive 3: navn eller beskrivelse endret på et kurs som har vært ute er en mindre versjon
     // (produkteier 2026-11-01: «endrer ikke kravet»). Ingen spørsmål — og ingen ekstra økning når innholdet
@@ -455,7 +460,7 @@ async function writeCourseItems(
     // publisert og innholdet endret, øker versjonen her — med seksjonsversjonene fra før som øyeblikksbilde.
     const repo = createCourseRepository(client);
     const previous = await repo.findAllCourseItems(courseId);
-    const before = await repo.findSectionVersions(courseId);
+    const snapshot = await repo.snapshotContent(courseId);
     await client.courseItem.deleteMany({ where: { courseId } });
     if (items.length > 0) {
       await client.courseItem.createMany({
@@ -489,7 +494,7 @@ async function writeCourseItems(
       sectionId: item.type === "SECTION" ? item.sectionId : null,
     }));
     if (itemSequenceKey(previous) === itemSequenceKey(next)) return null;
-    return applyCourseVersionChange(client, courseId, options?.versionRequest ?? { kind: "question" }, { before, after: () => repo.findSectionVersions(courseId) }, options?.actorId);
+    return applyCourseVersionChange(client, courseId, options?.versionRequest ?? { kind: "question" }, snapshot, options?.actorId);
   }
 }
 
@@ -521,7 +526,7 @@ export async function setCourseModules(
     // et publisert kurs blir en mindre versjon.
     const repo = createCourseRepository(client);
     const previous = await repo.findAllCourseItems(courseId);
-    const before = await repo.findSectionVersions(courseId);
+    const snapshot = await repo.snapshotContent(courseId);
     const sections = await client.courseItem.findMany({
       where: { courseId, itemType: "SECTION" },
       orderBy: { sortOrder: "asc" },
@@ -555,7 +560,7 @@ export async function setCourseModules(
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((r) => ({ itemType: r.itemType, moduleId: "moduleId" in r ? r.moduleId : null, sectionId: "sectionId" in r ? (r.sectionId ?? null) : null }));
     if (itemSequenceKey(previous) !== itemSequenceKey(next)) {
-      await applyCourseVersionChange(client, courseId, versionRequest ?? { kind: "minor" }, { before, after: () => repo.findSectionVersions(courseId) }, actorId);
+      await applyCourseVersionChange(client, courseId, versionRequest ?? { kind: "minor" }, snapshot, actorId);
     }
   };
   return tx ? run(tx) : runContentWrite(run);

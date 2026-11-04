@@ -9,7 +9,14 @@ import { listManageableContentIds } from "../content/contentOwnershipService.js"
 import { createCertificationRepository } from "../certification/index.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
 import { runContentWrite } from "../../db/contentLock.js";
-import { applyCourseVersionChange, applyMinorVersionToCoursesContaining, countCertificateHolders, type CourseVersionBump, type CourseVersionChoice } from "./courseVersioning.js";
+import {
+  applyCourseVersionChange,
+  applyMinorVersionToCoursesContaining,
+  countCertificateHolders,
+  countMajorVersionRecipients,
+  type CourseVersionBump,
+  type CourseVersionChoice,
+} from "./courseVersioning.js";
 
 // #934 skive 4a (kjent hull 2 etter 2.129.0): oppslagene tar klienten som parameter. Inne i en publisering
 // leser de på transaksjonen som holder innholdslåsen — de ser det låsen beskytter, og bruker ikke en forbindelse
@@ -74,9 +81,32 @@ export type CoursePublishPreview = {
   /** True when every unpublished item is publishable (cascade publish may proceed). */
   publishable: boolean;
   /** #934 skive 3: kursets versjon og antall kursbevis for den nåværende hovedversjonen. Dialogen spør
-   *  mindre/hoved når det publiseres nytt innhold og tallet er over null. */
-  course: { published: boolean; versionMajor: number; versionMinor: number; certificateHolders: number };
+   *  mindre/hoved når det publiseres nytt innhold og tallet er over null. #934 skive 4b: `majorEmailRecipients`
+   *  er hvor mange en hovedversjon sender e-post til (`findMajorVersionRecipients`). */
+  course: CourseVersionFacts;
 };
+
+/** #934 skive 3/4b: det dialogene trenger for å spørre mindre eller hovedversjon, og vise konsekvensen. */
+export type CourseVersionFacts = {
+  published: boolean;
+  versionMajor: number;
+  versionMinor: number;
+  certificateHolders: number;
+  majorEmailRecipients: number;
+};
+
+async function courseVersionFacts(
+  reader: PublishReader,
+  course: { id: string; publishedAt: Date | null; versionMajor: number; versionMinor: number },
+): Promise<CourseVersionFacts> {
+  return {
+    published: course.publishedAt != null,
+    versionMajor: course.versionMajor,
+    versionMinor: course.versionMinor,
+    certificateHolders: await countCertificateHolders(reader, course.id, course.versionMajor),
+    majorEmailRecipients: await countMajorVersionRecipients(reader, course.id),
+  };
+}
 
 export type PublishedItemRef = { type: "MODULE" | "SECTION"; id: string };
 
@@ -389,19 +419,14 @@ export async function getCoursePublishPreview(courseId: string, reader: PublishR
 
   const versionRow = await reader.course.findUniqueOrThrow({
     where: { id: courseId },
-    select: { publishedAt: true, versionMajor: true, versionMinor: true },
+    select: { id: true, publishedAt: true, versionMajor: true, versionMinor: true },
   });
   return {
     courseId,
     unpublishedItems,
     allPublished: unpublishedItems.length === 0,
     publishable: unpublishedItems.every((item) => item.publishable),
-    course: {
-      published: versionRow.publishedAt != null,
-      versionMajor: versionRow.versionMajor,
-      versionMinor: versionRow.versionMinor,
-      certificateHolders: await countCertificateHolders(reader, courseId, versionRow.versionMajor),
-    },
+    course: await courseVersionFacts(reader, versionRow),
   };
 }
 
@@ -435,7 +460,13 @@ export async function publishCourseChecked(courseId: string, actorId?: string) {
 // and never publish the course — so a published-with-broken-content course can never result.
 // #934 skive 3: `courseVersion` er forfatterens svar når kurset har vært ute og noen har kursbevis — nytt
 // innhold går live, og det er samme spørsmål som i skjemaet (produkteier 2026-11-02).
-export async function publishCourseCascade(courseId: string, actorId?: string, courseVersion?: CourseVersionChoice): Promise<CoursePublishResult> {
+// #934 skive 4b: `options.confirmEmailRecipients` — tallet dialogen viste da forfatteren sa ja til e-post til mange.
+export async function publishCourseCascade(
+  courseId: string,
+  actorId?: string,
+  courseVersion?: CourseVersionChoice,
+  options?: { confirmEmailRecipients?: number },
+): Promise<CoursePublishResult> {
   const preview = await getCoursePublishPreview(courseId);
 
   if (preview.allPublished) {
@@ -509,7 +540,7 @@ export async function publishCourseCascade(courseId: string, actorId?: string, c
         plan.push({ type: "MODULE", id: item.id, versionId: item.versionId });
       }
       const repo = createCourseRepository(tx);
-      const before = await repo.findSectionVersions(courseId);
+      const snapshot = await repo.snapshotContent(courseId);
       const publishedItems: PublishedItemRef[] = [];
       for (const item of plan) {
         if (item.type === "SECTION") {
@@ -523,8 +554,8 @@ export async function publishCourseCascade(courseId: string, actorId?: string, c
       const version = await applyCourseVersionChange(
         tx,
         courseId,
-        { kind: "question", answer: courseVersion },
-        { before, after: () => repo.findSectionVersions(courseId) },
+        { kind: "question", answer: courseVersion, confirmEmailRecipients: options?.confirmEmailRecipients },
+        snapshot,
         actorId,
       );
       const course = await publishCourse(courseId, actorId, tx);
@@ -584,8 +615,9 @@ export type CoursePendingVersions = {
   /** How many modules in `items` someone has passed. */
   modulesWithPasses: number;
   /** #934 skive 3: kursets versjon nå, og hvor mange som har kursbevis for den nåværende hovedversjonen.
-   *  Dialogen spør «mindre eller hovedversjon?» bare når kurset er publisert og tallet er over null. */
-  course: { published: boolean; versionMajor: number; versionMinor: number; certificateHolders: number };
+   *  Dialogen spør «mindre eller hovedversjon?» bare når kurset er publisert og tallet er over null.
+   *  #934 skive 4b: og hvor mange en hovedversjon sender e-post til. */
+  course: CourseVersionFacts;
 };
 
 export type PendingVersionsActor = { userId: string; roles: string[] };
@@ -655,12 +687,7 @@ export async function getCoursePendingVersions(courseId: string, actor: PendingV
     publishable: items.every((item) => item.publishable),
     passedTotal: items.reduce((sum, item) => sum + item.passedCount, 0),
     modulesWithPasses: items.filter((item) => item.passedCount > 0).length,
-    course: {
-      published: course.publishedAt != null,
-      versionMajor: course.versionMajor,
-      versionMinor: course.versionMinor,
-      certificateHolders: await countCertificateHolders(reader, courseId, course.versionMajor),
-    },
+    course: await courseVersionFacts(reader, course),
   };
 }
 
@@ -668,7 +695,8 @@ export async function publishCoursePendingVersions(
   courseId: string,
   actor: PendingVersionsActor,
   // #934 skive 3: `courseVersion` er forfatterens svar for kurset — ett svar, som for modulene. Utelatt = mindre.
-  input: { versionIds: string[]; supersedesEarlierPasses?: boolean; courseVersion?: CourseVersionChoice },
+  // #934 skive 4b: `confirmEmailRecipients` — tallet dialogen viste da forfatteren sa ja til e-post til mange.
+  input: { versionIds: string[]; supersedesEarlierPasses?: boolean; courseVersion?: CourseVersionChoice; confirmEmailRecipients?: number },
 ): Promise<{ publishedItems: PublishedItemRef[]; version: CourseVersionBump | null }> {
   const pending = await getCoursePendingVersions(courseId, actor);
 
@@ -719,7 +747,7 @@ export async function publishCoursePendingVersions(
         throw new AppError("revision_answer_required", 400, "Participants have passed some of these modules: say whether this is a revision (supersedesEarlierPasses).");
       }
       const repo = createCourseRepository(tx);
-      const before = await repo.findSectionVersions(courseId);
+      const snapshot = await repo.snapshotContent(courseId);
       const publishedItems: PublishedItemRef[] = [];
       for (const item of fresh.items) {
         if (item.type === "SECTION") {
@@ -736,8 +764,8 @@ export async function publishCoursePendingVersions(
       const version = await applyCourseVersionChange(
         tx,
         courseId,
-        { kind: "question", answer: input.courseVersion },
-        { before, after: () => repo.findSectionVersions(courseId) },
+        { kind: "question", answer: input.courseVersion, confirmEmailRecipients: input.confirmEmailRecipients },
+        snapshot,
         actor.userId || undefined,
       );
       return { publishedItems, version };

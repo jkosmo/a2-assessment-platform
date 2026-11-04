@@ -493,7 +493,8 @@ describe("#934 skive 3 — forfatterens valg og seksjonsregelen", () => {
     });
     const klar = await request(app).get(`/api/admin/content/courses/${course.id}/pending-versions`).set(admin());
     expect(klar.status).toBe(200);
-    expect(klar.body.course).toEqual({ published: true, versionMajor: 1, versionMinor: 0, certificateHolders: 1 });
+    // #934 skive 4b: og hvor mange en hovedversjon sender e-post til.
+    expect(klar.body.course).toEqual({ published: true, versionMajor: 1, versionMinor: 0, certificateHolders: 1, majorEmailRecipients: 1 });
     expect(klar.body.items.map((i: { versionId: string }) => i.versionId)).toEqual([v2.id]);
 
     const publisert = await request(app).post(`/api/admin/content/courses/${course.id}/publish-pending`).set(admin()).send({

@@ -253,7 +253,7 @@ versjonsregelen. Etter produkteiers regel er de registrert her og ikke rettet f�
 ## Plan for resten (skive 4–5)
 
 Status: **revidert 2026-11-04 etter Codex' gjennomgang, runde 1 og 2, og produkteiers avgjørelser 2026-11-03/04.**
-**4a er bygget i 2.131.0** (se «4a — bygget» under). Resten er ikke bygget. Det blir ingen flere Codex-runder på
+**4a er bygget i 2.131.0** og **4b i 2.132.0** (se «4a — bygget» og «4b — bygget» under). Resten er ikke bygget. Det blir ingen flere Codex-runder på
 planen; QA-porten tar hver skive når den er bygget.
 
 Det viktigste:
@@ -579,6 +579,61 @@ rettet og mutasjonssjekket der det finnes en test (se «Kjente mangler» nr. 16�
 **QA stopper på:** e-post ved mindre versjon, dobbel e-post, e-post til feil person, lenke i e-posten, eller at
 tallet i dialogen og antall e-poster ikke stemmer.
 
+### 4b — bygget (2.132.0)
+
+- **Radene:** `CourseVersionNotice` (migrering `20261104220000_course_version_notice`), unik på (kurs, hovedversjon,
+  person). `applyCourseVersionChange` lager dem når resultatet er en hovedversjon, i samme låste transaksjon som
+  økningen (`createMajorVersionNotices`, `skipDuplicates`), også når e-posten er av. Vakta
+  `test/course-version-write-guard.test.js` nekter at rader lages andre steder.
+- **Mottakerne:** `findMajorVersionRecipients` (`courseVersioning.ts`): kursbevis for kurset, aktiv, ikke anonymisert,
+  én per person. `countMajorVersionRecipients` bruker samme vilkår og gir `majorEmailRecipients` i kursdetaljen,
+  `publish-preview` og `pending-versions`.
+- **Over 200:** tallet telles på nytt etter låsen. Over 200 og ikke bekreftet, eller bekreftet lavere: `409
+  major_email_confirm_required` (`details.majorEmailRecipients`), og transaksjonen rulles tilbake. Feltet
+  `confirmEmailRecipients` tas imot av `PUT …/content`, `PUT …/items`, `POST …/publish`, `POST …/publish-pending` og
+  importen. De tre dialogene viser tallet og krever en avkrysning over 200 (`courseVersionAnswer`); uten den sendes
+  ingenting.
+- **Hva som er nytt:** `CourseVersion.changedItemCount` — seksjoner med ny versjon eller nye i kurset, og moduler som er
+  blitt levende i kurset (`countChangedItems`). Øyeblikksbildet før endringen tas av `snapshotContent`
+  (kursrepositoriet), som alle fire veiene med spørsmål bruker.
+- **Jobben:** `CourseMajorEmailMonitor` → `runCourseMajorEmailSchedule` (`courseMajorVersionEmail.ts`), hvert minutt,
+  bare med `COURSE_MAJOR_EMAIL_ENABLED=true` og en varselkanal som er på. Høyst 20 per runde, tre sekunder imellom
+  (`availableAt`). Nyere hovedversjon eller personen borte → `skipped`; avpublisert eller arkivert → venter. En rad
+  som har stått i `sending` i over 30 minutter (outboxen ga opp etter sin tidsgrense), blir `uncertain`.
+- **Behandleren:** `deliverCourseMajorVersionNotice`. `queued → sending` betinget, så samme regel (`judgeNotice`) en
+  gang til. `sending` funnet → `uncertain`, ikke sendt. Avbrutt underveis → `uncertain`; sikker feil → `queued` og nytt
+  forsøk; siste forsøk → `failed`; kanalen av → tilbake til `waiting`; en tittel som ligner en lenke → `failed`
+  (`contains_link`). Typen står i `SENDS_TO_A_PERSON`.
+- **E-posten:** `buildCourseMajorVersionEmail` med teksten fra `getCourseMajorVersionNotificationMessage` (nb, nn,
+  en-GB; mottakerens språk). **Den felles malen** for #1139 og #1141: `renderIllustratedEmail` (`illustratedEmail.ts`)
+  lager HTML (tabeller, bildet øverst som `cid:`), ren tekst og vedlegget, og nekter alt som ligner en lenke;
+  `deliverIllustratedEmail` sender den — ACS med HTML, vedlegg og `disableUserEngagementTracking`, `log` og
+  `webhook` bare ren tekst. `sendViaAcs` tar `html` og `attachments`. Scenene står i `EMAIL_ILLUSTRATIONS`.
+- **Bildet:** `src/assets/email/kurs-ny-versjon.jpg`, 600 × 200, 16 KB (skalert med Chromium fra
+  `scene-6a-service.png`). Lest fra disk ved første sending; hele repoet følger med i utrullingen.
+- **#997-e-posten** (`sendModuleRevisedNotification`) står urørt til 5a-3.
+
+**Veier inn til en hovedversjon** (grepet etter kallere av `applyCourseVersionChange` med `kind: "question"`,
+2026-11-04): kursskjemaet (`PUT …/content` → `updateCourse` → `writeCourseItems`), `PUT …/items` (`setCourseItems`),
+«Publiser nye versjoner» (`publishCoursePendingVersions`), «Publiser kurs» med nytt innhold (`publishCourseCascade`),
+og import med `replaceExisting` (`setCourseItems`, og `setCourseModules` for eldre filformat). Alle andre kall ber om
+mindre versjon (`kind: "minor"`) og kan ikke gi en hovedversjon. Modulveiene kommer i 5a-3.
+
+**Bevis:** `test/m2-course-major-email-934-4b.test.ts` (gjennom rutene: én rad per mottaker fra hver vei, ikke ved
+mindre versjon, én per person med flere bevis, nytt forsøk uten nye rader; 200 uten bekreftelse, 201 avvist uten og med
+lavere tall og ingenting skrevet, godtatt med tallet gjennom skjemaet, `/items`, «Publiser nye versjoner», «Publiser
+kurs» og importen; jobben: køen i samme transaksjon, spredning, 20 per runde, to runder samtidig, avpublisert venter,
+to hovedversjoner etter hverandre, inaktiv og anonymisert, `sending` som henger; behandleren: sendt på mottakerens
+språk, levert to ganger sender én gang, `sending` → `uncertain`, ny sjekk av alle tre forholdene, utfallene, kanalen
+av, lenke i tittelen, to forsøk samtidig), `test/unit/course-major-version-email-934-4b.test.ts` (språk, ingen
+`http`/`www`/`href`, CID og alt-tekst, ren tekst uten bilde, bildefila, ACS- og webhook-formen),
+`test/unit/outbox-service.test.ts`, `test/unit/course-major-email-monitor-934-4b.test.ts`,
+`test/e2e/admin-content-course-major-email-934-4b.spec.ts` (tallet i de tre dialogene, avkrysningen over 200, 409, 390
+px). Mutasjonssjekket: 45 av 45 røde (M18, køen uten betingelse, overlevde først — testen med to runder samtidig
+avhenger av tidspunkter; `queueNotice` ble skilt ut og testet direkte).
+
+**QA-porten** (2026-11-04): ikke kjørt — Codex-kontoen hadde nådd utgiftstaket. Produkteier kjører den etterpå.
+
 ### 5a — modulens beståtte status per kurs
 
 **Hvorfor dagens #997 ikke holder:** «erstatter tidligere bestått» setter `CertificationStatus` til `SUPERSEDED` for
@@ -849,8 +904,8 @@ deler modulen; 390 og 360 px med lange kurstitler; eksport og import tur-retur e
 
 ### Kjente mangler (bevisst ikke rettet)
 
-Ingen av disse kan miste innhold, gi feil kursbevis, la innhold gå live uten versjonsregelen eller lekke data, med
-unntak av de korte utrullingsvinduene i nr. 1, som produkteier har godtatt.
+Ingen av disse kan miste innhold, gi feil kursbevis, la innhold gå live uten versjonsregelen, sende feil eller dobbel
+e-post eller lekke data, med unntak av de korte utrullingsvinduene i nr. 1, som produkteier har godtatt.
 
 1. **Gammel og ny server side om side under en utrulling** (Codex runde 2 nr. 1, 8, 12 om tømming, og 15). Mens begge
    kjører, kan en lagring gå til den gamle uten tellerkontroll, en gammel server kan fatte vedtak uten `ModulePass`,
@@ -899,6 +954,20 @@ unntak av de korte utrullingsvinduene i nr. 1, som produkteier har godtatt.
     slettes, er sjekket på nytt etter låsen.
 17. **Oversatte SVG-er** (`localizeSectionAssets`) har ingen egen test for at filene ryddes når raden ikke kan skrives
     (rettet i runde 2, men ikke mutasjonssjekket: testen ville krevd språkmodell og lager).
+18. **E-post ved ny hovedversjon: `skipped` er endelig** (4b). Er en person inaktiv eller anonymisert når jobben eller
+    behandleren ser på raden, hoppes hen over for den versjonen — også om hen blir aktiv igjen (for eksempel etter en
+    feil i synkroniseringen fra Entra). Hen ser den nye versjonen i Mine kurs neste gang hen logger inn.
+19. **En kurstittel som ligner en lenke** (`www.`, `http`, `href`) stopper e-posten for det kurset: radene blir
+    `failed` (`contains_link`). Firmapolicy er ingen lenker, og en adresse i ren tekst blir en lenke i Outlook. Ingen
+    varsler forfatteren; det står bare på radene.
+20. **Ingen side viser radene** (4b). Status (`sent`, `uncertain`, `failed` …) står i databasen og i workerens
+    `lastSummary`, ikke i grensesnittet.
+21. **To forsøk på samme rad samtidig** (en leiekontrakt som gikk ut mens ACS fortsatt svarte): det andre setter raden
+    `uncertain`, og det første kan da ikke skrive `sent`. E-posten går én gang, men raden kan si `uncertain` om en som
+    gikk. Samme valg som #1115.
+22. **`COURSE_MAJOR_EMAIL_ENABLED` står ikke i Bicep** (`infra/azure/main.bicep`). Den settes for hånd på workeren.
+    Workerens innstillinger skrives fullt ut av hver infrastrukturutrulling (`deploy-azure.yml`), så en slik utrulling
+    fjerner den, og radene venter til den settes igjen. Ingen e-post går tapt.
 
 ### Gjennomgang av planen
 

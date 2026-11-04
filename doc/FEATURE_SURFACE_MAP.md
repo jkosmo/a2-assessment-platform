@@ -173,6 +173,18 @@ A course that has **never** been published gets no version (it becomes 1.0 at fi
 has been out — published now, has a slug, or has certificates — is versioned also while unpublished.
 A major version with nobody holding a certificate for the current major version becomes minor.
 
+**E-mail on a new major version (#934 slice 4b, 2.132.0).** A major version creates one `CourseVersionNotice` row
+per recipient inside `applyCourseVersionChange` (so every way in above that can give a major version — the form,
+`PUT …/items`, «Publiser nye versjoner», «Publiser kurs», import `replaceExisting` — creates them; the guard test
+forbids creating them anywhere else). Recipients: `findMajorVersionRecipients` (certificate for the course, active,
+not anonymized, one per person); the three dialogs show the same count as `majorEmailRecipients` and, over 200,
+require a tick (`courseVersionAnswer`) and send `confirmEmailRecipients` — the server recounts and answers `409
+major_email_confirm_required` without it. Sending: `CourseMajorEmailMonitor` → `runCourseMajorEmailSchedule` →
+outbox `course_major_version_notification` → `deliverCourseMajorVersionNotice` (`courseMajorVersionEmail.ts`), only
+with `COURSE_MAJOR_EMAIL_ENABLED=true` on the worker. The e-mail uses the shared illustrated template
+(`renderIllustratedEmail` / `deliverIllustratedEmail`, `src/modules/certification/illustratedEmail.ts`, image
+`src/assets/email/kurs-ny-versjon.jpg` as a CID attachment, no links) that #1139 and #1141 reuse.
+
 **Section rule:** a major version writes `CourseVersion` rows (N−1: the section versions just before
 the change; N: just after). Every reader of «which sections has the participant read» goes through
 `courseRepository` (`findReadSectionIds`, `findReadSectionIdsForCourses`,

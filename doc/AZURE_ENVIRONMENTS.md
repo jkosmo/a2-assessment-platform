@@ -142,6 +142,15 @@ For each environment, define variables/secrets used by workflow:
 - `BUDGET_CONTACT_EMAIL`
 - `MONTHLY_BUDGET_AMOUNT`
 
+Worker-only settings that are **not** in the Bicep template yet (set by hand on the worker App Service; an infra
+deploy rewrites the worker's app settings and removes them):
+- `COURSE_MAJOR_EMAIL_ENABLED` (#934 slice 4b, `true` | `false`, default `false`) — the job that e-mails participants
+  when a course gets a new major version. The rows are created regardless; while it is off they wait, and nothing of
+  type `course_major_version_notification` is put in the outbox. Turn it on only after the web app AND the worker both
+  report the new version on `/version`. Needs `PARTICIPANT_NOTIFICATION_CHANNEL` to be on.
+- `COURSE_MAJOR_EMAIL_INTERVAL_MS` (optional, default `60000`) — how often the job runs; each run queues at most 20
+  e-mails, three seconds apart.
+
 Do not set these manually in GitHub Environment variables:
 - `PROCESS_ROLE` - injected separately for web and worker apps
 - `PORT` - provided by App Service

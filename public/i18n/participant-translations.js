@@ -164,6 +164,8 @@ export const translations = {
     "errors.api.course_publish_items_changed": "The course changed while you were publishing. Reload the course and try again.",
     // #934 skive 4a: en fane som har stått åpen, skal ikke skrive over en annens lagring.
     "errors.api.course_changed": "Someone else saved this course after you opened it. Nothing was saved. Copy what you wrote if you need it, reload the page and make your change again.",
+    // #934 skive 4b: en hovedversjon sender e-post til over 200, og tallet er ikke bekreftet (eller har endret seg).
+    "errors.api.major_email_confirm_required": "A major version would e-mail more than 200 participants, and that number has not been confirmed. Nothing was saved. Reload the page and confirm the number in the dialog.",
     "errors.api.course_form_outdated": "This page is from an older version of the platform. Nothing was saved. Reload the page and make your change again.",
     "errors.api.course_cascade_changed": "What would be deleted changed after the preview was shown. Nothing was deleted. Open the preview again.",
     "errors.api.import_target_changed": "The course changed while the file was being imported. Nothing was changed. Import the file again.",
@@ -707,6 +709,7 @@ export const translations = {
     "errors.api.course_publish_items_changed": "Kurset ble endret mens du publiserte. Last kurset på nytt og prøv igjen.",
     // #934 skive 4a: en fane som har stått åpen, skal ikke skrive over en annens lagring.
     "errors.api.course_changed": "Noen andre har lagret kurset etter at du åpnet det. Ingenting ble lagret. Kopier det du skrev om du trenger det, last siden på nytt og gjør endringen igjen.",
+    "errors.api.major_email_confirm_required": "En hovedversjon ville sendt e-post til over 200 deltakere, og tallet er ikke bekreftet. Ingenting ble lagret. Last siden på nytt og bekreft tallet i dialogen.",
     "errors.api.course_form_outdated": "Siden er fra en eldre versjon av plattformen. Ingenting ble lagret. Last siden på nytt og gjør endringen igjen.",
     "errors.api.course_cascade_changed": "Det som ville blitt slettet, er endret siden forhåndsvisningen. Ingenting ble slettet. Åpne forhåndsvisningen på nytt.",
     "errors.api.import_target_changed": "Kurset ble endret mens fila ble importert. Ingenting ble endret. Importer fila på nytt.",
@@ -1243,6 +1246,7 @@ export const translations = {
     "errors.api.course_publish_items_changed": "Kurset vart endra medan du publiserte. Last kurset på nytt og prøv igjen.",
     // #934 skive 4a: ei fane som har stått open, skal ikkje skrive over lagringa til ein annan.
     "errors.api.course_changed": "Nokon andre har lagra kurset etter at du opna det. Ingenting vart lagra. Kopier det du skreiv om du treng det, last sida på nytt og gjer endringa igjen.",
+    "errors.api.major_email_confirm_required": "Ein hovudversjon ville sendt e-post til over 200 deltakarar, og talet er ikkje stadfesta. Ingenting vart lagra. Last sida på nytt og stadfest talet i dialogen.",
     "errors.api.course_form_outdated": "Sida er frå ein eldre versjon av plattforma. Ingenting vart lagra. Last sida på nytt og gjer endringa igjen.",
     "errors.api.course_cascade_changed": "Det som ville blitt sletta, er endra sidan førehandsvisinga. Ingenting vart sletta. Opne førehandsvisinga på nytt.",
     "errors.api.import_target_changed": "Kurset vart endra medan fila vart importert. Ingenting vart endra. Importer fila på nytt.",

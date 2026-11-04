@@ -404,12 +404,13 @@ async function publishCourseInAdmin(courseId, triggerButton = null) {
 
 // POST the publish. `publishItems` cascades the unpublished modules/sections; false is the plain
 // publish (used when everything is already live).
-async function commitCoursePublish(courseId, publishItems, triggerButton = null, courseVersion = undefined) {
+async function commitCoursePublish(courseId, publishItems, triggerButton = null, versionAnswer = undefined) {
   try {
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/publish`, getHeaders, {
       method: "POST",
-      // #934 skive 3: svaret sendes bare når dialogen spurte (kursbevis finnes).
-      body: JSON.stringify({ publishItems, ...(courseVersion ? { courseVersion } : {}) }),
+      // #934 skive 3: svaret sendes bare når dialogen spurte (kursbevis finnes). Skive 4b: med tallet forfatteren
+      // bekreftet når hovedversjonen sender e-post.
+      body: JSON.stringify({ publishItems, ...versionRequestBody(versionAnswer, "courseVersion") }),
     });
     showToast(t("adminContent.courses.message.published") || t("courses.published"), "success");
 
@@ -517,6 +518,7 @@ function openCascadePublishDialog(courseId, preview, triggerButton) {
   const versionHost = document.getElementById("cascadePublishVersion");
   const asksVersion = !blocked && Number(preview?.course?.certificateHolders) > 0;
   pendingCascadePublish.asksVersion = asksVersion;
+  pendingCascadePublish.course = preview?.course ?? null;
   if (versionHost) {
     setHidden(versionHost, !asksVersion);
     if (asksVersion) {
@@ -569,12 +571,14 @@ function initCascadePublishDialog() {
   const cancelBtn = document.getElementById("cascadePublishCancelBtn");
   confirmBtn?.addEventListener("click", async () => {
     if (!pendingCascadePublish) return;
-    const { courseId, triggerButton, asksVersion } = pendingCascadePublish;
-    const courseVersion = asksVersion ? selectedCourseVersion(document.getElementById("cascadePublishVersion"), "cascadeCourseVersion") : undefined;
+    const { courseId, triggerButton, asksVersion, course } = pendingCascadePublish;
+    const versionAnswer = asksVersion ? courseVersionAnswer(document.getElementById("cascadePublishVersion"), "cascadeCourseVersion", course) : undefined;
+    // #934 skive 4b: over 200 mottakere uten det ekstra «ja»: dialogen står åpen, og ingenting publiseres.
+    if (asksVersion && !versionAnswer) return;
     pendingCascadePublish = null;
     confirmBtn.disabled = true;
     cascadePublishDialog.close();
-    await commitCoursePublish(courseId, true, triggerButton, courseVersion);
+    await commitCoursePublish(courseId, true, triggerButton, versionAnswer);
     confirmBtn.disabled = false;
   });
   cancelBtn?.addEventListener("click", () => {
@@ -655,6 +659,7 @@ async function openPendingPublishDialog(courseId) {
   const versionHost = document.getElementById("pendingPublishVersion");
   const asksVersion = !blocked && Number(pending.course?.certificateHolders) > 0;
   pendingPublishTarget.asksVersion = asksVersion;
+  pendingPublishTarget.course = pending.course ?? null;
   if (versionHost) {
     setHidden(versionHost, !asksVersion);
     if (asksVersion) {
@@ -696,6 +701,11 @@ async function commitPendingPublish(supersedesEarlierPasses) {
   if (!target) return;
   const dialog = document.getElementById("pendingPublishDialog");
   const buttons = pendingPublishButtons();
+  // #934 skive 4b: over 200 mottakere uten det ekstra «ja»: dialogen står, og ingenting publiseres.
+  const versionAnswer = target.asksVersion
+    ? courseVersionAnswer(document.getElementById("pendingPublishVersion"), "pendingCourseVersion", target.course)
+    : undefined;
+  if (target.asksVersion && !versionAnswer) return;
   for (const button of [buttons.confirm, buttons.keep, buttons.supersede]) button.disabled = true;
   try {
     const result = await runWithWorkDialog(t("adminContent.work.publishing"), () => apiFetch(`/api/admin/content/courses/${encodeURIComponent(target.courseId)}/publish-pending`, getHeaders, {
@@ -704,7 +714,7 @@ async function commitPendingPublish(supersedesEarlierPasses) {
         versionIds: target.versionIds,
         ...(supersedesEarlierPasses === undefined ? {} : { supersedesEarlierPasses }),
         // #934 skive 3: svaret sendes bare når spørsmålet ble stilt; ellers bestemmer tjeneren (mindre).
-        ...(target.asksVersion ? { courseVersion: selectedCourseVersion(document.getElementById("pendingPublishVersion"), "pendingCourseVersion") } : {}),
+        ...versionRequestBody(versionAnswer, "courseVersion"),
       }),
     }));
     pendingPublishTarget = null;
@@ -808,6 +818,38 @@ function selectedCourseVersion(host, name) {
   return host?.querySelector(`input[name="${name}"]:checked`)?.value === "major" ? "major" : "minor";
 }
 
+/** Svaret som felt i et kall: `{ [versionField]: "major" | "minor", confirmEmailRecipients? }`, eller ingenting. */
+function versionRequestBody(answer, versionField) {
+  if (!answer) return {};
+  return {
+    [versionField]: answer.version,
+    ...(answer.confirmEmailRecipients !== undefined ? { confirmEmailRecipients: answer.confirmEmailRecipients } : {}),
+  };
+}
+
+// #934 skive 4b: over så mange mottakere krever en hovedversjon et ekstra «ja» (produkteier 2026-11-03). Samme tall
+// som serveren (`MAJOR_EMAIL_CONFIRM_THRESHOLD`); serveren teller på nytt og avviser med 409 uten bekreftelsen.
+const MAJOR_EMAIL_CONFIRM_THRESHOLD = 200;
+
+/** Hvor mange en hovedversjon sender e-post til, eller null når serveren ikke sier det (eldre server). */
+function majorEmailRecipients(course) {
+  return Number.isInteger(course?.majorEmailRecipients) ? course.majorEmailRecipients : null;
+}
+
+function majorEmailLineHtml(course, next) {
+  const n = majorEmailRecipients(course);
+  if (n === null) return "";
+  const text = n === 0
+    ? t("courses.version.majorEmailNone")
+    : n === 1 ? tf("courses.version.majorEmailOne", { next }) : tf("courses.version.majorEmailMany", { n, next });
+  const confirm = n > MAJOR_EMAIL_CONFIRM_THRESHOLD
+    ? `<label class="course-version-email-confirm"><input type="checkbox" data-email-confirm>
+        <span>${escapeHtml(tf("courses.version.majorEmailConfirm", { n }))}</span></label>
+      <p class="course-version-email-missing" data-email-confirm-missing hidden>${escapeHtml(tf("courses.version.majorEmailConfirmMissing", { n }))}</p>`
+    : "";
+  return `<li>${escapeHtml(text)}${confirm}</li>`;
+}
+
 function renderCourseVersionConsequence(host, course, choice) {
   const box = host?.querySelector("[data-version-consequence]");
   if (!box) return;
@@ -820,8 +862,30 @@ function renderCourseVersionConsequence(host, course, choice) {
         <li>${escapeHtml(tf("courses.version.majorKeep", { major, next }))}</li>
         <li>${escapeHtml(tf("courses.version.majorCounts", { major }))}</li>
         <li>${escapeHtml(t("courses.version.majorReport"))}</li>
+        ${majorEmailLineHtml(course, next)}
       </ul>`
     : `<p>${escapeHtml(t("courses.version.minorConsequence"))}</p>`;
+}
+
+/**
+ * #934 skive 4b: svaret fra valget, klart til å sendes: `{ version, confirmEmailRecipients }`. Hovedversjon sender
+ * tallet dialogen viste; serveren krever det over grensen. Mangler det ekstra «ja» over grensen, gir den `null`,
+ * viser hvorfor og flytter fokus til avkrysningen — da sendes ingenting.
+ */
+function courseVersionAnswer(host, name, course) {
+  const version = selectedCourseVersion(host, name);
+  if (version !== "major") return { version };
+  const n = majorEmailRecipients(course);
+  if (n !== null && n > MAJOR_EMAIL_CONFIRM_THRESHOLD) {
+    const box = host?.querySelector("[data-email-confirm]");
+    if (!box?.checked) {
+      const missing = host?.querySelector("[data-email-confirm-missing]");
+      if (missing) missing.hidden = false;
+      box?.focus();
+      return null;
+    }
+  }
+  return n === null ? { version } : { version, confirmEmailRecipients: n };
 }
 
 /** Tegn valget i `host` og hold konsekvensen (og ev. en knappetekst) i takt med det. */
@@ -838,14 +902,15 @@ function mountCourseVersionChoice(host, name, course, onChange) {
 
 /**
  * Spør forfatteren før et publisert kurs med kursbevis lagres med endret innhold.
- * Gir "major", "minor", eller null når forfatteren avbryter (da lagres ingenting).
+ * Gir svaret (`{ version: "major" | "minor", confirmEmailRecipients? }`, se `courseVersionAnswer`), eller null når
+ * forfatteren avbryter (da lagres ingenting).
  */
 function askCourseVersion(course, changes) {
   const dialog = document.getElementById("courseVersionDialog");
   const host = document.getElementById("courseVersionChoiceHost");
   const saveBtn = document.getElementById("courseVersionSaveBtn");
   const cancelBtn = document.getElementById("courseVersionCancelBtn");
-  if (!dialog || !host || !saveBtn || !cancelBtn || typeof dialog.showModal !== "function") return Promise.resolve("minor");
+  if (!dialog || !host || !saveBtn || !cancelBtn || typeof dialog.showModal !== "function") return Promise.resolve({ version: "minor" });
 
   const parts = [];
   if (changes.added > 0) parts.push(tf("courses.version.added", { n: changes.added }));
@@ -874,7 +939,11 @@ function askCourseVersion(course, changes) {
       if (dialog.open) dialog.close();
       resolve(value);
     };
-    const onSave = () => finish(selectedCourseVersion(host, "courseVersionChoice"));
+    const onSave = () => {
+      // #934 skive 4b: over 200 mottakere uten det ekstra «ja»: dialogen står, og ingenting lagres.
+      const answer = courseVersionAnswer(host, "courseVersionChoice", course);
+      if (answer) finish(answer);
+    };
     const onCancel = () => finish(null);
     // Esc lukker dialogen: det er et nei, ikke et «mindre».
     const onClose = () => finish(null);
@@ -2292,10 +2361,10 @@ async function saveCourse(courseId) {
   // kursbevis spørres det ikke — tjeneren gir en mindre versjon.
   const loadedCourse = courseId ? courseDetail?.course ?? null : null;
   const itemsChanged = Boolean(courseId) && courseItemsKey(courseModules) !== initialCourseItemsKey;
-  let versionChoice;
+  let versionAnswer;
   if (itemsChanged && Number(loadedCourse?.certificateHolders) > 0) {
-    versionChoice = await askCourseVersion(loadedCourse, courseItemChanges(initialCourseItemsKey, courseModules));
-    if (versionChoice === null) return false;
+    versionAnswer = await askCourseVersion(loadedCourse, courseItemChanges(initialCourseItemsKey, courseModules));
+    if (versionAnswer === null) return false;
   }
 
   if (saveBtn) saveBtn.disabled = true;
@@ -2352,7 +2421,8 @@ async function saveCourse(courseId) {
           sortOrder,
           themeIds,
           items,
-          ...(versionChoice ? { version: versionChoice } : {}),
+          // #934 skive 4b: med tallet forfatteren bekreftet når hovedversjonen sender e-post (se `courseVersionAnswer`).
+          ...versionRequestBody(versionAnswer, "version"),
           expectedRevision: Number.isInteger(loadedCourse?.contentRevision) ? loadedCourse.contentRevision : 0,
         }),
       });

@@ -117,6 +117,7 @@ model User {
   discussionSubscriptions       DiscussionSubscription[]
   agentAuthoringTokens          AgentAuthoringToken[]    @relation("AgentAuthoringTokens")
   contentOwnerships             ContentOwner[]           @relation("ContentOwnerships")
+  courseVersionNotices          CourseVersionNotice[]
 }
 
 // AA-3 (#651): kortlivet, scopet token for agent-orkestrerte draft-operasjoner.
@@ -679,6 +680,8 @@ model Course {
   completions        CourseCompletion[]
   // #934 skive 3: én rad per hovedversjon, for regelen om endrede seksjoner.
   versions           CourseVersion[]
+  // #934 skive 4b: e-posten om ny hovedversjon, én rad per person og versjon.
+  versionNotices     CourseVersionNotice[]
   sectionReads       CourseSectionRead[]
   enrollments        CourseEnrollment[]
   groupAssignments   CourseGroupAssignment[]
@@ -753,11 +756,41 @@ model CourseVersion {
   versionMajor        Int
   publishedAt         DateTime
   sectionVersionsJson String
+  // #934 skive 4b: hvor mange elementer som er nye eller endret i denne hovedversjonen (seksjoner med ny versjon,
+  // elementer lagt til). Regnet ut når hovedversjonen lages, og står i e-posten til deltakerne. Null for rader
+  // fra før 4b, og for raden som avslutter forrige hovedversjon.
+  changedItemCount    Int?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   course              Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@unique([courseId, versionMajor])
+}
+
+// #934 skive 4b: én rad per person og hovedversjon — e-posten om at kurset har fått en ny hovedversjon
+// (doc/DESIGN_934.md, «4b»). Radene lages i `applyCourseVersionChange`, i samme transaksjon som hovedversjonen,
+// også når e-posten er slått av, så ingen e-post går tapt. Workeren sender dem (`courseMajorVersionEmail.ts`).
+//
+// status: "waiting" (venter: kurset er avpublisert, eller jobben er av) | "queued" (lagt i outboxen) |
+//         "sending" | "sent" | "skipped" (ikke aktuell lenger: nyere hovedversjon, eller personen er borte) |
+//         "uncertain" (et forsøk ble avbrutt og kan ha gått; sendes ikke på nytt) | "failed"
+model CourseVersionNotice {
+  id           String    @id @default(cuid())
+  courseId     String
+  versionMajor Int
+  userId       String
+  status       String    @default("waiting")
+  // Hvorfor raden ble `skipped`, `uncertain` eller `failed`.
+  reason       String?
+  queuedAt     DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  course       Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, versionMajor, userId])
+  @@index([status, createdAt])
 }
 
 // #496/EN-1: assignment of a course to a participant (individual, department, or self-enrollment),

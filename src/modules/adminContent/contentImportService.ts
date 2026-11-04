@@ -28,7 +28,7 @@ import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { prisma } from "../../db/prisma.js";
 import { courseRepository, createCourseRepository } from "../course/courseRepository.js";
 import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
-import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, renameSectionInVersionSnapshots, sameLocalizedText, type CourseVersionChoice } from "../course/courseVersioning.js";
+import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, renameSectionInVersionSnapshots, sameLocalizedText, type CourseVersionChoice, type CourseVersionRequest } from "../course/courseVersioning.js";
 import { randomUUID } from "node:crypto";
 import { createSection, evaluateSectionTranslationGate } from "../course/sectionCommands.js";
 import { moduleExportPayloadSchema, sectionExportPayloadSchema } from "./adminContentSchemas.js";
@@ -684,6 +684,9 @@ export async function importCourseFromEnvelope(
     // #934 skive 3: `replaceExisting` bytter ut alt innholdet. Har noen kursbevis for kursets nåværende
     // hovedversjon, kreves forfatterens svar (mindre eller hovedversjon), som i dialogen. Uten kursbevis: som før.
     version?: CourseVersionChoice;
+    // #934 skive 4b: tallet forfatteren bekreftet når en hovedversjon sender e-post til over 200 (se
+    // `applyCourseVersionChange`).
+    confirmEmailRecipients?: number;
   },
   // #957: samme form som søsterfunksjonene — `importModulePayload` (:336) og `persistStagedSection`
   // (:169) rapporterer begge `heldBackByTranslationGate` oppover. Kursimporten regnet ut flagget,
@@ -978,6 +981,13 @@ export async function importCourseFromEnvelope(
         // Holdes adskilt fra `anyContentHeldBack`, som er det som MELDES tilbake (#957): et utkast fra
         // kilden er ikke «holdt tilbake».
         let anyModuleUnpublished = false;
+        // #934 skive 3/4b: `replaceExisting` (og et nytt kurs, som aldri har vært ute) spør om versjonen, med
+        // forfatterens svar og — for en hovedversjon som sender e-post til mange — tallet hen bekreftet.
+        const replaceVersionRequest: CourseVersionRequest = {
+          kind: "question",
+          answer: options.version,
+          confirmEmailRecipients: options.confirmEmailRecipients,
+        };
 
         const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [], replacedUnownedIds: [], keptUnownedIds, unchangedIds };
         if (orderedItems && updatePlan) {
@@ -1157,7 +1167,7 @@ export async function importCourseFromEnvelope(
               importedModuleIds.push(imported.moduleId);
             }
           }
-          await setCourseItems(courseId, courseItemInputs, { actorId: options.actorId, versionRequest: { kind: "question", answer: options.version } }, tx);
+          await setCourseItems(courseId, courseItemInputs, { actorId: options.actorId, versionRequest: replaceVersionRequest }, tx);
         } else {
           const importedModules: Array<{ moduleId: string; sortOrder: number }> = [];
           for (const item of payload.course.modules ?? []) {
@@ -1173,7 +1183,7 @@ export async function importCourseFromEnvelope(
             importedModules.map((m) => ({ moduleId: m.moduleId, sortOrder: m.sortOrder })),
             tx,
             options.actorId,
-            { kind: "question", answer: options.version },
+            replaceVersionRequest,
           );
         }
 

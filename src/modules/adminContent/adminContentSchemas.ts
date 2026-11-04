@@ -915,6 +915,9 @@ export const importBodySchema = z.object({
   targetId: z.string().min(1).optional(),
   // #934 skive 3: bare kursimport med `replaceExisting` — forfatterens svar når kurset har kursbevis.
   version: z.enum(["major", "minor"]).optional(),
+  // #934 skive 4b: med `version: "major"` — tallet forfatteren bekreftet når hovedversjonen sender e-post til over
+  // 200 deltakere (`majorEmailRecipients` i kursdetaljen). Uten det avvises en slik import med 409.
+  confirmEmailRecipients: z.number().int().min(0).optional(),
   // v1.2.14 (#456): når false, auto-publiser ikke selv om kildens audit.publishedAt er
   // satt. In-app duplisering sender false; fil-import lar default (true) stå.
   autoPublish: z.boolean().optional(),

@@ -413,6 +413,77 @@ export function getModuleRevisedNotificationMessage(
   };
 }
 
+// #934 skive 4b: kurset har fått en ny hovedversjon. Til dem som har kursbevis for en eldre versjon (doc/DESIGN_934.md).
+// Ingen lenker (firmapolicy, #688/#1139): siste avsnitt sier hvor kurset ligger. Tonen som i #1139: voksen, litt
+// humor (båten er på verftet, som på bildet), aldri skam — det gamle beviset står, og ingen har gjort noe galt.
+// Teksten er avsnitt, ikke én streng: den felles malen (illustratedEmail.ts) lager både HTML og ren tekst av dem.
+export type CourseMajorVersionMessage = { subject: string; paragraphs: string[]; reason: string };
+
+type CourseMajorVersionLabels = {
+  subject: string; // {course} {major}
+  greeting: string;
+  intro: string; // {course} {major}
+  changedOne: string;
+  // «Det er …», ikke «3 elementer …»: rett etter «versjon 4.» ville tallet lest som «versjon 4.3».
+  changedMany: string; // {n}
+  certificate: string; // {major}
+  closing: string;
+  reason: string; // {course}
+};
+
+const courseMajorVersionMessages: Record<SupportedLocale, CourseMajorVersionLabels> = {
+  "en-GB": {
+    subject: "«{course}» has a new version: version {major}",
+    greeting: "Hello!",
+    intro: "The course «{course}» has been to the boatyard and now has a new major version: version {major}.",
+    changedOne: "There is one new or changed item.",
+    changedMany: "There are {n} new or changed items.",
+    certificate:
+      "The course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version {major}, you only need to take what is new or changed.",
+    closing: "Log in to A-2 læringsplattform and open the course under My courses.",
+    reason: "You are getting this e-mail because you have a course certificate for «{course}».",
+  },
+  nb: {
+    subject: "«{course}» har fått versjon {major}",
+    greeting: "Hei!",
+    intro: "Kurset «{course}» har vært en tur på verftet og har fått en ny hovedversjon: versjon {major}.",
+    changedOne: "Det er ett nytt eller endret element.",
+    changedMany: "Det er {n} nye eller endrede elementer.",
+    certificate:
+      "Kursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon {major} tar du bare det som er nytt eller endret.",
+    closing: "Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.",
+    reason: "Du får denne e-posten fordi du har kursbevis for «{course}».",
+  },
+  nn: {
+    subject: "«{course}» har fått versjon {major}",
+    greeting: "Hei!",
+    intro: "Kurset «{course}» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon {major}.",
+    changedOne: "Det er eitt nytt eller endra element.",
+    changedMany: "Det er {n} nye eller endra element.",
+    certificate:
+      "Kursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon {major} tek du berre det som er nytt eller endra.",
+    closing: "Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.",
+    reason: "Du får denne e-posten fordi du har kursbevis for «{course}».",
+  },
+};
+
+export function getCourseMajorVersionNotificationMessage(
+  locale: SupportedLocale,
+  context: { courseTitle: string; versionMajor: number; changedItemCount: number | null },
+): CourseMajorVersionMessage {
+  const t = courseMajorVersionMessages[locale];
+  const fill = (template: string) =>
+    template.split("{course}").join(context.courseTitle).split("{major}").join(String(context.versionMajor));
+  const n = context.changedItemCount;
+  // Tallet mangler for en hovedversjon laget før 2.132.0, og er 0 når bare noe er tatt ut: da sier e-posten ingenting om det.
+  const changed = n == null || n <= 0 ? "" : n === 1 ? t.changedOne : t.changedMany.split("{n}").join(String(n));
+  return {
+    subject: fill(t.subject),
+    paragraphs: [t.greeting, [fill(t.intro), changed].filter(Boolean).join(" "), fill(t.certificate), t.closing],
+    reason: fill(t.reason),
+  };
+}
+
 export function getCourseAssignmentNotificationMessage(
   locale: SupportedLocale,
   context: { courseTitle: string; className: string; dueAt?: Date | null },

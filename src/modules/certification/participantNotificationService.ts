@@ -1,14 +1,21 @@
-import { EmailClient } from "@azure/communication-email";
+import { EmailClient, type EmailMessage } from "@azure/communication-email";
 import type { AppealStatus } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { ExternalCallTimeoutError, withTimeout } from "../../clients/externalCall.js";
 import { classifyAcsError, describeAcsFailure, nextAttemptDelayMs } from "./acsThrottle.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
-import { getAppealNotificationMessage, getAssessmentResultNotificationMessage, getCourseAssignmentNotificationMessage, getModuleRevisedNotificationMessage } from "../../i18n/notificationMessages.js";
+import {
+  getAppealNotificationMessage,
+  getAssessmentResultNotificationMessage,
+  getCourseAssignmentNotificationMessage,
+  getCourseMajorVersionNotificationMessage,
+  getModuleRevisedNotificationMessage,
+} from "../../i18n/notificationMessages.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
 import { recordAuditEvent } from "../../services/auditService.js";
+import { EMAIL_ILLUSTRATIONS, renderIllustratedEmail, type IllustratedEmail, type InlineImageAttachment } from "./illustratedEmail.js";
 
 type NotificationChannel = "disabled" | "log" | "webhook" | "acs_email";
 
@@ -191,18 +198,26 @@ export async function sendViaAcs(input: {
   subject: string;
   body: string;
   logPayload: { channel?: string } & Record<string, unknown>;
+  // #934 skive 4b (felles med #1139, #1141): HTML ved siden av den rene teksten, med bildene som innebygde vedlegg
+  // (CID). Lages av `renderIllustratedEmail` (illustratedEmail.ts). Uten: ren tekst, som før.
+  html?: string;
+  attachments?: InlineImageAttachment[];
 }): Promise<NotificationResult> {
   const connectionString = env.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING!;
   // ACS senderAddress must be a plain email address — display name is set at domain level in Azure.
   const senderAddress = env.ACS_EMAIL_SENDER!;
 
   const emailClient = new EmailClient(connectionString);
-  const message = {
+  const message: EmailMessage = {
     senderAddress,
-    content: { subject: input.subject, plainText: input.body },
+    content: input.html ? { subject: input.subject, plainText: input.body, html: input.html } : { subject: input.subject, plainText: input.body },
     recipients: {
       to: [{ address: input.recipientEmail, displayName: input.recipientName }],
     },
+    // #1139: ingen sporing av hvem som åpner e-posten. Med sporing slått på i ACS legger tjenesten inn en
+    // sporingspiksel (en nettadresse) i HTML-en — det ville brutt både personvernet og lenkeforbudet.
+    ...(input.html ? { disableUserEngagementTracking: true } : {}),
+    ...(input.attachments && input.attachments.length > 0 ? { attachments: input.attachments } : {}),
   };
 
   try {
@@ -515,6 +530,115 @@ export async function sendModuleRevisedNotification(
   }
   logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...payload });
   return { delivered: true, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance };
+}
+
+// #934 skive 4b (felles med #1139, #1141): sender en e-post laget med den felles malen (`renderIllustratedEmail`).
+// E-post (ACS) får HTML med bildet som innebygd vedlegg og ren tekst ved siden av; `log` og `webhook` får den rene
+// teksten. Gir tilbake hva som skjedde (#1115), så kalleren skiller en sikker feil (prøv igjen) fra en som ble
+// avbrutt underveis og kan ha gått (`ambiguous`: send ikke på nytt).
+export async function deliverIllustratedEmail(input: {
+  recipientEmail: string;
+  recipientName?: string | null;
+  email: IllustratedEmail;
+  logPayload: Record<string, unknown>;
+}): Promise<NotificationResult> {
+  const { email } = input;
+  const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
+  const logPayload = { ...input.logPayload, subject: email.subject, emittedAt: new Date().toISOString() };
+  const outcome = (delivered: boolean, extra: Partial<NotificationResult> = {}): NotificationResult => ({
+    delivered,
+    channel,
+    subject: email.subject,
+    nextStepGuidance: email.plainText,
+    ...extra,
+  });
+
+  if (channel === "disabled") return outcome(false, { failureReason: "channel_disabled" });
+  if (channel === "log") {
+    logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...logPayload });
+    return outcome(true);
+  }
+  if (channel === "acs_email") {
+    return sendViaAcs({
+      recipientEmail: input.recipientEmail,
+      recipientName: input.recipientName ?? undefined,
+      subject: email.subject,
+      body: email.plainText,
+      html: email.html,
+      attachments: email.attachments,
+      logPayload,
+    });
+  }
+
+  const webhookUrl = env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL;
+  if (!webhookUrl) {
+    logOperationalEvent(operationalEvents.certification.participantNotificationFailed, { channel, ...logPayload, failureReason: "missing_webhook_url" }, "error");
+    return outcome(false, { failureReason: "missing_webhook_url" });
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), env.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS);
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...logPayload, body: email.plainText }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const failureReason = `webhook_non_2xx_${response.status}`;
+      logOperationalEvent(operationalEvents.certification.participantNotificationFailed, { channel, ...logPayload, failureReason }, "error");
+      return outcome(false, { failureReason });
+    }
+    logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...logPayload });
+    return outcome(true);
+  } catch (error) {
+    const failureReason = error instanceof Error ? error.message : "webhook_send_failed";
+    logOperationalEvent(operationalEvents.certification.participantNotificationFailed, { channel, ...logPayload, failureReason }, "error");
+    return outcome(false, { failureReason, ambiguous: isCutOff(error) });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// #934 skive 4b: kurset har fått en ny hovedversjon. Teksten på MOTTAKERENS språk (#970), med båten på verftet.
+// Ingen lenker. Sendes av behandleren i outboxen (courseMajorVersionEmail.ts), som eier reglene for hvem og når.
+export interface CourseMajorVersionNotificationInput {
+  noticeId: string;
+  courseId: string;
+  recipientEmail: string;
+  recipientName?: string | null;
+  /** Kurstittelen valgt for mottakerens språk — samme språk som `locale`. */
+  courseTitle: string;
+  versionMajor: number;
+  changedItemCount: number | null;
+  locale: SupportedLocale;
+}
+
+/** Selve e-posten, uten å sende den. Eksportert for enhetstesten av teksten. */
+export function buildCourseMajorVersionEmail(input: Pick<CourseMajorVersionNotificationInput, "courseTitle" | "versionMajor" | "changedItemCount" | "locale">): IllustratedEmail {
+  const message = getCourseMajorVersionNotificationMessage(input.locale, input);
+  return renderIllustratedEmail({
+    locale: input.locale,
+    subject: message.subject,
+    paragraphs: message.paragraphs,
+    reason: message.reason,
+    illustration: EMAIL_ILLUSTRATIONS.courseNewVersion,
+  });
+}
+
+export async function sendCourseMajorVersionNotification(input: CourseMajorVersionNotificationInput): Promise<NotificationResult> {
+  return deliverIllustratedEmail({
+    recipientEmail: input.recipientEmail,
+    recipientName: input.recipientName,
+    email: buildCourseMajorVersionEmail(input),
+    logPayload: {
+      notificationType: "course_major_version",
+      noticeId: input.noticeId,
+      courseId: input.courseId,
+      versionMajor: input.versionMajor,
+      recipient: { email: input.recipientEmail, locale: input.locale },
+    },
+  });
 }
 
 // #495/T-QA-5: generisk sender for diskusjons-varsler (nytt spørsmål → kursets SMO; nytt svar →

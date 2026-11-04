@@ -69,6 +69,12 @@ function violations() {
     for (const call of callArguments(text, /\.courseVersion\s*\.\s*(create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(/g)) {
       out.push(`${rel}:${lineOf(text, call.index)} skriver CourseVersion`);
     }
+    // #934 skive 4b: e-postradene for en ny hovedversjon lages bare der hovedversjonen lages — i samme transaksjon,
+    // med innholdslåsen. En annen vei som lager dem, kunne sende e-post om en versjon som ikke finnes, eller uten
+    // 200-regelen. (Jobben og behandleren endrer bare status: `update`/`updateMany`.)
+    for (const call of callArguments(text, /\.courseVersionNotice\s*\.\s*(create|createMany|createManyAndReturn|upsert)\s*\(/g)) {
+      out.push(`${rel}:${lineOf(text, call.index)} lager CourseVersionNotice-rader`);
+    }
     for (const call of callArguments(text, /\$executeRaw(Unsafe)?\s*[`(]/g)) {
       if (/"?(versionMajor|versionMinor|CourseVersion)"?/.test(call.args)) out.push(`${rel}:${lineOf(text, call.index)} skriver versjon med rå SQL`);
     }
@@ -77,7 +83,7 @@ function violations() {
 }
 
 describe("#934: kursets versjon endres bare gjennom applyCourseVersionChange", () => {
-  it("ingen skriver versionMajor/versionMinor på et kurs, eller CourseVersion-rader, utenfor courseVersioning.ts", () => {
+  it("ingen skriver versionMajor/versionMinor på et kurs, CourseVersion-rader eller lager e-postrader (CourseVersionNotice), utenfor courseVersioning.ts", () => {
     expect(violations(), "Ny vei inn til kursets versjon. Kall applyCourseVersionChange (eller applyMinorVersionToCoursesContaining) i stedet.").toEqual([]);
   });
 
@@ -86,6 +92,8 @@ describe("#934: kursets versjon endres bare gjennom applyCourseVersionChange", (
     const writes = callArguments(text, /\.course\s*\.\s*update\s*\(/g).filter((call) => /\bversion(Major|Minor)\b/.test(call.args));
     expect(writes.length).toBeGreaterThanOrEqual(2);
     expect(callArguments(text, /\.courseVersion\s*\.\s*(create|upsert)\s*\(/g).length).toBeGreaterThanOrEqual(2);
+    // #934 skive 4b: og e-postradene.
+    expect(callArguments(text, /\.courseVersionNotice\s*\.\s*createMany\s*\(/g)).toHaveLength(1);
   });
 
   it("KONTROLLCASE: mønsteret fanger en skriving over flere linjer", () => {

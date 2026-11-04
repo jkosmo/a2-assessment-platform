@@ -209,6 +209,11 @@
       .course-version-consequence p { margin: 0; }
       .course-version-consequence ul { margin: 6px 0 0; padding-left: 20px; }
       .course-version-consequence li + li { margin-top: 4px; }
+      /* #934 skive 4b: det ekstra «ja» når en hovedversjon sender e-post til over 200. */
+      .course-version-email-confirm { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; font-weight: 600; cursor: pointer; }
+      .course-version-email-confirm input { width: 18px; height: 18px; margin: 1px 0 0; flex-shrink: 0; accent-color: var(--color-primary); }
+      .course-version-email-confirm span { min-width: 0; overflow-wrap: anywhere; }
+      .course-version-consequence .course-version-email-missing { margin-top: 6px; color: var(--color-error); font-weight: 600; }
       .cascade-delete-heading { font-size: 13px; font-weight: 700; margin: var(--space-2) 0 4px; }
       .cascade-delete-body .cascade-publish-blocker { display: block; color: var(--color-meta); font-size: 12px; }
 

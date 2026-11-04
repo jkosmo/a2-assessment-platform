@@ -12,12 +12,14 @@ const notifyAssessmentResult = vi.fn();
 const notifyAppealStatusTransition = vi.fn();
 const sendModuleRevisedNotification = vi.fn();
 const checkAndIssueCourseCompletions = vi.fn();
+const deliverCourseMajorVersionNotice = vi.fn();
 
 vi.mock("../../src/db/prisma.js", () => ({
   prisma: { outboxEvent: { findFirst, updateMany } },
 }));
 vi.mock("../../src/modules/certification/index.js", () => ({ notifyAssessmentResult, notifyAppealStatusTransition, sendModuleRevisedNotification }));
 vi.mock("../../src/modules/course/index.js", () => ({ checkAndIssueCourseCompletions }));
+vi.mock("../../src/modules/course/courseMajorVersionEmail.js", () => ({ deliverCourseMajorVersionNotice }));
 
 // #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
 warmModuleGraph(() => import("../../src/modules/outbox/outboxService.js"));
@@ -43,6 +45,7 @@ beforeEach(() => {
   notifyAppealStatusTransition.mockReset();
   sendModuleRevisedNotification.mockReset();
   checkAndIssueCourseCompletions.mockReset();
+  deliverCourseMajorVersionNotice.mockReset();
   process.env.OUTBOX_DELIVERY_TIMEOUT_MS = "30"; // 30ms deadline for the test
 });
 
@@ -115,6 +118,46 @@ describe("#1115 — utboksen ser svaret fra sendingen", () => {
     // En kanal som er slått av, sender ingenting — det er ikke en feil.
     sendModuleRevisedNotification.mockResolvedValue(svar(false, { channel: "disabled", failureReason: "channel_disabled" }));
     await expect(deliverOutboxEvent({ type: OUTBOX_EVENT_TYPES.moduleRevisedNotification, payloadJson: JSON.stringify({ moduleId: "m1" }) })).resolves.toBeUndefined();
+  });
+});
+
+// #934 skive 4b: «kurset har fått en ny hovedversjon». Behandleren eier radens tilstand (courseMajorVersionEmail.ts);
+// outboxen sender radens id og sier fra når det er siste forsøk. Et tidsavbrudd gir opp med en gang — e-posten kan
+// ha gått (typen står i SENDS_TO_A_PERSON).
+describe("#934 skive 4b — course_major_version_notification", () => {
+  const rad = (attempts: number) => ({
+    id: "evt-934",
+    type: "course_major_version_notification",
+    payloadJson: JSON.stringify({ noticeId: "notice-1" }),
+    attempts,
+    maxAttempts: 5,
+    availableAt: new Date(Date.now() - 1000),
+  });
+
+  it("leveres til behandleren med radens id; siste forsøk sies fra", async () => {
+    deliverCourseMajorVersionNotice.mockResolvedValue(undefined);
+    findFirst.mockResolvedValue(rad(0));
+    expect((await behandle()).status).toBe("delivered");
+    expect(deliverCourseMajorVersionNotice).toHaveBeenLastCalledWith("notice-1", { lastAttempt: false });
+    findFirst.mockResolvedValue(rad(4));
+    await behandle();
+    expect(deliverCourseMajorVersionNotice).toHaveBeenLastCalledWith("notice-1", { lastAttempt: true });
+  });
+
+  it("en sikker feil fra behandleren prøves igjen", async () => {
+    deliverCourseMajorVersionNotice.mockRejectedValue(new Error("not delivered: acs_400"));
+    findFirst.mockResolvedValue(rad(0));
+    const data = await behandle();
+    expect(data.status).toBe("pending");
+    expect(data.attempts).toBe(1);
+  });
+
+  it("henger sendingen, gis det opp med en gang — den kan ha gått", async () => {
+    deliverCourseMajorVersionNotice.mockReturnValue(new Promise(() => {}));
+    findFirst.mockResolvedValue(rad(0));
+    const data = await behandle();
+    expect(data.status).toBe("failed");
+    expect(data.attempts).toBe(5);
   });
 });
 

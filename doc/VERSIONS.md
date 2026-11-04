@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.132.0 - 2026-11-04
+
+#934 skive 4b: e-post til deltakerne når et kurs får en ny hovedversjon (`doc/DESIGN_934.md`, «4b — bygget»).
+
+- **Én rad per person og versjon**, laget i samme transaksjon som hovedversjonen, fra alle veiene dit: kursskjemaet,
+  «Publiser nye versjoner», «Publiser kurs» med nytt innhold og import som bytter ut alt. Radene lages også når
+  e-posten er av, så ingen e-post går tapt. Mottakerne er alle med kursbevis for kurset, aktive og ikke anonymiserte,
+  én gang hver.
+- **Dialogene viser hvor mange som får e-post.** Over 200 krever de et ekstra «ja», og serveren teller på nytt: uten
+  bekreftelsen, eller med et lavere tall, avvises endringen (409), og ingenting er lagret. En fane fra før utrullingen
+  sender aldri bekreftelsen og avvises derfor over 200.
+- **Workeren sender**, om lag 20 i minuttet, når `COURSE_MAJOR_EMAIL_ENABLED=true`. Et avpublisert kurs venter; en
+  nyere hovedversjon eller en person som har sluttet, hoppes over. Rett før sendingen sjekkes det samme på nytt. Et
+  forsøk som ble avbrutt, sendes ikke igjen (det kan ha gått).
+- **E-posten:** på mottakerens språk, med båten på verftet øverst (innebygd bilde, ikke en nettadresse), hvor mange
+  elementer som er nye eller endret, at det gamle kursbeviset fortsatt gjelder sin versjon, og «Logg inn på A-2
+  læringsplattform og åpne kurset under Mine kurs». Ingen lenker, og ingen sporing av hvem som åpner den.
+- **Den felles e-postmalen** med bilde (HTML og ren tekst, bildet som vedlegg) er laget her, så den ukentlige
+  e-posten (#1139) og båten i alle e-poster (#1141) kan bruke den.
+- Migrering: én ny tabell (`CourseVersionNotice`) og én ny kolonne (`CourseVersion.changedItemCount`).
+- **Utrulling:** innstillingen er av. Slå den på på workeren etter at app og worker begge viser 2.132.0.
+
 ## 2.131.0 - 2026-11-04
 
 #934 skive 4a: én lås for alt innhold, og kursskjemaet skriver aldri over en annens lagring
