@@ -97,7 +97,7 @@ test("et nytt lesekurs: ingen mottakere; etter at testkontoen har lest alt, én 
   expect((await api("POST", `/api/admin/content/courses/${tilstand.kursId}/publish`)).status).toBe(200);
   expect(tall(await detalj())).toEqual({ versionMajor: 1, versionMinor: 0, certificateHolders: 0, majorEmailRecipients: 0 });
 
-  for (const id of [a, b]) expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${id}/read`)).status);
+  for (const id of [a, b]) expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${id}/read`, { sectionVersionId: (await api("GET", `/api/courses/${tilstand.kursId}/sections/${id}`)).json.sectionVersionId })).status);
   const bevis = await api("GET", "/api/courses/completions");
   expect(bevis.status).toBe(200);
   expect((bevis.json.completions as Array<{ courseId: string }>).filter((c) => c.courseId === tilstand.kursId)).toHaveLength(1);

@@ -2,6 +2,7 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { readSection } from "./support/participantFlow.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -41,9 +42,9 @@ describe("Participant section read progress", () => {
     expect(before.body.course.progress).toMatchObject({ completed: 0, total: 1, moduleTotal: 0, sectionTotal: 1, sectionCompleted: 0 });
 
     // Mark read (idempotent).
-    const mark1 = await request(app).post(`/api/courses/${course.id}/sections/${section.id}/read`).set(participantHeaders);
+    const mark1 = await readSection(app, participantHeaders, course.id, section.id);
     expect(mark1.status).toBe(204);
-    const mark2 = await request(app).post(`/api/courses/${course.id}/sections/${section.id}/read`).set(participantHeaders);
+    const mark2 = await readSection(app, participantHeaders, course.id, section.id);
     expect(mark2.status).toBe(204);
 
     // After reading: read=true, progress 1/1, course COMPLETED.
@@ -114,7 +115,7 @@ describe("#944: en uleselig seksjon kan verken åpnes eller markeres lest", () =
 
     // ⚠️ Kjernen: markeringen skal heller ikke gå gjennom. Fram til nå var dette 204, lesningen ble
     // registrert, og kursbeviset utstedt for innhold som aldri ble publisert.
-    const mark = await request(app).post(`/api/courses/${courseId}/sections/${sectionId}/read`).set(participantHeaders);
+    const mark = await readSection(app, participantHeaders, courseId, sectionId);
     expect(mark.status).toBe(404);
 
     const reads = await prisma.courseSectionRead.count({ where: { courseId, sectionId } });
@@ -125,7 +126,7 @@ describe("#944: en uleselig seksjon kan verken åpnes eller markeres lest", () =
     const { courseId, sectionId } = await courseWithSection({ archived: true, withActiveVersion: false });
 
     expect((await request(app).get(`/api/courses/${courseId}/sections/${sectionId}`).set(participantHeaders)).status).toBe(404);
-    expect((await request(app).post(`/api/courses/${courseId}/sections/${sectionId}/read`).set(participantHeaders)).status).toBe(404);
+    expect((await readSection(app, participantHeaders, courseId, sectionId)).status).toBe(404);
   });
 
   it("KONTROLLCASE: en publisert seksjon leses og markeres som før", async () => {
@@ -137,7 +138,7 @@ describe("#944: en uleselig seksjon kan verken åpnes eller markeres lest", () =
     expect(read.status, JSON.stringify(read.body)).toBe(200);
     expect(read.body.html).toContain("Body.");
 
-    const mark = await request(app).post(`/api/courses/${courseId}/sections/${sectionId}/read`).set(participantHeaders);
+    const mark = await readSection(app, participantHeaders, courseId, sectionId);
     expect(mark.status).toBe(204);
   });
 
@@ -319,7 +320,7 @@ describe("#992: framdriftsbrøken bruker samme predikat i teller og nevner", () 
     // Uten denne ville «tell aldri lesninger» bestått testen over — og da ville ingen noensinne
     // fullført et kurs.
     const { courseId, liveId } = await courseWithReadButUnavailable();
-    const mark = await request(app).post(`/api/courses/${courseId}/sections/${liveId}/read`).set(participantHeaders);
+    const mark = await readSection(app, participantHeaders, courseId, liveId);
     expect(mark.status, JSON.stringify(mark.body)).toBe(204);
 
     const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);

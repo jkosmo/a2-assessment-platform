@@ -246,7 +246,7 @@ http://localhost:3000/admin-platform
 
 ## Attachment Parsing
 
-`POST /api/submissions` accepts optional attachment fields:
+`POST /api/submissions` requires `moduleVersionId`, the active version the page showed (#934, 2.133.0; see `doc/API_REFERENCE.md`), and accepts optional attachment fields:
 
 ```json
 {

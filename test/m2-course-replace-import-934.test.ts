@@ -5,6 +5,7 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { readSection } from "./support/participantFlow.js";
 
 const admin = { "x-user-id": "admin-1", "x-user-email": "admin@company.com", "x-user-name": "Platform Admin" };
 const tre = (nb: string) => ({ nb, nn: nb, "en-GB": nb });
@@ -28,7 +29,7 @@ async function kurs(tag: string, medBevis: boolean) {
   expect((await request(app).post(`/api/admin/content/courses/${courseId}/publish`).set(admin)).status).toBe(200);
   if (medBevis) {
     const deltaker = { "x-user-id": `v934-erstatt-${stempel}`, "x-user-email": `v934.erstatt.${stempel}@company.com`, "x-user-name": "Deltaker", "x-user-roles": "PARTICIPANT" };
-    expect((await request(app).post(`/api/courses/${courseId}/sections/${s}/read`).set(deltaker)).status).toBe(204);
+    expect((await readSection(app, deltaker, courseId, s)).status).toBe(204);
     await request(app).get("/api/courses/completions").set(deltaker);
     expect(await prisma.courseCompletion.count({ where: { courseId } })).toBe(1);
   }

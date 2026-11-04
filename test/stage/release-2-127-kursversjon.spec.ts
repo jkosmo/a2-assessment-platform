@@ -83,7 +83,7 @@ test("et nytt lesekurs som fullføres, gir nøyaktig ett bevis — også etter e
   expect((await api("PUT", `/api/admin/content/courses/${tilstand.kursId}/items`, { items: [{ type: "SECTION", sectionId: tilstand.seksjonId }] })).status).toBe(204);
   expect((await api("POST", `/api/admin/content/courses/${tilstand.kursId}/publish`)).status).toBe(200);
 
-  const lest = await api("POST", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjonId}/read`);
+  const lest = await api("POST", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjonId}/read`, { sectionVersionId: (await api("GET", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjonId}`)).json.sectionVersionId });
   noter("marker lest", lest.status);
   expect([200, 201, 204]).toContain(lest.status);
 

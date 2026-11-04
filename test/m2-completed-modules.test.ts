@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -126,6 +127,7 @@ describe("Participant completed modules and available list filtering", () => {
       .set(participantHeaders)
       .send({
         moduleId: module.id,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, module.id),
         deliveryType: "text",
         responseJson: {
           response: "Retake submission after completed result.",

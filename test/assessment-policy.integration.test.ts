@@ -11,6 +11,7 @@ import {
   submitMcqWithAnswerSelector,
 } from "./support/participantFlow.js";
 import { warmModuleGraph } from "./support/moduleGraphWarmup.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 const mockEvaluatePracticalWithLlm = vi.hoisted(() => vi.fn());
 // #475 Phase 2: the content-similarity "model answer" generator lives in the same module, so it is
@@ -464,6 +465,7 @@ describe("Local integration assessment policy suite", () => {
         .set(participantHeaders)
         .send({
           moduleId,
+          moduleVersionId: await seenModuleVersionId(app, participantHeaders, moduleId),
           deliveryType: "text",
           responseJson: {
             response:
@@ -559,6 +561,7 @@ describe("Local integration assessment policy suite", () => {
         .set(participantHeaders)
         .send({
           moduleId,
+          moduleVersionId: await seenModuleVersionId(app, participantHeaders, moduleId),
           deliveryType: "text",
           responseJson: {
             response: answerText,

@@ -2,6 +2,7 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { readSection } from "./support/participantFlow.js";
 
 // #778/#785: the course LIST endpoint filters RESTRICTED courses by enrolment/class visibility, but
 // the direct detail / section-content / mark-read endpoints previously gated only on `publishedAt`.
@@ -67,7 +68,7 @@ describe("RESTRICTED course direct-endpoint visibility (#785)", () => {
     expect(detail.status).toBe(404);
     const section = await request(app).get(`/api/courses/${courseId}/sections/${sectionId}`).set(h);
     expect(section.status).toBe(404);
-    const read = await request(app).post(`/api/courses/${courseId}/sections/${sectionId}/read`).set(h);
+    const read = await readSection(app, h, courseId, sectionId);
     expect(read.status).toBe(404);
 
     // The read must NOT have been recorded (the guard runs before markSectionRead).
@@ -87,7 +88,7 @@ describe("RESTRICTED course direct-endpoint visibility (#785)", () => {
     const section = await request(app).get(`/api/courses/${courseId}/sections/${sectionId}`).set(h);
     expect(section.status).toBe(200);
     expect(section.body.html).toContain("Secret body");
-    expect((await request(app).post(`/api/courses/${courseId}/sections/${sectionId}/read`).set(h)).status).toBe(204);
+    expect((await readSection(app, h, courseId, sectionId)).status).toBe(204);
     await cleanup(courseId, sectionId);
   });
 

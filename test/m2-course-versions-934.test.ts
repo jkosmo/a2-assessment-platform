@@ -7,6 +7,7 @@ import { deriveStatus } from "../src/modules/course/enrollmentService.js";
 import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, renameSectionInVersionSnapshots } from "../src/modules/course/courseVersioning.js";
 import { runContentWrite } from "../src/db/contentLock.js";
 import { publishModuleVersion } from "../src/modules/adminContent/adminContentCommands.js";
+import { readSection } from "./support/participantFlow.js";
 
 // #934 skive 1: kurs har hovedversjon og mindre versjon, og et kursbevis gjelder sin hovedversjon
 // (produkteier 2026-11-01, doc/DESIGN_934.md). Ingen flate setter versjonen ennå — testen gjør det
@@ -140,7 +141,7 @@ describe("#934 skive 3 — forfatterens valg og seksjonsregelen", () => {
     const modulId = (await prisma.courseItem.findFirstOrThrow({ where: { courseId: course.id, itemType: "MODULE" } })).moduleId!;
     const seksjon = await createPublishedSection("s3-hoved");
     await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: seksjon.id, sortOrder: 2 } });
-    expect((await request(app).post(`/api/courses/${course.id}/sections/${seksjon.id}/read`).set(headers)).status).toBe(204);
+    expect((await readSection(app, headers, course.id, seksjon.id)).status).toBe(204);
     await reconcileCourseCompletionsForUser(participant.id);
     expect(await completions(participant.id, course.id)).toEqual([{ versionMajor: 1, versionMinor: 0 }]);
 
@@ -189,7 +190,7 @@ describe("#934 skive 3 — forfatterens valg og seksjonsregelen", () => {
     const modulId = (await prisma.courseItem.findFirstOrThrow({ where: { courseId: course.id, itemType: "MODULE" } })).moduleId!;
     const seksjon = await createPublishedSection("s3-to");
     await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: seksjon.id, sortOrder: 2 } });
-    expect((await request(app).post(`/api/courses/${course.id}/sections/${seksjon.id}/read`).set(headers)).status).toBe(204);
+    expect((await readSection(app, headers, course.id, seksjon.id)).status).toBe(204);
     await reconcileCourseCompletionsForUser(participant.id);
     const innhold = (moduler: string[]) => [
       ...moduler.map((moduleId) => ({ type: "MODULE", moduleId })),
@@ -418,7 +419,7 @@ describe("#934 skive 3 — forfatterens valg og seksjonsregelen", () => {
     const { participant, course, headers } = await courseWithOnePassedModule("s3-tofaner");
     const seksjon = await createPublishedSection("s3-tofaner");
     await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: seksjon.id, sortOrder: 2 } });
-    expect((await request(app).post(`/api/courses/${course.id}/sections/${seksjon.id}/read`).set(headers)).status).toBe(204);
+    expect((await readSection(app, headers, course.id, seksjon.id)).status).toBe(204);
     await reconcileCourseCompletionsForUser(participant.id);
     const v2 = await prisma.courseSectionVersion.create({
       data: { sectionId: seksjon.id, versionNo: 2, bodyMarkdown: JSON.stringify(L("Ny tekst.")) },
@@ -449,7 +450,7 @@ describe("#934 skive 3 — forfatterens valg og seksjonsregelen", () => {
     const modulId = (await prisma.courseItem.findFirstOrThrow({ where: { courseId: course.id, itemType: "MODULE" } })).moduleId!;
     const gammel = await createPublishedSection("s3-bytt-gammel");
     await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: gammel.id, sortOrder: 2 } });
-    expect((await request(app).post(`/api/courses/${course.id}/sections/${gammel.id}/read`).set(headers)).status).toBe(204);
+    expect((await readSection(app, headers, course.id, gammel.id)).status).toBe(204);
     await reconcileCourseCompletionsForUser(participant.id);
     // Versjon 2 (en modul til): seksjonen er uendret, og lesingen (fra før versjon 2) teller.
     const n1 = await createPublishedModule(`934 s3 bytt n1 ${Date.now()}`);
@@ -480,7 +481,7 @@ describe("#934 skive 3 — forfatterens valg og seksjonsregelen", () => {
       ],
     });
     for (const id of [uendret.id, endres.id]) {
-      expect((await request(app).post(`/api/courses/${course.id}/sections/${id}/read`).set(headers)).status).toBe(204);
+      expect((await readSection(app, headers, course.id, id)).status).toBe(204);
     }
     await reconcileCourseCompletionsForUser(participant.id);
     expect(await completions(participant.id, course.id)).toEqual([{ versionMajor: 1, versionMinor: 0 }]);
@@ -528,7 +529,7 @@ describe("#934 skive 3 — forfatterens valg og seksjonsregelen", () => {
     });
 
     // Leser hen den på nytt, teller den — lesingen får nytt tidspunkt, den uendrede beholder sitt.
-    expect((await request(app).post(`/api/courses/${course.id}/sections/${endres.id}/read`).set(headers)).status).toBe(204);
+    expect((await readSection(app, headers, course.id, endres.id)).status).toBe(204);
     expect(await lest()).toEqual({ [uendret.id]: true, [endres.id]: true });
     const lestEtter = await readAt(participant.id, course.id);
     expect(lestEtter[uendret.id]).toBe(lestFør[uendret.id]);
@@ -544,7 +545,7 @@ describe("#934 skive 3 — forfatterens valg og seksjonsregelen", () => {
     const { participant, course, headers } = await courseWithOnePassedModule("s3-atom");
     const seksjon = await createPublishedSection("s3-atom");
     await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: seksjon.id, sortOrder: 2 } });
-    expect((await request(app).post(`/api/courses/${course.id}/sections/${seksjon.id}/read`).set(headers)).status).toBe(204);
+    expect((await readSection(app, headers, course.id, seksjon.id)).status).toBe(204);
     await reconcileCourseCompletionsForUser(participant.id);
     const v2 = await prisma.courseSectionVersion.create({
       data: { sectionId: seksjon.id, versionNo: 2, bodyMarkdown: JSON.stringify(L("Ny tekst.")) },
@@ -568,7 +569,7 @@ describe("#934 skive 3 — forfatterens valg og seksjonsregelen", () => {
     const { participant, course, headers } = await courseWithOnePassedModule("s3-pmindre");
     const seksjon = await createPublishedSection("s3-pmindre");
     await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: seksjon.id, sortOrder: 2 } });
-    expect((await request(app).post(`/api/courses/${course.id}/sections/${seksjon.id}/read`).set(headers)).status).toBe(204);
+    expect((await readSection(app, headers, course.id, seksjon.id)).status).toBe(204);
     await reconcileCourseCompletionsForUser(participant.id);
     const v2 = await prisma.courseSectionVersion.create({
       data: { sectionId: seksjon.id, versionNo: 2, bodyMarkdown: JSON.stringify(L("Rettet skrivefeil.")) },
@@ -716,7 +717,7 @@ describe("#934 skive 3 — QA-runde 5: delte elementer, lesing under versjonsend
     await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: seksjon.id, sortOrder: 2 } });
     // Lesingen finnes fra før: en NY lesing venter uansett (fremmednøkkelen låser kursraden), men en lesing som
     // bare skal få nytt tidspunkt, gjør det bare med den delte låsen.
-    expect((await request(app).post(`/api/courses/${course.id}/sections/${seksjon.id}/read`).set(headers)).status).toBe(204);
+    expect((await readSection(app, headers, course.id, seksjon.id)).status).toBe(204);
     let sluppet = 0;
     // #934 skive 4a: innholdslåsen eksklusivt, slik en versjonsendring holder den.
     const holder = runContentWrite(async () => {
@@ -724,7 +725,7 @@ describe("#934 skive 3 — QA-runde 5: delte elementer, lesing under versjonsend
       sluppet = Date.now();
     }, { timeout: 10_000 });
     await new Promise((resolve) => setTimeout(resolve, 150));
-    const lesing = request(app).post(`/api/courses/${course.id}/sections/${seksjon.id}/read`).set(headers).then((r) => ({ status: r.status, ferdig: Date.now() }));
+    const lesing = readSection(app, headers, course.id, seksjon.id).then((r) => ({ status: r.status, ferdig: Date.now() }));
     const [, lest] = await Promise.all([holder, lesing]);
     expect(lest.status).toBe(204);
     expect(lest.ferdig).toBeGreaterThanOrEqual(sluppet);

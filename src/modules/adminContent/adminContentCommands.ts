@@ -1035,7 +1035,7 @@ export async function publishModuleVersion(
       const titleRow = await createAdminContentRepository(client).findModuleTitle(moduleId);
       const storedTitle = titleRow?.title ?? "";
       const storedCourseTitles = await createAdminContentRepository(client).findLiveCourseTitlesContainingModule(moduleId);
-      await certRepo.supersedeCertificationsForModule(moduleId, moduleVersionId);
+      await certRepo.supersedeCertificationsForModule(client, moduleId, moduleVersionId);
 
       if (passed.length > 0) {
         await enqueueOutboxEvents(

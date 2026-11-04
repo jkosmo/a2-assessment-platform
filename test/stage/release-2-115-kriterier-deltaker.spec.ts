@@ -81,7 +81,7 @@ test("deltakerens modul bærer de synlige kriteriene med trinn — og aldri fasi
 
 test("resultatet: poeng per synlig kriterium på egen skala; innleveringen bærer ikke fasiten", async () => {
   test.setTimeout(300_000);
-  const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, deliveryType: "text", responseJson: { response: "Vedtak: Budsjettet ble godkjent.\nOppfølging: Ola sender til revisor innen 1. november. Lokale: uklart.\nTil stede: Kari, Ola, Siri." } });
+  const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, moduleVersionId: (await api("GET", `/api/modules/${tilstand.moduleId}`)).json.module?.activeVersion?.id, deliveryType: "text", responseJson: { response: "Vedtak: Budsjettet ble godkjent.\nOppfølging: Ola sender til revisor innen 1. november. Lokale: uklart.\nTil stede: Kari, Ola, Siri." } });
   expect(innlevering.status, innlevering.tekst).toBe(201);
   tilstand.submissionId = innlevering.json.submission.id;
   let kjør = await api("POST", `/api/assessments/${tilstand.submissionId}/run`, {});

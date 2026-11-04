@@ -85,7 +85,7 @@ test("vurder de tre svarene", async () => {
   const resultater: Array<Record<string, unknown>> = [];
   for (const [navn, tekst] of Object.entries(SVAR)) {
     for (let i = 0; i < GANGER; i++) {
-      const innlevering = await api("POST", "/api/submissions", { moduleId, deliveryType: "text", responseJson: { response: tekst } });
+      const innlevering = await api("POST", "/api/submissions", { moduleId, moduleVersionId: (await api("GET", `/api/modules/${moduleId}`)).json.module?.activeVersion?.id, deliveryType: "text", responseJson: { response: tekst } });
       expect(innlevering.status, innlevering.tekst).toBe(201);
       const id = innlevering.json.submission.id as string;
       // Som deltakersiden: vurderingen startes i et eget steg (participant.js, /api/assessments/:id/run).

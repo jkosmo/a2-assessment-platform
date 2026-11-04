@@ -115,7 +115,7 @@ test("1. et lesekurs publiseres som 1.0, og testkontoen får kursbevis for versj
   tilstand.kursId = kurs.json.course.id;
   expect((await api("PUT", `/api/admin/content/courses/${tilstand.kursId}/items`, { items: [{ type: "SECTION", sectionId: a }, { type: "SECTION", sectionId: b }] })).status).toBe(204);
   expect((await api("POST", `/api/admin/content/courses/${tilstand.kursId}/publish`)).status).toBe(200);
-  for (const id of [a, b]) expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${id}/read`)).status);
+  for (const id of [a, b]) expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${id}/read`, { sectionVersionId: (await api("GET", `/api/courses/${tilstand.kursId}/sections/${id}`)).json.sectionVersionId })).status);
   const bevis = await bevisForKurset();
   noter("bevis etter 1.0", bevis.map((c) => `${c.versionMajor}.${c.versionMinor}:${c.current}`));
   expect(bevis.map((c) => [c.versionMajor, c.current])).toEqual([[1, true]]);
@@ -243,7 +243,7 @@ test("4. bevis for 1 uten versjonslinje; ny seksjon lest → bevis for 2 med «V
   await expect(page.locator("#certVersionWrap")).toBeHidden();
   await bilde(page, "4a-kursbevis-v1", false);
 
-  expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjoner[2]}/read`)).status);
+  expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjoner[2]}/read`, { sectionVersionId: (await api("GET", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjoner[2]}`)).json.sectionVersionId })).status);
   const bevis = await bevisForKurset();
   noter("bevis etter at den nye er lest", bevis.map((c) => `${c.versionMajor}.${c.versionMinor}:${c.current}`));
   expect(bevis.map((c) => [c.versionMajor, c.current])).toEqual([[1, false], [2, true]]);

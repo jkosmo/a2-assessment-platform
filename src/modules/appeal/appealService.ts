@@ -3,6 +3,7 @@ import { allLocaleValues } from "../../i18n/allLocaleValues.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { appealRepository, createAppealRepository } from "./appealRepository.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
+import { runLearnerWrite } from "../../db/contentLock.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { env } from "../../config/env.js";
@@ -318,7 +319,8 @@ async function resolveAppealCommand(
   latestDecision: ResolutionDecision,
   finalisedAt: Date,
 ) {
-  return runInTransaction(async (tx) => {
+  // #934 skive 5a-1: deltakerlåsen, som første setning. Innleveringens eier endres aldri, så den kan leses før.
+  return runLearnerWrite(appeal.submission.userId, async (tx) => {
     const repo = createAppealRepository(tx);
 
     // #790: perform the guarded state transition FIRST. If a concurrent resolve already moved the appeal

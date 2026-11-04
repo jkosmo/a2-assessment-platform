@@ -3,6 +3,7 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { findModuleIdByTitle } from "./support/participantFlow.js";
 import { countCourseCompletionChecks, submissionOwner } from "./support/outboxProbe.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -39,6 +40,7 @@ describe("MVP manual review workspace", () => {
       .set(participantHeaders)
       .send({
         moduleId,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, moduleId),
         deliveryType: "text",
         responseJson: {
           response: "Submission contains sensitive client data references.",

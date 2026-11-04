@@ -6,6 +6,7 @@ import { runContentRead, runContentWrite } from "../src/db/contentLock.js";
 import { archiveModule } from "../src/modules/adminContent/adminContentCommands.js";
 import { courseRepository } from "../src/modules/course/courseRepository.js";
 import { getCoursePendingVersions } from "../src/modules/course/coursePublishService.js";
+import { readSection } from "./support/participantFlow.js";
 
 // #934 skive 4a (doc/DESIGN_934.md, «4a — innholdslåsen, kursskjemaet og overgangen»):
 //   - ÉN lås for alt innhold; alt sjekkes etter den. To samtidige endringer venter på hverandre, og den andre ser
@@ -501,12 +502,12 @@ describe("#934 skive 4a: innholdslåsen — samtidige endringer venter på hvera
     };
     const holder = runContentWrite(() => pause(4_500), { timeout: 10_000 });
     await pause(100);
-    const read = await request(app).post(`/api/courses/${courseId}/sections/${sectionId}/read`).set(headers);
+    const read = await readSection(app, headers, courseId, sectionId);
     await holder;
     expect(read.status).toBe(503);
     expect(read.body.error).toBe("content_busy");
     // Etterpå går den gjennom.
-    const again = await request(app).post(`/api/courses/${courseId}/sections/${sectionId}/read`).set(headers);
+    const again = await readSection(app, headers, courseId, sectionId);
     expect(again.status).toBe(204);
   }, 20_000);
 

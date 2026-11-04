@@ -107,7 +107,7 @@ test("et lesekurs publiseres som 1.0, og den som har lest alt, får kursbevis fo
   expect((await api("POST", `/api/admin/content/courses/${tilstand.kursId}/publish`)).status).toBe(200);
   expect(await versjon()).toEqual({ versionMajor: 1, versionMinor: 0, certificateHolders: 0 });
 
-  for (const id of [a, b]) expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${id}/read`)).status);
+  for (const id of [a, b]) expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${id}/read`, { sectionVersionId: (await api("GET", `/api/courses/${tilstand.kursId}/sections/${id}`)).json.sectionVersionId })).status);
   const bevis = await bevisForKurset();
   noter("bevis etter versjon 1", bevis.map((c) => `${c.versionMajor}.${c.versionMinor}:${c.current}`));
   expect(bevis.map((c) => [c.versionMajor, c.current])).toEqual([[1, true]]);
@@ -131,7 +131,7 @@ test("en seksjon lagt til som HOVEDVERSJON: 2.0 — det leste står, det nye gje
   const bevis = await bevisForKurset();
   expect(bevis.map((x) => [x.versionMajor, x.current])).toEqual([[1, false]]);
 
-  expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${c}/read`)).status);
+  expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${c}/read`, { sectionVersionId: (await api("GET", `/api/courses/${tilstand.kursId}/sections/${c}`)).json.sectionVersionId })).status);
   const nå = await bevisForKurset();
   noter("bevis etter at det nye er lest", nå.map((x) => `${x.versionMajor}.${x.versionMinor}:${x.current}`));
   expect(nå.map((x) => [x.versionMajor, x.current])).toEqual([[1, false], [2, true]]);

@@ -1,5 +1,6 @@
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
+import type { LearnerContentTx } from "../../db/contentLock.js";
 
 type CreateSubmissionInput = {
   userId: string;
@@ -18,8 +19,10 @@ type SubmissionRepositoryClient = Pick<typeof prisma, "submission">;
 
 export function createSubmissionRepository(client: SubmissionRepositoryClient = prisma) {
   return {
-    create(data: CreateSubmissionInput) {
-      return client.submission.create({ data });
+    // #934 skive 5a-1: `locked` holder innholdslåsen delt og deltakerlåsen. Da er versjonen som er sjekket, fortsatt den
+    // aktive når raden skrives. Uten den merkede klienten kompilerer ikke kallet.
+    create(locked: LearnerContentTx, data: CreateSubmissionInput) {
+      return locked.submission.create({ data });
     },
 
     findOwnedSubmission(submissionId: string, userId: string) {
@@ -183,8 +186,8 @@ export async function queryCompletedSubmissionsForUser(
   });
 }
 
-export async function getModuleWithActiveVersion(moduleId: string) {
-  return prisma.module.findUnique({
+export async function getModuleWithActiveVersion(moduleId: string, client: Pick<typeof prisma, "module"> = prisma) {
+  return client.module.findUnique({
     where: { id: moduleId },
     include: { activeVersion: true },
   });

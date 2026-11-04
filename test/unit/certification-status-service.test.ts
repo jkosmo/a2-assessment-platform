@@ -11,18 +11,16 @@ const upsertCertificationStatus = vi.fn();
 const findByUserAndModule = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
+// #934 skive 5a-1: transaksjonen er påkrevd. Den holder deltakerlåsen.
+const TX = {} as never;
 
 vi.mock("../../src/repositories/decisionRepository.js", () => ({
-  decisionRepository: {
+  createDecisionRepository: () => ({
     findDecisionWithSubmissionIdentifiers,
-  },
+  }),
 }));
 
 vi.mock("../../src/modules/certification/certificationRepository.js", () => ({
-  certificationRepository: {
-    upsertCertificationStatus,
-    findByUserAndModule,
-  },
   createCertificationRepository: () => ({
     upsertCertificationStatus,
     findByUserAndModule,
@@ -58,7 +56,7 @@ describe("certification status service", () => {
       upsertCertificationStatusFromDecision({
         decisionId: "decision-1",
         actorId: "admin-1",
-      }),
+      }, TX),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -83,10 +81,10 @@ describe("certification status service", () => {
     const result = await upsertCertificationStatusFromDecision({
       decisionId: "decision-1",
       actorId: "admin-1",
-    });
+    }, TX);
 
     // toHaveBeenCalledWith er eksakt: står expiryDate/recertificationDueDate igjen, blir denne rød.
-    expect(upsertCertificationStatus).toHaveBeenCalledWith({
+    expect(upsertCertificationStatus).toHaveBeenCalledWith(TX, {
       userId: "user-1",
       moduleId: "module-1",
       latestDecisionId: "decision-1",
@@ -106,7 +104,7 @@ describe("certification status service", () => {
         status: "ACTIVE",
         passedAt: "2026-03-11T00:00:00.000Z",
       },
-    }, undefined);
+    }, TX);
     expect(result).toEqual({
       id: "cert-1",
       status: "ACTIVE",
@@ -129,9 +127,10 @@ describe("certification status service", () => {
 
     const { upsertCertificationStatusFromDecision } = await import("../../src/modules/certification/index.js");
 
-    await upsertCertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" });
+    await upsertCertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" }, TX);
 
     expect(upsertCertificationStatus).toHaveBeenCalledWith(
+      TX,
       expect.objectContaining({ status: "NOT_CERTIFIED", passedAt: null }),
     );
   });
@@ -159,7 +158,7 @@ describe("certification status service", () => {
 
     const { upsertCertificationStatusFromDecision } = await import("../../src/modules/certification/index.js");
 
-    const result = await upsertCertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" });
+    const result = await upsertCertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" }, TX);
 
     expect(upsertCertificationStatus).not.toHaveBeenCalled();
     expect(logOperationalEvent).toHaveBeenCalledWith(
@@ -193,9 +192,10 @@ describe("certification status service", () => {
 
     const { upsertCertificationStatusFromDecision } = await import("../../src/modules/certification/index.js");
 
-    await upsertCertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" });
+    await upsertCertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" }, TX);
 
     expect(upsertCertificationStatus).toHaveBeenCalledWith(
+      TX,
       expect.objectContaining({ status: "NOT_CERTIFIED" }),
     );
     expect(logOperationalEvent).not.toHaveBeenCalledWith("certification_downgrade_skipped", expect.anything());

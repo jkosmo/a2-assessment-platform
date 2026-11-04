@@ -3,13 +3,8 @@ import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { createDecisionRepository } from "../../repositories/decisionRepository.js";
 import { upsertCertificationStatusFromDecision } from "../certification/index.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import type { DbTransactionClient } from "../../db/transaction.js";
+import type { LearnerTx } from "../../db/contentLock.js";
 import { auditEntityTypes, type AuditAction, type AuditMetadataByAction } from "../../observability/auditEvents.js";
-
-type LineageTxClient = Pick<
-  DbTransactionClient,
-  "assessmentDecision" | "manualReview" | "submission" | "certificationStatus" | "auditEvent"
->;
 
 export type ParentDecisionSnapshot = {
   id: string;
@@ -30,7 +25,7 @@ export type ParentDecisionSnapshot = {
  * advances the submission to COMPLETED, updates certification status, and
  * writes the decision audit event.
  *
- * Must be called inside a Prisma transaction. Workflow-specific side-effects
+ * Must be called inside a transaction holding the learner lock (#934 5a-1). Workflow-specific side-effects
  * (resolving the review/appeal, workflow audit events, notifications) remain
  * the caller's responsibility.
  */
@@ -46,11 +41,11 @@ export async function appendDecisionWithLineage(
     auditAction: AuditAction;
     auditMetadata: AuditMetadataByAction[AuditAction];
   },
-  tx: LineageTxClient,
+  tx: LearnerTx,
 ) {
   const repo = createDecisionRepository(tx);
 
-  const decision = await repo.createAssessmentDecision({
+  const decision = await repo.createAssessmentDecision(tx, {
     submissionId: input.parentDecision.submissionId,
     moduleVersionId: input.parentDecision.moduleVersionId,
     rubricVersionId: input.parentDecision.rubricVersionId,

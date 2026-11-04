@@ -85,7 +85,7 @@ test("leveres stokket, rettes som rett eller galt, og gjennomgangen viser begge 
   expect([200, 201]).toContain(publisert.status);
 
   const forsøk = async (svar: (stokket: string[]) => string[]) => {
-    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, deliveryType: "text", responseJson: {} });
+    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, moduleVersionId: (await api("GET", `/api/modules/${tilstand.moduleId}`)).json.module?.activeVersion?.id, deliveryType: "text", responseJson: {} });
     expect(innlevering.status, innlevering.tekst).toBe(201);
     const submissionId = innlevering.json.submission.id as string;
     const start = await api("GET", `/api/modules/${tilstand.moduleId}/mcq/start?submissionId=${submissionId}&locale=nb`);

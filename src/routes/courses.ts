@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { courseRepository, createCourseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
-import { runContentRead } from "../db/contentLock.js";
+import { runContentReadForLearner } from "../db/contentLock.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
-import { NotFoundError } from "../errors/AppError.js";
+import { ConflictError, NotFoundError } from "../errors/AppError.js";
 import { sortCoursesForParticipant } from "../modules/course/courseOrdering.js";
 import {
   listUserEnrollments,
@@ -477,7 +477,12 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
     }
     const localizedTitle = localizeContentText(locale, section.title) ?? section.title;
     const localizedBody = localizeContentText(locale, section.activeVersion?.bodyMarkdown ?? "") ?? "";
-    response.json({ title: localizedTitle, html: renderSectionMarkdown(localizedBody, locale) });
+    // #934 skive 5a-1: `sectionVersionId` er versjonen teksten kom fra. Siden sender den tilbake når deltakeren har lest.
+    response.json({
+      title: localizedTitle,
+      html: renderSectionMarkdown(localizedBody, locale),
+      sectionVersionId: section.activeVersion?.id ?? null,
+    });
   } catch (error) {
     next(error);
   }
@@ -503,16 +508,7 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     if (!course) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
-    // #944/#958: samme dør som lesestien. Var dette to oppslag med hver sin regel, kunne markeringen
-    // gå gjennom for en seksjon lesestien nektet — og kursbeviset bli utstedt for innhold som aldri
-    // ble publisert. Det var nøyaktig hullet i #944.
-    const courseItems = await courseRepository.findCourseItemsForParticipant(course.id);
-    const item = courseItems.find(
-      (i) => i.itemType === "SECTION" && i.sectionId === request.params.sectionId,
-    );
-    if (!item) {
-      throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
-    }
+    const seenVersionId: unknown = request.body?.sectionVersionId;
     // #946: markeringen og bevisporten commiter sammen. Sto tidligere som to uavhengige skriv:
     // seksjonen ble markert lest, og feilet porten etterpå, var kurset ferdig uten at noe bevis
     // ble utstedt — og ingenting rettet det før deltakeren selv åpnet bevissiden.
@@ -521,8 +517,28 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     // og leser ferdig siste seksjon; her skal beviset finnes med én gang, ikke når worker-en
     // rekker det. Transaksjonen gir holdbarheten uten å gjøre utstedelsen asynkron.
     // #934 skive 4a: innholdslåsen DELT, som første setning — lesingen venter på en versjonsendring som pågår.
-    await runContentRead(async (tx) => {
+    // Skive 5a-1: så deltakerlåsen, og alt som avgjør om lesingen er gyldig, sjekkes etter dem.
+    await runContentReadForLearner(userId, async (tx) => {
       const txRepo = createCourseRepository(tx);
+      // #944/#958: samme dør som lesestien. Var dette to oppslag med hver sin regel, kunne markeringen
+      // gå gjennom for en seksjon lesestien nektet — og kursbeviset bli utstedt for innhold som aldri
+      // ble publisert. Det var nøyaktig hullet i #944.
+      const courseItems = await txRepo.findCourseItemsForParticipant(course.id);
+      const item = courseItems.find(
+        (i) => i.itemType === "SECTION" && i.sectionId === request.params.sectionId,
+      );
+      if (!item) {
+        throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
+      }
+      // #934 skive 5a-1: en fane fra før utrullingen sender ikke versjonen, og en som har stått åpen, kan ha lest en
+      // eldre tekst. Lesingen registreres bare på versjonen deltakeren faktisk så. Ingenting er skrevet ved 409.
+      if (typeof seenVersionId !== "string" || seenVersionId.length === 0) {
+        throw new ConflictError("client_outdated", "This page is out of date. Nothing was recorded; reload the page.", { sectionId: request.params.sectionId });
+      }
+      const section = await tx.courseSection.findUnique({ where: { id: request.params.sectionId }, select: { activeVersionId: true } });
+      if (section?.activeVersionId !== seenVersionId) {
+        throw new ConflictError("section_version_changed", "The text has changed since this page was opened. Nothing was recorded; reload the page.", { sectionId: request.params.sectionId });
+      }
       await txRepo.markSectionRead(tx, userId, course.id, request.params.sectionId);
       // Reading the final section can be the last gate for certification (#476/#525) — re-check.
       await checkCourseCompletionForCourse({ userId, courseId: course.id }, tx);

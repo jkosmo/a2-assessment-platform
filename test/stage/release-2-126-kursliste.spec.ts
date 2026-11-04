@@ -159,7 +159,7 @@ test("en strøket modul viser resultatet og anke-knappen når den åpnes igjen i
   expect(kursPublisert.status, kursPublisert.tekst.slice(0, 400)).toBe(200);
 
   // Et stryk, levert gjennom API-et.
-  const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, deliveryType: "text", responseJson: {} });
+  const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, moduleVersionId: (await api("GET", `/api/modules/${tilstand.moduleId}`)).json.module?.activeVersion?.id, deliveryType: "text", responseJson: {} });
   expect(innlevering.status, innlevering.tekst).toBe(201);
   tilstand.submissionId = innlevering.json.submission.id;
   const start = await api("GET", `/api/modules/${tilstand.moduleId}/mcq/start?submissionId=${tilstand.submissionId}`);

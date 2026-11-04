@@ -86,7 +86,7 @@ test("leveres uten de godkjente svarene, rettes, og gjennomgangen viser dem", as
   expect([200, 201], publisert.tekst.slice(0, 600)).toContain(publisert.status);
 
   const forsøk = async (svar: [string, string]) => {
-    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, deliveryType: "text", responseJson: {} });
+    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, moduleVersionId: (await api("GET", `/api/modules/${tilstand.moduleId}`)).json.module?.activeVersion?.id, deliveryType: "text", responseJson: {} });
     expect(innlevering.status, innlevering.tekst).toBe(201);
     const submissionId = innlevering.json.submission.id as string;
     const start = await api("GET", `/api/modules/${tilstand.moduleId}/mcq/start?submissionId=${submissionId}`);

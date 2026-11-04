@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { resetRateLimitState } from "../src/middleware/rateLimiting.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 const participantHeaders = {
   "x-user-id": "rate-limit-participant",
@@ -39,6 +40,7 @@ describe("API rate limiting", () => {
       .set(participantHeaders)
       .send({
         moduleId: seedModule.id,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, seedModule.id),
         deliveryType: "text",
         responseJson: {
           response: "Rate limit test content for queued assessments.",

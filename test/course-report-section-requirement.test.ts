@@ -2,6 +2,7 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { readSection } from "./support/participantFlow.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -153,9 +154,7 @@ describe("Kursrapporten krever leste seksjoner (#966)", () => {
 
     // KONTROLLCASE. Uten dette ville testen over vært like grønn om regelen alltid sa «ikke
     // fullført» — den ville målt at noe er strengt, ikke at det er RIKTIG strengt.
-    const markRead = await request(app)
-      .post(`/api/courses/${course.id}/sections/${section.id}/read`)
-      .set(participantHeaders);
+    const markRead = await readSection(app, participantHeaders, course.id, section.id);
     expect(markRead.status).toBe(204);
 
     const afterRead = await readRow();

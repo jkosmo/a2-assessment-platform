@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 // #1136: GET /api/submissions/:id sendte hele raden med moduleVersion — også assessorExpectedContent,
 // fasiten for vurdereren — og de rå KI-vurderingene. Samme klasse som #387 i modulruta. Nå: bare
@@ -28,6 +29,7 @@ describe("[Security #1136] GET /api/submissions/:id gir deltakeren ikke fasiten"
 
     const created = await request(app).post("/api/submissions").set(participantHeaders).send({
       moduleId: seed.id,
+      moduleVersionId: await seenModuleVersionId(app, participantHeaders, seed.id),
       deliveryType: "text",
       responseJson: { response: "Mitt eget svar #1136.", reflection: "Refleksjon.", promptExcerpt: "Utdrag." },
     });

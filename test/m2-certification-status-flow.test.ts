@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 // #989: het `m2-recertification-flow.test.ts` og verifiserte utløpsdatoer + påminnelseskjøringer.
 // Nå verifiserer den det motsatte: en bestått modul får ACTIVE og `passedAt`, INGEN utløpsdato, og
@@ -41,6 +42,7 @@ describe("Certification status without expiry", () => {
       .set(participantHeaders)
       .send({
         moduleId,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, moduleId),
         deliveryType: "text",
         responseJson: {
           response:

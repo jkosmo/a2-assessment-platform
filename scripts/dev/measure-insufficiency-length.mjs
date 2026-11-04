@@ -173,6 +173,7 @@ for (const sak of SAKER) {
     const svar = await leverMedTålmodighet(
       {
         moduleId: modul.id,
+      moduleVersionId: modul.activeVersion?.id, // #934 2.133.0: versjonen «siden» så; uten den svarer ruta 409.
         deliveryType: "text",
         responseJson: { response: sak.response, reflection: sak.reflection },
         processSignals: { declaration: "improve", declarationText: "Modellen ble brukt som utkastverktøy." },

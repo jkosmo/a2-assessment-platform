@@ -2,6 +2,31 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.133.0 - 2026-11-04
+
+#934 skive 5a-1: deltakerlåsen, kursbevis utstedt under låsene, og versjonen deltakeren så (`doc/DESIGN_934.md`,
+«5a-1 — bygget»). Ingen regel for hva som teller, er endret; det kommer i 5a-3.
+
+- **Kursbeviset** måles og skrives i én transaksjon som holder innholdslåsen delt og deltakerlåsen, fra alle tre
+  veiene inn: workeren, lesingen av siste seksjon og kursbevissiden. En ny hovedversjon står enten ferdig, og da gjelder
+  beviset den, eller venter til beviset er skrevet, og da får personen e-posten. En anke eller lesing kan ikke komme midt
+  i målingen. Kursbevissiden tar låsene bare for et kurs der det ser ut til å mangle et bevis, og gir opp resten av runden
+  hvis noen skriver innhold; siden vises uansett, og beviset kommer neste gang.
+- **Deltakerlåsen:** én lås per deltaker, tatt av innlevering, alle vedtak (flervalg, automatisk, manuell vurdering,
+  anke), lesing og utstedelse. Alltid innholdslåsen først. Typene nekter en skriving uten låsen; vakta
+  `test/content-lock-write-guard.test.js` nekter det samme.
+- **Versjonen deltakeren så:** `POST /api/submissions` tar `moduleVersionId`, `GET …/sections/:id` sender
+  `sectionVersionId`, og `POST …/read` sender den tilbake. Eldre versjon: `409 module_version_changed` eller
+  `409 section_version_changed`. Mangler den: `409 client_outdated`. Ingenting er skrevet. Deltakersiden sier fra,
+  og ber deltakeren laste på nytt; kladden står. Knappene på lesesiden er av til teksten er lastet.
+- **Siden prøver igjen ved `503 content_busy`:** `apiFetch` prøver tre ganger til (etter 1, 2 og 4 sekunder), på alle
+  sider utenom forfatterflatene. Svaret betyr der at ingenting er skrevet. Forfatterflatene (`/api/admin/`) har ventet i
+  15 sekunder allerede, og noen ruter der gjør flere transaksjoner, så de prøver ikke av seg selv.
+- **Ved utrulling:** faner fra før utrullingen må lastes på nytt én gang. Innlevering og lesing fra dem får 409, med en
+  generell feilmelding siden den gamle siden ikke kjenner kodene. Kladden står. Klienter utenfor nettleseren må sende
+  feltene: `scripts/dev/measure-*` og stage-testene er oppdatert.
+- **Opprydding:** `createOverrideDecision` og `createResolutionDecision` i repositoriene var døde og er fjernet.
+
 ## 2.132.1 - 2026-11-04
 
 #934: rettinger fra kvalitetssjekken av 4a (runde 3) og 4b (runde 1).

@@ -4,6 +4,7 @@ import { prisma } from "../src/db/prisma.js";
 import { findModuleIdByTitle } from "./support/participantFlow.js";
 import { countCourseCompletionChecks, submissionOwner } from "./support/outboxProbe.js";
 import { processNextOutboxEvent } from "../src/modules/outbox/outboxService.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -31,6 +32,7 @@ describe("MVP appeal flow", () => {
       .set(participantHeaders)
       .send({
         moduleId,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, moduleId),
         deliveryType: "text",
         responseJson: {
           response: "A practical submission with analysis and responsible use notes.",

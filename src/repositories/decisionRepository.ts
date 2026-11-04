@@ -4,6 +4,7 @@ import type {
   SubmissionStatus as SubmissionStatusType,
 } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+import type { LearnerTx } from "../db/contentLock.js";
 
 export type CreateAssessmentDecisionInput = {
   submissionId: string;
@@ -49,8 +50,10 @@ export function createDecisionRepository(client: DecisionRepositoryClient = pris
       });
     },
 
-    createAssessmentDecision(data: CreateAssessmentDecisionInput) {
-      return client.assessmentDecision.create({ data });
+    // #934 skive 5a-1: et vedtak endrer hva deltakeren har gjort. `locked` holder deltakerlåsen, og det er den vedtaket
+    // skrives på. Uten den merkede klienten kompilerer ikke kallet.
+    createAssessmentDecision(locked: LearnerTx, data: CreateAssessmentDecisionInput) {
+      return locked.assessmentDecision.create({ data });
     },
 
     createManualReview(data: {

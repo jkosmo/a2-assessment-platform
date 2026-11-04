@@ -191,6 +191,24 @@ the change; N: just after). Every reader of «which sections has the participant
 `findReadSectionIdsForCourseParticipants`), which applies `readCountsForCurrentVersion`: the certificate
 gate, the course detail's `read`, progress in «Mine kurs» and the course report must agree.
 `markSectionRead` gives a read that no longer counts a new timestamp.
+**Learner lock, locked issuance, the version the learner saw (#934 slice 5a-1, 2.133.0).** `src/db/contentLock.ts`:
+`runContentReadForLearner(userId, cb)` takes the content lock shared and then the learner lock (submission, section read,
+certificate); `runLearnerWrite(userId, cb)` takes only the learner lock (decisions). Order is always content → learner →
+audit. The clients are branded (`LearnerContentTx`, `LearnerTx`), and the functions that write what a learner has done
+take only them: `submissionRepository.create`, `decisionRepository.createAssessmentDecision`,
+`certificationRepository.upsertCertificationStatus`, `courseRepository.markSectionRead` and
+`createCourseCompletion`. A certificate is issued in one place, `evaluateCourseCompletionLocked`
+(`courseCompletionService.ts`), with three ways in: the worker (outbox `course_completion_check` →
+`checkAndIssueCourseCompletions`, one transaction per course), the read route (`checkCourseCompletionForCourse`, the
+read's own transaction), and the certificate page (`reconcileCourseCompletionsForUser`, one transaction per course that
+looks due, stops on `content_busy`). The participant page sends the version it showed: `moduleVersionId` on `POST
+/api/submissions` (`participant.js`, the create-submission handler) and `sectionVersionId` on `POST …/read`
+(`postSectionRead`; both reader buttons stay disabled until the text has loaded). `409 module_version_changed`,
+`section_version_changed`, `client_outdated`: texts in `participant-translations.js`; the draft stands (autosave and `beforeunload`).
+`apiFetch` (`api-client.js`) retries `503 content_busy` after 1, 2 and 4 seconds, on every call outside `/api/admin/`. Guards:
+`test/content-lock-write-guard.test.js`, `test/m2-learner-lock-934-5a1.test.ts`,
+`test/e2e/participant-seen-version-934-5a1.spec.ts`, `test/dom/api-client-content-busy.dom.test.js`.
+
 **Guards:** `test/m2-course-versions-934.test.ts` (through the routes),
 `test/e2e/admin-content-course-version-934.spec.ts` (dialogs), `test/e2e/course-versions-934.spec.ts`
 (participant, certificate, profile, results).

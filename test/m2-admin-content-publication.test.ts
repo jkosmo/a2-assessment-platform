@@ -4,6 +4,7 @@ import { localizedTextCodec } from "../src/codecs/localizedTextCodec.js";
 import { localizeContentText } from "../src/i18n/content.js";
 import { missingLocalesFor } from "../src/modules/adminContent/contentValidationService.js";
 import { prisma } from "../src/db/prisma.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 const adminHeaders = {
   "x-user-id": "admin-1",
@@ -585,6 +586,7 @@ describe("MVP admin content management and publication", () => {
       .set(isolatedParticipantHeaders)
       .send({
         moduleId: seedModule.id,
+        moduleVersionId: await seenModuleVersionId(app, isolatedParticipantHeaders, seedModule.id),
         deliveryType: "text",
         responseJson: {
           // ⚠️ Lengden er load-bearing — se kommentaren i teksten.

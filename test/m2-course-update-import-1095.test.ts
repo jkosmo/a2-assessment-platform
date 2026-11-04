@@ -7,6 +7,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { readSection } from "./support/participantFlow.js";
 
 const admin = { "x-user-id": "admin-1", "x-user-email": "admin@company.com", "x-user-name": "Platform Admin" };
 const deltaker = { "x-user-id": "deltaker-1095", "x-user-email": "deltaker1095@company.com", "x-user-name": "Deltaker", "x-user-roles": "PARTICIPANT" };
@@ -70,7 +71,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     const klasse = await prisma.class.create({ data: { name: `Klasse ${stempel}` }, select: { id: true } });
     klasseId = klasse.id;
     await prisma.courseGroupAssignment.create({ data: { classId: klasseId, courseId } });
-    const lest = await request(app).post(`/api/courses/${courseId}/sections/${s1}/read`).set(deltaker);
+    const lest = await readSection(app, deltaker, courseId, s1);
     expect(lest.status).toBe(204);
 
     const ut = await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(admin);
@@ -332,7 +333,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     expect(medUtkast.status, JSON.stringify(medUtkast.body).slice(0, 300)).toBe(204);
     const klasse = await prisma.class.create({ data: { name: `Klasse B ${stempel}` }, select: { id: true } });
     await prisma.courseGroupAssignment.create({ data: { classId: klasse.id, courseId: smoKurs } });
-    expect((await request(app).post(`/api/courses/${smoKurs}/sections/${adminsSeksjon}/read`).set(deltaker)).status).toBe(204);
+    expect((await readSection(app, deltaker, smoKurs, adminsSeksjon)).status).toBe(204);
 
     const lagFil = async () => {
       const ut = await request(app).get(`/api/admin/content/courses/${smoKurs}/export-package`).set(smo);
@@ -453,7 +454,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     const kursId = kurs.body.course.id as string;
     expect((await request(app).put(`/api/admin/content/courses/${kursId}/items`).set(admin).send(await withRevision(kursId, { items: [{ type: "SECTION", sectionId: del }, { type: "MODULE", moduleId: m1 }] }))).status).toBe(204);
     expect((await request(app).post(`/api/admin/content/courses/${kursId}/publish`).set(admin)).status).toBe(200);
-    expect((await request(app).post(`/api/courses/${kursId}/sections/${del}/read`).set(deltaker)).status).toBe(204);
+    expect((await readSection(app, deltaker, kursId, del)).status).toBe(204);
     const ut = await request(app).get(`/api/admin/content/courses/${kursId}/export-package`).set(admin);
     const fil = JSON.parse(JSON.stringify(ut.body.envelope ?? ut.body));
     fil.course.course.items[0].section.bodyMarkdown = tre("Ny tekst lagt klar av oppdateringen.");

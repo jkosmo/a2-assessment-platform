@@ -62,10 +62,13 @@ vi.mock("../../src/db/prisma.js", () => ({
   },
 }));
 
+// #934 skive 5a-1: låsene er SQL; her går de rett gjennom den falske transaksjonen.
+vi.mock("../../src/db/contentLock.js", () => import("../support/contentLockThroughTransaction.js"));
+
 vi.mock("../../src/modules/submission/submissionRepository.js", () => ({
   getModuleWithActiveVersion,
   submissionRepository: { create: submissionCreate },
-  createSubmissionRepository: () => ({ create: submissionCreate }),
+  createSubmissionRepository: () => ({ create: (_locked: unknown, data: unknown) => submissionCreate(data) }),
 }));
 vi.mock("../../src/modules/assessment/documentParsingService.js", () => ({ resolveSubmissionResponseJson }));
 vi.mock("../../src/modules/review/index.js", () => ({ supersedeEligibleReviewsForRetake }));
@@ -78,7 +81,7 @@ vi.mock("../../src/repositories/decisionRepository.js", () => ({
     updateSubmissionStatus: decisionSubmissionUpdate,
   },
   createDecisionRepository: () => ({
-    createAssessmentDecision: assessmentDecisionCreate,
+    createAssessmentDecision: (_locked: unknown, data: unknown) => assessmentDecisionCreate(data),
     createManualReview: manualReviewCreate,
     updateSubmissionStatus: decisionSubmissionUpdate,
   }),
@@ -87,13 +90,11 @@ vi.mock("../../src/repositories/decisionRepository.js", () => ({
 vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
   manualReviewRepository: {
     findManualReviewForOverride,
-    createOverrideDecision,
     resolveManualReviewGuarded,
     findManualReviewById,
     updateSubmissionStatus: manualReviewSubmissionUpdate,
   },
   createManualReviewRepository: () => ({
-    createOverrideDecision,
     resolveManualReviewGuarded,
     findManualReviewById,
     updateSubmissionStatus: manualReviewSubmissionUpdate,
@@ -103,13 +104,11 @@ vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
 vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
   appealRepository: {
     findAppealForResolution,
-    createResolutionDecision,
     markAppealResolvedGuarded,
     findAppealById,
     updateSubmissionStatus: appealSubmissionUpdate,
   },
   createAppealRepository: () => ({
-    createResolutionDecision,
     markAppealResolvedGuarded,
     findAppealById,
     updateSubmissionStatus: appealSubmissionUpdate,
@@ -604,7 +603,7 @@ describe("transactional failure injection", () => {
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
       await expect(
-        createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+        createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
       ).rejects.toThrow("DB write failed");
 
       expect(supersedeEligibleReviewsForRetake).not.toHaveBeenCalled();
@@ -618,7 +617,7 @@ describe("transactional failure injection", () => {
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
       await expect(
-        createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+        createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
       ).rejects.toThrow("Review supersede failed");
 
       expect(supersedeEligibleAppealsForRetake).not.toHaveBeenCalled();
@@ -631,7 +630,7 @@ describe("transactional failure injection", () => {
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
       await expect(
-        createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+        createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
       ).rejects.toThrow("Appeal supersede failed");
     });
 
@@ -641,7 +640,7 @@ describe("transactional failure injection", () => {
 
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
-      const result = await createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} });
+      const result = await createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
 
       expect(supersedeEligibleReviewsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", FAKE_TX);
       expect(supersedeEligibleAppealsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", FAKE_TX);
@@ -657,7 +656,7 @@ describe("transactional failure injection", () => {
       supersedeEligibleAppealsForRetake.mockResolvedValue(0);
 
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
-      await createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} });
+      await createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
 
       const actions = recordAuditEvent.mock.calls.map((c: unknown[]) => (c[0] as { action: string }).action);
       expect(actions).toContain("submission_created");

@@ -1,5 +1,6 @@
 import type { CertificationLifecycleStatus } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
+import type { ContentWriteTx, LearnerTx } from "../../db/contentLock.js";
 
 type CertificationRepositoryClient = Pick<typeof prisma, "certificationStatus">;
 
@@ -27,14 +28,15 @@ export function createCertificationRepository(client: CertificationRepositoryCli
     // #989: `expiryDate` og `recertificationDueDate` skrives ikke lenger. Kolonnene står igjen
     // (expand/contract, ingen destruktiv migrasjon nå) og beholder verdiene sine på gamle rader —
     // de sier hva regelen var da raden ble skrevet.
-    upsertCertificationStatus(data: {
+    // #934 skive 5a-1: `locked` holder deltakerlåsen. Kursbeviset leser denne raden under samme lås.
+    upsertCertificationStatus(locked: LearnerTx, data: {
       userId: string;
       moduleId: string;
       latestDecisionId: string;
       status: "ACTIVE" | "NOT_CERTIFIED";
       passedAt: Date | null;
     }) {
-      return client.certificationStatus.upsert({
+      return locked.certificationStatus.upsert({
         where: {
           userId_moduleId: {
             userId: data.userId,
@@ -70,9 +72,13 @@ export function createCertificationRepository(client: CertificationRepositoryCli
       });
     },
 
-    /** #997: marker dem som foreldet av en ny modulversjon. Returnerer antall rader. */
-    supersedeCertificationsForModule(moduleId: string, supersededByVersionId: string) {
-      return client.certificationStatus.updateMany({
+    /**
+     * #997: marker dem som foreldet av en ny modulversjon. Returnerer antall rader.
+     * #934 skive 5a-1: gjelder mange deltakere, så den skjer under den eksklusive innholdslåsen, ikke deltakerlåsen. Den
+     * stenger ute alle utstedelser, men ikke et vedtak; det går bort i 5a-3, når `SUPERSEDED` ikke skrives lenger.
+     */
+    supersedeCertificationsForModule(locked: ContentWriteTx, moduleId: string, supersededByVersionId: string) {
+      return locked.certificationStatus.updateMany({
         where: { moduleId, status: { in: CERTIFICATION_PASSED_STATUSES } },
         data: { status: "SUPERSEDED", supersededByVersionId },
       });

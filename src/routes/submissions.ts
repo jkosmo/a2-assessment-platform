@@ -26,6 +26,9 @@ const processSignalsSchema = z.object({
 
 const createSubmissionSchema = z.object({
   moduleId: z.string().min(1),
+  // #934 skive 5a-1: valgfri i skjemaet, så en fane fra før utrullingen får `409 client_outdated` med en forklaring,
+  // ikke en valideringsfeil. Se `createSubmission`.
+  moduleVersionId: z.string().optional(),
   deliveryType: z.enum(["text", "file", "hybrid"]).default("text"),
   responseJson: z.record(z.string(), z.unknown()).default({}),
   attachmentUri: z.string().trim().optional(),

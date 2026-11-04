@@ -253,7 +253,7 @@ versjonsregelen. Etter produkteiers regel er de registrert her og ikke rettet f�
 ## Plan for resten (skive 4–5)
 
 Status: **revidert 2026-11-04 etter Codex' gjennomgang, runde 1 og 2, og produkteiers avgjørelser 2026-11-03/04.**
-**4a er bygget i 2.131.0** og **4b i 2.132.0** (se «4a — bygget» og «4b — bygget» under). Resten er ikke bygget. Det blir ingen flere Codex-runder på
+**4a er bygget i 2.131.0**, **4b i 2.132.0** og **5a-1 i 2.133.0** (se «… — bygget» under). Resten er ikke bygget. Det blir ingen flere Codex-runder på
 planen; QA-porten tar hver skive når den er bygget.
 
 Det viktigste:
@@ -759,6 +759,54 @@ Bygger på innholdslåsen fra 4a.
 **QA stopper på:** et kursbevis utstedt mot krav fra to ulike øyeblikk, eller en innlevering eller lesing registrert
 på en annen versjon enn den deltakeren så.
 
+#### 5a-1 — bygget (2.133.0)
+
+- **Låsene** (`src/db/contentLock.ts`): `runContentReadForLearner(userId, cb)` tar innholdslåsen delt og så deltakerlåsen;
+  `runLearnerWrite(userId, cb)` tar bare deltakerlåsen. Nøkkelen er `pg_advisory_xact_lock(9_340_402, hashtext(userId))`,
+  to heltall, så den ikke kan kollidere med innholdslåsen eller revisjonssporet. Venter den over 3 sekunder: `503
+  content_busy`. Arbeidstiden i transaksjonen utvides med begge ventegrensene. En ny transaksjon inne i en som holder
+  deltakerlåsen, stoppes med en gang (`assertNotNested`), så rekkefølgen ikke kan brytes.
+- **Merkene:** `LearnerTx` og `LearnerContentTx`. Disse tar bare imot dem: `submissionRepository.create`,
+  `decisionRepository.createAssessmentDecision`, `certificationRepository.upsertCertificationStatus`,
+  `courseRepository.markSectionRead` og `createCourseCompletion`, og `upsertCertificationStatusFromDecision` og
+  `appendDecisionWithLineage`. Vakta `test/content-lock-write-guard.test.js` nekter i tillegg enhver skriving av
+  `CourseCompletion`, `CourseSectionRead`, `AssessmentDecision`, `CertificationStatus` og nye `Submission` på en klient uten
+  merket (eller uten den eksklusive innholdslåsen: importen flytter lesinger, #997 setter `SUPERSEDED`).
+- **Utstedelsen:** én funksjon, `evaluateCourseCompletionLocked`. Den leser kurset, kravet, beståtte og lesinger inne i
+  transaksjonen og skriver beviset der. Kursbevissiden sjekker først uten lås (`findCompletionToIssue`), for den åpnes ofte
+  og har sjelden noe å gjøre, og gir opp resten av runden ved `content_busy`.
+- **Versjonen deltakeren så:** som beskrevet over. Sjekken ligger etter låsene. For innlevering er det også en rask sjekk
+  før dokumentet tolkes. Lesingen sjekker også at seksjonen fortsatt ligger i kurset, etter låsene.
+- **Siden:** `apiFetch` prøver igjen ved `503 content_busy` (1, 2 og 4 sekunder), på alt utenom `/api/admin/` (der har
+  skriveren ventet i 15 sekunder, og noen ruter gjør flere transaksjoner). Knappene på lesesiden er av
+  til teksten er lastet. Ved 409 på innlevering står kladden: den autolagres hvert kvarte sekund, og ved `beforeunload`.
+
+**Veier inn** (grepet 2026-11-04):
+- *Kursbevis:* `createCourseCompletion` kalles bare fra `evaluateCourseCompletionLocked`, som har tre veier: workeren
+  (`deliverOutboxEvent` → `course_completion_check`, lagt i køen av `AssessmentDecisionApplicationService`,
+  `manualReviewService` og `appealService`), lesingen (`POST …/read`), og kursbevissiden (`GET /api/courses/completions` →
+  `reconcileCourseCompletionsForUser`). Ingen skript i `scripts/` lager kursbevis.
+- *Innlevering:* `POST /api/submissions` → `createSubmission`. Flervalg og vurdering arver versjonen fra innleveringen.
+- *Lesing:* `POST …/read` → `markSectionRead`. Importen flytter lesinger under den eksklusive låsen
+  (`contentImportService.ts`).
+- *Vedtak:* `createMcqOnlyDecision` og `createAssessmentDecision` (`decisionService.ts`), og `appendDecisionWithLineage` fra
+  `manualReviewService` og `appealService`. To døde metoder i repositoriene er fjernet.
+- *Modulstatus:* `upsertCertificationStatusFromDecision` fra de samme tre, og `supersedeCertificationsForModule` (#997) under
+  den eksklusive låsen.
+- *Klienter:* `public/participant.js` er den eneste siden som leverer eller registrerer lesing. Stage-testene og
+  `scripts/dev/measure-*` er oppdatert.
+
+**Bevis:** `test/m2-learner-lock-934-5a1.test.ts` (gjennom rutene; alle tre veiene til kursbevis mot en ny hovedversjon, et
+endret krav og en anke; en ekte hovedversjon samtidig med utstedelsen; alle fire vedtak; 409 og 503 og ingenting skrevet),
+`test/content-lock-write-guard.test.js`, `test/unit/content-lock-queue.test.ts`, `test/dom/api-client-content-busy.dom.test.js`,
+`test/e2e/participant-seen-version-934-5a1.spec.ts`, `test/stage/release-2-133-deltakerlaas.spec.ts`. Mutasjonssjekket: 34 av
+38 røde. De fire som overlevde, gjør ingen forskjell: tre leser fra den globale klienten etter at låsen er tatt, altså det
+samme ferske (kurset i utstedelsen, modulversjonen i innleveringen, medlemskapet i lesingen), og den fjerde fjerner sjekken
+etter låsene i en test der den raske sjekken stopper først (kappløpstesten måler den). En femte, «kladden lagres ved 409»,
+overlevde fordi autolagringen og `beforeunload` allerede gjør det. Den koden er fjernet.
+
+**QA-porten** (2026-11-04): ikke kjørt — Codex-kontoen hadde nådd utgiftstaket. Produkteier kjører den etterpå.
+
 #### 5a-2 — grunnmur, uten endret regel
 
 Alt er nytt ved siden av det gamle. Ingen leser bytter regel i denne skiva.
@@ -937,10 +985,7 @@ e-post eller lekke data, med unntak av de korte utrullingsvinduene i nr. 1, som 
    hovedversjoner.
 10. **Ventetid bak innholdslåsen.** Mens en stor import eller publisering pågår, venter innleveringer, lesinger og
     utstedelse. Etter 3 sekunder svarer serveren 503, og siden prøver igjen.
-11. **Fra 4a, til 5a-1: siden prøver ikke igjen ved 503.** I 4a er registrering av lesing den eneste som tar låsen
-    delt. Får den `503 content_busy` (en skriving har holdt låsen over 3 sekunder), ser deltakeren en feil og må
-    lese seksjonen på nytt. Ingenting er skrevet halvt. Det nye forsøket kommer i 5a-1, sammen med de andre delte
-    leserne.
+11. *(Lukket i 2.133.0: `apiFetch` prøver igjen ved `503 content_busy`, utenom forfatterflatene.)*
 12. **«Slett med alt innhold» fra en fane fra før 2.131.0** får `409 course_form_outdated` og må laste siden på
     nytt: ruta krever det forhåndsvisningen viste, ellers kunne en delt seksjon som nettopp ble eksklusiv, slettes
     uten at administratoren så det.
@@ -975,15 +1020,28 @@ e-post eller lekke data, med unntak av de korte utrullingsvinduene i nr. 1, som 
     står i kø bak låsen, går lagringen gjennom. Vinduet er sekunder, og forfatteren hadde tilgang da hen trykket.
 24. **Rubrikk-, oppgavemal- og flervalgsversjoner tar ikke innholdslåsen** (QA-porten 2.131.0, runde 3). En samtidig
     lagring kan treffe den unike nøkkelen og gi en synlig feil. Ingenting går tapt, og forfatteren prøver igjen.
-25. **Kursbevis utstedes ennå uten delt lås** (QA-porten 2.132.0). Består noen siste modul idet en hovedversjon lages,
-    kan beviset komme etter at mottakerne er talt, og personen får ikke e-posten. Hen ser den nye versjonen i Mine kurs.
-    Rettes i 5a-1, som lar utstedelsen ta låsen.
+25. *(Lukket i 2.133.0: alle tre veiene til et kursbevis, workeren, lesingen og kursbevissiden, tar innholdslåsen delt og
+    deltakerlåsen. Se «5a-1 — bygget».)*
 26. **En sikker sendefeil der lagringen også feiler** (QA-porten 2.132.0): feiler databasen rett etter at ACS svarte
     `Failed`, står raden i `sending` og blir `uncertain`. Personen får ikke e-posten, men aldri to.
 27. **En ny hovedversjon i øyeblikket før sendingen** (QA-porten 2.132.0): e-posten om den forrige kan gå likevel, og
     så den om den nyeste. Vinduet er det korte stykket mellom sjekken og sendingen.
 28. **Grensen på 20 i minuttet gjelder per worker** (QA-porten 2.132.0). Prod har én worker, så to overlapper bare i en
     utrulling. Azure kan da strupe, og outboxen prøver igjen.
+29. **En fane fra før 2.133.0** får en generell feilmelding (409) ved innlevering og lesing, for den gamle siden kjenner
+    ikke kodene. Kladden står, for autolagringen var der allerede. Etter én innlasting er det over.
+30. **#997 tar ikke deltakerlåsen** (`supersedeCertificationsForModule`, under den eksklusive innholdslåsen). Et vedtak holder
+    bare deltakerlåsen, så et vedtak samtidig med en revisjon kan skrive `ACTIVE` rett etter `SUPERSEDED`. Slik har det vært
+    siden #997, og det gjelder en innlevering på den gamle versjonen. Faller bort i 5a-3, der versjonen avgjør og
+    `SUPERSEDED` ikke skrives.
+31. **Workeren finner kursene uten lås** (`checkAndIssueCourseCompletions`). Får et kurs modulen i det øyeblikket, sjekkes ikke
+    det kurset. Kravet måles riktig; beviset kommer når deltakeren åpner kursbevissiden. Gjelder også et kurs som
+    publiseres i det øyeblikket.
+32. **Å opprette en anke og å ta en sak tar ikke deltakerlåsen.** De endrer saksgangen, ikke hva deltakeren har bestått, og
+    planen tar dem ikke med. Et vedtak som kommer rett etter, venter som før på sin egen betingede overgang.
+33. **Et admin-overtak før en deltakerlås som ikke ble ledig** (`manualReviewService`, `appealService`). Revisjonsraden for
+    overtaket skrives før transaksjonen. Får vedtaket `503`, og siden prøver igjen, står det to rader om overtaket. Saken
+    selv er rett; bare sporet er dobbelt. Krever en administrator som tar over en annens sak i de samme sekundene.
 
 ### Gjennomgang av planen
 

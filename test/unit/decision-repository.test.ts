@@ -10,7 +10,7 @@ describe("decision repository", () => {
       },
     } as never);
 
-    await repository.createAssessmentDecision({
+    await repository.createAssessmentDecision({ assessmentDecision: { create } } as never, {
       submissionId: "submission-1",
       moduleVersionId: "module-version-1",
       rubricVersionId: "rubric-version-1",

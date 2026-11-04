@@ -4,7 +4,7 @@ import { createDecisionRepository } from "../../repositories/decisionRepository.
 import { createAssessmentJobRepository } from "./assessmentJobRepository.js";
 import type { AssessmentRunFence } from "./AssessmentJobRunner.js";
 import { ConflictError } from "../../errors/AppError.js";
-import { runInTransaction } from "../../db/transaction.js";
+import { runLearnerWrite } from "../../db/contentLock.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -376,9 +376,10 @@ export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
   const { passFailTotal, decisionReason, decisionReasonCode, decisionReasonParams } =
     resolveMcqOnlyDecision(input.mcqPercentScore, mcqMinPercent);
 
-  return runInTransaction(async (tx) => {
+  // #934 skive 5a-1: deltakerlåsen, som første setning. `input.userId` er den som leverte.
+  return runLearnerWrite(input.userId, async (tx) => {
     const repo = createDecisionRepository(tx);
-    // #953: gjerdet FØRST i transaksjonen. Er dette en forlatt kjøring (#856) som våknet etter at
+    // #953: gjerdet FØRST etter låsen. Er dette en forlatt kjøring (#856) som våknet etter at
     // et gjenforsøk overtok, eier den ikke lenger jobben — og da skal vedtaket ikke skrives. Kastes
     // her, ruller hele transaksjonen tilbake, så ingen halv dom blir liggende.
     const stillOurs = await createAssessmentJobRepository(tx).claimDecisionWrite(
@@ -394,7 +395,7 @@ export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
     }
 
 
-    const decision = await repo.createAssessmentDecision({
+    const decision = await repo.createAssessmentDecision(tx, {
       submissionId: input.submissionId,
       moduleVersionId: input.moduleVersionId,
       rubricVersionId: null,
@@ -440,9 +441,10 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
   const practicalScoreScaled = input.llmResult.practical_score_scaled;
   const resolved = resolveAssessmentDecision(input);
 
-  return runInTransaction(async (tx) => {
+  // #934 skive 5a-1: deltakerlåsen, som første setning. `input.userId` er den som leverte.
+  return runLearnerWrite(input.userId, async (tx) => {
     const repo = createDecisionRepository(tx);
-    // #953: gjerdet FØRST i transaksjonen. Er dette en forlatt kjøring (#856) som våknet etter at
+    // #953: gjerdet FØRST etter låsen. Er dette en forlatt kjøring (#856) som våknet etter at
     // et gjenforsøk overtok, eier den ikke lenger jobben — og da skal vedtaket ikke skrives. Kastes
     // her, ruller hele transaksjonen tilbake, så ingen halv dom blir liggende.
     const stillOurs = await createAssessmentJobRepository(tx).claimDecisionWrite(
@@ -458,7 +460,7 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     }
 
 
-    const decision = await repo.createAssessmentDecision({
+    const decision = await repo.createAssessmentDecision(tx, {
       submissionId: input.submissionId,
       moduleVersionId: input.moduleVersionId,
       rubricVersionId: input.rubricVersionId,

@@ -16,7 +16,11 @@ import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const recordAuditEvent = vi.fn();
 
-vi.mock("../../src/db/prisma.js", () => ({ prisma: {} }));
+// #934 skive 5a-1: utstedelsen åpner sin egen låste transaksjon, så den falske klienten står nå der `prisma` står.
+const prismaHolder = vi.hoisted(() => ({}) as Record<string, unknown>);
+vi.mock("../../src/db/prisma.js", () => ({ prisma: prismaHolder }));
+// #934 skive 5a-1: låsene er SQL; her går de rett gjennom den falske transaksjonen.
+vi.mock("../../src/db/contentLock.js", () => import("../support/contentLockThroughTransaction.js"));
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
 
 type CertRow = { userId: string; moduleId: string; status: string };
@@ -33,18 +37,19 @@ function createFakeClient(certifications: CertRow[]) {
   const lookups: unknown[] = [];
   const versions: Array<{ versionMajor: unknown; versionMinor: unknown }> = [];
 
+  const courseRow = {
+    id: COURSE_ID,
+    publishedAt: new Date("2026-01-01T00:00:00.000Z"),
+    archivedAt: null,
+    versionMajor: 3,
+    versionMinor: 2,
+    items: [{ moduleId: MODULE_ID, sortOrder: 0, module: { archivedAt: null } }],
+  };
   const client = {
+    $transaction: (cb: (tx: unknown) => unknown) => cb(client),
     course: {
-      findMany: async () => [
-        {
-          id: COURSE_ID,
-          publishedAt: new Date("2026-01-01T00:00:00.000Z"),
-          archivedAt: null,
-          versionMajor: 3,
-          versionMinor: 2,
-          items: [{ moduleId: MODULE_ID }],
-        },
-      ],
+      findMany: async () => [courseRow],
+      findUnique: async () => courseRow,
     },
     courseItem: {
       // Kurset har én modul og ingen lærings-seksjoner: modulporten er eneste gate.
@@ -93,7 +98,8 @@ async function issueCompletionsFor(status: string | null) {
     "../../src/modules/course/courseCompletionService.js"
   );
 
-  await checkAndIssueCourseCompletions({ userId: USER_ID, moduleId: MODULE_ID }, client as never);
+  Object.assign(prismaHolder, client);
+  await checkAndIssueCourseCompletions({ userId: USER_ID, moduleId: MODULE_ID });
   return created;
 }
 
@@ -135,7 +141,8 @@ describe("kursbevisporten er uendret av at resertifisering fjernes (#989)", () =
   it("#934: slår opp beviset for kursets hovedversjon og stempler det nye med versjonen", async () => {
     const { client, lookups, versions } = createFakeClient([{ userId: USER_ID, moduleId: MODULE_ID, status: "ACTIVE" }]);
     const { checkAndIssueCourseCompletions } = await import("../../src/modules/course/courseCompletionService.js");
-    await checkAndIssueCourseCompletions({ userId: USER_ID, moduleId: MODULE_ID }, client as never);
+    Object.assign(prismaHolder, client);
+    await checkAndIssueCourseCompletions({ userId: USER_ID, moduleId: MODULE_ID });
 
     expect(lookups).toEqual([{ userId_courseId_versionMajor: { userId: USER_ID, courseId: COURSE_ID, versionMajor: 3 } }]);
     expect(versions).toEqual([{ versionMajor: 3, versionMinor: 2 }]);

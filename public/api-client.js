@@ -206,6 +206,16 @@ async function parseResponseBody(response) {
   }
 }
 
+// #934 skive 5a-1: `503 content_busy` fra en deltaker- eller behandlerrute betyr at en lås ikke ble ledig innen 3 sekunder,
+// og at transaksjonen ikke skrev noe. Da er det trygt å prøve igjen, også for en innlevering. Står her fordi alle sider
+// går gjennom `apiFetch`, så ingen ny side kan glemme det. Gir den opp, får kalleren feilen som før, og siden sier «prøv
+// igjen om et øyeblikk».
+//
+// ⚠️ IKKE forfatterflatene (`/api/admin/`): de har allerede ventet i 15 sekunder bak låsen, og noen av rutene gjør flere
+// transaksjoner etter hverandre, så der betyr svaret ikke alltid at ingenting er skrevet. Der avgjør forfatteren selv.
+export const CONTENT_BUSY_RETRY_DELAYS_MS = [1000, 2000, 4000];
+const retriesWhenBusy = (url) => !String(url).startsWith("/api/admin/");
+
 export async function apiFetch(url, getHeadersOrOptions = {}, maybeOptions = {}) {
   const getHeaders = typeof getHeadersOrOptions === "function" ? getHeadersOrOptions : null;
   const options = getHeaders ? maybeOptions : (getHeadersOrOptions ?? {});
@@ -225,12 +235,18 @@ export async function apiFetch(url, getHeadersOrOptions = {}, maybeOptions = {})
     delete headers["content-type"];
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  let response;
+  let body;
+  for (let attempt = 0; ; attempt += 1) {
+    response = await fetch(url, {
+      ...options,
+      headers,
+    });
+    body = await parseResponseBody(response);
+    if (response.status !== 503 || body?.error !== "content_busy" || !retriesWhenBusy(url) || attempt >= CONTENT_BUSY_RETRY_DELAYS_MS.length) break;
+    await new Promise((resolve) => setTimeout(resolve, CONTENT_BUSY_RETRY_DELAYS_MS[attempt]));
+  }
 
-  const body = await parseResponseBody(response);
   if (!response.ok) {
     // The message keeps its exact old shape — several call sites and tests match on it. The
     // parsed body rides along as properties so a caller that wants to act on structured error

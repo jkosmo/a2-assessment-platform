@@ -3186,10 +3186,15 @@ createSubmissionButton.addEventListener("click", async () => {
 
       // MCQ-only modules send an empty submission (no free-text); acknowledgement is implicit
       // since there is no deliverable to take responsibility for (#525).
+      // #934 skive 5a-1: versjonen siden viser. `loadedModules` tegnes hver gang den byttes, så dette er versjonen
+      // deltakeren har foran seg. Er den ikke lenger aktiv, svarer serveren 409. Svaret står i feltene og i kladden
+      // (autolagringen hvert kvarte sekund, og `beforeunload`), så det er der etter at siden er lastet på nytt.
+      const seenVersionId = resolveSelectedModule(loadedModules, moduleId)?.activeVersion?.id;
       const body = await apiFetch("/api/submissions", headers, {
         method: "POST",
         body: JSON.stringify({
           moduleId,
+          moduleVersionId: seenVersionId,
           deliveryType: "text",
           responseJson,
           responsibilityAcknowledged: selectedModuleIsMcqOnly() ? true : ackCheckbox.checked,
@@ -4795,9 +4800,9 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   const canFinish = !nextEntry && outstanding.length === 0;
   let actionsMarkup = "";
   if (nextEntry) {
-    actionsMarkup = `<button type="button" id="sectionReaderMarkRead" class="btn-primary" data-role="markReadNext">${escapeHtmlP(advanceLabel)}</button>`;
+    actionsMarkup = `<button type="button" id="sectionReaderMarkRead" class="btn-primary" data-role="markReadNext" disabled>${escapeHtmlP(advanceLabel)}</button>`;
   } else if (canFinish) {
-    actionsMarkup = `<button type="button" id="sectionReaderFinish" class="btn-primary" data-role="finishCourse">${escapeHtmlP(t("courses.section.finishCourse"))}</button>`;
+    actionsMarkup = `<button type="button" id="sectionReaderFinish" class="btn-primary" data-role="finishCourse" disabled>${escapeHtmlP(t("courses.section.finishCourse"))}</button>`;
   } else {
     // Ingen avslutt-knapp, men en forklaring. En blindvei uten begrunnelse er verre enn en knapp som
     // mangler — deltakeren vet ikke om det er dem eller systemet det er noe galt med.
@@ -4851,6 +4856,14 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     });
   }
 
+  // #934 skive 5a-1: lesingen sender versjonen teksten kom fra. Knappene er derfor av til teksten er lastet; en lesing
+  // av noe deltakeren ikke har sett, skal ikke kunne registreres.
+  let seenSectionVersionId = null;
+  const postSectionRead = () => apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}/read`, headers, {
+    method: "POST",
+    body: JSON.stringify({ sectionVersionId: seenSectionVersionId }),
+  });
+
   // #924: marker lest OG gå videre, i ett. Rekkefølgen er nøye: kursdetaljen hentes på nytt før vi
   // åpner neste element, så radene i DOM er de ferske openCourseItemEntry slår opp i — og
   // nextEntryAfter regnes ut på nytt fra den ferske sekvensen, ikke fra et gammelt øyeblikksbilde.
@@ -4858,7 +4871,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   markReadBtn?.addEventListener("click", async () => {
     markReadBtn.disabled = true;
     try {
-      await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}/read`, headers, { method: "POST" });
+      await postSectionRead();
       collapseInlineOpen();
       loadParticipantCourses().catch(() => {});
       await loadCourseDetail(courseId);
@@ -4882,7 +4895,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   finishBtn?.addEventListener("click", async () => {
     finishBtn.disabled = true;
     try {
-      await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}/read`, headers, { method: "POST" });
+      await postSectionRead();
       collapseInlineOpen();
       // Vent på lista: det er DEN som viser at kurset er fullført, og som utløser
       // kursbevis-feiringen. Å ikke vente ga nettopp den stille fullføringen #929 finnes for.
@@ -4905,6 +4918,10 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     // policy client-side (defense-in-depth) before this innerHTML sink.
     if (bodyEl) {
       bodyEl.innerHTML = sanitizeSectionHtml(body.html);
+      // Teksten står. Knappene venter ikke på bildene: et bilde som henger, skal ikke stenge deltakeren inne.
+      seenSectionVersionId = body.sectionVersionId ?? null;
+      if (markReadBtn) markReadBtn.disabled = false;
+      if (finishBtn) finishBtn.disabled = false;
       // Private asset images can't carry auth headers as a plain <img>; hydrate them.
       await hydrateContentAssetImages(bodyEl, headers);
     }

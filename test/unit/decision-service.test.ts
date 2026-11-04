@@ -10,6 +10,9 @@ const submissionUpdate = vi.fn();
 const recordAuditEvent = vi.fn();
 const upsertCertificationStatusFromDecision = vi.fn();
 
+// #934 skive 5a-1: låsene er SQL; her går de rett gjennom den falske transaksjonen.
+vi.mock("../../src/db/contentLock.js", () => import("../support/contentLockThroughTransaction.js"));
+
 vi.mock("../../src/db/prisma.js", () => ({
   prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
 }));
@@ -21,7 +24,7 @@ vi.mock("../../src/repositories/decisionRepository.js", () => ({
     updateSubmissionStatus: submissionUpdate,
   },
   createDecisionRepository: () => ({
-    createAssessmentDecision: assessmentDecisionCreate,
+    createAssessmentDecision: (_locked: unknown, data: unknown) => assessmentDecisionCreate(data),
     createManualReview: manualReviewCreate,
     updateSubmissionStatus: submissionUpdate,
   }),

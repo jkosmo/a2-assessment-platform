@@ -3,7 +3,7 @@ import type { ReportFilters } from "../reporting/types.js";
 import { CERTIFICATION_PASSED_STATUSES } from "../certification/certificationRepository.js";
 import { sectionAvailableWhere } from "./sectionAvailability.js";
 import { countCertificateHolders, loadSectionReadRules, readCountsForCurrentVersion, type SectionSnapshot } from "./courseVersioning.js";
-import type { ContentReadTx } from "../../db/contentLock.js";
+import type { LearnerContentTx } from "../../db/contentLock.js";
 
 function buildSubmissionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
   return {
@@ -131,14 +131,17 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
     // #933: seksjonene lagres nå ved siden av modulene. Produkteiers regel er «alle moduler kurset
     // inneholdt DA, samt bekreftet lest alle seksjoner kurset inneholdt på det tidspunkt» — uten
     // seksjonene var halve regelen uetterprøvbar, og et bevis kunne ikke vise hva det dekket.
+    // #934 skive 5a-1: `locked` holder innholdslåsen delt og deltakerlåsen. Beviset skrives altså i samme låste
+    // transaksjon som kravet ble målt i. Uten den merkede klienten kompilerer ikke kallet.
     createCourseCompletion(
+      locked: LearnerContentTx,
       userId: string,
       courseId: string,
       version: { major: number; minor: number },
       moduleSnapshotJson: string,
       sectionSnapshotJson?: string,
     ) {
-      return client.courseCompletion.create({
+      return locked.courseCompletion.create({
         data: { userId, courseId, versionMajor: version.major, versionMinor: version.minor, moduleSnapshotJson, sectionSnapshotJson },
       });
     },
@@ -155,10 +158,10 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
     // #934 skive 3: en lesing som ikke teller for kursets nåværende hovedversjon (seksjonen er endret
     // siden forrige), får nytt tidspunkt når deltakeren leser den på nytt — ellers kunne den aldri telle.
     // En lesing som teller, står urørt: tidspunktet er når hen leste, og aktivitetsrapporten bygger på det.
-    // #934 skive 4a: `locked` er transaksjonen som holder innholdslåsen DELT (`runContentRead`), og det er den
-    // lesingen skrives på. Den venter på en åpen versjonsendring, så tidspunktet aldri havner på feil side av
-    // grensen `publishedAt`. Uten den merkede klienten kompilerer ikke kallet.
-    async markSectionRead(locked: ContentReadTx, userId: string, courseId: string, sectionId: string) {
+    // #934 skive 4a: `locked` er transaksjonen som holder innholdslåsen DELT, og det er den lesingen skrives på. Den
+    // venter på en åpen versjonsendring, så tidspunktet aldri havner på feil side av grensen `publishedAt`. Skive 5a-1:
+    // den holder også deltakerlåsen. Uten den merkede klienten kompilerer ikke kallet.
+    async markSectionRead(locked: LearnerContentTx, userId: string, courseId: string, sectionId: string) {
       const read = await locked.courseSectionRead.upsert({
         where: { userId_courseId_sectionId: { userId, courseId, sectionId } },
         update: {},

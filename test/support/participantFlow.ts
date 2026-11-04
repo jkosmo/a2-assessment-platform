@@ -28,6 +28,23 @@ export async function findModuleIdByTitle(
   return module.id;
 }
 
+// #934 skive 5a-1: det klienten gjør. Deltakersiden viser modulen fra `GET /api/modules` og sender versjonen den viste
+// med innleveringen. `undefined` når modulen ikke har en aktiv versjon, så ruta får svare selv.
+export async function seenModuleVersionId(app: Express, headers: ParticipantHeaders, moduleId: string) {
+  const response = await request(app).get(`/api/modules/${moduleId}`).set(headers);
+  return response.body.module?.activeVersion?.id as string | undefined;
+}
+
+// #934 skive 5a-1: det klienten gjør. Først hentes teksten, så sendes versjonen den kom fra tilbake med lesingen. Svaret
+// er ruta sitt, også når teksten ikke kunne hentes.
+export async function readSection(app: Express, headers: ParticipantHeaders, courseId: string, sectionId: string) {
+  const shown = await request(app).get(`/api/courses/${courseId}/sections/${sectionId}`).set(headers);
+  return request(app)
+    .post(`/api/courses/${courseId}/sections/${sectionId}/read`)
+    .set(headers)
+    .send({ sectionVersionId: shown.body.sectionVersionId });
+}
+
 export async function createSubmission(app: Express, headers: ParticipantHeaders, input: {
   moduleId: string;
   responseJson: Record<string, unknown>;
@@ -37,6 +54,7 @@ export async function createSubmission(app: Express, headers: ParticipantHeaders
     .set(headers)
     .send({
       moduleId: input.moduleId,
+      moduleVersionId: await seenModuleVersionId(app, headers, input.moduleId),
       deliveryType: "text",
       responseJson: input.responseJson,
     });

@@ -104,7 +104,7 @@ test("et kurs i gang har seilbåten, og linja fylles fra høyre; fullført er he
   expect((await api("POST", `/api/admin/content/courses/${tilstand.kursId}/publish`)).status).toBe(200);
 
   // Første seksjon lest: 1 av 2 steg = 50 % → kurs i gang, fullt seil.
-  expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjoner[0]}/read`)).status);
+  expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjoner[0]}/read`, { sectionVersionId: (await api("GET", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjoner[0]}`)).json.sectionVersionId })).status);
 
   await forberedSide(page);
   await page.goto(`${BASE}/participant`, { waitUntil: "domcontentloaded" });
@@ -120,7 +120,7 @@ test("et kurs i gang har seilbåten, og linja fylles fra høyre; fullført er he
   expect(Math.abs((fylt!.x + fylt!.width) - (linje!.x + linje!.width))).toBeLessThan(1.5);
 
   // Andre seksjon lest: fullført → hel grønn linje, ingen båt.
-  expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjoner[1]}/read`)).status);
+  expect([200, 201, 204]).toContain((await api("POST", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjoner[1]}/read`, { sectionVersionId: (await api("GET", `/api/courses/${tilstand.kursId}/sections/${tilstand.seksjoner[1]}`)).json.sectionVersionId })).status);
   await page.reload({ waitUntil: "domcontentloaded" });
   const ferdig = page.locator(`.course-accordion-item[data-course-id="${tilstand.kursId}"]`).first();
   await expect(ferdig).toHaveClass(/course-accordion-item--done/, { timeout: 45000 });

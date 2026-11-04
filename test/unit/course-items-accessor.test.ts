@@ -19,7 +19,11 @@ import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 //   4. la deltakerdøra returnere `item.section` med `archivedAt`      → «bærer ikke feltene
 //      regelen bygger på» blir rød.
 
-vi.mock("../../src/db/prisma.js", () => ({ prisma: {} }));
+// #934 skive 5a-1: utstedelsen åpner sin egen låste transaksjon, så den falske klienten står nå der `prisma` står.
+const prismaHolder = vi.hoisted(() => ({}) as Record<string, unknown>);
+vi.mock("../../src/db/prisma.js", () => ({ prisma: prismaHolder }));
+// #934 skive 5a-1: låsene er SQL; her går de rett gjennom den falske transaksjonen.
+vi.mock("../../src/db/contentLock.js", () => import("../support/contentLockThroughTransaction.js"));
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent: vi.fn() }));
 
 const COURSE_ID = "course-1";
@@ -287,12 +291,13 @@ describe("#958 bevisporten og deltakersekvensen får radene fra samme dør", () 
   // holde i takt: porten leser det døra ga den.
   async function issue(items: ItemRow[], reads: string[]) {
     const created: Array<{ courseId: string }> = [];
+    // #934: versjonen er påkrevd i utstedelsen; uten den sto `undefined` i oppslaget og testen ble grønn.
+    const courseRow = { id: COURSE_ID, publishedAt: new Date("2026-01-01"), archivedAt: null, versionMajor: 1, versionMinor: 0, items: [] };
     const client = createClient(items, {
+      $transaction: (cb: (tx: unknown) => unknown) => cb(client),
       course: {
-        findMany: async () => [
-          // #934: versjonen er påkrevd i utstedelsen; uten den sto `undefined` i oppslaget og testen ble grønn.
-          { id: COURSE_ID, publishedAt: new Date("2026-01-01"), archivedAt: null, versionMajor: 1, versionMinor: 0, items: [] },
-        ],
+        findMany: async () => [courseRow],
+        findUnique: async () => courseRow,
       },
       certificationStatus: { count: async () => 0 },
       courseSectionRead: { findMany: async () => reads.map((sectionId) => ({ sectionId })) },
@@ -313,7 +318,8 @@ describe("#958 bevisporten og deltakersekvensen får radene fra samme dør", () 
     });
 
     const { checkAndIssueCourseCompletions } = await import("../../src/modules/course/courseCompletionService.js");
-    await checkAndIssueCourseCompletions({ userId: "user-1", moduleId: "mod-x" }, client as never);
+    Object.assign(prismaHolder, client);
+    await checkAndIssueCourseCompletions({ userId: "user-1", moduleId: "mod-x" });
     return created;
   }
 

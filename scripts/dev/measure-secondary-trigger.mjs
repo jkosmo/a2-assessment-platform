@@ -170,6 +170,7 @@ for (const sak of SAKER) {
     const merkelapp = `${sak.id} #${i + 1}`;
     const svar = await leverMedTålmodighet({
       moduleId: modul.id,
+      moduleVersionId: modul.activeVersion?.id, // #934 2.133.0: versjonen «siden» så; uten den svarer ruta 409.
       deliveryType: "text",
       responseJson: { response: sak.response, reflection: sak.reflection },
       // ⚠️ Gyldige verdier er none | ideas | improve | autonomous. «assisted» finnes ikke, og ga 400.

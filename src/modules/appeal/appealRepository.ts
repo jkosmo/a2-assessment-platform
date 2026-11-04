@@ -2,7 +2,6 @@ import type {
   AppealStatus as AppealStatusType,
   SubmissionStatus as SubmissionStatusType,
 } from "@prisma/client";
-import type { CreateAssessmentDecisionInput } from "../../repositories/decisionRepository.js";
 import { prisma } from "../../db/prisma.js";
 
 type AppealRepositoryClient = Pick<typeof prisma, "appeal" | "submission" | "user" | "assessmentDecision">;
@@ -297,10 +296,6 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
           },
         },
       });
-    },
-
-    createResolutionDecision(data: CreateAssessmentDecisionInput) {
-      return client.assessmentDecision.create({ data });
     },
 
     // #790: plain row re-read after a guarded transition (the guarded updateMany can't return the row).

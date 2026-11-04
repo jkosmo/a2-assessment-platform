@@ -93,7 +93,7 @@ test("#1077: deltakeren får typen uten fasit; rett eller galt; gjennomgangen vi
   expect([200, 201]).toContain(publisert.status);
 
   const forsøk = async (valg: string[]) => {
-    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, deliveryType: "text", responseJson: {} });
+    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, moduleVersionId: (await api("GET", `/api/modules/${tilstand.moduleId}`)).json.module?.activeVersion?.id, deliveryType: "text", responseJson: {} });
     expect(innlevering.status, innlevering.tekst).toBe(201);
     const submissionId = innlevering.json.submission.id as string;
     const start = await api("GET", `/api/modules/${tilstand.moduleId}/mcq/start?submissionId=${submissionId}&locale=nb`);
@@ -138,7 +138,7 @@ test("2.99.1: et «velg alle» der alle er riktige lagres; bare alle valgt gir r
   expect([200, 201]).toContain(publisert.status);
 
   const riktigSvar = async (valg: string[]) => {
-    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleIdAlle, deliveryType: "text", responseJson: {} });
+    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleIdAlle, moduleVersionId: (await api("GET", `/api/modules/${tilstand.moduleIdAlle}`)).json.module?.activeVersion?.id, deliveryType: "text", responseJson: {} });
     expect(innlevering.status, innlevering.tekst).toBe(201);
     const submissionId = innlevering.json.submission.id as string;
     const start = await api("GET", `/api/modules/${tilstand.moduleIdAlle}/mcq/start?submissionId=${submissionId}&locale=nb`);
