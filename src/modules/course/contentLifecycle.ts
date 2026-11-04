@@ -1,4 +1,5 @@
 import { prisma } from "../../db/prisma.js";
+import type { DbTransactionClient } from "../../db/transaction.js";
 import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { localizeContentText } from "../../i18n/content.js";
 
@@ -9,14 +10,20 @@ import { localizeContentText } from "../../i18n/content.js";
 
 const MSG_LOCALE = "nb" as const;
 
+// #934 skive 4a: vaktene leser på klienten de får. En skriver kaller dem med transaksjonen som holder
+// innholdslåsen, så svaret gjelder til den har skrevet — sjekket på den globale klienten før låsen, kunne et
+// kurs få modulen mellom sjekken og arkiveringen. Utelatt: den globale klienten (forhåndsvisninger og lister).
+export type LifecycleReader = DbTransactionClient | typeof prisma;
+
 function courseDisplayTitle(rawTitle: string): string {
   return localizeContentText(MSG_LOCALE, rawTitle) ?? rawTitle;
 }
 
 async function coursesContaining(
   itemWhere: { moduleId: string } | { sectionId: string },
+  reader: LifecycleReader = prisma,
 ): Promise<Array<{ id: string; title: string }>> {
-  const rows = await prisma.course.findMany({
+  const rows = await reader.course.findMany({
     where: { items: { some: itemWhere } },
     select: { id: true, title: true },
     orderBy: { updatedAt: "desc" },
@@ -24,12 +31,12 @@ async function coursesContaining(
   return rows.map((row) => ({ id: row.id, title: courseDisplayTitle(row.title) }));
 }
 
-export function findCoursesContainingModule(moduleId: string) {
-  return coursesContaining({ moduleId });
+export function findCoursesContainingModule(moduleId: string, reader: LifecycleReader = prisma) {
+  return coursesContaining({ moduleId }, reader);
 }
 
-export function findCoursesContainingSection(sectionId: string) {
-  return coursesContaining({ sectionId });
+export function findCoursesContainingSection(sectionId: string, reader: LifecycleReader = prisma) {
+  return coursesContaining({ sectionId }, reader);
 }
 
 // #705-UX(G): batch — hvilke kurs bruker hver av disse seksjonene (for «Brukt i kurs»-kolonnen i
@@ -72,8 +79,8 @@ export function inUseMessage(
 
 // G2: en modul som ligger i ethvert kurs (publisert eller utkast) kan ikke avpubliseres/
 // arkiveres/slettes. `verb` brukes i feilmeldingen, f.eks. "avpubliseres" | "arkiveres" | "slettes".
-export async function assertModuleNotInAnyCourse(moduleId: string, verb: string): Promise<void> {
-  const courses = await findCoursesContainingModule(moduleId);
+export async function assertModuleNotInAnyCourse(moduleId: string, verb: string, reader: LifecycleReader = prisma): Promise<void> {
+  const courses = await findCoursesContainingModule(moduleId, reader);
   if (courses.length > 0) {
     // #999: koden er kontrakten. `courseTitles` foelger med saa klienten kan navngi kursene uten
     // aa lese dem ut av setningen.
@@ -85,8 +92,8 @@ export async function assertModuleNotInAnyCourse(moduleId: string, verb: string)
 }
 
 // G2 for seksjoner — samme regel.
-export async function assertSectionNotInAnyCourse(sectionId: string, verb: string): Promise<void> {
-  const courses = await findCoursesContainingSection(sectionId);
+export async function assertSectionNotInAnyCourse(sectionId: string, verb: string, reader: LifecycleReader = prisma): Promise<void> {
+  const courses = await findCoursesContainingSection(sectionId, reader);
   if (courses.length > 0) {
     throw new DomainRuleError("content_in_use", inUseMessage("Seksjonen", verb, courses), {
       count: courses.length,
@@ -120,8 +127,9 @@ async function assertNotInIssuedCertificate(
   column: "moduleSnapshotJson" | "sectionSnapshotJson",
   noun: string,
   verb: string,
+  reader: LifecycleReader = prisma,
 ): Promise<void> {
-  const count = await prisma.courseCompletion.count({ where: { [column]: { contains: id } } });
+  const count = await reader.courseCompletion.count({ where: { [column]: { contains: id } } });
   if (count > 0) {
     throw new DomainRuleError(
       "content_in_issued_certificate",
@@ -132,8 +140,8 @@ async function assertNotInIssuedCertificate(
   }
 }
 
-export function assertModuleNotInIssuedCertificate(moduleId: string, verb: string): Promise<void> {
-  return assertNotInIssuedCertificate(moduleId, "moduleSnapshotJson", "Modulen", verb);
+export function assertModuleNotInIssuedCertificate(moduleId: string, verb: string, reader: LifecycleReader = prisma): Promise<void> {
+  return assertNotInIssuedCertificate(moduleId, "moduleSnapshotJson", "Modulen", verb, reader);
 }
 
 /**
@@ -143,9 +151,9 @@ export function assertModuleNotInIssuedCertificate(moduleId: string, verb: strin
  * ⚠️ Regelen bor ett sted. To kopier — én som kaster og én som rapporterer — ville drevet fra
  * hverandre, og det er nettopp det #938 handlet om.
  */
-export async function describeIssuedCertificateBlock(sectionId: string): Promise<string | null> {
+export async function describeIssuedCertificateBlock(sectionId: string, reader: LifecycleReader = prisma): Promise<string | null> {
   try {
-    await assertSectionNotInIssuedCertificate(sectionId, "slettes");
+    await assertSectionNotInIssuedCertificate(sectionId, "slettes", reader);
     return null;
   } catch (error) {
     // ⚠️ #999: vakta kaster nå DomainRuleError, ikke ValidationError. Sto denne igjen på den gamle
@@ -159,8 +167,8 @@ export async function describeIssuedCertificateBlock(sectionId: string): Promise
   }
 }
 
-export async function assertSectionNotInIssuedCertificate(sectionId: string, verb: string): Promise<void> {
-  await assertNotInIssuedCertificate(sectionId, "sectionSnapshotJson", "Seksjonen", verb);
+export async function assertSectionNotInIssuedCertificate(sectionId: string, verb: string, reader: LifecycleReader = prisma): Promise<void> {
+  await assertNotInIssuedCertificate(sectionId, "sectionSnapshotJson", "Seksjonen", verb, reader);
 
   // ⚠️ Kursbevis utstedt FØR v2.23.0 har `sectionSnapshotJson = NULL` — kolonnen er nullbar og med
   // vilje ikke bakfylt (`doc/DECISIONS.md`: NULL betyr ærlig «utstedt før vi registrerte dette»).
@@ -177,13 +185,13 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
   //
   // Snudd er mengden naturlig avgrenset: hvor mange har lest DENNE ene seksjonen. To `IN`-lister
   // i stedet for N `OR`-grener, og det eksakte par-treffet gjøres i minnet på et lite resultat.
-  const reads = await prisma.courseSectionRead.findMany({
+  const reads = await reader.courseSectionRead.findMany({
     where: { sectionId },
     select: { userId: true, courseId: true, readAt: true },
   });
   if (reads.length === 0) return;
 
-  const legacy = await prisma.courseCompletion.findMany({
+  const legacy = await reader.courseCompletion.findMany({
     where: {
       sectionSnapshotJson: null,
       userId: { in: [...new Set(reads.map((r) => r.userId))] },
@@ -222,19 +230,19 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
 
 // Antall deltakere som har PÅBEGYNT (lest en seksjon eller levert et forsøk på en kurs-modul)
 // men IKKE fullført (ingen CourseCompletion). Brukt av G3-vakta for kurs.
-export async function countCourseInProgressParticipants(courseId: string): Promise<number> {
+export async function countCourseInProgressParticipants(courseId: string, reader: LifecycleReader = prisma): Promise<number> {
   const [reads, submissions, completions] = await Promise.all([
-    prisma.courseSectionRead.findMany({
+    reader.courseSectionRead.findMany({
       where: { courseId },
       select: { userId: true },
       distinct: ["userId"],
     }),
-    prisma.submission.findMany({
+    reader.submission.findMany({
       where: { module: { courseItems: { some: { courseId } } } },
       select: { userId: true },
       distinct: ["userId"],
     }),
-    prisma.courseCompletion.findMany({ where: { courseId }, select: { userId: true } }),
+    reader.courseCompletion.findMany({ where: { courseId }, select: { userId: true } }),
   ]);
 
   const completed = new Set(completions.map((c) => c.userId));
@@ -251,8 +259,8 @@ export async function countCourseInProgressParticipants(courseId: string): Promi
 
 // G3: et kurs med minst én påbegynt-ufullført deltaker kan ikke arkiveres (pensjoneres). Avpublisering
 // er bevisst unntatt (reversibel «myk» nedtaking) — derfor peker meldingen på Avpubliser som alternativ.
-export async function assertCourseHasNoInProgressParticipants(courseId: string, verb: string): Promise<void> {
-  const count = await countCourseInProgressParticipants(courseId);
+export async function assertCourseHasNoInProgressParticipants(courseId: string, verb: string, reader: LifecycleReader = prisma): Promise<void> {
+  const count = await countCourseInProgressParticipants(courseId, reader);
   if (count > 0) {
     const deltaker = count === 1 ? "1 deltaker er" : `${count} deltakere er`;
     throw new DomainRuleError(

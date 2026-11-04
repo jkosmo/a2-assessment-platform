@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
+import type { DbTransactionClient } from "../../db/transaction.js";
+import { runContentWrite } from "../../db/contentLock.js";
 import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { putAsset, getAsset, deleteAsset } from "./assetStorage.js";
 import { canParticipantReadSection } from "./enrollmentService.js";
@@ -84,6 +86,7 @@ export async function createSectionAsset(input: {
   mimeType: string;
   buffer: Buffer;
 }) {
+  // Rask avvisning før opplastingen; sjekken som gjelder, står i den låste transaksjonen under.
   const section = await prisma.courseSection.findUnique({
     where: { id: input.sectionId },
     select: { id: true },
@@ -113,16 +116,29 @@ export async function createSectionAsset(input: {
   // leaves no row; a failed row-insert leaves an orphan blob (rare, tolerable for v1).
   await putAsset(blobPath, storedBuffer, input.mimeType);
 
-  return prisma.sectionAsset.create({
-    data: {
-      sectionId: input.sectionId,
-      filename: safeName,
-      mimeType: input.mimeType,
-      blobPath,
-      sizeBytes: storedBuffer.byteLength,
-    },
-    select: { id: true, sectionId: true, filename: true, mimeType: true, sizeBytes: true },
-  });
+  // #934 skive 4a: raden skrives under innholdslåsen, og seksjonen sjekkes på nytt etter den (den kan være
+  // slettet mens fila ble lastet opp). Fila er alt i lageret; blir raden ikke skrevet, ryddes den bort.
+  try {
+    return await runContentWrite(async (tx) => {
+      const stillThere = await tx.courseSection.findUnique({ where: { id: input.sectionId }, select: { id: true } });
+      if (!stillThere) {
+        throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+      }
+      return tx.sectionAsset.create({
+        data: {
+          sectionId: input.sectionId,
+          filename: safeName,
+          mimeType: input.mimeType,
+          blobPath,
+          sizeBytes: storedBuffer.byteLength,
+        },
+        select: { id: true, sectionId: true, filename: true, mimeType: true, sizeBytes: true },
+      });
+    });
+  } catch (error) {
+    await reclaimAssetBlobs([blobPath]);
+    throw error;
+  }
 }
 
 export async function listSectionAssets(sectionId: string) {
@@ -202,9 +218,13 @@ function assetFiles(asset: { blobPath: string; localizedBlobPaths: unknown; layo
 // localized SVG variant, and (#1079) every other layout with its variants. Query this BEFORE the
 // sections are deleted: `SectionAsset` cascades away with the section (`onDelete: Cascade`), so
 // afterwards there is nothing left to look the paths up from. Returns a flat, de-duplicated list.
-export async function collectSectionAssetBlobPaths(sectionIds: string[]): Promise<string[]> {
+// #934 skive 4a: `reader` er transaksjonen som sletter, så stiene er de radene slettingen faktisk tar med seg.
+export async function collectSectionAssetBlobPaths(
+  sectionIds: string[],
+  reader: Pick<DbTransactionClient, "sectionAsset"> | typeof prisma = prisma,
+): Promise<string[]> {
   if (sectionIds.length === 0) return [];
-  const assets = await prisma.sectionAsset.findMany({
+  const assets = await reader.sectionAsset.findMany({
     where: { sectionId: { in: sectionIds } },
     select: { blobPath: true, localizedBlobPaths: true, layoutVariants: true },
   });
@@ -488,10 +508,28 @@ export async function localizeSectionAssets(
     const layoutVariants = Object.fromEntries(
       otherLayouts.map(([layout, variant]) => [layout, { blobPath: variant.blobPath, localizedBlobPaths: otherLocalized.get(layout) ?? {} }]),
     );
-    await prisma.sectionAsset.update({
-      where: { id: asset.id },
-      data: { sourceLocale, localizedBlobPaths, ...(otherLayouts.length > 0 ? { layoutVariants } : {}) },
-    });
+    // #934 skive 4a: raden skrives under innholdslåsen (SectionAsset er innhold). Oversettelsen tar tid hos
+    // språkmodellen, så den skjer FØR låsen; bare skrivingen står i kø. Er figuren slettet i mellomtiden, er
+    // det ingenting å skrive til, og de nye filene ryddes bort.
+    const newPaths = [...Object.values(localizedBlobPaths), ...[...otherLocalized.values()].flatMap((paths) => Object.values(paths))];
+    let written: { count: number };
+    try {
+      written = await runContentWrite((tx) =>
+        tx.sectionAsset.updateMany({
+          where: { id: asset.id },
+          data: { sourceLocale, localizedBlobPaths, ...(otherLayouts.length > 0 ? { layoutVariants } : {}) },
+        }),
+      );
+    } catch (error) {
+      // Raden ble ikke skrevet (f.eks. 503 content_busy, QA-porten 2.131.0 runde 2): ingenting peker på de nye
+      // filene. De ryddes bort, og feilen går videre.
+      await reclaimAssetBlobs(newPaths);
+      throw error;
+    }
+    if (written.count === 0) {
+      await reclaimAssetBlobs(newPaths);
+      continue;
+    }
     // #1090: nothing points at the translated files the row pointed at BEFORE. They used to stay in
     // storage for good — two per figure for every new translation, four when the figure has a narrow
     // layout. Every file written above has a new name, so none of the old ones is still in use.

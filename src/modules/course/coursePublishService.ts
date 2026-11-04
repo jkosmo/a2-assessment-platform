@@ -1,14 +1,20 @@
 import { prisma } from "../../db/prisma.js";
-import { AppError, NotFoundError } from "../../errors/AppError.js";
+import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { publishCourse } from "./courseCommands.js";
 import { publishSection, evaluateSectionTranslationGate } from "./sectionCommands.js";
 import { publishModuleVersion } from "../adminContent/adminContentCommands.js";
-import { courseRepository, createCourseRepository } from "./courseRepository.js";
+import { createCourseRepository } from "./courseRepository.js";
 import { evaluateModulePublishGate, flattenStoredLocalized } from "../adminContent/modulePublishGate.js";
 import { listManageableContentIds } from "../content/contentOwnershipService.js";
-import { certificationRepository } from "../certification/index.js";
-import { runInTransaction } from "../../db/transaction.js";
-import { applyCourseVersionChange, applyMinorVersionToCoursesContaining, countCertificateHolders, lockCourseRow, type CourseVersionBump, type CourseVersionChoice } from "./courseVersioning.js";
+import { createCertificationRepository } from "../certification/index.js";
+import type { DbTransactionClient } from "../../db/transaction.js";
+import { runContentWrite } from "../../db/contentLock.js";
+import { applyCourseVersionChange, applyMinorVersionToCoursesContaining, countCertificateHolders, type CourseVersionBump, type CourseVersionChoice } from "./courseVersioning.js";
+
+// #934 skive 4a (kjent hull 2 etter 2.129.0): oppslagene tar klienten som parameter. Inne i en publisering
+// leser de på transaksjonen som holder innholdslåsen — de ser det låsen beskytter, og bruker ikke en forbindelse
+// til i poolen mens transaksjonen holder sin. Utelatt: den globale klienten (forhåndsvisningene).
+type PublishReader = DbTransactionClient | typeof prisma;
 
 // Cascade-publish (#734): when an author publishes a COURSE, its modules/sections must already be
 // published — otherwise the published course contains unavailable content (violates content-
@@ -50,6 +56,8 @@ export type PublishBlocker = {
 export type CourseUnpublishedItem = {
   type: "MODULE" | "SECTION";
   id: string;
+  /** #934 skive 4a: versjonen som ville blitt publisert (den nyeste), eller null når elementet ikke kan publiseres. */
+  versionId: string | null;
   title: string | null;
   /** Whether this unpublished item can be published right now (all guards satisfied). */
   publishable: boolean;
@@ -121,8 +129,8 @@ type ModuleEvaluation = {
   latestVersionId: string | null;
 };
 
-async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
-  const module = await prisma.module.findUnique({
+async function evaluateModule(moduleId: string, reader: PublishReader): Promise<ModuleEvaluation> {
+  const module = await reader.module.findUnique({
     where: { id: moduleId },
     select: {
       title: true,
@@ -198,7 +206,7 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
     rationale: string | null;
   }> = [];
   if (latest.mcqSetVersionId) {
-    const set = await prisma.mCQSetVersion.findUnique({
+    const set = await reader.mCQSetVersion.findUnique({
       where: { id: latest.mcqSetVersionId },
       select: {
         _count: { select: { questions: true } },
@@ -257,8 +265,8 @@ type SectionEvaluation = {
   latestVersionId: string | null;
 };
 
-async function evaluateSection(sectionId: string): Promise<SectionEvaluation> {
-  const section = await prisma.courseSection.findUnique({
+async function evaluateSection(sectionId: string, reader: PublishReader): Promise<SectionEvaluation> {
+  const section = await reader.courseSection.findUnique({
     where: { id: sectionId },
     select: { title: true, archivedAt: true, activeVersionId: true },
   });
@@ -276,7 +284,7 @@ async function evaluateSection(sectionId: string): Promise<SectionEvaluation> {
 
   const title = flattenLocalized(section.title);
   const unpublished = section.activeVersionId === null;
-  const latest = await prisma.courseSectionVersion.findFirst({
+  const latest = await reader.courseSectionVersion.findFirst({
     where: { sectionId },
     orderBy: { versionNo: "desc" },
     select: { id: true, bodyMarkdown: true },
@@ -339,8 +347,9 @@ async function evaluateSection(sectionId: string): Promise<SectionEvaluation> {
 
 // (a) Inspect a course's items and report which modules/sections are unpublished and whether each is
 // currently publishable. Only unpublished items are returned; already-live items are omitted.
-export async function getCoursePublishPreview(courseId: string): Promise<CoursePublishPreview> {
-  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
+export async function getCoursePublishPreview(courseId: string, reader: PublishReader = prisma): Promise<CoursePublishPreview> {
+  const courseRepository = createCourseRepository(reader);
+  const course = await reader.course.findUnique({ where: { id: courseId }, select: { id: true } });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 
   // #958: gaten må se ALT — dens spørsmål er «hva er ikke publisert ennå», og den døra som skjuler
@@ -352,23 +361,25 @@ export async function getCoursePublishPreview(courseId: string): Promise<CourseP
 
   for (const item of items) {
     if (item.itemType === "MODULE" && item.moduleId) {
-      const evaluation = await evaluateModule(item.moduleId);
+      const evaluation = await evaluateModule(item.moduleId, reader);
       if (evaluation.unpublished) {
         unpublishedItems.push({
           type: "MODULE",
           id: item.moduleId,
           title: evaluation.title,
+          versionId: evaluation.latestVersionId,
           publishable: evaluation.publishable,
           blockers: evaluation.blockers,
         });
       }
     } else if (item.itemType === "SECTION" && item.sectionId) {
-      const evaluation = await evaluateSection(item.sectionId);
+      const evaluation = await evaluateSection(item.sectionId, reader);
       if (evaluation.unpublished) {
         unpublishedItems.push({
           type: "SECTION",
           id: item.sectionId,
           title: evaluation.title,
+          versionId: evaluation.latestVersionId,
           publishable: evaluation.publishable,
           blockers: evaluation.blockers,
         });
@@ -376,7 +387,7 @@ export async function getCoursePublishPreview(courseId: string): Promise<CourseP
     }
   }
 
-  const versionRow = await prisma.course.findUniqueOrThrow({
+  const versionRow = await reader.course.findUniqueOrThrow({
     where: { id: courseId },
     select: { publishedAt: true, versionMajor: true, versionMinor: true },
   });
@@ -389,9 +400,29 @@ export async function getCoursePublishPreview(courseId: string): Promise<CourseP
       published: versionRow.publishedAt != null,
       versionMajor: versionRow.versionMajor,
       versionMinor: versionRow.versionMinor,
-      certificateHolders: await countCertificateHolders(prisma, courseId, versionRow.versionMajor),
+      certificateHolders: await countCertificateHolders(reader, courseId, versionRow.versionMajor),
     },
   };
+}
+
+/**
+ * #934 skive 4a: «Publiser kurs» når ingenting er upublisert. Ruta så det i en forhåndsvisning FØR låsen; her ses
+ * det på nytt etter den. Har noen lagt et upublisert element inn i kurset i mellomtiden, publiseres ikke kurset —
+ * det ville stått levende med noe deltakeren ikke kan åpne (I1). Samme svar som ruta gir når det er upubliserte
+ * elementer: `409 course_has_unpublished_items` med forhåndsvisningen, så dialogen kan spørre.
+ */
+export async function publishCourseChecked(courseId: string, actorId?: string) {
+  return runContentWrite(async (tx) => {
+    const fresh = await getCoursePublishPreview(courseId, tx);
+    if (!fresh.allPublished) {
+      throw new ConflictError(
+        "course_has_unpublished_items",
+        "The course has unpublished items. Confirm cascade publish with { publishItems: true }.",
+        { unpublishedItems: fresh.unpublishedItems, publishable: fresh.publishable },
+      );
+    }
+    return publishCourse(courseId, actorId, tx);
+  });
 }
 
 // (b) Publish a course, cascade-publishing its unpublished items first (items → course).
@@ -408,18 +439,21 @@ export async function publishCourseCascade(courseId: string, actorId?: string, c
   const preview = await getCoursePublishPreview(courseId);
 
   if (preview.allPublished) {
-    // Nothing to cascade — plain publish (still enforces G1: at least one module).
-    const course = await publishCourse(courseId, actorId);
+    // Nothing to cascade — plain publish (still enforces G1: at least one module). #934 skive 4a: sjekket på nytt
+    // etter låsen.
+    const course = await publishCourseChecked(courseId, actorId);
     return { course, publishedItems: [] };
   }
 
-  if (!preview.publishable) {
-    throw new AppError(
+  const blockedByItems = (items: CourseUnpublishedItem[]) =>
+    new AppError(
       "course_publish_blocked_by_items",
       422,
       "One or more course items cannot be published. Fix them before publishing the course.",
-      { unpublishedItems: preview.unpublishedItems },
+      { unpublishedItems: items },
     );
+  if (!preview.publishable) {
+    throw blockedByItems(preview.unpublishedItems);
   }
 
   // #960: ALT som kan avvise, avvises FØR første skriving.
@@ -434,45 +468,45 @@ export async function publishCourseCascade(courseId: string, actorId?: string, c
   // Nå slås versjonene opp og aktøren kreves i ett forberedelsessteg. Feiler noe her, er ingenting
   // skrevet. Vakter som leser som vakter, men står for sent, er verre enn ingen vakter
   // (`adminSections.ts`-regelen).
-  const plan: Array<{ type: "SECTION"; id: string } | { type: "MODULE"; id: string; versionId: string }> = [];
-  for (const item of preview.unpublishedItems) {
-    if (item.type === "SECTION") {
-      plan.push({ type: "SECTION", id: item.id });
-      continue;
-    }
-    const latest = await prisma.moduleVersion.findFirst({
-      where: { moduleId: item.id },
-      orderBy: { versionNo: "desc" },
-      select: { id: true },
-    });
-    if (!latest) {
-      // Nåbar bare som en kappestrid: versjonen forsvant mellom forhåndsvisningen og nå.
-      throw new AppError("module_no_content", 422, `Module ${item.id} has no version to publish.`, { moduleId: item.id });
-    }
-    plan.push({ type: "MODULE", id: item.id, versionId: latest.id });
-  }
+  // #934 skive 4a: forberedelsen står nå ETTER innholdslåsen, inne i transaksjonen (under). Forhåndsvisningen
+  // over er det forfatteren svarte på; stemmer den ikke med det som regnes ut etter låsen, er svaret gitt på noe
+  // annet (409), og ingenting er publisert.
+  // Med versjonen: lagrer noen en ny versjon av et element mens publiseringen venter på låsen, er det ikke den
+  // forhåndsvisningen viste (QA-porten 2.131.0, runde 1) — 409 i stedet for å publisere den.
+  const planIds = preview.unpublishedItems.map((item) => `${item.type}:${item.id}:${item.versionId ?? "-"}`).sort();
 
   // Publisering tilskrives en aktør. Ruta garanterer én; en kaller uten HTTP-laget som ikke gjør
   // det, er en programmeringsfeil — og den skal stoppe her, ikke halvveis i en kaskade.
-  // (`plan` er aldri tom her: vi er forbi `preview.allPublished`.)
+  // (planen er aldri tom her: vi er forbi `preview.allPublished`.)
   if (!actorId) {
     throw new AppError("internal_error", 500, "Publishing course items requires an actor; the caller passed none.");
   }
 
-  // #934 skive 3: alt i ÉN transaksjon — låst kursrad, øyeblikksbildet FØR, elementene, kursets versjon, og
-  // så selve publiseringen. Versjonen avgjøres FØR `publishCourse`: et kurs som aldri har vært ute, er da
-  // fortsatt uten delingslenke og blir 1.0; et som har vært ute, får spørsmålet. Stopper noe, er ingenting
-  // publisert (I1, og ingen ny tekst uten versjon).
+  // #934 skive 3: alt i ÉN transaksjon — øyeblikksbildet FØR, elementene, kursets versjon, og så selve
+  // publiseringen. Versjonen avgjøres FØR `publishCourse`: et kurs som aldri har vært ute, er da fortsatt uten
+  // delingslenke og blir 1.0; et som har vært ute, får spørsmålet. Stopper noe, er ingenting publisert (I1, og
+  // ingen ny tekst uten versjon). #934 skive 4a: innholdslåsen er det første transaksjonen gjør.
   try {
-    return await runInTransaction(async (tx) => {
-      await lockCourseRow(tx, courseId);
-      // To samtidige «Publiser kurs» kan begge ha laget planen. Den andre venter på låsen; så leses det
+    return await runContentWrite(async (tx) => {
+      // To samtidige «Publiser kurs» kan begge ha sett forhåndsvisningen. Den andre venter på låsen; så leses det
       // upubliserte på nytt, og har den første publisert det, er svaret gitt på noe annet (409).
-      const fresh = await getCoursePublishPreview(courseId);
-      const freshIds = fresh.unpublishedItems.map((item) => `${item.type}:${item.id}`).sort();
-      const planIds = plan.map((item) => `${item.type}:${item.id}`).sort();
+      const fresh = await getCoursePublishPreview(courseId, tx);
+      const freshIds = fresh.unpublishedItems.map((item) => `${item.type}:${item.id}:${item.versionId ?? "-"}`).sort();
       if (freshIds.length !== planIds.length || freshIds.some((id, index) => id !== planIds[index])) {
         throw new AppError("course_publish_items_changed", 409, "The course changed since publishing was requested. Reload and try again.");
+      }
+      if (!fresh.publishable) throw blockedByItems(fresh.unpublishedItems);
+      const plan: Array<{ type: "SECTION"; id: string } | { type: "MODULE"; id: string; versionId: string }> = [];
+      for (const item of fresh.unpublishedItems) {
+        if (item.type === "SECTION") {
+          plan.push({ type: "SECTION", id: item.id });
+          continue;
+        }
+        // Versjonen forhåndsvisningen viste og som ble sammenlignet over — ikke en ny oppslag.
+        if (!item.versionId) {
+          throw new AppError("module_no_content", 422, `Module ${item.id} has no version to publish.`, { moduleId: item.id });
+        }
+        plan.push({ type: "MODULE", id: item.id, versionId: item.versionId });
       }
       const repo = createCourseRepository(tx);
       const before = await repo.findSectionVersions(courseId);
@@ -556,8 +590,10 @@ export type CoursePendingVersions = {
 
 export type PendingVersionsActor = { userId: string; roles: string[] };
 
-export async function getCoursePendingVersions(courseId: string, actor: PendingVersionsActor): Promise<CoursePendingVersions> {
-  const course = await prisma.course.findUnique({
+export async function getCoursePendingVersions(courseId: string, actor: PendingVersionsActor, reader: PublishReader = prisma): Promise<CoursePendingVersions> {
+  const courseRepository = createCourseRepository(reader);
+  const certificationRepository = createCertificationRepository(reader);
+  const course = await reader.course.findUnique({
     where: { id: courseId },
     select: { id: true, publishedAt: true, versionMajor: true, versionMinor: true },
   });
@@ -575,7 +611,7 @@ export async function getCoursePendingVersions(courseId: string, actor: PendingV
   const notOwnedItems: CoursePendingVersions["notOwnedItems"] = [];
   for (const item of courseItems) {
     if (item.itemType === "MODULE" && item.moduleId) {
-      const evaluation = await evaluateModule(item.moduleId);
+      const evaluation = await evaluateModule(item.moduleId, reader);
       if (!evaluation.pending) continue;
       if (!ownedModules.has(item.moduleId)) {
         notOwnedItems.push({ type: "MODULE", id: item.moduleId, title: evaluation.title });
@@ -593,7 +629,7 @@ export async function getCoursePendingVersions(courseId: string, actor: PendingV
         passedCount,
       });
     } else if (item.itemType === "SECTION" && item.sectionId) {
-      const evaluation = await evaluateSection(item.sectionId);
+      const evaluation = await evaluateSection(item.sectionId, reader);
       if (!evaluation.pending) continue;
       if (!ownedSections.has(item.sectionId)) {
         notOwnedItems.push({ type: "SECTION", id: item.sectionId, title: evaluation.title });
@@ -623,7 +659,7 @@ export async function getCoursePendingVersions(courseId: string, actor: PendingV
       published: course.publishedAt != null,
       versionMajor: course.versionMajor,
       versionMinor: course.versionMinor,
-      certificateHolders: await countCertificateHolders(prisma, courseId, course.versionMajor),
+      certificateHolders: await countCertificateHolders(reader, courseId, course.versionMajor),
     },
   };
 }
@@ -662,14 +698,25 @@ export async function publishCoursePendingVersions(
   // ingenting publisert: en ny tekst skal aldri stå levende uten versjonen som hører til, og et nytt forsøk
   // ser det samme settet som det første. Seksjonsversjonene RETT FØR leses først i transaksjonen.
   try {
-    return await runInTransaction(async (tx) => {
+    return await runContentWrite(async (tx) => {
       // To samtidige «Publiser» kan begge ha passert sjekken over. Låsen gjør at den andre venter; så leses
       // settet på nytt, og har den første publisert det, er svaret gitt på noe annet (409) — ikke en ny økning.
-      await lockCourseRow(tx, courseId);
-      const fresh = await getCoursePendingVersions(courseId, actor);
+      // #934 skive 4a: også det andre sjekkene over avgjorde, sjekkes på nytt etter låsen.
+      const fresh = await getCoursePendingVersions(courseId, actor, tx);
       const now = fresh.items.map((item) => item.versionId ?? "").sort();
       if (now.length !== seen.length || now.some((id, index) => id !== seen[index])) {
         throw new AppError("pending_versions_changed", 409, "The versions ready to publish changed since they were shown. Reload and try again.");
+      }
+      if (!fresh.publishable) {
+        throw new AppError(
+          "course_pending_blocked",
+          422,
+          "One or more new versions cannot be published. Fix them before publishing.",
+          { items: fresh.items },
+        );
+      }
+      if (fresh.passedTotal > 0 && input.supersedesEarlierPasses === undefined) {
+        throw new AppError("revision_answer_required", 400, "Participants have passed some of these modules: say whether this is a revision (supersedesEarlierPasses).");
       }
       const repo = createCourseRepository(tx);
       const before = await repo.findSectionVersions(courseId);

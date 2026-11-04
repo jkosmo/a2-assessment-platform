@@ -1396,6 +1396,12 @@ async function openCascadeDeleteDialog(courseId, courseTitle) {
       getHeaders,
     );
     renderCascadeDeletePreview(preview);
+    if (pendingCascadeDelete && pendingCascadeDelete.courseId === courseId) {
+      pendingCascadeDelete.expected = {
+        expectedDeletedModuleIds: (preview?.deletableModules ?? []).map((entry) => entry.id),
+        expectedDeletedSectionIds: (preview?.deletableSections ?? []).map((entry) => entry.id),
+      };
+    }
   } catch (err) {
     if (textEl) textEl.textContent = apiErrorText(err);
   }
@@ -1406,13 +1412,15 @@ function initCascadeDeleteDialog() {
   const cancelBtn = document.getElementById("cascadeDeleteCancelBtn");
   confirmBtn?.addEventListener("click", async () => {
     if (!pendingCascadeDelete) return;
-    const { courseId } = pendingCascadeDelete;
+    const { courseId, expected } = pendingCascadeDelete;
     confirmBtn.disabled = true;
     try {
+      // #934 skive 4a: det forhåndsvisningen sa ville bli slettet. Har det endret seg (en delt seksjon er tatt ut
+      // av det andre kurset), svarer serveren 409 og sletter ingenting.
       const summary = await apiFetch(
         `/api/admin/content/courses/${encodeURIComponent(courseId)}/cascade-delete`,
         getHeaders,
-        { method: "POST" },
+        { method: "POST", ...(expected ? { body: JSON.stringify(expected) } : {}) },
       );
       cascadeDeleteDialog.close();
       pendingCascadeDelete = null;
@@ -1523,8 +1531,12 @@ async function renderDetailView(courseId) {
     allLibrarySections = [];
   }
 
-  // Init course item list from the mixed CourseItem sequence (#490). Falls back
-  // to the legacy module-only shape if the items endpoint is unavailable.
+  // Init course item list from the mixed CourseItem sequence (#490).
+  //
+  // ⚠️ #934 skive 4a: INGEN RESERVELISTE. Feilet lastingen, brukte skjemaet en gammel liste med bare modulene
+  // (`course.modules`). Skjemaet sender hele lista ved hver lagring, så en lagring tok da bort alle seksjonene
+  // fra kurset. Nå står lista tom, skjemaet sier fra, og `saveCourse` nekter å lagre.
+  courseItemsLoadFailed = false;
   if (course) {
     try {
       const itemsData = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/items`, getHeaders);
@@ -1532,9 +1544,8 @@ async function renderDetailView(courseId) {
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map(it => ({ type: it.type, refId: it.type === "MODULE" ? it.moduleId : it.sectionId, title: localizedText(it.title) || it.moduleId || it.sectionId, discussionsEnabled: it.discussionsEnabled !== false }));
     } catch {
-      courseModules = (course.modules ?? [])
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map(cm => ({ type: "MODULE", refId: cm.moduleId, title: localizedText(cm.moduleTitle) || cm.moduleId }));
+      courseModules = [];
+      courseItemsLoadFailed = true;
     }
   } else {
     courseModules = [];
@@ -1724,6 +1735,7 @@ async function copyCourseShareLink() {
 function bindCourseDetail() {
   const { courseId } = courseDetail;
   renderModuleList();
+  showCourseItemsLoadError();
   initDetailEventListeners(courseId);
   // #787 slice 5: content-owner management for this course (a new course has no id yet).
   const ownerHost = document.getElementById("ownerPanelHost");
@@ -1732,12 +1744,25 @@ function bindCourseDetail() {
   }
 }
 
+// #934 skive 4a: feilet lastingen av elementlista, står meldingen i skjemaets feilbanner, og lagring er stengt.
+function showCourseItemsLoadError() {
+  if (!courseItemsLoadFailed) return false;
+  const errorBanner = document.getElementById("formErrorBanner");
+  if (errorBanner) {
+    errorBanner.innerHTML = `<div class="error-banner" data-course-items-load-error>${escapeHtml(t("courses.itemsLoadError"))}</div>`;
+    errorBanner.hidden = false;
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Skjemasida for kurs (form-page.js). #1046 nivå to.
 // ---------------------------------------------------------------------------
 
 let courseDetail = null; // { courseId, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled }
 let initialCourseItemsKey = ""; // #934 skive 3: kursets innhold da det ble lastet
+// #934 skive 4a: elementlista kom ikke. Da kan skjemaet ikke lagres — det ville sendt en tom (eller gammel) liste.
+let courseItemsLoadFailed = false;
 let courseFormPage = null;
 
 const courseFormTexts = () => formPageTexts(t, { back: t("courses.back"), typeLabel: t("courses.typeLabel"), untitled: t("courses.untitled") });
@@ -2194,6 +2219,9 @@ async function saveCourse(courseId) {
   const saveBtn = document.getElementById("formSaveBtn");
   const errorBanner = document.getElementById("formErrorBanner");
 
+  // #934 skive 4a: uten elementlista lagres ingenting — en lagring ville tatt bort det som ikke ble lastet.
+  if (courseId && showCourseItemsLoadError()) return false;
+
   const collectedValues = collectLocaleValues();
   const certLevel = document.getElementById("certLevel")?.value ?? "";
   const enrollmentPolicy = document.getElementById("enrollmentPolicy")?.value === "RESTRICTED" ? "RESTRICTED" : "OPEN";
@@ -2280,10 +2308,10 @@ async function saveCourse(courseId) {
       ? { type: "SECTION", sectionId: m.refId, discussionsEnabled: m.discussionsEnabled !== false }
       : { type: "MODULE", moduleId: m.refId, discussionsEnabled: m.discussionsEnabled !== false },
   );
-  const saveItems = (id) => apiFetch(`/api/admin/content/courses/${encodeURIComponent(id)}/items`, getHeaders, {
+  // Et NYTT kurs har aldri vært ute: elementene lagres etter at kurset er opprettet, uten teller (#934 skive 4a).
+  const saveNewCourseItems = (id) => apiFetch(`/api/admin/content/courses/${encodeURIComponent(id)}/items`, getHeaders, {
     method: "PUT",
-    // #934 skive 3: markøren sier at dette skjemaet kjenner versjonsspørsmålet (overgangen i PUT …/items).
-    body: JSON.stringify({ items, versionAware: true, ...(versionChoice ? { version: versionChoice } : {}) }),
+    body: JSON.stringify({ items }),
   });
 
   try {
@@ -2306,12 +2334,13 @@ async function saveCourse(courseId) {
       });
       savedCourseId = body.course?.id;
       if (!savedCourseId) throw new Error(t("courses.noIdReturned"));
-      await saveItems(savedCourseId);
+      await saveNewCourseItems(savedCourseId);
     } else {
-      // Update. #934 skive 3: er innholdet endret, går navn og innhold i ÉTT kall til et eget endepunkt, i én
-      // transaksjon, med forfatterens svar — serveren avgjør versjonen én gang. En gammel server svarer 404 på
-      // det endepunktet i stedet for å lagre halvt (QA-porten). Uendret innhold: som før.
-      await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}${itemsChanged ? "/content" : ""}`, getHeaders, {
+      // Update. #934 skive 4a: ALLTID ett kall til `…/content` — navn, innstillinger, elementene (alltid med) og
+      // forfatterens svar, i én transaksjon. `expectedRevision` er telleren skjemaet lastet: har noen andre lagret
+      // kurset siden, svarer serveren 409 `course_changed` og har ikke skrevet noe. Skjemaet beholder det
+      // forfatteren skrev (feilbanneret under), og forfatteren laster siden på nytt.
+      await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/content`, getHeaders, {
         method: "PUT",
         body: JSON.stringify({
           title: normalizedTitle,
@@ -2322,10 +2351,11 @@ async function saveCourse(courseId) {
           discussionOwnerNotifications,
           sortOrder,
           themeIds,
-          ...(itemsChanged ? { items, ...(versionChoice ? { version: versionChoice } : {}) } : {}),
+          items,
+          ...(versionChoice ? { version: versionChoice } : {}),
+          expectedRevision: Number.isInteger(loadedCourse?.contentRevision) ? loadedCourse.contentRevision : 0,
         }),
       });
-      if (!itemsChanged) await saveItems(courseId);
     }
 
     showToast(t("courses.saved"), "success");

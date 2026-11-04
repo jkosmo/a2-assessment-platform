@@ -2,7 +2,8 @@ import { prisma } from "../../db/prisma.js";
 import type { ReportFilters } from "../reporting/types.js";
 import { CERTIFICATION_PASSED_STATUSES } from "../certification/certificationRepository.js";
 import { sectionAvailableWhere } from "./sectionAvailability.js";
-import { countCertificateHolders, loadSectionReadRules, lockCourseRowShared, readCountsForCurrentVersion } from "./courseVersioning.js";
+import { countCertificateHolders, loadSectionReadRules, readCountsForCurrentVersion } from "./courseVersioning.js";
+import type { ContentReadTx } from "../../db/contentLock.js";
 
 function buildSubmissionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
   return {
@@ -132,17 +133,18 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
     // #934 skive 3: en lesing som ikke teller for kursets nåværende hovedversjon (seksjonen er endret
     // siden forrige), får nytt tidspunkt når deltakeren leser den på nytt — ellers kunne den aldri telle.
     // En lesing som teller, står urørt: tidspunktet er når hen leste, og aktivitetsrapporten bygger på det.
-    async markSectionRead(userId: string, courseId: string, sectionId: string) {
-      // Venter på en åpen versjonsendring, så tidspunktet aldri havner på feil side av grensen (se låsen).
-      await lockCourseRowShared(client, courseId);
-      const read = await client.courseSectionRead.upsert({
+    // #934 skive 4a: `locked` er transaksjonen som holder innholdslåsen DELT (`runContentRead`), og det er den
+    // lesingen skrives på. Den venter på en åpen versjonsendring, så tidspunktet aldri havner på feil side av
+    // grensen `publishedAt`. Uten den merkede klienten kompilerer ikke kallet.
+    async markSectionRead(locked: ContentReadTx, userId: string, courseId: string, sectionId: string) {
+      const read = await locked.courseSectionRead.upsert({
         where: { userId_courseId_sectionId: { userId, courseId, sectionId } },
         update: {},
         create: { userId, courseId, sectionId },
       });
-      const rule = (await loadSectionReadRules(client, [courseId])).get(courseId);
+      const rule = (await loadSectionReadRules(locked, [courseId])).get(courseId);
       if (readCountsForCurrentVersion(rule, sectionId, read.readAt)) return read;
-      return client.courseSectionRead.update({ where: { id: read.id }, data: { readAt: new Date() } });
+      return locked.courseSectionRead.update({ where: { id: read.id }, data: { readAt: new Date() } });
     },
 
     // #934 skive 3: bare lesinger som teller for kursets nåværende hovedversjon (courseVersioning.ts).

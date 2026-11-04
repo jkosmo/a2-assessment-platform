@@ -1,5 +1,5 @@
 import { prisma } from "../../db/prisma.js";
-import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
+import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { AppError, DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
@@ -94,7 +94,7 @@ export async function createSection(input: {
   // #796: a transactional import pre-generates the section id so its asset blobs can be staged under the
   // final `sections/<id>/…` path before the graph transaction opens. Omitted → the DB generates the id.
   id?: string;
-}, tx?: DbTransactionClient) {
+}, tx?: ContentWriteTx) {
   // #916: door 2 of the publish gate. An explicit `draft: true` already keeps the section
   // unpublished; a language hole now does the same. `heldBackByTranslationGate` distinguishes the
   // two for the caller — the author asked for one and did not ask for the other.
@@ -102,7 +102,7 @@ export async function createSection(input: {
   const heldBackByTranslationGate = !input.draft && !gate.ok;
   const keepAsDraft = Boolean(input.draft) || heldBackByTranslationGate;
 
-  const run = async (client: DbTransactionClient) => {
+  const run = async (client: ContentWriteTx) => {
     const section = await client.courseSection.create({
       data: { ...(input.id ? { id: input.id } : {}), title: input.title },
     });
@@ -149,7 +149,7 @@ export async function createSection(input: {
     }
     return { ...result, heldBackByTranslationGate, translationGateIssues: gate.issues };
   };
-  return tx ? run(tx) : runInTransaction(run);
+  return tx ? run(tx) : runContentWrite(run);
 }
 
 // #763 (Layer B): create a section AND its inline figures/images in one call. Returns the section
@@ -183,7 +183,7 @@ export async function createSectionWithAssets(input: {
 
   let section: Awaited<ReturnType<typeof createSection>>;
   try {
-    section = await runInTransaction(async (tx) => {
+    section = await runContentWrite(async (tx) => {
       const created = await createSection(
         {
           id: sectionId,
@@ -223,10 +223,11 @@ export async function createSectionWithAssets(input: {
 }
 
 export async function updateSectionTitle(sectionId: string, title: string, actorId?: string) {
-  await assertSectionExists(sectionId);
   // #934 skive 3: seksjonens navn står i kursene den ligger i — en endring er levende innhold der, og gir
   // dem en mindre versjon. Samme tekst lagret på nytt er ingen endring.
-  return runInTransaction(async (tx) => {
+  // #934 skive 4a: innholdslåsen først; kursene seksjonen ligger i, leses etter den.
+  return runContentWrite(async (tx) => {
+    await assertSectionExists(sectionId, tx);
     const previous = await tx.courseSection.findUniqueOrThrow({ where: { id: sectionId }, select: { title: true } });
     const section = await tx.courseSection.update({
       where: { id: sectionId },
@@ -238,22 +239,24 @@ export async function updateSectionTitle(sectionId: string, title: string, actor
   });
 }
 
-export async function updateSectionContent(sectionId: string, bodyMarkdown: string, actorId?: string, tx?: DbTransactionClient) {
-  const existing = await prisma.courseSection.findUnique({
-    where: { id: sectionId },
-    select: { id: true, title: true },
-  });
-  if (!existing) {
-    throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
-  }
+export async function updateSectionContent(sectionId: string, bodyMarkdown: string, actorId?: string, tx?: ContentWriteTx) {
+  // #934 skive 4a: alt etter innholdslåsen — også tittelen språkporten måler, så den ikke er fra før en
+  // samtidig navneendring.
+  const run = async (client: ContentWriteTx) => {
+    const existing = await client.courseSection.findUnique({
+      where: { id: sectionId },
+      select: { id: true, title: true },
+    });
+    if (!existing) {
+      throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+    }
 
-  // #916: door 3. Saving a section IS publishing it (latest-wins), so the gate belongs here too.
-  // The version is always written — the author's text is never lost — but it only becomes the
-  // active, participant-visible one when every gated field carries all three locales.
-  const gate = evaluateSectionTranslationGate({ title: existing.title, bodyMarkdown });
-  const heldBackByTranslationGate = !gate.ok;
+    // #916: door 3. Saving a section IS publishing it (latest-wins), so the gate belongs here too.
+    // The version is always written — the author's text is never lost — but it only becomes the
+    // active, participant-visible one when every gated field carries all three locales.
+    const gate = evaluateSectionTranslationGate({ title: existing.title, bodyMarkdown });
+    const heldBackByTranslationGate = !gate.ok;
 
-  const run = async (client: DbTransactionClient) => {
     const last = await client.courseSectionVersion.findFirst({
       where: { sectionId },
       orderBy: { versionNo: "desc" },
@@ -285,7 +288,7 @@ export async function updateSectionContent(sectionId: string, bodyMarkdown: stri
     if (!heldBackByTranslationGate) await applyMinorVersionToCoursesContaining(client, { sectionId }, actorId);
     return { ...section, heldBackByTranslationGate, translationGateIssues: gate.issues };
   };
-  return tx ? run(tx) : runInTransaction(run);
+  return tx ? run(tx) : runContentWrite(run);
 }
 
 export function getSection(sectionId: string) {
@@ -321,12 +324,21 @@ export function listSections() {
 export async function publishSection(
   sectionId: string,
   actorId?: string,
-  tx?: DbTransactionClient,
+  tx?: ContentWriteTx,
   // #934 skive 3: «Publiser nye versjoner» og «Publiser kurs» avgjør kursets versjon selv, med forfatterens
   // svar. Alle andre (seksjonens egen side) gir kursene seksjonen ligger i en mindre versjon.
   options?: { courseVersionHandledByCaller?: boolean },
 ) {
-  const reader = tx ?? prisma;
+  // #934 skive 4a: sjekkene og skrivingen i samme låste transaksjon.
+  return tx ? publishSectionLocked(tx, sectionId, actorId, options) : runContentWrite((locked) => publishSectionLocked(locked, sectionId, actorId, options));
+}
+
+async function publishSectionLocked(
+  reader: ContentWriteTx,
+  sectionId: string,
+  actorId: string | undefined,
+  options?: { courseVersionHandledByCaller?: boolean },
+) {
   const section = await reader.courseSection.findUnique({
     where: { id: sectionId },
     select: { id: true, title: true, archivedAt: true, activeVersionId: true },
@@ -374,7 +386,8 @@ export async function publishSection(
   // #934 skive 3: et nytt forsøk på en versjon som alt er aktiv, setter ingenting live — ingen ny kursversjon
   // (QA-porten). Leses FØR skrivingen: inne i den er `section` den oppdaterte raden.
   const changed = section.activeVersionId !== latest.id;
-  const write = async (tx: DbTransactionClient) => {
+  const tx = reader;
+  {
     // 2.101.0: versjonen merkes publisert. Bare pekeren ble flyttet før, så eksporten meldte en
     // levende seksjon som upublisert (`audit.publishedAt: null`) — funnet av stage-testen for
     // «Publiser alle». Står datoen alt (publisert ved lagring, eller tidligere), beholdes den.
@@ -401,15 +414,15 @@ export async function publishSection(
     );
     if (changed && !options?.courseVersionHandledByCaller) await applyMinorVersionToCoursesContaining(tx, { sectionId }, actorId);
     return section;
-  };
-  return tx ? write(tx) : runInTransaction(write);
+  }
 }
 
 // Avpubliser: nullstill activeVersionId. G2 — kan ikke avpublisere en seksjon som ligger i et kurs.
 export async function unpublishSection(sectionId: string, actorId?: string) {
-  await assertSectionExists(sectionId);
-  await assertSectionNotInAnyCourse(sectionId, "avpubliseres");
-  const updated = await runInTransaction(async (tx) => {
+  // #934 skive 4a: «ligger ikke i noe kurs» sjekkes etter innholdslåsen, i samme transaksjon som skrivingen.
+  const updated = await runContentWrite(async (tx) => {
+    await assertSectionExists(sectionId, tx);
+    await assertSectionNotInAnyCourse(sectionId, "avpubliseres", tx);
     const section = await tx.courseSection.update({
       where: { id: sectionId },
       data: { activeVersionId: null },
@@ -432,19 +445,21 @@ export async function unpublishSection(sectionId: string, actorId?: string) {
 
 // Arkiver: G2-vakt + auto-avpubliser (I3). Gjenopprett lander i Utkast.
 export async function archiveSection(sectionId: string, actorId?: string) {
-  const section = await prisma.courseSection.findUnique({
-    where: { id: sectionId },
-    select: { id: true, archivedAt: true },
-  });
-  if (!section) {
-    throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
-  }
-  if (section.archivedAt) {
-    // #999: se forklaringen over.
-    throw new DomainRuleError("section_already_archived", "The section is already archived.");
-  }
-  await assertSectionNotInAnyCourse(sectionId, "arkiveres");
-  const updated = await runInTransaction(async (tx) => {
+  // #934 skive 4a: alt etter innholdslåsen. Sjekket før, kunne seksjonen bli lagt inn i et kurs mellom
+  // sjekken og arkiveringen (Codex runde 1 nr. 2).
+  const updated = await runContentWrite(async (tx) => {
+    const existing = await tx.courseSection.findUnique({
+      where: { id: sectionId },
+      select: { id: true, archivedAt: true },
+    });
+    if (!existing) {
+      throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+    }
+    if (existing.archivedAt) {
+      // #999: se forklaringen over.
+      throw new DomainRuleError("section_already_archived", "The section is already archived.");
+    }
+    await assertSectionNotInAnyCourse(sectionId, "arkiveres", tx);
     const section = await tx.courseSection.update({
       where: { id: sectionId },
       data: { archivedAt: new Date(), activeVersionId: null },
@@ -467,18 +482,18 @@ export async function archiveSection(sectionId: string, actorId?: string) {
 
 // Gjenopprett: nullstill archivedAt (lander i Utkast — forfatteren re-publiserer bevisst).
 export async function restoreSection(sectionId: string, actorId?: string) {
-  const section = await prisma.courseSection.findUnique({
-    where: { id: sectionId },
-    select: { id: true, archivedAt: true },
-  });
-  if (!section) {
-    throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
-  }
-  if (!section.archivedAt) {
-    // #999: se forklaringen over.
-    throw new DomainRuleError("section_not_archived", "The section is not archived.");
-  }
-  const updated = await runInTransaction(async (tx) => {
+  const updated = await runContentWrite(async (tx) => {
+    const existing = await tx.courseSection.findUnique({
+      where: { id: sectionId },
+      select: { id: true, archivedAt: true },
+    });
+    if (!existing) {
+      throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+    }
+    if (!existing.archivedAt) {
+      // #999: se forklaringen over.
+      throw new DomainRuleError("section_not_archived", "The section is not archived.");
+    }
     const section = await tx.courseSection.update({
       where: { id: sectionId },
       data: { archivedAt: null },
@@ -500,25 +515,27 @@ export async function restoreSection(sectionId: string, actorId?: string) {
 }
 
 export async function deleteSection(sectionId: string, actorId?: string) {
-  // #961: tittelen hentes FØR slettingen. Etterpå finnes den ingen steder — revisjonsraden er alt
-  // som er igjen, og en id alene lar ingen kjenne igjen hva som forsvant (samme form som
-  // modul-sletting, adminContentCommands.ts:376).
-  const section = await prisma.courseSection.findUnique({
-    where: { id: sectionId },
-    select: { id: true, title: true },
-  });
-  if (!section) {
-    throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
-  }
-  // G2: navngir kursene (konsistent med modul-sletting).
-  await assertSectionNotInAnyCourse(sectionId, "slettes");
-  // #938: G2 over dekker «ligger i et kurs NÅ». Denne dekker «sto i et kursbevis DA» — innhold
-  // som er fjernet fra kurset, men som et utstedt diplom fortsatt hviler på.
-  await assertSectionNotInIssuedCertificate(sectionId, "slettes");
-  // #758: capture the section's asset blob paths before the delete — SectionAsset rows cascade away
-  // with the section, so afterwards there is nothing left to look them up from.
-  const blobPaths = await collectSectionAssetBlobPaths([sectionId]);
-  await runInTransaction(async (tx) => {
+  // #934 skive 4a: alt etter innholdslåsen, i samme transaksjon som slettingen. Sjekket før, kunne seksjonen
+  // bli lagt inn i et kurs mellom sjekken og slettingen.
+  const blobPaths = await runContentWrite(async (tx) => {
+    // #961: tittelen hentes FØR slettingen. Etterpå finnes den ingen steder — revisjonsraden er alt
+    // som er igjen, og en id alene lar ingen kjenne igjen hva som forsvant (samme form som
+    // modul-sletting, adminContentCommands.ts:376).
+    const section = await tx.courseSection.findUnique({
+      where: { id: sectionId },
+      select: { id: true, title: true },
+    });
+    if (!section) {
+      throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+    }
+    // G2: navngir kursene (konsistent med modul-sletting).
+    await assertSectionNotInAnyCourse(sectionId, "slettes", tx);
+    // #938: G2 over dekker «ligger i et kurs NÅ». Denne dekker «sto i et kursbevis DA» — innhold
+    // som er fjernet fra kurset, men som et utstedt diplom fortsatt hviler på.
+    await assertSectionNotInIssuedCertificate(sectionId, "slettes", tx);
+    // #758: capture the section's asset blob paths before the delete — SectionAsset rows cascade away
+    // with the section, so afterwards there is nothing left to look them up from.
+    const paths = await collectSectionAssetBlobPaths([sectionId], tx);
     // Detach activeVersion FK before deleting versions to avoid the self-reference.
     await tx.courseSection.update({ where: { id: sectionId }, data: { activeVersionId: null } });
     await tx.courseSectionVersion.deleteMany({ where: { sectionId } });
@@ -537,13 +554,14 @@ export async function deleteSection(sectionId: string, actorId?: string) {
       },
       tx,
     );
+    return paths;
   });
   // After commit: reclaim the storage (best-effort — a failed blob delete never fails the delete).
   await reclaimAssetBlobs(blobPaths);
 }
 
-async function assertSectionExists(sectionId: string) {
-  const section = await prisma.courseSection.findUnique({ where: { id: sectionId }, select: { id: true } });
+async function assertSectionExists(sectionId: string, reader: Pick<ContentWriteTx, "courseSection"> | typeof prisma = prisma) {
+  const section = await reader.courseSection.findUnique({ where: { id: sectionId }, select: { id: true } });
   if (!section) {
     throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
   }

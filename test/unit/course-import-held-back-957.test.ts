@@ -58,7 +58,8 @@ const courseUpdate = vi.fn();
 vi.mock("../../src/db/transaction.js", () => ({
   // #1003: importen leser publiseringstilstanden FØR den avpubliserer, så overgangen kan spores.
   // #934 skive 3: `replaceExisting` teller kursbevis før den bytter ut innholdet — ingen her.
-  runInTransaction: (cb: (tx: unknown) => unknown) => cb({ course: { update: courseUpdate, findUnique: courseFindUnique }, courseCompletion: { count: async () => 0 } }),
+  // #934 skive 4a: runContentWrite tar innholdslåsen med rå SQL først.
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({ course: { update: courseUpdate, findUnique: courseFindUnique }, courseCompletion: { count: async () => 0 }, $executeRaw: async () => 0, $executeRawUnsafe: async () => 0 }),
 }));
 
 function resetMocks() {

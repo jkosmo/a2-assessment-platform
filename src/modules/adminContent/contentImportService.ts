@@ -22,17 +22,18 @@ import {
   createModuleVersion,
   publishModuleVersion,
 } from "./adminContentCommands.js";
-import { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
-import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
+import { adminContentRepository, createAdminContentRepository, createAdminContentWriter } from "./adminContentRepository.js";
+import type { DbTransactionClient } from "../../db/transaction.js";
+import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { prisma } from "../../db/prisma.js";
-import { courseRepository } from "../course/courseRepository.js";
+import { courseRepository, createCourseRepository } from "../course/courseRepository.js";
 import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
 import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, renameSectionInVersionSnapshots, sameLocalizedText, type CourseVersionChoice } from "../course/courseVersioning.js";
 import { randomUUID } from "node:crypto";
 import { createSection, evaluateSectionTranslationGate } from "../course/sectionCommands.js";
 import { moduleExportPayloadSchema, sectionExportPayloadSchema } from "./adminContentSchemas.js";
 import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "../course/assetCommands.js";
-import { AppError, DomainRuleError, ForbiddenError, ValidationError } from "../../errors/AppError.js";
+import { AppError, ConflictError, DomainRuleError, ForbiddenError, ValidationError } from "../../errors/AppError.js";
 import { assertContentOwnership } from "../content/contentOwnershipService.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -176,7 +177,7 @@ async function stageSectionForImport(
 // and already-remapped markdown) and its SectionAsset rows (with pre-generated ids referencing the staged
 // blobs). No blob I/O here.
 async function persistStagedSection(
-  tx: DbTransactionClient,
+  tx: ContentWriteTx,
   staged: StagedImportSection,
   actorId: string,
   // #916: the standalone section import lands UNPUBLISHED (the same rule module import follows
@@ -287,7 +288,7 @@ async function importModulePayload(
   },
   // #796: the whole module graph is built on this single transaction client, so a failure partway
   // through rolls back every row (no standalone module / partial versions / missing audit).
-  tx: DbTransactionClient,
+  tx: ContentWriteTx,
   // #896 S4: `heldBackByTranslationGate` is true when the source was published but the package is
   // missing a locale, so this module stayed a draft. A course import needs to know, or it publishes
   // a course whose module is not live.
@@ -449,7 +450,8 @@ export async function importModuleFromEnvelope(
   // #796: the whole module graph (module + rubric/prompt/mcq versions + module version + publish) and its
   // import audit commit in ONE transaction. A failure on any step rolls the entire import back — no
   // standalone module, partial versions, or missing audit. Modules carry no blobs, so this is pure DB.
-  return runInTransaction(
+  // #934 skive 4a: innholdslåsen er det første transaksjonen gjør.
+  return runContentWrite(
     async (tx) => {
       const result = await importModulePayload(moduleEnvelope, options, tx);
       await recordAuditEvent(
@@ -494,7 +496,7 @@ export async function importModuleFromEnvelope(
 // vi ikke; forfatteren publiserer den nye i seksjonens egen flate. Tittelen følger samme regel som
 // seksjonsimporten (#931 pkt 3): en levende seksjon beholder sin, et utkast tar filas.
 async function appendInactiveSectionVersion(
-  tx: DbTransactionClient,
+  tx: ContentWriteTx,
   staged: StagedImportSection,
   targetSectionId: string,
   keepLiveTitle: boolean,
@@ -522,6 +524,40 @@ async function appendInactiveSectionVersion(
     await tx.sectionAsset.create({ data: { id: asset.id, sectionId: targetSectionId, ...asset.rowData } });
   }
   return { sectionVersionId: created.id, versionNo: created.versionNo };
+}
+
+/**
+ * #934 skive 4a: det en «Oppdater dette kurset»-plan bygger på, som én tekst: kursets elementer i rekkefølge, om
+ * kurset er publisert, kursets teller (`contentRevision`), og for hvert element planen oppdaterer, den aktive og den nyeste versjonen. Planen regnes
+ * ut før innholdslåsen; inne i transaksjonen regnes dette ut på nytt, og er det endret, avvises importen (409).
+ * Ellers kunne planen for eksempel lagt en ny versjon oppå en versjon noen publiserte i mellomtiden, eller tatt ut
+ * et element som nettopp ble lagt inn.
+ */
+async function courseUpdateBasis(reader: DbTransactionClient | typeof prisma, courseId: string, plan: CourseUpdatePlan): Promise<string> {
+  // Telleren er med (QA-porten 2.131.0, runde 2): en lagring fra kursskjemaet som bare endret navn, innstillinger
+  // eller diskusjonsbryteren per element, endrer verken elementene eller versjonene — men importen ville skrevet
+  // over den. Telleren øker ved hver lagring, så den fanger alle.
+  const course = await reader.course.findUnique({ where: { id: courseId }, select: { publishedAt: true, contentRevision: true } });
+  const items = await createCourseRepository(reader).findAllCourseItems(courseId);
+  const entries: string[] = [];
+  for (const entry of plan.entries) {
+    if (entry.action !== "update") continue;
+    if (entry.type === "SECTION") {
+      const section = await reader.courseSection.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
+      const newest = await reader.courseSectionVersion.findFirst({ where: { sectionId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { id: true } });
+      entries.push(`SECTION:${entry.targetId}:${section?.activeVersionId ?? "-"}:${newest?.id ?? "-"}`);
+    } else {
+      const module = await reader.module.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
+      const newest = await reader.moduleVersion.findFirst({ where: { moduleId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { id: true } });
+      entries.push(`MODULE:${entry.targetId}:${module?.activeVersionId ?? "-"}:${newest?.id ?? "-"}`);
+    }
+  }
+  return JSON.stringify({
+    published: course?.publishedAt != null,
+    revision: course?.contentRevision ?? null,
+    items: items.map((item) => `${item.itemType}:${item.moduleId ?? item.sectionId}`),
+    entries,
+  });
 }
 
 export async function importSectionFromEnvelope(
@@ -567,10 +603,15 @@ export async function importSectionFromEnvelope(
   const staged = await stageSectionForImport(payload, targetSectionId);
 
   try {
-    return await runInTransaction(
+    return await runContentWrite(
       async (tx) => {
         let sectionId: string;
         if (targetSectionId) {
+          // #934 skive 4a: om seksjonen er levende, avgjøres etter innholdslåsen — den kan være publisert eller
+          // slettet mens bildene ble lastet opp.
+          const current = await tx.courseSection.findUnique({ where: { id: targetSectionId }, select: { activeVersionId: true } });
+          if (!current) throw new Error("Target section not found for replaceExisting.");
+          keepLiveTitle = current.activeVersionId !== null;
           // Content becomes a new INACTIVE version — the section's live content does not change
           // until the author publishes (and passes the gate).
           await appendInactiveSectionVersion(tx, staged, targetSectionId, keepLiveTitle);
@@ -676,6 +717,7 @@ export async function importCourseFromEnvelope(
   // en modul som ikke kan åpnes (I1). Den opprettes, men legges ikke inn i kurset før forfatteren
   // publiserer den og legger den inn selv — slik kursbyggeren krever (#440).
   let targetCourseIsPublished = false;
+  let planBasis: string | null = null;
   if (options.mode === "updateExisting") {
     // #999: domeneregler bærer koder, så klienten kan si det på brukerens språk.
     if (!options.targetCourseId) throw new DomainRuleError("import_target_required", "targetCourseId is required when mode is updateExisting.");
@@ -695,6 +737,9 @@ export async function importCourseFromEnvelope(
     const targetCourse = await prisma.course.findUnique({ where: { id: options.targetCourseId }, select: { publishedAt: true } });
     if (!targetCourse) throw new DomainRuleError("import_target_not_found", "Target course not found for updateExisting.");
     targetCourseIsPublished = targetCourse.publishedAt != null;
+    // #934 skive 4a: planen over er regnet ut FØR innholdslåsen (fila må leses og bildene lastes opp utenfor
+    // transaksjonen). Det den bygger på, sjekkes på nytt etter låsen; se `courseUpdateBasis`.
+    planBasis = await courseUpdateBasis(prisma, options.targetCourseId, updatePlan);
     for (const entry of updatePlan.entries) {
       if (entry.action !== "update") continue;
       let keepLiveTitle = false;
@@ -851,10 +896,22 @@ export async function importCourseFromEnvelope(
     // their version graphs, the ordered items, the publish flip, and the import audit — in ONE
     // transaction. A failure on any item rolls the entire import back (no standalone modules/sections,
     // partial versions, or a course with no final audit).
-    return await runInTransaction(
+    return await runContentWrite(
       async (tx) => {
         let courseId: string;
         let courseTextChanged = false;
+        if (options.mode === "updateExisting" && updatePlan && planBasis !== null) {
+          // #934 skive 4a: har kurset eller et av elementene endret seg siden planen ble laget (noen lagret
+          // kurset, publiserte et element, eller la klar en ny versjon), bygger planen på noe som ikke finnes
+          // lenger. Da skrives ingenting (409); forfatteren importerer på nytt.
+          const now = await courseUpdateBasis(tx, options.targetCourseId!, updatePlan);
+          if (now !== planBasis) {
+            throw new ConflictError(
+              "import_target_changed",
+              "The course changed while the file was being prepared. Import the file again; nothing was changed.",
+            );
+          }
+        }
         if (options.mode === "updateExisting") {
           const existing = await tx.course.findUnique({ where: { id: options.targetCourseId! }, select: { id: true, title: true, description: true } });
           if (!existing) throw new DomainRuleError("import_target_not_found", "Target course not found for updateExisting.");
@@ -1074,7 +1131,7 @@ export async function importCourseFromEnvelope(
             } else {
               const elsewhere = await tx.courseItem.count({ where: { moduleId: replaced.oldId } });
               if (elsewhere > 0) continue;
-              await createAdminContentRepository(tx).archiveModule(replaced.oldId, now);
+              await createAdminContentWriter(tx).archiveModule(replaced.oldId, now);
               await recordAuditEvent({ entityType: auditEntityTypes.module, entityId: replaced.oldId, action: auditActions.adminContent.moduleArchived, actorId: options.actorId, metadata: { moduleId: replaced.oldId } }, tx);
             }
             replaced.oldArchived = true;

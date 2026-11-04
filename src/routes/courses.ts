@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { courseRepository, createCourseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
-import { runInTransaction } from "../db/transaction.js";
+import { runContentRead } from "../db/contentLock.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
@@ -520,9 +520,10 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     // ⚠️ Bevisst IKKE flyttet til outboxen slik de tre andre veiene er. Deltakeren står på siden
     // og leser ferdig siste seksjon; her skal beviset finnes med én gang, ikke når worker-en
     // rekker det. Transaksjonen gir holdbarheten uten å gjøre utstedelsen asynkron.
-    await runInTransaction(async (tx) => {
+    // #934 skive 4a: innholdslåsen DELT, som første setning — lesingen venter på en versjonsendring som pågår.
+    await runContentRead(async (tx) => {
       const txRepo = createCourseRepository(tx);
-      await txRepo.markSectionRead(userId, course.id, request.params.sectionId);
+      await txRepo.markSectionRead(tx, userId, course.id, request.params.sectionId);
       // Reading the final section can be the last gate for certification (#476/#525) — re-check.
       await checkCourseCompletionForCourse({ userId, courseId: course.id }, tx);
     });

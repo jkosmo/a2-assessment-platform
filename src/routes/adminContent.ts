@@ -250,6 +250,11 @@ adminContentRouter.post("/modules", async (request, response) => {
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });
   } catch (error) {
+    // #934 skive 4a: innholdslåsen ga opp (503 content_busy) — det skal klienten få, ikke en valideringsfeil.
+    if (error instanceof AppError && error.code === "content_busy") {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_module_failed", message: "Could not create module." });
   }
 });
@@ -746,6 +751,11 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
     );
     response.status(201).json({ moduleVersion });
   } catch (error) {
+    // #934 skive 4a: innholdslåsen ga opp (503 content_busy) — det skal klienten få, ikke en valideringsfeil.
+    if (error instanceof AppError && error.code === "content_busy") {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_module_version_failed", message: "Could not create module version." });
   }
 });

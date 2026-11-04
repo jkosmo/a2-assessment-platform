@@ -667,6 +667,10 @@ model Course {
   // utstedte bevis. Eksisterende kurs er 1.0. Se doc/DESIGN_934.md.
   versionMajor       Int                     @default(1)
   versionMinor       Int                     @default(0)
+  // #934 skive 4a: øker hver gang kursets innhold eller innstillinger lagres (`claimCourseRevision`). Kursskjemaet
+  // sender tallet det lastet; er det endret siden, har noen andre lagret, og lagringen avvises (409). Ingen lås:
+  // den gjelder en fane som har stått åpen, ikke to som skriver samtidig.
+  contentRevision    Int                     @default(0)
   publishedAt        DateTime?
   archivedAt         DateTime?
   createdAt          DateTime                @default(now())

@@ -3782,7 +3782,7 @@ test.describe("admin content browser coverage", () => {
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let putBody: any = null;
-    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+    await page.route("**/api/admin/content/courses/course-1{,/content}", async (route: Route) => {
       const course = state.mutableCourses.find((c) => c.id === "course-1");
       if (route.request().method() === "PUT") {
         putBody = route.request().postDataJSON();

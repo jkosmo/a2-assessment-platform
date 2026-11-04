@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.131.0 - 2026-11-04
+
+#934 skive 4a: én lås for alt innhold, og kursskjemaet skriver aldri over en annens lagring
+(`doc/DESIGN_934.md`, «4a — bygget»).
+
+- **Innholdslåsen:** alt som skriver innhold eller endrer hvilke elementer et kurs har, tar den samme låsen først,
+  og sjekker alt annet etter den. To samtidige endringer venter på hverandre; den andre ser hva den første gjorde.
+  Kurslåsene fra 2.129.0 er borte, og med dem de to kjente hullene (500 ved to publiseringer med et delt element,
+  og oppslag utenom transaksjonen). En vakttest nekter en skriving til innholdstabellene uten låsen.
+- **Kursskjemaet lagrer i ett kall**, også når bare navnet er endret, med en teller for kurset. Har noen andre
+  lagret kurset etter at skjemaet ble åpnet, lagres ingenting, og forfatteren får beskjed om å laste siden på nytt
+  (det hen skrev, står i skjemaet).
+- **Skjemaet lagrer ikke uten elementlista.** Feilet lastingen, brukte skjemaet en gammel liste med bare modulene,
+  og en lagring kunne ta bort alle seksjonene i kurset. Nå sier det fra og lagrer ikke.
+- **Faner fra før utrullingen** avvises ved første lagring, før noe er skrevet: «Siden er fra en eldre versjon …
+  Last siden på nytt». Overgangen fra 2.129.0 (`versionAware`) er fjernet.
+- **Forhåndsvisninger sjekkes på nytt:** «Publiser kurs», «Slett med alt innhold» og «Oppdater dette kurset»
+  avviser med 409 hvis det forfatteren så, ikke lenger stemmer — ingenting er gjort.
+- Agent-tokenet og et nytt kurs fra skjemaet lagrer elementene som før (kurset har aldri vært ute).
+- Migrering: én ny kolonne (`Course.contentRevision`, standard 0).
+
 ## 2.130.1 - 2026-11-02
 
 QA-sjekken (kjørt på 2.130.0 da Codex var tilbake) fant fire mindre feil i seilbåten (#1137):

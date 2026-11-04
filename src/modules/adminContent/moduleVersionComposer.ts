@@ -1,4 +1,4 @@
-import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
+import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { mcqQuestionTypeFields } from "./adminContentSchemas.js";
 import type { McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import {
@@ -10,7 +10,7 @@ import {
 } from "./adminContentCommands.js";
 import type { LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { localizedTextCodec } from "../../codecs/localizedTextCodec.js";
-import { createAdminContentRepository } from "./adminContentRepository.js";
+import { createAdminContentRepository, createAdminContentWriter } from "./adminContentRepository.js";
 
 /**
  * #906: compose a complete module version in ONE transaction.
@@ -92,8 +92,8 @@ function mergeLocalized(storedRaw: string | null, patch: LocalizedText): Localiz
   return { ...stored, ...patch };
 }
 
-export async function composeModuleVersion(input: ComposeModuleVersionInput, existingTx?: DbTransactionClient) {
-  const run = async (tx: DbTransactionClient) => {
+export async function composeModuleVersion(input: ComposeModuleVersionInput, existingTx?: ContentWriteTx) {
+  const run = async (tx: ContentWriteTx) => {
     // The rename belongs to the same commitment. Saving it separately is how a failed version
     // used to leave a module renamed with nothing else to show for it.
     if (input.title !== undefined) {
@@ -151,7 +151,7 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
         throw new Error("validTo must be on or after validFrom.");
       }
 
-      await repo.updateModuleDetails(input.moduleId, detailPatch);
+      await createAdminContentWriter(tx).updateModuleDetails(input.moduleId, detailPatch);
     }
 
     const isMcqOnly = input.assessmentMode === "MCQ_ONLY";
@@ -243,5 +243,5 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
   };
 
   // Callers already inside a transaction (import) compose into it rather than nesting.
-  return existingTx ? run(existingTx) : runInTransaction(run);
+  return existingTx ? run(existingTx) : runContentWrite(run);
 }

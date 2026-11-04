@@ -2,6 +2,7 @@
 // OPPDATERING av det samme kurset: eksisterende elementer får en ny, upublisert versjon, nye
 // opprettes som utkast, fjernede tas ut av kurset — og kursets id, publisering, klassetildeling
 // og deltakernes framdrift er urørt. Produkteier: «det bør en bevisst handling til for å publisere».
+import { withRevision } from "./support/courseRevision.js";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
@@ -60,7 +61,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     const opprettet = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Justert kurs ${stempel}`), sortOrder: 2 });
     expect(opprettet.status).toBe(201);
     courseId = opprettet.body.course.id as string;
-    const elementer = await request(app).put(`/api/admin/content/courses/${courseId}/items`).set(admin).send({ items: [{ type: "SECTION", sectionId: s1 }, { type: "SECTION", sectionId: s2 }, { type: "MODULE", moduleId: m1 }] });
+    const elementer = await request(app).put(`/api/admin/content/courses/${courseId}/items`).set(admin).send(await withRevision(courseId, { items: [{ type: "SECTION", sectionId: s1 }, { type: "SECTION", sectionId: s2 }, { type: "MODULE", moduleId: m1 }] }));
     expect(elementer.status).toBe(204);
     const pub = await request(app).post(`/api/admin/content/courses/${courseId}/publish`).set(admin);
     expect(pub.status, JSON.stringify(pub.body).slice(0, 300)).toBe(200);
@@ -310,24 +311,24 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     const gammel = await prisma.courseSection.create({ data: { title: JSON.stringify({ nb: `Gammel del ${stempel}` }), versions: { create: { versionNo: 1, bodyMarkdown: JSON.stringify({ nb: "Tekst bare på bokmål." }), publishedAt: new Date() } } }, select: { id: true, versions: { select: { id: true } } } });
     await prisma.courseSection.update({ where: { id: gammel.id }, data: { activeVersionId: gammel.versions[0]!.id } });
     const annet = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Annet kurs ${stempel}`) });
-    expect((await request(app).put(`/api/admin/content/courses/${annet.body.course.id}/items`).set(admin).send({ items: [{ type: "SECTION", sectionId: deltSeksjon }] })).status).toBe(204);
+    expect((await request(app).put(`/api/admin/content/courses/${annet.body.course.id}/items`).set(admin).send(await withRevision(annet.body.course.id, { items: [{ type: "SECTION", sectionId: deltSeksjon }] }))).status).toBe(204);
 
     const opprettet = await request(app).post("/api/admin/content/courses").set(smo).send({ title: tre(`Fagansvarligs kurs ${stempel}`) });
     expect(opprettet.status, JSON.stringify(opprettet.body).slice(0, 300)).toBe(201);
     const smoKurs = opprettet.body.course.id as string;
-    const elementer = await request(app).put(`/api/admin/content/courses/${smoKurs}/items`).set(smo).send({ items: [
+    const elementer = await request(app).put(`/api/admin/content/courses/${smoKurs}/items`).set(smo).send(await withRevision(smoKurs, { items: [
       { type: "SECTION", sectionId: egenId }, { type: "SECTION", sectionId: adminsSeksjon }, { type: "SECTION", sectionId: deltSeksjon }, { type: "MODULE", moduleId: adminsModul },
       { type: "SECTION", sectionId: uendretSeksjon }, { type: "SECTION", sectionId: gammel.id }, { type: "MODULE", moduleId: uendretModul },
       { type: "SECTION", sectionId: tittelSeksjon },
-    ] });
+    ] }));
     expect(elementer.status).toBe(204);
     expect((await request(app).post(`/api/admin/content/courses/${smoKurs}/publish`).set(smo)).status).toBe(200);
     // Utkastet legges inn etter publiseringen (et publisert kurs kan ikke publiseres med et utkast i).
-    const medUtkast = await request(app).put(`/api/admin/content/courses/${smoKurs}/items`).set(smo).send({ items: [
+    const medUtkast = await request(app).put(`/api/admin/content/courses/${smoKurs}/items`).set(smo).send(await withRevision(smoKurs, { items: [
       { type: "SECTION", sectionId: egenId }, { type: "SECTION", sectionId: adminsSeksjon }, { type: "SECTION", sectionId: deltSeksjon }, { type: "MODULE", moduleId: adminsModul },
       { type: "SECTION", sectionId: uendretSeksjon }, { type: "SECTION", sectionId: gammel.id }, { type: "MODULE", moduleId: uendretModul },
       { type: "SECTION", sectionId: tittelSeksjon }, { type: "SECTION", sectionId: adminsUtkastId },
-    ] });
+    ] }));
     expect(medUtkast.status, JSON.stringify(medUtkast.body).slice(0, 300)).toBe(204);
     const klasse = await prisma.class.create({ data: { name: `Klasse B ${stempel}` }, select: { id: true } });
     await prisma.courseGroupAssignment.create({ data: { classId: klasse.id, courseId: smoKurs } });
@@ -434,7 +435,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     expect((await prisma.courseSection.findUniqueOrThrow({ where: { id: utkastId }, select: { activeVersionId: true } })).activeVersionId).toBeNull();
     const kurs = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Utkastkurs ${stempel}`) });
     const kursId = kurs.body.course.id as string;
-    expect((await request(app).put(`/api/admin/content/courses/${kursId}/items`).set(admin).send({ items: [{ type: "SECTION", sectionId: utkastId }, { type: "MODULE", moduleId: m1 }] })).status).toBe(204);
+    expect((await request(app).put(`/api/admin/content/courses/${kursId}/items`).set(admin).send(await withRevision(kursId, { items: [{ type: "SECTION", sectionId: utkastId }, { type: "MODULE", moduleId: m1 }] }))).status).toBe(204);
     const ut = await request(app).get(`/api/admin/content/courses/${kursId}/export-package`).set(admin);
     const fil = JSON.parse(JSON.stringify(ut.body.envelope ?? ut.body));
     fil.course.course.items[0].section.title = tre(`Utkastdel ${stempel} (ny tittel)`);
@@ -450,7 +451,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     const del = await seksjon(`Publiseres etterpå ${stempel}`, "Gammel tekst som deltakeren ser.");
     const kurs = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Publiseringskurs ${stempel}`) });
     const kursId = kurs.body.course.id as string;
-    expect((await request(app).put(`/api/admin/content/courses/${kursId}/items`).set(admin).send({ items: [{ type: "SECTION", sectionId: del }, { type: "MODULE", moduleId: m1 }] })).status).toBe(204);
+    expect((await request(app).put(`/api/admin/content/courses/${kursId}/items`).set(admin).send(await withRevision(kursId, { items: [{ type: "SECTION", sectionId: del }, { type: "MODULE", moduleId: m1 }] }))).status).toBe(204);
     expect((await request(app).post(`/api/admin/content/courses/${kursId}/publish`).set(admin)).status).toBe(200);
     expect((await request(app).post(`/api/courses/${kursId}/sections/${del}/read`).set(deltaker)).status).toBe(204);
     const ut = await request(app).get(`/api/admin/content/courses/${kursId}/export-package`).set(admin);

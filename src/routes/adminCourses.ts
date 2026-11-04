@@ -7,7 +7,6 @@ import { z } from "zod";
 import {
   createCourse,
   updateCourse,
-  publishCourse,
   unpublishCourse,
   archiveCourse,
   restoreCourse,
@@ -20,6 +19,8 @@ import {
   listCourseEnrollments,
   getCoursePublishPreview,
   publishCourseCascade,
+  publishCourseChecked,
+  courseFormOutdatedError,
   getCoursePendingVersions,
   publishCoursePendingVersions,
   getCourseCascadeDeletePreview,
@@ -71,6 +72,8 @@ const setCourseModulesBodySchema = z.object({
       sortOrder: z.number().int().min(0),
     }),
   ),
+  // #934 skive 4a: som `PUT …/items`.
+  expectedRevision: z.number().int().min(0).optional(),
 });
 
 const setCourseItemsBodySchema = z.object({
@@ -84,18 +87,26 @@ const setCourseItemsBodySchema = z.object({
   agentRunId: agentRunIdSchema.optional(),
   // #934 skive 3: forfatterens svar når et publisert kurs endres.
   version: z.enum(["major", "minor"]).optional(),
-  // #934 skive 3 — OVERGANG, fjernes i neste utgivelse etter 2.129.0: kursskjemaet fra 2.129.0 sender
-  // markøren. Uten den er det en fane som var åpen fra før utrullingen, og den kjenner ikke spørsmålet.
+  // #934 skive 4a: overgangen fra 2.129.0 er fjernet. Markøren godtas fortsatt (en klient som sender den, skal
+  // ikke få 400), men betyr ingenting: uten svar avvises endringen når noen har kursbevis.
   versionAware: z.literal(true).optional(),
+  // #934 skive 4a: telleren skjemaet lastet. Uten den godtas lagringen bare for et kurs som aldri har vært ute.
+  expectedRevision: z.number().int().min(0).optional(),
 });
+
+// #934 skive 4a: telleren kursskjemaet lastet (`contentRevision` i kursdetaljen). Kreves av `PUT /:courseId` og
+// `PUT …/content`: uten den er det en fane fra før denne utgivelsen, og den avvises før noe skrives.
+const expectedRevisionSchema = z.number().int().min(0).optional();
 
 // #934 skive 3: `PUT /:courseId/content` — kursskjemaet lagrer navnet og innholdet i ÉN lagring: `items`
 // (samme form som `PUT …/items`, påkrevd) og forfatterens svar `version` skrives i samme transaksjon som
 // navnet, og serveren avgjør versjonen én gang. Et EGET endepunkt, ikke nye felt på `PUT /:courseId`: under
 // rullering svarer en gammel server 404 på dette i stedet for å fjerne `items` stille og svare OK (QA-porten).
+// #934 skive 4a: skjemaet lagrer ALLTID et eksisterende kurs her, også når elementene er uendret.
 const saveCourseContentBodySchema = courseBodySchema.partial().extend({
   items: setCourseItemsBodySchema.shape.items,
   version: z.enum(["major", "minor"]).optional(),
+  expectedRevision: expectedRevisionSchema,
 });
 
 const courseLocalizationBodySchema = z.object({
@@ -408,6 +419,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       versionMajor: course.versionMajor,
       versionMinor: course.versionMinor,
       certificateHolders: await courseRepository.countCertificateHolders(course.id, course.versionMajor),
+      contentRevision: course.contentRevision,
       modules: course.modules.map((cm) => ({
         moduleId: cm.moduleId,
         sortOrder: cm.sortOrder,
@@ -421,14 +433,18 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
   }
 });
 
+// #934 skive 4a: kursskjemaet bruker ikke lenger denne for et eksisterende kurs (alt går til `…/content`). En fane
+// fra før utrullingen gjør det, og den sender ikke telleren: `409 course_form_outdated` før noe skrives — ellers
+// ville navnet stått lagret mens elementene ble avvist i neste kall, eller skrevet over en annens endring.
 adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
-  const parsed = courseBodySchema.partial().safeParse(request.body);
+  const parsed = courseBodySchema.partial().extend({ expectedRevision: expectedRevisionSchema }).safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
     return;
   }
 
   try {
+    if (parsed.data.expectedRevision === undefined) throw courseFormOutdatedError();
     const course = await updateCourse(request.params.courseId, {
       title: parsed.data.title ? localizedTextCodec.serialize(parsed.data.title) : undefined,
       description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : undefined,
@@ -438,7 +454,7 @@ adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId
       discussionOwnerNotifications: parsed.data.discussionOwnerNotifications,
       sortOrder: parsed.data.sortOrder,
       themeIds: parsed.data.themeIds,
-    }, request.context?.userId);
+    }, request.context?.userId, { expectedRevision: parsed.data.expectedRevision });
     response.json({ course });
   } catch (error) {
     next(error);
@@ -446,6 +462,8 @@ adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId
 });
 
 // #934 skive 3: navn og innhold i ÉN lagring, i én transaksjon (se skjemaet over).
+// #934 skive 4a: med telleren skjemaet lastet. Har noen andre lagret kurset siden, `409 course_changed`, og
+// ingenting er skrevet. Uten telleren: en gammel fane, `409 course_form_outdated`.
 adminCoursesRouter.put("/:courseId/content", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = saveCourseContentBodySchema.safeParse(request.body);
   if (!parsed.success) {
@@ -453,6 +471,7 @@ adminCoursesRouter.put("/:courseId/content", requireContentOwnership("COURSE", "
     return;
   }
   try {
+    if (parsed.data.expectedRevision === undefined) throw courseFormOutdatedError();
     const course = await updateCourse(request.params.courseId, {
       title: parsed.data.title ? localizedTextCodec.serialize(parsed.data.title) : undefined,
       description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : undefined,
@@ -462,7 +481,7 @@ adminCoursesRouter.put("/:courseId/content", requireContentOwnership("COURSE", "
       discussionOwnerNotifications: parsed.data.discussionOwnerNotifications,
       sortOrder: parsed.data.sortOrder,
       themeIds: parsed.data.themeIds,
-    }, request.context?.userId, { items: parsed.data.items, version: parsed.data.version });
+    }, request.context?.userId, { items: parsed.data.items, version: parsed.data.version, expectedRevision: parsed.data.expectedRevision });
     response.json({ course });
   } catch (error) {
     next(error);
@@ -477,7 +496,11 @@ adminCoursesRouter.put("/:courseId/modules", requireContentOwnership("COURSE", "
   }
 
   try {
-    await setCourseModules(request.params.courseId, parsed.data.modules, undefined, request.context?.userId);
+    // #934 skive 4a: uten telleren bare på et kurs som aldri har vært ute (sjekkes etter innholdslåsen).
+    await setCourseModules(request.params.courseId, parsed.data.modules, undefined, request.context?.userId, undefined, {
+      expected: parsed.data.expectedRevision,
+      requireUnlessDraft: true,
+    });
     response.status(204).send();
   } catch (error) {
     next(error);
@@ -534,12 +557,11 @@ adminCoursesRouter.put("/:courseId/items", requireContentOwnership("COURSE", "co
     await setCourseItems(request.params.courseId, parsed.data.items, {
       actorId: request.context?.userId,
       agent: { agentRunId: parsed.data.agentRunId },
-      // ⚠️ OVERGANG (fjernes i neste utgivelse etter 2.129.0): en gammel fane sender verken svar eller markør.
-      // Den lagret navnet i et eget kall rett før; en avvisning her ville gitt en halv lagring. Den får en
-      // mindre versjon i stedet. Med markøren gjelder regelen: uten svar avvises endringen når noen har kursbevis.
-      versionRequest: !parsed.data.versionAware && !parsed.data.version
-        ? { kind: "minor" }
-        : { kind: "question", answer: parsed.data.version },
+      // #934 skive 4a: overgangen fra 2.129.0 er borte. Uten svar avvises endringen når noen har kursbevis.
+      versionRequest: { kind: "question", answer: parsed.data.version },
+      // #934 skive 4a: uten telleren bare på et kurs som aldri har vært ute — agent-tokenet, og et nytt kurs fra
+      // skjemaet. En gammel fane på et kurs som har vært ute, avvises før noe skrives.
+      revision: { expected: parsed.data.expectedRevision, requireUnlessDraft: true },
     });
     response.status(204).send();
   } catch (error) {
@@ -584,21 +606,36 @@ adminCoursesRouter.post("/:courseId/publish", requireContentOwnership("COURSE", 
   try {
     const preview = await getCoursePublishPreview(request.params.courseId);
 
+    const askForCascade = (unpublishedItems: unknown, publishable: boolean) => {
+      response.status(409).json({
+        error: "course_has_unpublished_items",
+        message: "The course has unpublished items. Confirm cascade publish with { publishItems: true }.",
+        unpublishedItems,
+        publishable,
+      });
+    };
+
     // No unpublished items — plain publish (unchanged happy path; still enforces G1: ≥1 module).
+    // #934 skive 4a: forhåndsvisningen over er regnet ut før innholdslåsen. `publishCourseChecked` ser på nytt etter
+    // den; har noen lagt et upublisert element inn i mellomtiden, får forfatteren samme spørsmål som her under.
     if (preview.allPublished) {
-      const course = await publishCourse(request.params.courseId, request.context?.userId);
-      response.json({ course, publishedItems: [] });
+      try {
+        const course = await publishCourseChecked(request.params.courseId, request.context?.userId);
+        response.json({ course, publishedItems: [] });
+      } catch (error) {
+        if (error instanceof AppError && error.code === "course_has_unpublished_items") {
+          const details = error.details as { unpublishedItems?: unknown; publishable?: boolean } | undefined;
+          askForCascade(details?.unpublishedItems ?? [], details?.publishable ?? false);
+          return;
+        }
+        throw error;
+      }
       return;
     }
 
     // Unpublished items exist but the caller has not opted into cascade — ask for confirmation.
     if (!publishItems) {
-      response.status(409).json({
-        error: "course_has_unpublished_items",
-        message: "The course has unpublished items. Confirm cascade publish with { publishItems: true }.",
-        unpublishedItems: preview.unpublishedItems,
-        publishable: preview.publishable,
-      });
+      askForCascade(preview.unpublishedItems, preview.publishable);
       return;
     }
 
@@ -723,8 +760,27 @@ adminCoursesRouter.post("/:courseId/cascade-delete", async (request, response, n
     response.status(403).json({ error: "forbidden", message: "Only ADMINISTRATOR can cascade-delete a course." });
     return;
   }
+  // #934 skive 4a: det forhåndsvisningen sa ville bli slettet. Stemmer det ikke etter innholdslåsen, 409 og
+  // ingenting slettet. KREVES: uten det kunne en delt seksjon som nettopp ble eksklusiv, slettes uten at
+  // administratoren så det — en eldre fane (som ikke sender det) får `409 course_form_outdated` før noe skjer.
+  const expected = z
+    .object({
+      expectedDeletedModuleIds: z.array(z.string().min(1)).max(1000).optional(),
+      expectedDeletedSectionIds: z.array(z.string().min(1)).max(1000).optional(),
+    })
+    .safeParse(request.body ?? {});
+  if (!expected.success) {
+    response.status(400).json({ error: "validation_error", issues: expected.error.issues });
+    return;
+  }
   try {
-    const summary = await cascadeDeleteCourse(request.params.courseId, request.context?.userId);
+    if (expected.data.expectedDeletedModuleIds === undefined || expected.data.expectedDeletedSectionIds === undefined) {
+      throw courseFormOutdatedError();
+    }
+    const summary = await cascadeDeleteCourse(request.params.courseId, request.context?.userId, {
+      deletedModuleIds: expected.data.expectedDeletedModuleIds,
+      deletedSectionIds: expected.data.expectedDeletedSectionIds,
+    });
     response.json(summary);
   } catch (error) {
     next(error);

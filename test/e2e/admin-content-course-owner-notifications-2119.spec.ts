@@ -13,7 +13,7 @@ async function openCourse(page: Page, course: Record<string, unknown>) {
   });
   await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
   const sendt: Array<Record<string, unknown>> = [];
-  await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+  await page.route("**/api/admin/content/courses/course-1{,/content}", async (route: Route) => {
     if (route.request().method() !== "PUT") return route.fallback();
     sendt.push(route.request().postDataJSON());
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });

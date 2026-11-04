@@ -253,7 +253,8 @@ versjonsregelen. Etter produkteiers regel er de registrert her og ikke rettet f�
 ## Plan for resten (skive 4–5)
 
 Status: **revidert 2026-11-04 etter Codex' gjennomgang, runde 1 og 2, og produkteiers avgjørelser 2026-11-03/04.**
-Ingenting her er bygget. Det blir ingen flere Codex-runder på planen; QA-porten tar hver skive når den er bygget.
+**4a er bygget i 2.131.0** (se «4a — bygget» under). Resten er ikke bygget. Det blir ingen flere Codex-runder på
+planen; QA-porten tar hver skive når den er bygget.
 
 Det viktigste:
 
@@ -427,6 +428,64 @@ ekte som før: en lesing tar låsen delt og venter på en versjonsendring.
 
 **QA stopper på:** halv lagring, at en fane skriver over en annens endring, at seksjoner forsvinner, 500 ved
 samtidige endringer, eller en innholdsskriver uten låsen.
+
+### 4a — bygget (2.131.0)
+
+- **Låsen:** `src/db/contentLock.ts`. `runContentWrite` åpner transaksjonen og tar låsen eksklusivt som første
+  setning; `runContentRead` tar den delt. Begge gir en merket klient (`ContentWriteTx`/`ContentReadTx`). Låsen tas
+  ikke andre steder, og en innholdstransaksjon inne i en annen stopper med én gang (den ville ventet på sin egen
+  lås). Venter en skriver lenger enn 15 sekunder, eller en leser lenger enn 3, svarer serveren `503 content_busy`;
+  ventetiden kommer i tillegg til transaksjonens arbeidstid, så Prisma ikke ruller tilbake med 500 mens den venter.
+- **Vakta:** `test/content-lock-write-guard.test.js` bruker TypeScripts typesjekker: enhver skriving til
+  `CourseItem`, `Course`, `Module`, `ModuleVersion`, `CourseSection`, `CourseSectionVersion`, `SectionAsset` og
+  `CourseVersion` i `src/` må skje på en klient med merket. Unntak per funksjon: de to vedlikeholdsskriptene.
+- **Kurslåsene er borte:** `lockCourseRow` og `lockCourseRowShared`. Registrering av lesing (`courses.ts`) tar
+  innholdslåsen delt i stedet — det er den ene leseren 4a flytter. De andre delte leserne og deltakerlåsen er 5a-1.
+- **Telleren:** `Course.contentRevision` (migrering `20261104180000_course_content_revision`), `claimCourseRevision`
+  i `courseVersioning.ts`. Kursdetaljen sender den. Skjemaet lagrer et eksisterende kurs i ÉTT kall til
+  `PUT …/content` med `expectedRevision`, også når elementene er uendret. `409 course_changed` beholder det
+  forfatteren skrev.
+- **Gamle faner:** `PUT /:courseId` og `PUT …/content` uten teller gir `409 course_form_outdated`. `PUT …/items` og
+  `PUT …/modules` uten teller godtas bare for et kurs som aldri har vært ute, sjekket etter låsen. `versionAware`
+  godtas og betyr ingenting.
+- **Ingen reserveliste:** feiler `GET …/items`, sier skjemaet fra og lagrer ikke.
+- **Forhåndsvisninger etter låsen:** «Publiser kurs» uten upubliserte elementer ser på nytt (`publishCourseChecked`,
+  409 og spørsmålet hvis et utkast er lagt inn); kaskaden og «Publiser nye versjoner» sjekker også publiserbarhet og
+  #997-svaret på nytt; «Slett med alt innhold» får det forhåndsvisningen viste (`expectedDeleted…Ids`) og svarer
+  `409 course_cascade_changed` hvis det er endret (uten det: `409 course_form_outdated`); «Oppdater dette kurset» sammenligner det planen bygde på
+  (`courseUpdateBasis`) og svarer `409 import_target_changed`.
+- **Hull 2:** forhåndsvisningene og tellingen tar klienten som parameter, og leser på den låste transaksjonen.
+- **Hull 3:** borte; det finnes bare én lås.
+
+**Veier inn, slik de ble dekket** (grepet etter skrivere, ikke kallere, 2026-11-04). Alle tar innholdslåsen; de
+merket «teller» kaller også `claimCourseRevision`:
+- kurs: `createCourse`, `updateCourse` (teller), `setCourseItems` (teller), `setCourseModules` (teller), `publishCourse` (bare med låst
+  klient), `publishCourseChecked`, `publishCourseCascade`, `publishCoursePendingVersions`, `unpublishCourse`,
+  `archiveCourse`, `restoreCourse`, `deleteCourse`, `cascadeDeleteCourse`, `assignCourseSlugIfMissing`;
+- moduler: `createModule`, `updateModuleTitle`, `composeModuleVersion` (også `updateModuleDetails`),
+  `createModuleVersion`, `restoreModuleVersion`, `appendMcqQuestions`, `publishModuleVersion`,
+  `publishModuleVersionWithThresholds` (kalibrering), `unpublishModule`, `archiveModule`, `restoreModule`,
+  `deleteModule` (G2 flyttet fra ruta inn i transaksjonen), **`purgeUnpublishedModules`** (manglet i planen; sjekker
+  hver kandidat på nytt etter låsen);
+- seksjoner: `createSection`, `createSectionWithAssets`, `updateSectionTitle`, `updateSectionContent`,
+  `publishSection`, `unpublishSection`, `archiveSection`, `restoreSection`, `deleteSection`;
+- bilder: **`createSectionAsset`** (opplasting) og **`localizeSectionAssets`** (oversatte SVG-er) — begge manglet i
+  planens liste; raden skrives under låsen, fila lastes opp før;
+- import: `importModuleFromEnvelope`, **`importSectionFromEnvelope`** (manglet i planen), `importCourseFromEnvelope`
+  (alle tre modusene, teller);
+- bevisste unntak: `collapseDuplicatedLocalizedTitles` og `repairUnreadableSvgAssets` (vedlikeholdsskript).
+
+**Bevis:** `test/m2-content-lock-934-4a.test.ts` (to faner med og uten endrede elementer, fire samtidige lagringer,
+den gamle klientens rekkefølge, utkast uten teller, arkivering mot innlegging begge veier, sletting med alt innhold
+mot uttak, to «Publiser kurs» med delt element, «Publiser kurs» mot et utkast lagt inn, kalibrering mot ny versjon,
+lesing bak en lang skriving gir 503, nestet transaksjon), `test/e2e/admin-content-course-lock-934-4a.spec.ts`
+(elementlista feiler, også etter at hodet er tegnet på nytt; ett kall med teller; 409; 390 px) og vakta.
+
+**QA-porten** (2026-11-04): runde 1 NO-GO — kaskaden sammenlignet ikke versjonene (en ny utkastversjon lagret mens
+publiseringen ventet, ble publisert), og modulrutene gjorde 503 om til 400. Begge rettet. Runde 2 NO-GO — importens
+grunnlag manglet telleren (en lagring som bare endret navn eller innstillinger, ble skrevet over), en full
+forbindelsespool ga 500 (P2028) i stedet for 503, og oversatte SVG-er ble liggende i lageret ved 503. Alle tre
+rettet og mutasjonssjekket der det finnes en test (se «Kjente mangler» nr. 16–17). Runde 3 er ikke kjørt.
 
 ### 4b — e-post ved ny hovedversjon
 
@@ -821,6 +880,25 @@ unntak av de korte utrullingsvinduene i nr. 1, som produkteier har godtatt.
    hovedversjoner.
 10. **Ventetid bak innholdslåsen.** Mens en stor import eller publisering pågår, venter innleveringer, lesinger og
     utstedelse. Etter 3 sekunder svarer serveren 503, og siden prøver igjen.
+11. **Fra 4a, til 5a-1: siden prøver ikke igjen ved 503.** I 4a er registrering av lesing den eneste som tar låsen
+    delt. Får den `503 content_busy` (en skriving har holdt låsen over 3 sekunder), ser deltakeren en feil og må
+    lese seksjonen på nytt. Ingenting er skrevet halvt. Det nye forsøket kommer i 5a-1, sammen med de andre delte
+    leserne.
+12. **«Slett med alt innhold» fra en fane fra før 2.131.0** får `409 course_form_outdated` og må laste siden på
+    nytt: ruta krever det forhåndsvisningen viste, ellers kunne en delt seksjon som nettopp ble eksklusiv, slettes
+    uten at administratoren så det.
+13. **Kalibreringen sender ikke hvilken versjon forfatteren kalibrerte på.** Den kloner versjonen som er aktiv etter
+    låsen. Er en ny versjon publisert i mellomtiden, får den nye versjonen tersklene — samme utfall som om de kom
+    etter hverandre. Tallene forfatteren så, gjaldt den gamle.
+14. **«Rydd stage» (`purgeUnpublishedModules`)** sjekker hver kandidat på nytt etter låsen, men har ingen egen
+    integrasjonstest for kappløpet: testen ville slettet andre testers upubliserte moduler i den delte databasen.
+15. **Etter et avvist kall (409) må forfatteren laste siden selv.** Skjemaet beholder teksten, men slår ikke sammen
+    endringene; det forfatteren skrev, må skrives inn igjen etter innlastingen.
+16. **«Rydd stage» og `content_busy`** (QA-porten 2.131.0, runde 2, P2): sletter en kandidat om gangen og legger en
+    som ikke fikk låsen, under `failed`. Ruta svarer 200 med det som ble gjort. Bare administrator; hver modul som
+    slettes, er sjekket på nytt etter låsen.
+17. **Oversatte SVG-er** (`localizeSectionAssets`) har ingen egen test for at filene ryddes når raden ikke kan skrives
+    (rettet i runde 2, men ikke mutasjonssjekket: testen ville krevd språkmodell og lager).
 
 ### Gjennomgang av planen
 

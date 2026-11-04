@@ -1,13 +1,38 @@
 import { prisma } from "../../db/prisma.js";
-import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
-import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
+import type { DbTransactionClient } from "../../db/transaction.js";
+import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
+import { ConflictError, DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertCourseHasNoInProgressParticipants } from "./contentLifecycle.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import { setCourseThemes } from "./courseThemeService.js";
 import { assignCourseSlugIfMissing } from "./courseSlug.js";
-import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, sameLocalizedText, type CourseVersionBump, type CourseVersionChoice, type CourseVersionRequest } from "./courseVersioning.js";
+import { applyCourseVersionChange, claimCourseRevision, isCourseEverPublished, NO_SECTION_SNAPSHOT, sameLocalizedText, type CourseVersionBump, type CourseVersionChoice, type CourseVersionRequest } from "./courseVersioning.js";
+
+/**
+ * #934 skive 4a: hvordan en lagring av kursets elementer forholder seg til telleren (`Course.contentRevision`).
+ *   - `expected`: tallet skjemaet lastet. Er det endret, `409 course_changed`.
+ *   - `requireUnlessDraft`: uten `expected` godtas lagringen bare for et kurs som aldri har vært ute (agent-tokenet,
+ *     og et nytt kurs fra skjemaet). Ellers er det en gammel fane, og den avvises før noe skrives
+ *     (`409 course_form_outdated`). Sjekkes etter innholdslåsen: et kurs kan bli publisert mens kallet venter.
+ *   - utelatt (importen): telleren øker bare.
+ */
+export type CourseRevisionCheck = { expected?: number; requireUnlessDraft?: boolean };
+
+export function courseFormOutdatedError() {
+  return new ConflictError(
+    "course_form_outdated",
+    "This course form is from an older version of the platform. Reload the page and make your change again; nothing was saved.",
+  );
+}
+
+async function claimRevisionForItemWrite(client: ContentWriteTx, courseId: string, revision?: CourseRevisionCheck) {
+  if (revision?.expected === undefined && revision?.requireUnlessDraft && (await isCourseEverPublished(client, courseId))) {
+    throw courseFormOutdatedError();
+  }
+  await claimCourseRevision(client, courseId, revision?.expected);
+}
 import { createCourseRepository } from "./courseRepository.js";
 
 // #934 skive 3: kursets innhold er rekkefølgen av moduler og seksjoner. Diskusjonsbryteren per element er
@@ -92,9 +117,9 @@ export async function createCourse(input: {
   actorId?: string;
   // AA-5 (#653): agent-orchestrated creates carry a trace in the audit metadata.
   agent?: AgentAuthoringContext;
-}, tx?: DbTransactionClient) {
+}, tx?: ContentWriteTx) {
   // #803: create + its audit commit atomically.
-  const run = async (client: DbTransactionClient) => {
+  const run = async (client: ContentWriteTx) => {
     const created = await client.course.create({
       data: {
         title: input.title,
@@ -126,7 +151,7 @@ export async function createCourse(input: {
     return created;
   };
 
-  return tx ? run(tx) : runInTransaction(run);
+  return tx ? run(tx) : runContentWrite(run);
 }
 
 export async function updateCourse(
@@ -146,23 +171,27 @@ export async function updateCourse(
   // #934 skive 3: kursskjemaet lagrer navnet og innholdet i ÉN lagring. Med `items` skrives innholdet i samme
   // transaksjon, med forfatterens svar (`version`), og serveren avgjør versjonen én gang: endret innhold gir
   // forfatterens svar; bare navn eller beskrivelse endret gir mindre. Ingen klient kan slå økningen av.
-  options?: { items?: CourseItemInput[]; version?: CourseVersionChoice },
+  // #934 skive 4a: `expectedRevision` er telleren skjemaet lastet. Er den endret siden, har noen andre lagret
+  // kurset: `409 course_changed`, og ingenting er skrevet. Rutene krever den (en gammel fane sender den ikke).
+  options?: { items?: CourseItemInput[]; version?: CourseVersionChoice; expectedRevision?: number },
 ) {
   // #805: a course-metadata edit is a state change and must leave a trail. Record which fields changed.
   // #803: update + audit commit atomically.
-  return runInTransaction(async (tx) => {
+  // #934 skive 4a: innholdslåsen først; telleren og alt annet sjekkes etter den, før noe skrives.
+  return runContentWrite(async (tx) => {
     const { themeIds, ...fields } = input;
     const previous = await tx.course.findUnique({ where: { id: courseId }, select: { title: true, description: true } });
+    if (!previous) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    await claimCourseRevision(tx, courseId, options?.expectedRevision);
     let course = await tx.course.update({ where: { id: courseId }, data: fields });
     const itemsBump = options?.items
-      ? await setCourseItems(courseId, options.items, { actorId, versionRequest: { kind: "question", answer: options.version } }, tx)
+      ? await writeCourseItems(tx, courseId, options.items, { actorId, versionRequest: { kind: "question", answer: options.version } })
       : null;
     // #934 skive 3: navn eller beskrivelse endret på et kurs som har vært ute er en mindre versjon
     // (produkteier 2026-11-01: «endrer ikke kravet»). Ingen spørsmål — og ingen ekstra økning når innholdet
     // i samme lagring allerede ga versjonen. Nivå, tilgang, diskusjon, plassering og tema er innstillinger,
     // ikke innhold, og gir ingen ny versjon.
     const textChanged =
-      previous != null &&
       ((fields.title !== undefined && !sameLocalizedText(fields.title, previous.title)) ||
         (fields.description !== undefined && !sameLocalizedText(fields.description, previous.description)));
     const textBump = textChanged && !itemsBump ? await applyCourseVersionChange(tx, courseId, { kind: "minor" }, NO_SECTION_SNAPSHOT, actorId) : null;
@@ -186,7 +215,10 @@ export async function updateCourse(
   });
 }
 
-export async function publishCourse(courseId: string, actorId?: string, tx?: DbTransactionClient) {
+// #934 skive 4a: `publishCourse` publiserer bare kursraden. Ruta og kaskaden kaller den inne i
+// `publishCourseChecked`/`publishCourseCascade` (coursePublishService.ts), som ser etter upubliserte elementer
+// ETTER innholdslåsen. Importen kaller den med sin egen låste transaksjon.
+export async function publishCourse(courseId: string, actorId: string | undefined, tx: ContentWriteTx) {
   // #796: sjekken kjører på tx-klienten når en import komponeres, så den ser kurselementene som ble
   // laget tidligere i SAMME transaksjon.
   //
@@ -209,7 +241,7 @@ export async function publishCourse(courseId: string, actorId?: string, tx?: DbT
   // To steder i kodebasen behandlet allerede rene lesekurs som normale: rapportlaget regner ut
   // fullføringsgrad for dem (#969), og #916 måtte legge inn en dummy-modul i fiksturet sitt for å
   // komme forbi denne porten.
-  const course = await (tx ?? prisma).course.findUnique({
+  const course = await tx.course.findUnique({
     where: { id: courseId },
     include: { _count: { select: { items: true } } },
   });
@@ -225,27 +257,24 @@ export async function publishCourse(courseId: string, actorId?: string, tx?: DbT
   }
 
   // #803: publish + audit commit atomically.
-  const run = async (client: DbTransactionClient) => {
-    await client.course.update({
-      where: { id: courseId },
-      data: { publishedAt: new Date() },
-    });
-    // 2.121.0: delingslenka settes første gang kurset publiseres, og står fast etterpå.
-    await assignCourseSlugIfMissing(client, courseId);
-    const updated = await client.course.findUniqueOrThrow({ where: { id: courseId } });
-    await recordAuditEvent(
-      {
-        entityType: auditEntityTypes.course,
-        entityId: courseId,
-        action: auditActions.course.published,
-        actorId,
-        metadata: { courseId },
-      },
-      client,
-    );
-    return updated;
-  };
-  return tx ? run(tx) : runInTransaction(run);
+  await tx.course.update({
+    where: { id: courseId },
+    data: { publishedAt: new Date() },
+  });
+  // 2.121.0: delingslenka settes første gang kurset publiseres, og står fast etterpå.
+  await assignCourseSlugIfMissing(tx, courseId);
+  const updated = await tx.course.findUniqueOrThrow({ where: { id: courseId } });
+  await recordAuditEvent(
+    {
+      entityType: auditEntityTypes.course,
+      entityId: courseId,
+      action: auditActions.course.published,
+      actorId,
+      metadata: { courseId },
+    },
+    tx,
+  );
+  return updated;
 }
 
 // #705: avpubliser et kurs (motstykke til publishCourse). Symmetri med modul/seksjon.
@@ -253,11 +282,10 @@ export async function publishCourse(courseId: string, actorId?: string, tx?: DbT
 // måten å ta et kurs ned på mens noen er midt i det. Den harde G3-låsen gjelder kun arkivering
 // (som er pensjonering). Frontend bekrefter avpublisering med en advarsel.
 export async function unpublishCourse(courseId: string, actorId?: string) {
-  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
-  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
-
-  // #803: unpublish + audit commit atomically.
-  return runInTransaction(async (tx) => {
+  // #803: unpublish + audit commit atomically. #934 skive 4a: innholdslåsen først, så sjekken.
+  return runContentWrite(async (tx) => {
+    const course = await tx.course.findUnique({ where: { id: courseId }, select: { id: true } });
+    if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
     const updated = await tx.course.update({
       where: { id: courseId },
       data: { publishedAt: null },
@@ -277,16 +305,14 @@ export async function unpublishCourse(courseId: string, actorId?: string) {
 }
 
 export async function archiveCourse(courseId: string, actorId?: string) {
-  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
-  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
-
-  // G3 (aktivitets-lås): blokker arkivering så lenge noen har en påbegynt, ufullført gjennomføring.
-  await assertCourseHasNoInProgressParticipants(courseId, "arkiveres");
-
   // I3: arkivering auto-avpubliserer (publishedAt nullstilles) så «arkivert men publisert» aldri
   // oppstår. Gjenopprett (restoreCourse) lander dermed i Utkast.
-  // #803: archive + audit commit atomically.
-  return runInTransaction(async (tx) => {
+  // #803: archive + audit commit atomically. #934 skive 4a: innholdslåsen først, så sjekkene.
+  return runContentWrite(async (tx) => {
+    const course = await tx.course.findUnique({ where: { id: courseId }, select: { id: true } });
+    if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    // G3 (aktivitets-lås): blokker arkivering så lenge noen har en påbegynt, ufullført gjennomføring.
+    await assertCourseHasNoInProgressParticipants(courseId, "arkiveres", tx);
     const updated = await tx.course.update({
       where: { id: courseId },
       data: { archivedAt: new Date(), publishedAt: null },
@@ -308,7 +334,7 @@ export async function archiveCourse(courseId: string, actorId?: string) {
 // #673: gjenopprett et arkivert kurs (nullstill archivedAt). Motstykke til archiveCourse.
 export async function restoreCourse(courseId: string, actorId?: string) {
   // #803: restore + audit commit atomically.
-  return runInTransaction(async (tx) => {
+  return runContentWrite(async (tx) => {
     const updated = await tx.course.update({
       where: { id: courseId },
       data: { archivedAt: null },
@@ -328,27 +354,27 @@ export async function restoreCourse(courseId: string, actorId?: string) {
 }
 
 export async function deleteCourse(courseId: string, actorId?: string) {
-  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
-  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+  // #803: delete + audit commit atomically. #934 skive 4a: innholdslåsen først, så sjekkene.
+  await runContentWrite(async (tx) => {
+    const course = await tx.course.findUnique({ where: { id: courseId }, select: { id: true } });
+    if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 
-  // #660: CourseCompletion.course is onDelete: Restrict (issued certificates are achievement
-  // records we never silently destroy). Without this guard, course.delete fails with a raw FK
-  // violation and the route surfaces a generic 500. Block with a clear message and point the
-  // author at archiving (the soft-delete) instead.
-  const completionCount = await prisma.courseCompletion.count({ where: { courseId } });
-  if (completionCount > 0) {
-    // ⚠️ ANTALLET SOM FELT, ikke som interpolert prosa — klienten skal kunne si «3 kursbevis» på
-    // brukerens språk uten å lese tallet ut av en engelsk setning.
-    throw new DomainRuleError(
-      "course_has_completions",
-      `Cannot delete a course that has ${completionCount} completion${completionCount === 1 ? "" : "s"} ` +
-        `(issued certificates). Archive the course instead to keep the completion records.`,
-      { count: completionCount },
-    );
-  }
+    // #660: CourseCompletion.course is onDelete: Restrict (issued certificates are achievement
+    // records we never silently destroy). Without this guard, course.delete fails with a raw FK
+    // violation and the route surfaces a generic 500. Block with a clear message and point the
+    // author at archiving (the soft-delete) instead.
+    const completionCount = await tx.courseCompletion.count({ where: { courseId } });
+    if (completionCount > 0) {
+      // ⚠️ ANTALLET SOM FELT, ikke som interpolert prosa — klienten skal kunne si «3 kursbevis» på
+      // brukerens språk uten å lese tallet ut av en engelsk setning.
+      throw new DomainRuleError(
+        "course_has_completions",
+        `Cannot delete a course that has ${completionCount} completion${completionCount === 1 ? "" : "s"} ` +
+          `(issued certificates). Archive the course instead to keep the completion records.`,
+        { count: completionCount },
+      );
+    }
 
-  // #803: delete + audit commit atomically.
-  await runInTransaction(async (tx) => {
     await tx.course.delete({ where: { id: courseId } });
     await recordAuditEvent(
       {
@@ -378,15 +404,33 @@ export async function setCourseItems(
   // AA-5 (#653): audited write; agent runs stamp source/agentRunId into the metadata.
   // #934 skive 3: hvordan endringen spør om versjonen (courseVersioning.ts). Utelatt = spørsmålet uten svar:
   // avvises når noen har kursbevis og innholdet er endret (`course_version_required`).
-  options?: { actorId?: string; agent?: AgentAuthoringContext; versionRequest?: CourseVersionRequest },
-  tx?: DbTransactionClient,
+  // #934 skive 4a: `revision` — se `CourseRevisionCheck`. Telleren økes alltid; utelatt (importen) gjør bare det.
+  options?: { actorId?: string; agent?: AgentAuthoringContext; versionRequest?: CourseVersionRequest; revision?: CourseRevisionCheck },
+  tx?: ContentWriteTx,
 ): Promise<CourseVersionBump | null> {
   // #796: when composing an import, existence checks must run on the tx client so they see the course,
   // modules, and sections created earlier in the SAME transaction.
-  const reader = tx ?? prisma;
-  const course = await reader.course.findUnique({ where: { id: courseId }, select: { id: true } });
-  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+  // #934 skive 4a: ALT sjekkes etter innholdslåsen, i samme transaksjon som skrivingen. Sjekket før, kunne en
+  // modul bli arkivert mellom sjekken og innleggingen (Codex runde 1 nr. 2).
+  const run = async (client: ContentWriteTx) => {
+    const course = await client.course.findUnique({ where: { id: courseId }, select: { id: true } });
+    if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    await claimRevisionForItemWrite(client, courseId, options?.revision);
+    return writeCourseItems(client, courseId, items, options);
+  };
+  return tx ? run(tx) : runContentWrite(run);
+}
 
+/**
+ * Skriver kursets elementer og avgjør versjonen. Kalles bare med låst klient, etter at telleren er tatt
+ * (`setCourseItems`, og `updateCourse` som tar telleren selv).
+ */
+async function writeCourseItems(
+  client: ContentWriteTx,
+  courseId: string,
+  items: CourseItemInput[],
+  options?: { actorId?: string; agent?: AgentAuthoringContext; versionRequest?: CourseVersionRequest },
+): Promise<CourseVersionBump | null> {
   const moduleIds = items.flatMap((i) => (i.type === "MODULE" ? [i.moduleId] : []));
   const sectionIds = items.flatMap((i) => (i.type === "SECTION" ? [i.sectionId] : []));
   if (new Set(moduleIds).size !== moduleIds.length) {
@@ -403,10 +447,10 @@ export async function setCourseItems(
       { itemType: "SECTION" },
     );
   }
-  await assertContentUsableInCourse(reader, { moduleIds, sectionIds });
+  await assertContentUsableInCourse(client, { moduleIds, sectionIds });
 
   // #502: CourseItem er eneste sannhetskilde — ingen dual-write til CourseModule lenger.
-  const run = async (client: DbTransactionClient) => {
+  {
     // #934 skive 3: det som gjaldt FØR endringen, lest i samme transaksjon som den skrives. Er kurset
     // publisert og innholdet endret, øker versjonen her — med seksjonsversjonene fra før som øyeblikksbilde.
     const repo = createCourseRepository(client);
@@ -446,9 +490,7 @@ export async function setCourseItems(
     }));
     if (itemSequenceKey(previous) === itemSequenceKey(next)) return null;
     return applyCourseVersionChange(client, courseId, options?.versionRequest ?? { kind: "question" }, { before, after: () => repo.findSectionVersions(courseId) }, options?.actorId);
-  };
-  const result = await (tx ? run(tx) : runInTransaction(run));
-  return result;
+  }
 }
 
 // Legacy modules-only setter (import + admin PUT /modules). #502: skriver nå CourseItem MODULE-
@@ -457,19 +499,24 @@ export async function setCourseItems(
 export async function setCourseModules(
   courseId: string,
   modules: Array<{ moduleId: string; sortOrder: number }>,
-  tx?: DbTransactionClient,
+  tx?: ContentWriteTx,
   // #934 skive 3: hvem endringen gjelder, til revisjonssporet for versjonsøkningen.
   actorId?: string,
   // #934 skive 3: hvordan endringen spør. Utelatt = mindre (legacy-ruta har ingen dialog); importen som
   // bytter ut alt sender spørsmålet med forfatterens svar.
   versionRequest?: CourseVersionRequest,
+  // #934 skive 4a: som `setCourseItems`. Legacy-ruta krever telleren, unntatt for et kurs som aldri har vært ute.
+  revision?: CourseRevisionCheck,
 ) {
-  // #992: samme dør som `setCourseItems`. Denne ruta er dokumentert som legacy, men den er ikke
-  // stengt — importklienter og `PUT /api/admin/content/courses/:id/modules` bruker den — og uten
-  // vakta kunne den gjenskape den ugyldige tilstanden #938 skulle gjøre uoppnåelig.
-  await assertContentUsableInCourse(tx ?? prisma, { moduleIds: modules.map((m) => m.moduleId) });
-
-  const run = async (client: DbTransactionClient) => {
+  const run = async (client: ContentWriteTx) => {
+    const course = await client.course.findUnique({ where: { id: courseId }, select: { id: true } });
+    if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    await claimRevisionForItemWrite(client, courseId, revision);
+    // #992: samme dør som `setCourseItems`. Denne ruta er dokumentert som legacy, men den er ikke
+    // stengt — importklienter og `PUT /api/admin/content/courses/:id/modules` bruker den — og uten
+    // vakta kunne den gjenskape den ugyldige tilstanden #938 skulle gjøre uoppnåelig.
+    // #934 skive 4a: etter innholdslåsen, i samme transaksjon som skrivingen.
+    await assertContentUsableInCourse(client, { moduleIds: modules.map((m) => m.moduleId) });
     // #934 skive 3: samme regel som `setCourseItems` — denne inngangen har ingen dialog, så en endring av
     // et publisert kurs blir en mindre versjon.
     const repo = createCourseRepository(client);
@@ -511,5 +558,5 @@ export async function setCourseModules(
       await applyCourseVersionChange(client, courseId, versionRequest ?? { kind: "minor" }, { before, after: () => repo.findSectionVersions(courseId) }, actorId);
     }
   };
-  return tx ? run(tx) : runInTransaction(run);
+  return tx ? run(tx) : runContentWrite(run);
 }

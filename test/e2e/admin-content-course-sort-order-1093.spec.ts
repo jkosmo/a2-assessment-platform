@@ -28,7 +28,7 @@ test.describe("#1093 kursskjemaet — plassering i «Mine kurs»", () => {
     });
     await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
     const sendt: unknown[] = [];
-    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+    await page.route("**/api/admin/content/courses/course-1{,/content}", async (route: Route) => {
       if (route.request().method() !== "PUT") return route.fallback();
       sendt.push(route.request().postDataJSON());
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });
@@ -60,7 +60,7 @@ test.describe("#1093 kursskjemaet — plassering i «Mine kurs»", () => {
     });
     await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
     const sendt: unknown[] = [];
-    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+    await page.route("**/api/admin/content/courses/course-1{,/content}", async (route: Route) => {
       if (route.request().method() !== "PUT") return route.fallback();
       sendt.push(route.request().postDataJSON());
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });
@@ -97,7 +97,7 @@ test.describe("#1093 kursskjemaet — plassering i «Mine kurs»", () => {
     });
     await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
     const sendt: unknown[] = [];
-    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+    await page.route("**/api/admin/content/courses/course-1{,/content}", async (route: Route) => {
       if (route.request().method() !== "PUT") return route.fallback();
       sendt.push(route.request().postDataJSON());
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });

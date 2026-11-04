@@ -1,4 +1,5 @@
 import request from "supertest";
+import { withRevision } from "./support/courseRevision.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
@@ -31,7 +32,7 @@ async function createPublishableCourse(nb: string) {
   expect(created.status).toBe(201);
   const id = created.body.course.id as string;
   createdCourseIds.push(id);
-  const items = await request(app).put(`/api/admin/content/courses/${id}/items`).set(owner).send({ items: [{ type: "MODULE", moduleId }] });
+  const items = await request(app).put(`/api/admin/content/courses/${id}/items`).set(owner).send(await withRevision(id, { items: [{ type: "MODULE", moduleId }] }));
   expect(items.status).toBeLessThan(300);
   return id;
 }
@@ -64,7 +65,7 @@ describe("2.121.0 delingslenke til kurs", () => {
   it("ingen lenke før publisering; tittelen kan byttes fritt til da", async () => {
     const id = await createPublishableCourse(`Utkast ${ts}`);
     expect(await slugOf(id)).toBeNull();
-    await request(app).put(`/api/admin/content/courses/${id}`).set(owner).send({ title: titleFor(`Ferdig navn ${ts}`) });
+    await request(app).put(`/api/admin/content/courses/${id}`).set(owner).send(await withRevision(id, { title: titleFor(`Ferdig navn ${ts}`) }));
     expect(await slugOf(id)).toBeNull();
     const detail = await request(app).get(`/api/admin/content/courses/${id}`).set(owner);
     expect(detail.body.course.slug).toBeNull();
@@ -78,7 +79,7 @@ describe("2.121.0 delingslenke til kurs", () => {
     await publish(id);
     expect(await slugOf(id)).toBe(`fast-lenke-${ts}`);
 
-    await request(app).put(`/api/admin/content/courses/${id}`).set(owner).send({ title: titleFor(`Helt nytt navn ${ts}`) });
+    await request(app).put(`/api/admin/content/courses/${id}`).set(owner).send(await withRevision(id, { title: titleFor(`Helt nytt navn ${ts}`) }));
     await request(app).post(`/api/admin/content/courses/${id}/unpublish`).set(owner);
     await publish(id);
     expect(await slugOf(id)).toBe(`fast-lenke-${ts}`);

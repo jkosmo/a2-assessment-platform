@@ -162,6 +162,12 @@ export const translations = {
     // #934 skive 3: noen har fått kursbevis siden kurset ble åpnet — svaret mindre/hoved trengs.
     "errors.api.course_version_required": "Someone has a course certificate for this course now. Reload the course and choose a minor or a major version.",
     "errors.api.course_publish_items_changed": "The course changed while you were publishing. Reload the course and try again.",
+    // #934 skive 4a: en fane som har stått åpen, skal ikke skrive over en annens lagring.
+    "errors.api.course_changed": "Someone else saved this course after you opened it. Nothing was saved. Copy what you wrote if you need it, reload the page and make your change again.",
+    "errors.api.course_form_outdated": "This page is from an older version of the platform. Nothing was saved. Reload the page and make your change again.",
+    "errors.api.course_cascade_changed": "What would be deleted changed after the preview was shown. Nothing was deleted. Open the preview again.",
+    "errors.api.import_target_changed": "The course changed while the file was being imported. Nothing was changed. Import the file again.",
+    "errors.api.content_busy": "Someone else is changing content right now. Try again in a moment.",
     "errors.api.item_archived": "The item is archived. Restore it before you publish.",
     // #914: innholdsvalideringens meldinger. Serveren skrev dem ferdig paa ENGELSK, mens
     // kurspubliseringens meldinger var hardkodet NORSK — saa begge spraakgrupper fikk feil tekst,
@@ -699,6 +705,12 @@ export const translations = {
     // #934 skive 3: noen har fått kursbevis siden kurset ble åpnet — svaret mindre/hoved trengs.
     "errors.api.course_version_required": "Noen har kursbevis for dette kurset nå. Last kurset på nytt og velg mindre versjon eller hovedversjon.",
     "errors.api.course_publish_items_changed": "Kurset ble endret mens du publiserte. Last kurset på nytt og prøv igjen.",
+    // #934 skive 4a: en fane som har stått åpen, skal ikke skrive over en annens lagring.
+    "errors.api.course_changed": "Noen andre har lagret kurset etter at du åpnet det. Ingenting ble lagret. Kopier det du skrev om du trenger det, last siden på nytt og gjør endringen igjen.",
+    "errors.api.course_form_outdated": "Siden er fra en eldre versjon av plattformen. Ingenting ble lagret. Last siden på nytt og gjør endringen igjen.",
+    "errors.api.course_cascade_changed": "Det som ville blitt slettet, er endret siden forhåndsvisningen. Ingenting ble slettet. Åpne forhåndsvisningen på nytt.",
+    "errors.api.import_target_changed": "Kurset ble endret mens fila ble importert. Ingenting ble endret. Importer fila på nytt.",
+    "errors.api.content_busy": "Noen andre endrer innhold akkurat nå. Prøv igjen om et øyeblikk.",
     "errors.api.item_archived": "Elementet er arkivert. Gjenopprett det før du publiserer.",
     "errors.api.DISTRACTOR_ELIMINATION_RISK_HIGH": "Spørsmål {questionNumber}: ett eller flere alternativer kan utelukkes uten fagkunnskap. Lag spørsmålet på nytt eller revider det.",
     "errors.api.DISTRACTOR_ELIMINATION_RISK_MEDIUM": "Spørsmål {questionNumber}: minst ett alternativ kan trolig utelukkes uten full fagkunnskap. Vurder å revidere.",
@@ -1229,6 +1241,12 @@ export const translations = {
     // #934 skive 3: nokon har fått kursbevis sidan kurset vart opna — svaret mindre/hovud trengst.
     "errors.api.course_version_required": "Nokon har kursbevis for dette kurset no. Last kurset på nytt og vel mindre versjon eller hovudversjon.",
     "errors.api.course_publish_items_changed": "Kurset vart endra medan du publiserte. Last kurset på nytt og prøv igjen.",
+    // #934 skive 4a: ei fane som har stått open, skal ikkje skrive over lagringa til ein annan.
+    "errors.api.course_changed": "Nokon andre har lagra kurset etter at du opna det. Ingenting vart lagra. Kopier det du skreiv om du treng det, last sida på nytt og gjer endringa igjen.",
+    "errors.api.course_form_outdated": "Sida er frå ein eldre versjon av plattforma. Ingenting vart lagra. Last sida på nytt og gjer endringa igjen.",
+    "errors.api.course_cascade_changed": "Det som ville blitt sletta, er endra sidan førehandsvisinga. Ingenting vart sletta. Opne førehandsvisinga på nytt.",
+    "errors.api.import_target_changed": "Kurset vart endra medan fila vart importert. Ingenting vart endra. Importer fila på nytt.",
+    "errors.api.content_busy": "Nokon andre endrar innhald akkurat no. Prøv igjen om eit augeblikk.",
     "errors.api.item_archived": "Elementet er arkivert. Gjenopprett det før du publiserer.",
     "errors.api.DISTRACTOR_ELIMINATION_RISK_HIGH": "Spørsmål {questionNumber}: eitt eller fleire alternativ kan utelukkast utan fagkunnskap. Lag spørsmålet på nytt eller revider det.",
     "errors.api.DISTRACTOR_ELIMINATION_RISK_MEDIUM": "Spørsmål {questionNumber}: minst eitt alternativ kan truleg utelukkast utan full fagkunnskap. Vurder å revidere.",

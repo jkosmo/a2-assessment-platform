@@ -29,6 +29,8 @@ function course(overrides: Record<string, unknown> = {}) {
     versionMajor: 3,
     versionMinor: 1,
     certificateHolders: 42,
+    // #934 skive 4a: telleren skjemaet sender tilbake.
+    contentRevision: 5,
     ...overrides,
   };
 }
@@ -166,8 +168,12 @@ test.describe("#934 skive 3 — mindre eller hovedversjon", () => {
     await expect(page.locator("#courseVersionDialog")).toBeHidden();
     expect(sentItems[0]).not.toHaveProperty("version");
     expect(sentCourse[0]).not.toHaveProperty("version");
-    // Markøren: dette skjemaet kjenner versjonsspørsmålet (overgangen i PUT …/items, fjernes etter 2.129.0).
-    expect(sentItems[0]).toMatchObject({ versionAware: true });
+    // #934 skive 4a: også med uendret innhold går alt i ÉTT kall til …/content, med elementene og telleren
+    // skjemaet lastet. Markøren fra overgangen (versionAware) sendes ikke lenger.
+    expect(sentCourse).toHaveLength(1);
+    expect((sentCourse[0].items as unknown[]).length).toBe(2);
+    expect(sentCourse[0]).toMatchObject({ expectedRevision: 5 });
+    expect(sentCourse[0]).not.toHaveProperty("versionAware");
   });
 
   test("et avpublisert kurs med kursbevis spørres også — det har vært ute", async ({ page }) => {

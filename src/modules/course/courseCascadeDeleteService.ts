@@ -1,12 +1,12 @@
 import { prisma } from "../../db/prisma.js";
-import { runInTransaction } from "../../db/transaction.js";
-import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
+import { runContentWrite } from "../../db/contentLock.js";
+import { ConflictError, DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
-import { adminContentRepository } from "../adminContent/adminContentRepository.js";
-import { courseRepository } from "./courseRepository.js";
-import { describeIssuedCertificateBlock, findCoursesContainingModule, findCoursesContainingSection } from "./contentLifecycle.js";
+import { createAdminContentRepository } from "../adminContent/adminContentRepository.js";
+import { createCourseRepository } from "./courseRepository.js";
+import { describeIssuedCertificateBlock, findCoursesContainingModule, findCoursesContainingSection, type LifecycleReader } from "./contentLifecycle.js";
 import { collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands.js";
 
 // #762 — ADMINISTRATOR-only destructive cleanup: delete a course together with the modules and
@@ -70,8 +70,13 @@ export type CascadeDeleteSummary = {
 type CascadeAnalysis = CourseCascadeDeletePreview;
 
 // Shared analysis used by both preview and delete so the two can never diverge.
-async function analyzeCourseCascade(courseId: string): Promise<CascadeAnalysis> {
-  const course = await prisma.course.findUnique({
+// #934 skive 4a: slettingen kjører analysen på NYTT med transaksjonen som holder innholdslåsen. Forhåndsvisningen
+// administratoren så, er bare et forslag: en seksjon som var delt (og skulle spares), kan ha blitt tatt ut av det
+// andre kurset i mellomtiden — og ville da blitt slettet (Codex runde 2 nr. 4).
+async function analyzeCourseCascade(courseId: string, reader: LifecycleReader = prisma): Promise<CascadeAnalysis> {
+  const courseRepository = createCourseRepository(reader);
+  const adminContentRepository = createAdminContentRepository(reader);
+  const course = await reader.course.findUnique({
     where: { id: courseId },
     select: { id: true, title: true },
   });
@@ -95,7 +100,7 @@ async function analyzeCourseCascade(courseId: string): Promise<CascadeAnalysis> 
   const blockers: CascadeDeleteEntry[] = [];
 
   // Course-level blocker: issued completions (certificates) are achievement records we never destroy.
-  const completionCount = await prisma.courseCompletion.count({ where: { courseId } });
+  const completionCount = await reader.courseCompletion.count({ where: { courseId } });
   if (completionCount > 0) {
     blockers.push({
       id: courseId,
@@ -110,7 +115,7 @@ async function analyzeCourseCascade(courseId: string): Promise<CascadeAnalysis> 
     const summary = await adminContentRepository.findModuleDeleteSummary(moduleId);
     if (!summary) continue; // Referential integrity should make this impossible; skip defensively.
     const title = displayTitle(summary.title);
-    const otherCourses = (await findCoursesContainingModule(moduleId)).filter((c) => c.id !== courseId);
+    const otherCourses = (await findCoursesContainingModule(moduleId, reader)).filter((c) => c.id !== courseId);
 
     if (otherCourses.length > 0) {
       sparedModules.push({
@@ -139,13 +144,13 @@ async function analyzeCourseCascade(courseId: string): Promise<CascadeAnalysis> 
   }
 
   for (const sectionId of sectionIds) {
-    const section = await prisma.courseSection.findUnique({
+    const section = await reader.courseSection.findUnique({
       where: { id: sectionId },
       select: { id: true, title: true },
     });
     if (!section) continue;
     const title = displayTitle(section.title);
-    const otherCourses = (await findCoursesContainingSection(sectionId)).filter((c) => c.id !== courseId);
+    const otherCourses = (await findCoursesContainingSection(sectionId, reader)).filter((c) => c.id !== courseId);
 
     if (otherCourses.length > 0) {
       sparedSections.push({
@@ -161,7 +166,7 @@ async function analyzeCourseCascade(courseId: string): Promise<CascadeAnalysis> 
       //
       // ⚠️ Vakta ligger i ANALYSEN, ikke i slettingen. Da ser forfatteren blokkeringen i
       // forhåndsvisningen i stedet for å møte et unntak halvveis i en transaksjon.
-      const certificateBlock = await describeIssuedCertificateBlock(sectionId);
+      const certificateBlock = await describeIssuedCertificateBlock(sectionId, reader);
       if (certificateBlock) {
         blockers.push({ id: sectionId, title, reason: certificateBlock });
       } else {
@@ -189,34 +194,60 @@ export function getCourseCascadeDeletePreview(courseId: string): Promise<CourseC
 
 // Delete the course and its exclusively-owned modules/sections in one transaction. All-or-nothing:
 // if any blocker exists we throw a ValidationError naming them and delete NOTHING.
+/**
+ * #934 skive 4a: det administratoren så i forhåndsvisningen — hva som slettes. Klienten sender det med; stemmer
+ * det ikke med analysen etter låsen, avvises slettingen (409), og ingenting er slettet. Utelatt (en eldre klient,
+ * eller API-et): analysen etter låsen gjelder alene.
+ */
+export type CascadeDeleteExpectation = { deletedModuleIds?: string[]; deletedSectionIds?: string[] };
+
+function sameIdSet(a: string[], b: string[]): boolean {
+  const left = [...new Set(a)].sort();
+  const right = [...new Set(b)].sort();
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
 export async function cascadeDeleteCourse(
   courseId: string,
   actorId?: string,
+  expected?: CascadeDeleteExpectation,
 ): Promise<CascadeDeleteSummary> {
-  const analysis = await analyzeCourseCascade(courseId);
+  const result = await runContentWrite(async (tx) => {
+    // #934 skive 4a: hva slettingen tar med seg, avgjøres ETTER innholdslåsen, i samme transaksjon som slettingen.
+    const analysis = await analyzeCourseCascade(courseId, tx);
 
-  if (analysis.blockers.length > 0) {
-    // ⚠️ #999: DEN SISTE NORSKE PROSAEN I SETTET. Den ble vist ordrett i et engelsk grensesnitt.
-    //
-    // Blokkeringene lå allerede som data i `details` — det var bare selve setningen som var norsk,
-    // og som klienten ikke kunne oversette fordi kastet manglet en kode.
-    throw new DomainRuleError(
-      "course_cascade_blocked",
-      `Cannot delete the course: ${analysis.blockers.map((b) => b.reason).join(" ")}`,
-      { blockers: analysis.blockers },
-    );
-  }
+    if (analysis.blockers.length > 0) {
+      // ⚠️ #999: DEN SISTE NORSKE PROSAEN I SETTET. Den ble vist ordrett i et engelsk grensesnitt.
+      //
+      // Blokkeringene lå allerede som data i `details` — det var bare selve setningen som var norsk,
+      // og som klienten ikke kunne oversette fordi kastet manglet en kode.
+      throw new DomainRuleError(
+        "course_cascade_blocked",
+        `Cannot delete the course: ${analysis.blockers.map((b) => b.reason).join(" ")}`,
+        { blockers: analysis.blockers },
+      );
+    }
 
-  const deletedModuleIds = analysis.deletableModules.map((m) => m.id);
-  const deletedSectionIds = analysis.deletableSections.map((s) => s.id);
-  const sparedModuleIds = analysis.sparedModules.map((m) => m.id);
-  const sparedSectionIds = analysis.sparedSections.map((s) => s.id);
+    const deletedModuleIds = analysis.deletableModules.map((m) => m.id);
+    const deletedSectionIds = analysis.deletableSections.map((s) => s.id);
+    const sparedModuleIds = analysis.sparedModules.map((m) => m.id);
+    const sparedSectionIds = analysis.sparedSections.map((s) => s.id);
 
-  // #758: capture the exclusive sections' asset blob paths before the transaction deletes them —
-  // SectionAsset cascades away with each section, so this is the last chance to learn the paths.
-  const sectionBlobPaths = await collectSectionAssetBlobPaths(deletedSectionIds);
+    if (
+      (expected?.deletedModuleIds !== undefined && !sameIdSet(expected.deletedModuleIds, deletedModuleIds)) ||
+      (expected?.deletedSectionIds !== undefined && !sameIdSet(expected.deletedSectionIds, deletedSectionIds))
+    ) {
+      throw new ConflictError(
+        "course_cascade_changed",
+        "What this delete would remove changed after the preview was shown. Open the preview again; nothing was deleted.",
+        { deletedModuleIds, deletedSectionIds },
+      );
+    }
 
-  await runInTransaction(async (tx) => {
+    // #758: capture the exclusive sections' asset blob paths before the transaction deletes them —
+    // SectionAsset cascades away with each section, so this is the last chance to learn the paths.
+    const sectionBlobPaths = await collectSectionAssetBlobPaths(deletedSectionIds, tx);
+
     // 1. Unlink modules/sections from this course so the CourseItem Restrict FK no longer blocks
     //    deleting them.
     await tx.courseItem.deleteMany({ where: { courseId } });
@@ -274,11 +305,16 @@ export async function cascadeDeleteCourse(
         tx,
       );
     }
-  });
+    return { sectionBlobPaths, summary: { deletedCourseId: courseId, deletedModuleIds, deletedSectionIds, sparedModuleIds, sparedSectionIds } };
+  }, { timeout: CASCADE_DELETE_TX_TIMEOUT_MS });
 
   // #758: after commit, reclaim the deleted sections' asset blobs (best-effort — a failed blob
   // delete never fails the cascade; the section rows are already gone).
-  await reclaimAssetBlobs(sectionBlobPaths);
+  await reclaimAssetBlobs(result.sectionBlobPaths);
 
-  return { deletedCourseId: courseId, deletedModuleIds, deletedSectionIds, sparedModuleIds, sparedSectionIds };
+  return result.summary;
 }
+
+// Analysen gjøres nå inne i transaksjonen, med ett oppslag per element. Et stort kurs skal ikke rulles tilbake av
+// Prismas standard på 5 sekunder.
+const CASCADE_DELETE_TX_TIMEOUT_MS = 30_000;

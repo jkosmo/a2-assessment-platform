@@ -1,5 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import type { AssessmentMode } from "@prisma/client";
+import type { ContentWriteTx } from "../../db/contentLock.js";
 
 type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseItem" | "contentOwner">;
 
@@ -89,24 +90,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
-    archiveModule(moduleId: string, now: Date) {
-      // I3: arkivering auto-avpubliserer (activeVersionId nullstilles) så «arkivert men
-      // publisert» aldri oppstår. Gjenopprett (restoreModule) lander dermed i Utkast.
-      return client.module.update({
-        where: { id: moduleId },
-        data: { archivedAt: now, activeVersionId: null },
-        select: { id: true, title: true, archivedAt: true },
-      });
-    },
-
-    restoreModule(moduleId: string) {
-      return client.module.update({
-        where: { id: moduleId },
-        data: { archivedAt: null },
-        select: { id: true, title: true },
-      });
-    },
-
     findModuleDeleteSummary(moduleId: string) {
       return client.module.findUnique({
         where: { id: moduleId },
@@ -124,30 +107,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
               promptTemplateVersions: true,
             },
           },
-        },
-      });
-    },
-
-    createModule(data: {
-      title: string;
-      description?: string;
-      certificationLevel?: string;
-      // #1049: forfatterens forventede svarlengde. Utelatt = nivåets standard.
-      scopeMinWords?: number | null;
-      scopeMaxWords?: number | null;
-      validFrom?: Date;
-      validTo?: Date;
-    }) {
-      return client.module.create({
-        data,
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          certificationLevel: true,
-          validFrom: true,
-          validTo: true,
-          createdAt: true,
         },
       });
     },
@@ -191,45 +150,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
 
     async countModuleCourses(moduleId: string) {
       return client.courseItem.count({ where: { moduleId } });
-    },
-
-    updateModuleTitle(moduleId: string, title: string) {
-      return client.module.update({
-        where: { id: moduleId },
-        data: { title },
-        select: { id: true, title: true },
-      });
-    },
-
-    // #896 S3b: the module-level fields an author edits after creation. Until now these were
-    // create-only — the only update path on a module was the title — so «beskrivelse»,
-    // «sertifiseringsnivå» and validity could be set once and never corrected.
-    updateModuleDetails(
-      moduleId: string,
-      data: {
-        description?: string | null;
-        certificationLevel?: string;
-        scopeMinWords?: number | null;
-        scopeMaxWords?: number | null;
-        validFrom?: Date | null;
-        validTo?: Date | null;
-      },
-    ) {
-      return client.module.update({
-        where: { id: moduleId },
-        data,
-        select: { id: true, description: true, certificationLevel: true, scopeMinWords: true, scopeMaxWords: true, validFrom: true, validTo: true },
-      });
-    },
-
-    deleteModule(moduleId: string) {
-      return client.module.delete({
-        where: { id: moduleId },
-        select: {
-          id: true,
-          title: true,
-        },
-      });
     },
 
     // v1.2.11: list purge candidates — moduler som aldri har vært publisert nå (activeVersionId
@@ -559,46 +479,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
-    createModuleVersion(data: {
-      moduleId: string;
-      versionNo: number;
-      // taskText / rubricVersionId / promptTemplateVersionId are null for MCQ_ONLY modules (#525).
-      taskText?: string | null;
-      assessorExpectedContent?: string | null;
-      modelAnswer?: string | null;
-      candidateTaskConstraints?: string | null;
-      assessmentBlueprint?: string | null;
-      rubricVersionId?: string | null;
-      promptTemplateVersionId?: string | null;
-      mcqSetVersionId?: string | null;
-      assessmentMode?: AssessmentMode;
-      submissionSchemaJson?: string | null;
-      assessmentPolicyJson?: string | null;
-    }) {
-      return client.moduleVersion.create({
-        data,
-        select: {
-          id: true,
-          moduleId: true,
-          versionNo: true,
-          taskText: true,
-          assessorExpectedContent: true,
-          modelAnswer: true,
-          candidateTaskConstraints: true,
-          assessmentBlueprint: true,
-          submissionSchemaJson: true,
-          assessmentPolicyJson: true,
-          rubricVersionId: true,
-          promptTemplateVersionId: true,
-          mcqSetVersionId: true,
-          assessmentMode: true,
-          publishedBy: true,
-          publishedAt: true,
-          createdAt: true,
-        },
-      });
-    },
-
     findPromptTemplateSummary(promptTemplateVersionId: string) {
       return client.promptTemplateVersion.findUnique({
         where: { id: promptTemplateVersionId },
@@ -640,6 +520,138 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           mcqSetVersionId: true,
           submissionSchemaJson: true,
           assessmentPolicyJson: true,
+        },
+      });
+    },
+  };
+}
+
+export const adminContentRepository = createAdminContentRepository();
+
+/**
+ * #934 skive 4a: det som SKRIVER moduler og modulversjoner, står for seg og tar bare imot en transaksjon som holder
+ * innholdslåsen (`runContentWrite`). Leserne over kan brukes med hvilken klient som helst; skriverne kan ikke
+ * kalles uten låsen — da kompilerer det ikke. `test/content-lock-write-guard.test.js` nekter skrivinger andre steder.
+ */
+export function createAdminContentWriter(client: ContentWriteTx) {
+  return {
+    archiveModule(moduleId: string, now: Date) {
+      // I3: arkivering auto-avpubliserer (activeVersionId nullstilles) så «arkivert men
+      // publisert» aldri oppstår. Gjenopprett (restoreModule) lander dermed i Utkast.
+      return client.module.update({
+        where: { id: moduleId },
+        data: { archivedAt: now, activeVersionId: null },
+        select: { id: true, title: true, archivedAt: true },
+      });
+    },
+
+    restoreModule(moduleId: string) {
+      return client.module.update({
+        where: { id: moduleId },
+        data: { archivedAt: null },
+        select: { id: true, title: true },
+      });
+    },
+
+    createModule(data: {
+      title: string;
+      description?: string;
+      certificationLevel?: string;
+      // #1049: forfatterens forventede svarlengde. Utelatt = nivåets standard.
+      scopeMinWords?: number | null;
+      scopeMaxWords?: number | null;
+      validFrom?: Date;
+      validTo?: Date;
+    }) {
+      return client.module.create({
+        data,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          certificationLevel: true,
+          validFrom: true,
+          validTo: true,
+          createdAt: true,
+        },
+      });
+    },
+
+    updateModuleTitle(moduleId: string, title: string) {
+      return client.module.update({
+        where: { id: moduleId },
+        data: { title },
+        select: { id: true, title: true },
+      });
+    },
+
+    // #896 S3b: the module-level fields an author edits after creation. Until now these were
+    // create-only — the only update path on a module was the title — so «beskrivelse»,
+    // «sertifiseringsnivå» and validity could be set once and never corrected.
+    updateModuleDetails(
+      moduleId: string,
+      data: {
+        description?: string | null;
+        certificationLevel?: string;
+        scopeMinWords?: number | null;
+        scopeMaxWords?: number | null;
+        validFrom?: Date | null;
+        validTo?: Date | null;
+      },
+    ) {
+      return client.module.update({
+        where: { id: moduleId },
+        data,
+        select: { id: true, description: true, certificationLevel: true, scopeMinWords: true, scopeMaxWords: true, validFrom: true, validTo: true },
+      });
+    },
+
+    deleteModule(moduleId: string) {
+      return client.module.delete({
+        where: { id: moduleId },
+        select: {
+          id: true,
+          title: true,
+        },
+      });
+    },
+
+    createModuleVersion(data: {
+      moduleId: string;
+      versionNo: number;
+      // taskText / rubricVersionId / promptTemplateVersionId are null for MCQ_ONLY modules (#525).
+      taskText?: string | null;
+      assessorExpectedContent?: string | null;
+      modelAnswer?: string | null;
+      candidateTaskConstraints?: string | null;
+      assessmentBlueprint?: string | null;
+      rubricVersionId?: string | null;
+      promptTemplateVersionId?: string | null;
+      mcqSetVersionId?: string | null;
+      assessmentMode?: AssessmentMode;
+      submissionSchemaJson?: string | null;
+      assessmentPolicyJson?: string | null;
+    }) {
+      return client.moduleVersion.create({
+        data,
+        select: {
+          id: true,
+          moduleId: true,
+          versionNo: true,
+          taskText: true,
+          assessorExpectedContent: true,
+          modelAnswer: true,
+          candidateTaskConstraints: true,
+          assessmentBlueprint: true,
+          submissionSchemaJson: true,
+          assessmentPolicyJson: true,
+          rubricVersionId: true,
+          promptTemplateVersionId: true,
+          mcqSetVersionId: true,
+          assessmentMode: true,
+          publishedBy: true,
+          publishedAt: true,
+          createdAt: true,
         },
       });
     },
@@ -710,5 +722,3 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
     },
   };
 }
-
-export const adminContentRepository = createAdminContentRepository();

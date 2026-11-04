@@ -1,4 +1,5 @@
 import request from "supertest";
+import { withRevision } from "./support/courseRevision.js";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
@@ -32,7 +33,7 @@ describe("audit coverage for state-changing mutations (#805)", () => {
     const res = await request(app)
       .put(`/api/admin/content/courses/${course.id}`)
       .set(adminHeaders)
-      .send({ title: { "en-GB": "Renamed" }, enrollmentPolicy: "RESTRICTED" });
+      .send(await withRevision(course.id, { title: { "en-GB": "Renamed" }, enrollmentPolicy: "RESTRICTED" }));
     expect(res.status).toBe(200);
 
     const events = await auditEventsFor(course.id, "course_updated");

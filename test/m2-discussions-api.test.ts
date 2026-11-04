@@ -1,4 +1,5 @@
 import request from "supertest";
+import { withRevision } from "./support/courseRevision.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
@@ -286,7 +287,7 @@ describe("Discussions API (#495/T-QA-2)", () => {
     const update = await request(app)
       .put(`/api/admin/content/courses/${id}`)
       .set(smo)
-      .send({ title, discussionsEnabled: true });
+      .send(await withRevision(id, { title, discussionsEnabled: true }));
     expect(update.status).toBe(200);
 
     const detailOn = await request(app).get(`/api/admin/content/courses/${id}`).set(smo);
@@ -353,7 +354,7 @@ describe("Discussions API (#495/T-QA-2)", () => {
     await request(app)
       .put(`/api/admin/content/courses/${courseId}/items`)
       .set(smo)
-      .send({ items: [{ type: "SECTION", sectionId: section.id, discussionsEnabled: false }] })
+      .send(await withRevision(courseId, { items: [{ type: "SECTION", sectionId: section.id, discussionsEnabled: false }] }))
       .expect(204);
 
     const itemsRes = await request(app).get(`/api/admin/content/courses/${courseId}/items`).set(smo);

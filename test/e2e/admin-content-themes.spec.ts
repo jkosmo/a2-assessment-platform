@@ -185,7 +185,7 @@ test.describe("2.102.0 Tema inne i kurset", () => {
     await mockThemes(page, EXISTING);
     await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
     const sent: Array<Record<string, unknown>> = [];
-    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+    await page.route("**/api/admin/content/courses/course-1{,/content}", async (route: Route) => {
       if (route.request().method() !== "PUT") return route.fallback();
       sent.push(route.request().postDataJSON());
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });
@@ -224,7 +224,7 @@ test.describe("2.102.0 Tema inne i kurset", () => {
     await page.route("**/api/admin/content/themes**", (route: Route) => route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
     await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
     const sent: Array<Record<string, unknown>> = [];
-    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+    await page.route("**/api/admin/content/courses/course-1{,/content}", async (route: Route) => {
       if (route.request().method() !== "PUT") return route.fallback();
       sent.push(route.request().postDataJSON());
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });

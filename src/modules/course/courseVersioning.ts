@@ -18,7 +18,8 @@
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
-import { AppError } from "../../errors/AppError.js";
+import type { ContentWriteTx } from "../../db/contentLock.js";
+import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js";
 
 export type CourseVersionChoice = "major" | "minor";
 
@@ -34,25 +35,56 @@ export type SectionSnapshot = { before: SectionVersions; after: () => Promise<Se
 /** Navn og beskrivelse er ikke seksjoner: endringen gir alltid mindre, og trenger ikke noe øyeblikksbilde. */
 export const NO_SECTION_SNAPSHOT: SectionSnapshot = { before: {}, after: async () => ({}) };
 
-type VersionClient = Pick<DbTransactionClient, "course" | "courseCompletion" | "courseVersion" | "auditEvent" | "$queryRaw">;
+// #934 skive 4a: kurslåsene (`lockCourseRow`, `lockCourseRowShared`) er borte. Innholdslåsen (src/db/contentLock.ts)
+// gjør jobben: alle som endrer versjonen, holder den eksklusivt (typen `ContentWriteTx` krever det), og en
+// deltakers lesing tar den delt. Dermed er grensen `publishedAt` for en ny hovedversjon like ekte som før: en
+// lesing gjort mens den gamle teksten var aktiv, er ferdig før versjonsendringen får låsen; en lesing etter, ser
+// den nye teksten.
 
 /**
- * Lås kursraden ut transaksjonen (`SELECT … FOR UPDATE`). To endringer som overlapper, leser ellers samme
- * versjon og skriver samme neste — én økning går tapt, og revisjonssporets «fra» blir feil (QA-porten).
- * Den andre venter til den første er ferdig, og leser så versjonen den første skrev.
+ * «Har vært ute»: publisert nå, eller fikk delingslenka ved første publisering (2.121.0), eller har kursbevis
+ * (eldre kurs uten lenke). Et kurs som aldri har vært ute, har ingen versjon å endre — og (4a) det er det eneste
+ * kurset `PUT …/items` og `PUT …/modules` godtar uten telleren fra skjemaet.
  */
-export async function lockCourseRow(client: Pick<DbTransactionClient, "$queryRaw">, courseId: string): Promise<void> {
-  await client.$queryRaw`SELECT "id" FROM "Course" WHERE "id" = ${courseId} FOR UPDATE`;
+export async function isCourseEverPublished(
+  client: Pick<DbTransactionClient, "course" | "courseCompletion">,
+  courseId: string,
+): Promise<boolean> {
+  const course = await client.course.findUnique({ where: { id: courseId }, select: { publishedAt: true, slug: true } });
+  if (!course) return false;
+  return course.publishedAt != null || course.slug != null || (await client.courseCompletion.count({ where: { courseId } })) > 0;
 }
 
 /**
- * Delt lås på kursraden (`SELECT … FOR SHARE`) for en deltakers lesing (QA-porten, runde 5). Lesinger hindrer
- * ikke hverandre, men venter på en åpen versjonsendring (`FOR UPDATE`), og den venter på dem. Dermed er
- * grensen `publishedAt` for en ny hovedversjon ekte: en lesing gjort mens den gamle teksten var aktiv, er
- * ferdig før versjonsendringen tar låsen (og får et tidligere tidspunkt); en lesing etter, ser den nye teksten.
+ * #934 skive 4a: telleren for kursets innhold og innstillinger. Kalles etter innholdslåsen, før noe skrives.
+ *
+ *   - Med `expected` (kursskjemaet sender tallet det lastet): stemmer det ikke, har noen andre lagret kurset
+ *     siden skjemaet ble åpnet. `409 course_changed`, og transaksjonen rulles tilbake — ingenting er skrevet.
+ *   - Uten `expected` (importen, og agent-tokenet på et utkast): telleren øker bare.
+ *
+ * Returnerer den nye verdien.
  */
-export async function lockCourseRowShared(client: Pick<DbTransactionClient, "$queryRaw">, courseId: string): Promise<void> {
-  await client.$queryRaw`SELECT "id" FROM "Course" WHERE "id" = ${courseId} FOR SHARE`;
+export async function claimCourseRevision(client: ContentWriteTx, courseId: string, expected?: number): Promise<number> {
+  if (expected === undefined) {
+    const updated = await client.course.updateMany({ where: { id: courseId }, data: { contentRevision: { increment: 1 } } });
+    if (updated.count === 0) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+  } else {
+    const updated = await client.course.updateMany({
+      where: { id: courseId, contentRevision: expected },
+      data: { contentRevision: { increment: 1 } },
+    });
+    if (updated.count === 0) {
+      const current = await client.course.findUnique({ where: { id: courseId }, select: { contentRevision: true } });
+      if (!current) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+      throw new ConflictError(
+        "course_changed",
+        "Someone else saved this course after you opened it. Reload the page to see their changes; nothing was saved.",
+        { expectedRevision: expected, currentRevision: current.contentRevision },
+      );
+    }
+  }
+  const row = await client.course.findUniqueOrThrow({ where: { id: courseId }, select: { contentRevision: true } });
+  return row.contentRevision;
 }
 
 /** Hvor mange som har kursbevis for kursets nåværende hovedversjon — dem en ny hovedversjon gjelder. */
@@ -92,24 +124,21 @@ export type CourseVersionRequest = { kind: "question"; answer?: CourseVersionCho
  * publisering) — da økes ingenting.
  */
 export async function applyCourseVersionChange(
-  client: VersionClient,
+  // #934 skive 4a: bare en transaksjon som holder innholdslåsen eksklusivt, kan endre versjonen. Låsen gjør det
+  // `lockCourseRow` gjorde: to endringer som overlapper, kan ikke lese samme versjon og skrive samme neste.
+  client: ContentWriteTx,
   courseId: string,
   request: CourseVersionRequest,
   snapshot: SectionSnapshot,
   actorId?: string,
 ): Promise<CourseVersionBump | null> {
   const { before } = snapshot;
-  await lockCourseRow(client, courseId);
   const course = await client.course.findUnique({
     where: { id: courseId },
     select: { publishedAt: true, slug: true, versionMajor: true, versionMinor: true },
   });
   if (!course) return null;
-  // «Har vært publisert»: publisert nå, eller fikk delingslenka ved første publisering (2.121.0), eller har
-  // kursbevis (eldre kurs uten lenke). Et kurs som aldri har vært ute, har ingen versjon å endre.
-  const everPublished =
-    course.publishedAt != null || course.slug != null || (await client.courseCompletion.count({ where: { courseId } })) > 0;
-  if (!everPublished) return null;
+  if (!(await isCourseEverPublished(client, courseId))) return null;
 
   const from = { major: course.versionMajor, minor: course.versionMinor };
   const holders = request.kind === "question" ? await countCertificateHolders(client, courseId, course.versionMajor) : 0;
@@ -171,10 +200,10 @@ export async function applyCourseVersionChange(
  * En seksjon eller modul går live fra sin EGEN side (publisert, lagret med alle språk, ny terskel). Den er
  * levende innhold i hvert kurs den ligger i; designet stiller ikke spørsmålet der («Ingen — mindre for
  * kursene»), så hvert kurs som har vært ute får en mindre versjon. Modulens eget hoved/mindre-valg per kurs
- * kommer i skive 5. Kursene låses i id-rekkefølge, så to slike endringer ikke kan låse hverandre fast.
+ * kommer i skive 5. Kursene gås i id-rekkefølge; innholdslåsen gjør at to slike endringer aldri går samtidig.
  */
 export async function applyMinorVersionToCoursesContaining(
-  client: VersionClient,
+  client: ContentWriteTx,
   ref: { sectionId: string } | { moduleId: string } | Array<{ sectionId: string } | { moduleId: string }>,
   actorId?: string,
   // «Publiser nye versjoner» og «Publiser kurs» avgjør versjonen for kurset de står i, med forfatterens svar.
@@ -227,7 +256,7 @@ export function sameLocalizedText(a: string | null | undefined, b: string | null
  * den nye id-en, og en seksjon som var uendret, forblir uendret — ellers ville de kopierte lesingene ikke telle.
  */
 export async function renameSectionInVersionSnapshots(
-  client: Pick<DbTransactionClient, "courseVersion">,
+  client: ContentWriteTx,
   courseId: string,
   oldSectionId: string,
   newSectionId: string,

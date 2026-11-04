@@ -1,6 +1,7 @@
-import { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
+import { adminContentRepository, createAdminContentRepository, createAdminContentWriter } from "./adminContentRepository.js";
 import { questionTypeOf, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
+import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
@@ -8,7 +9,7 @@ import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs
 import type { AssessmentMode } from "@prisma/client";
 import { localizedTextCodec, type LocalizedText, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
-import { assertModuleNotInAnyCourse } from "../course/contentLifecycle.js";
+import { assertModuleNotInAnyCourse, findCoursesContainingModule, inUseMessage } from "../course/contentLifecycle.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import {
   generateModuleRubric,
@@ -107,13 +108,13 @@ async function ensureModuleExists(moduleId: string, repo: AdminContentReader = a
   return module;
 }
 
-export async function createModule(input: CreateModuleInput, tx?: DbTransactionClient) {
+export async function createModule(input: CreateModuleInput, tx?: ContentWriteTx) {
   if (input.validFrom && input.validTo && input.validTo < input.validFrom) {
     throw new Error("validTo must be on or after validFrom.");
   }
 
-  const run = async (client: DbTransactionClient) => {
-    const repo = createAdminContentRepository(client);
+  const run = async (client: ContentWriteTx) => {
+    const repo = createAdminContentWriter(client);
     const created = await repo.createModule({
       title: input.title,
       description: input.description,
@@ -156,7 +157,7 @@ export async function createModule(input: CreateModuleInput, tx?: DbTransactionC
     return created;
   };
 
-  return tx ? run(tx) : runInTransaction(run);
+  return tx ? run(tx) : runContentWrite(run);
 }
 
 /**
@@ -235,17 +236,17 @@ export async function updateModuleTitle(
   actorId: string,
   // #906: when the caller is already composing a version, the rename has to land in the SAME
   // transaction — otherwise a failed version leaves the module renamed and nothing else changed.
-  existingTx?: DbTransactionClient,
+  existingTx?: ContentWriteTx,
 ) {
-  const reader = existingTx ? createAdminContentRepository(existingTx) : adminContentRepository;
-  const existingModule = await reader.findModuleTitle(moduleId);
-  if (!existingModule) {
-    throw new NotFoundError("Module", "module_not_found", "Module not found.");
-  }
-
-  const title = resolveNextModuleTitle(existingModule.title, titlePatch);
-  const applyIn = async (tx: DbTransactionClient) => {
-    const repo = createAdminContentRepository(tx);
+  // #934 skive 4a: den lagrede tittelen leses etter innholdslåsen — en sammenslåing med en tittel fra før en
+  // samtidig endring ville skrevet over den.
+  const applyIn = async (tx: ContentWriteTx) => {
+    const existingModule = await createAdminContentRepository(tx).findModuleTitle(moduleId);
+    if (!existingModule) {
+      throw new NotFoundError("Module", "module_not_found", "Module not found.");
+    }
+    const title = resolveNextModuleTitle(existingModule.title, titlePatch);
+    const repo = createAdminContentWriter(tx);
     const updated = await repo.updateModuleTitle(moduleId, title);
     await recordAuditEvent(
       {
@@ -259,7 +260,7 @@ export async function updateModuleTitle(
     );
     return updated;
   };
-  return existingTx ? applyIn(existingTx) : runInTransaction(applyIn);
+  return existingTx ? applyIn(existingTx) : runContentWrite(applyIn);
 }
 
 // v1.2.11: bulk-purge alle uplubliserte moduler (activeVersionId=null) som ikke er i kurs
@@ -311,7 +312,17 @@ export async function purgeUnpublishedModules(actorId: string): Promise<PurgeRes
       continue;
     }
     try {
-      await runInTransaction(async (tx) => {
+      const purged = await runContentWrite(async (tx) => {
+        // #934 skive 4a: kandidatlista over ble laget før innholdslåsen. Etter den sjekkes det på nytt at modulen
+        // fortsatt er upublisert, ikke arkivert, ikke i noe kurs og uten innleveringer eller beståtte. Har noe
+        // endret seg, står modulen.
+        const fresh = await tx.module.findUnique({
+          where: { id: candidate.id },
+          select: { activeVersionId: true, archivedAt: true, _count: { select: { submissions: true, courseItems: true, certificationStatuses: true } } },
+        });
+        if (!fresh || fresh.activeVersionId || fresh.archivedAt || fresh._count.submissions > 0 || fresh._count.courseItems > 0 || fresh._count.certificationStatuses > 0) {
+          return false;
+        }
         // FKs på Module-relasjoner er Restrict, så vi må slette barn først i riktig
         // rekkefølge: moduleVersions har FK til rubric/prompt/mcq-set-versions, så slett
         // moduleVersions først; deretter mcqQuestions (FK til mcqSetVersion + module);
@@ -332,7 +343,12 @@ export async function purgeUnpublishedModules(actorId: string): Promise<PurgeRes
           },
           tx,
         );
+        return true;
       });
+      if (!purged) {
+        result.skipped.push({ id: candidate.id, title: candidate.title, reason: "changed since the list was made" });
+        continue;
+      }
       result.deleted.push({ id: candidate.id, title: candidate.title });
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown_error";
@@ -344,42 +360,50 @@ export async function purgeUnpublishedModules(actorId: string): Promise<PurgeRes
 }
 
 export async function deleteModule(moduleId: string, actorId: string) {
-  const module = await adminContentRepository.findModuleDeleteSummary(moduleId);
+  // #934 skive 4a: alt etter innholdslåsen, i samme transaksjon som slettingen — også «ligger ikke i noe kurs»,
+  // som ruta sjekket alene før. Sjekket før låsen, kunne modulen bli lagt inn i et kurs mellom sjekken og slettingen.
+  return runContentWrite(async (tx) => {
+    const module = await createAdminContentRepository(tx).findModuleDeleteSummary(moduleId);
 
-  if (!module) {
-    throw new Error("Module not found.");
-  }
+    if (!module) {
+      throw new Error("Module not found.");
+    }
 
-  const dependencyChecks = [
-    ["module versions", module._count.versions],
-    ["rubric versions", module._count.rubricVersions],
-    ["prompt template versions", module._count.promptTemplateVersions],
-    ["MCQ set versions", module._count.mcqSetVersions],
-    ["submissions", module._count.submissions],
-    ["certification statuses", module._count.certificationStatuses],
-  ].filter(([, count]) => typeof count === "number" && count > 0);
+    // G2: samme melding og kode som ruta har gitt siden #705 (`module_in_use`, 409, antall kurs).
+    const courses = await findCoursesContainingModule(moduleId, tx);
+    if (courses.length > 0) {
+      throw new ConflictError("module_in_use", inUseMessage("Modulen", "slettes", courses), { courseCount: courses.length });
+    }
 
-  // #938: en modul som står i et utstedt kursbevis er ALLEREDE beskyttet her — `certificationStatuses`
-  // over blokkerer. Et kursbevis krever at deltakeren besto modulen, så raden finnes, og sletting
-  // stoppes. Derfor er det bevisst IKKE lagt til en egen `assertModuleNotInIssuedCertificate`:
-  // den ville aldri kunne fyre, og en vakt som leser som en vakt uten å kunne virke er verre enn
-  // ingen vakt (#960).
-  //
-  // Seksjoner har ingen tilsvarende avhengighet — `courseSectionRead` sjekkes ikke ved sletting —
-  // så DER er vakta reell. Se `assertSectionNotInIssuedCertificate` i contentLifecycle.ts.
+    const dependencyChecks = [
+      ["module versions", module._count.versions],
+      ["rubric versions", module._count.rubricVersions],
+      ["prompt template versions", module._count.promptTemplateVersions],
+      ["MCQ set versions", module._count.mcqSetVersions],
+      ["submissions", module._count.submissions],
+      ["certification statuses", module._count.certificationStatuses],
+    ].filter(([, count]) => typeof count === "number" && count > 0);
 
-  if (module.activeVersionId || dependencyChecks.length > 0) {
-    const dependencySummary = [
-      module.activeVersionId ? "active published version" : null,
-      ...dependencyChecks.map(([label, count]) => `${count} ${label}`),
-    ]
-      .filter(Boolean)
-      .join(", ");
-    throw new Error(`Module cannot be deleted because it still has dependencies: ${dependencySummary}.`);
-  }
+    // #938: en modul som står i et utstedt kursbevis er ALLEREDE beskyttet her — `certificationStatuses`
+    // over blokkerer. Et kursbevis krever at deltakeren besto modulen, så raden finnes, og sletting
+    // stoppes. Derfor er det bevisst IKKE lagt til en egen `assertModuleNotInIssuedCertificate`:
+    // den ville aldri kunne fyre, og en vakt som leser som en vakt uten å kunne virke er verre enn
+    // ingen vakt (#960).
+    //
+    // Seksjoner har ingen tilsvarende avhengighet — `courseSectionRead` sjekkes ikke ved sletting —
+    // så DER er vakta reell. Se `assertSectionNotInIssuedCertificate` i contentLifecycle.ts.
 
-  const deletedModule = await runInTransaction(async (tx) => {
-    const repo = createAdminContentRepository(tx);
+    if (module.activeVersionId || dependencyChecks.length > 0) {
+      const dependencySummary = [
+        module.activeVersionId ? "active published version" : null,
+        ...dependencyChecks.map(([label, count]) => `${count} ${label}`),
+      ]
+        .filter(Boolean)
+        .join(", ");
+      throw new Error(`Module cannot be deleted because it still has dependencies: ${dependencySummary}.`);
+    }
+
+    const repo = createAdminContentWriter(tx);
     const deleted = await repo.deleteModule(moduleId);
     await recordAuditEvent(
       {
@@ -396,8 +420,6 @@ export async function deleteModule(moduleId: string, actorId: string) {
     );
     return deleted;
   });
-
-  return deletedModule;
 }
 
 async function getNextVersionNo(
@@ -717,10 +739,16 @@ export async function createMcqSetVersion(input: CreateMcqSetVersionInput, tx?: 
   return tx ? run(tx) : runInTransaction(run);
 }
 
-export async function createModuleVersion(input: CreateModuleVersionInput, tx?: DbTransactionClient) {
+export async function createModuleVersion(input: CreateModuleVersionInput, tx?: ContentWriteTx) {
+  // #934 skive 4a: sjekkene og versjonsnummeret etter innholdslåsen, i samme transaksjon som skrivingen — to
+  // samtidige lagringer kan ellers få samme nummer.
+  return tx ? createModuleVersionLocked(input, tx) : runContentWrite((locked) => createModuleVersionLocked(input, locked));
+}
+
+async function createModuleVersionLocked(input: CreateModuleVersionInput, client: ContentWriteTx) {
   // #796: reads run on the tx client when composing an import, so they see the module + rubric/prompt/mcq
   // versions created earlier in the SAME transaction.
-  const reader = tx ? createAdminContentRepository(tx) : adminContentRepository;
+  const reader = createAdminContentRepository(client);
   await ensureModuleExists(input.moduleId, reader);
   const versionNo = await getNextVersionNo("module", input.moduleId, reader);
 
@@ -758,8 +786,7 @@ export async function createModuleVersion(input: CreateModuleVersionInput, tx?: 
     }
   }
 
-  const run = async (client: DbTransactionClient) =>
-    createAdminContentRepository(client).createModuleVersion({
+  return createAdminContentWriter(client).createModuleVersion({
       moduleId: input.moduleId,
       versionNo,
       assessmentMode: input.assessmentMode,
@@ -774,7 +801,6 @@ export async function createModuleVersion(input: CreateModuleVersionInput, tx?: 
       submissionSchemaJson: input.submissionSchemaJson,
       assessmentPolicyJson: input.assessmentPolicyJson,
     });
-  return tx ? run(tx) : runInTransaction(run);
 }
 
 export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampleVersionInput) {
@@ -869,25 +895,23 @@ export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampl
 }
 
 export async function archiveModule(moduleId: string, actorId: string) {
-  const module = await adminContentRepository.findModuleSummary(moduleId);
-
-  if (!module) {
-    throw new Error("Module not found.");
-  }
-
-  if (module.archivedAt) {
-    throw new Error("Module is already archived.");
-  }
-
-  // G2 (bruk-lås): en modul som ligger i ETHVERT kurs (publisert eller utkast) kan ikke
-  // arkiveres — den ville trekkes vekk under kurset. Dette tetter hullet der en publisert
-  // modul kunne avpubliseres og deretter arkiveres mens den fortsatt lå i et publisert kurs.
-  await assertModuleNotInAnyCourse(moduleId, "arkiveres");
-
   // I3: arkivering auto-avpubliserer (rydder activeVersionId samtidig som archivedAt settes),
   // så tilstanden «arkivert men fortsatt publisert» aldri oppstår. Gjenopprett lander i Utkast.
-  const result = await runInTransaction(async (tx) => {
-    const repo = createAdminContentRepository(tx);
+  // #934 skive 4a: sjekkene etter innholdslåsen. Arkivering mot innlegging (Codex runde 1 nr. 2): den ene venter
+  // på den andre, og ser hva den andre gjorde.
+  const result = await runContentWrite(async (tx) => {
+    const module = await createAdminContentRepository(tx).findModuleSummary(moduleId);
+    if (!module) {
+      throw new Error("Module not found.");
+    }
+    if (module.archivedAt) {
+      throw new Error("Module is already archived.");
+    }
+    // G2 (bruk-lås): en modul som ligger i ETHVERT kurs (publisert eller utkast) kan ikke
+    // arkiveres — den ville trekkes vekk under kurset. Dette tetter hullet der en publisert
+    // modul kunne avpubliseres og deretter arkiveres mens den fortsatt lå i et publisert kurs.
+    await assertModuleNotInAnyCourse(moduleId, "arkiveres", tx);
+    const repo = createAdminContentWriter(tx);
     const archived = await repo.archiveModule(moduleId, new Date());
     await recordAuditEvent(
       {
@@ -906,18 +930,15 @@ export async function archiveModule(moduleId: string, actorId: string) {
 }
 
 export async function restoreModule(moduleId: string, actorId: string) {
-  const module = await adminContentRepository.findModuleSummary(moduleId);
-
-  if (!module) {
-    throw new Error("Module not found.");
-  }
-
-  if (!module.archivedAt) {
-    throw new Error("Module is not archived.");
-  }
-
-  const result = await runInTransaction(async (tx) => {
-    const repo = createAdminContentRepository(tx);
+  const result = await runContentWrite(async (tx) => {
+    const module = await createAdminContentRepository(tx).findModuleSummary(moduleId);
+    if (!module) {
+      throw new Error("Module not found.");
+    }
+    if (!module.archivedAt) {
+      throw new Error("Module is not archived.");
+    }
+    const repo = createAdminContentWriter(tx);
     const restored = await repo.restoreModule(moduleId);
     await recordAuditEvent(
       {
@@ -936,12 +957,12 @@ export async function restoreModule(moduleId: string, actorId: string) {
 }
 
 export async function unpublishModule(moduleId: string, actorId: string) {
-  await ensureModuleExists(moduleId);
-  // G2 (bruk-lås): kan ikke avpublisere en modul som ligger i et kurs — det ville gi en
-  // blindvei i kurset. Fjern den fra kursene først.
-  await assertModuleNotInAnyCourse(moduleId, "avpubliseres");
-  const result = await runInTransaction(async (tx) => {
-    const repo = createAdminContentRepository(tx);
+  const result = await runContentWrite(async (tx) => {
+    await ensureModuleExists(moduleId, createAdminContentRepository(tx));
+    // G2 (bruk-lås): kan ikke avpublisere en modul som ligger i et kurs — det ville gi en
+    // blindvei i kurset. Fjern den fra kursene først. #934 skive 4a: etter innholdslåsen.
+    await assertModuleNotInAnyCourse(moduleId, "avpubliseres", tx);
+    const repo = createAdminContentWriter(tx);
     const unpublished = await repo.unpublishModule(moduleId);
     await recordAuditEvent(
       {
@@ -983,18 +1004,19 @@ export async function publishModuleVersion(
   moduleId: string,
   moduleVersionId: string,
   actorId: string,
-  tx?: DbTransactionClient,
+  tx?: ContentWriteTx,
   // #934 skive 3: `courseVersionHandledByCaller` — «Publiser nye versjoner» og «Publiser kurs» avgjør kursets
   // versjon selv. Alle andre (modulens egen side, modulimport) gir kursene modulen ligger i en mindre versjon;
   // modulens eget hoved/mindre-valg per kurs kommer i skive 5.
   options?: { supersedesEarlierPasses?: boolean; courseVersionHandledByCaller?: boolean },
 ) {
-  // #796: the read runs on the tx client when composing an import, so it sees the just-created module.
-  const module = await ensureModuleExists(moduleId, tx ? createAdminContentRepository(tx) : adminContentRepository);
   const now = new Date();
 
-  const run = async (client: DbTransactionClient) => {
-    const result = await createAdminContentRepository(client).publishModuleVersion(
+  const run = async (client: ContentWriteTx) => {
+    // #796: the read runs on the tx client when composing an import, so it sees the just-created module.
+    // #934 skive 4a: og etter innholdslåsen, så «hva var aktiv før» er det som faktisk byttes ut.
+    const module = await ensureModuleExists(moduleId, createAdminContentRepository(client));
+    const result = await createAdminContentWriter(client).publishModuleVersion(
       moduleId,
       moduleVersionId,
       actorId,
@@ -1075,7 +1097,7 @@ export async function publishModuleVersion(
     return result;
   };
 
-  return tx ? run(tx) : runInTransaction(run);
+  return tx ? run(tx) : runContentWrite(run);
 }
 
 /**
@@ -1103,21 +1125,22 @@ export async function restoreModuleVersion(input: {
   sourceModuleVersionId: string;
   actorId: string;
 }) {
-  await ensureModuleExists(input.moduleId);
+  // #934 skive 4a: oppslagene og versjonsnummeret etter innholdslåsen.
+  return runContentWrite(async (tx) => {
+    const reader = createAdminContentRepository(tx);
+    await ensureModuleExists(input.moduleId, reader);
 
-  const sourceVersion = await adminContentRepository.findActiveModuleVersionForClone(input.sourceModuleVersionId);
-  if (!sourceVersion) {
-    throw new NotFoundError("ModuleVersion", "module_version_not_found", "Module version not found.");
-  }
-  // A version id from a different module would silently graft that module's content onto this one.
-  if (sourceVersion.moduleId !== input.moduleId) {
-    throw new NotFoundError("ModuleVersion", "module_version_not_found", "The module version does not belong to this module.");
-  }
+    const sourceVersion = await reader.findActiveModuleVersionForClone(input.sourceModuleVersionId);
+    if (!sourceVersion) {
+      throw new NotFoundError("ModuleVersion", "module_version_not_found", "Module version not found.");
+    }
+    // A version id from a different module would silently graft that module's content onto this one.
+    if (sourceVersion.moduleId !== input.moduleId) {
+      throw new NotFoundError("ModuleVersion", "module_version_not_found", "The module version does not belong to this module.");
+    }
 
-  const versionNo = await getNextVersionNo("module", input.moduleId);
-
-  return runInTransaction(async (tx) => {
-    const repo = createAdminContentRepository(tx);
+    const versionNo = await getNextVersionNo("module", input.moduleId, reader);
+    const repo = createAdminContentWriter(tx);
     const restored = await repo.createModuleVersion({
       moduleId: input.moduleId,
       versionNo,
@@ -1163,33 +1186,36 @@ export async function appendMcqQuestions(input: {
   questions: CreateMcqSetVersionInput["questions"];
   actorId: string;
 }) {
-  await ensureModuleExists(input.moduleId);
-  const module = await adminContentRepository.findModuleActiveVersion(input.moduleId);
-  const sourceVersion = module?.activeVersion ?? (await adminContentRepository.findLatestModuleVersionRow(input.moduleId));
-  if (!sourceVersion) {
-    throw new NotFoundError("ModuleVersion", "module_version_not_found", "The module has no version yet.");
-  }
-  if (!sourceVersion.mcqSetVersionId) {
-    throw new ConflictError("module_has_no_mcq", "The module has no multiple-choice component; change the module type first.");
-  }
-  const currentSet = await adminContentRepository.findMcqSetVersionWithQuestions(sourceVersion.mcqSetVersionId);
-  if (!currentSet) {
-    throw new NotFoundError("MCQSetVersion", "mcq_set_not_found", "The module's MCQ set was not found.");
-  }
-  const existing = currentSet.questions
-    .filter((question) => question.active)
-    .map((question) => ({
-      stem: question.stem,
-      options: JSON.parse(question.optionsJson) as string[],
-      correctAnswer: question.correctAnswer,
-      rationale: question.rationale ?? undefined,
-      // #1077: kopien beholder typen. Uten den ble et «velg alle som stemmer» et vanlig spørsmål
-      // første gang noen fylte på banken.
-      questionType: questionTypeOf(question),
-      answerKeyJson: question.answerKeyJson ?? null,
-    }));
+  // #934 skive 4a: kilden leses etter innholdslåsen — ellers kunne påfyllingen bygge på en versjon som ble byttet
+  // ut i mellomtiden, og den nye modulversjonen ville mistet den andres endring.
+  return runContentWrite(async (tx) => {
+    const reader = createAdminContentRepository(tx);
+    await ensureModuleExists(input.moduleId, reader);
+    const module = await reader.findModuleActiveVersion(input.moduleId);
+    const sourceVersion = module?.activeVersion ?? (await reader.findLatestModuleVersionRow(input.moduleId));
+    if (!sourceVersion) {
+      throw new NotFoundError("ModuleVersion", "module_version_not_found", "The module has no version yet.");
+    }
+    if (!sourceVersion.mcqSetVersionId) {
+      throw new ConflictError("module_has_no_mcq", "The module has no multiple-choice component; change the module type first.");
+    }
+    const currentSet = await reader.findMcqSetVersionWithQuestions(sourceVersion.mcqSetVersionId);
+    if (!currentSet) {
+      throw new NotFoundError("MCQSetVersion", "mcq_set_not_found", "The module's MCQ set was not found.");
+    }
+    const existing = currentSet.questions
+      .filter((question) => question.active)
+      .map((question) => ({
+        stem: question.stem,
+        options: JSON.parse(question.optionsJson) as string[],
+        correctAnswer: question.correctAnswer,
+        rationale: question.rationale ?? undefined,
+        // #1077: kopien beholder typen. Uten den ble et «velg alle som stemmer» et vanlig spørsmål
+        // første gang noen fylte på banken.
+        questionType: questionTypeOf(question),
+        answerKeyJson: question.answerKeyJson ?? null,
+      }));
 
-  return runInTransaction(async (tx) => {
     const mcqSet = await createMcqSetVersion({
       moduleId: input.moduleId,
       title: currentSet.title,
@@ -1197,7 +1223,7 @@ export async function appendMcqQuestions(input: {
       questions: [...existing, ...input.questions],
     }, tx);
     const versionNo = await getNextVersionNo("module", input.moduleId, createAdminContentRepository(tx));
-    const version = await createAdminContentRepository(tx).createModuleVersion({
+    const version = await createAdminContentWriter(tx).createModuleVersion({
       moduleId: input.moduleId,
       versionNo,
       assessmentMode: sourceVersion.assessmentMode,
@@ -1247,41 +1273,45 @@ type PublishThresholdsInput = {
 // calibration on modules published before the gate existed. The gate belongs where new content
 // reaches participants: the module-publish route, the course cascade, and import auto-publish.
 export async function publishModuleVersionWithThresholds(input: PublishThresholdsInput) {
-  const module = await ensureModuleExists(input.moduleId);
+  // #934 skive 4a: kalibreringen kloner den AKTIVE versjonen — slått opp etter innholdslåsen. Slått opp før, kunne
+  // en ny versjon bli publisert i mellomtiden, og kalibreringen ville publisert en kopi av den gamle over den
+  // (Codex runde 2 nr. 10).
+  const { published } = await runContentWrite(async (tx) => {
+    const reader = createAdminContentRepository(tx);
+    const module = await ensureModuleExists(input.moduleId, reader);
 
-  if (!module.activeVersionId) {
-    throw new Error("Module has no active version to base thresholds on.");
-  }
+    if (!module.activeVersionId) {
+      throw new Error("Module has no active version to base thresholds on.");
+    }
 
-  const sourceVersion = await adminContentRepository.findActiveModuleVersionForClone(module.activeVersionId);
+    const sourceVersion = await reader.findActiveModuleVersionForClone(module.activeVersionId);
 
-  if (!sourceVersion) {
-    throw new Error("Active module version not found.");
-  }
+    if (!sourceVersion) {
+      throw new Error("Active module version not found.");
+    }
 
-  const existingPolicy: ModuleAssessmentPolicy = assessmentPolicyCodec.parse(sourceVersion.assessmentPolicyJson) ?? {};
+    const existingPolicy: ModuleAssessmentPolicy = assessmentPolicyCodec.parse(sourceVersion.assessmentPolicyJson) ?? {};
 
-  const newPassRules: ModuleAssessmentPolicy["passRules"] = {
-    ...(existingPolicy.passRules ?? {}),
-    totalMin: input.totalMin,
-  };
-  if (input.mcqMinPercent !== undefined) {
-    newPassRules.mcqMinPercent = input.mcqMinPercent;
-  }
-  if (input.practicalMinPercent !== undefined) {
-    newPassRules.practicalMinPercent = input.practicalMinPercent;
-  }
+    const newPassRules: ModuleAssessmentPolicy["passRules"] = {
+      ...(existingPolicy.passRules ?? {}),
+      totalMin: input.totalMin,
+    };
+    if (input.mcqMinPercent !== undefined) {
+      newPassRules.mcqMinPercent = input.mcqMinPercent;
+    }
+    if (input.practicalMinPercent !== undefined) {
+      newPassRules.practicalMinPercent = input.practicalMinPercent;
+    }
 
-  const newPolicy: ModuleAssessmentPolicy = {
-    ...existingPolicy,
-    passRules: newPassRules,
-  };
+    const newPolicy: ModuleAssessmentPolicy = {
+      ...existingPolicy,
+      passRules: newPassRules,
+    };
 
-  const versionNo = await getNextVersionNo("module", input.moduleId);
-  const now = new Date();
+    const versionNo = await getNextVersionNo("module", input.moduleId, reader);
+    const now = new Date();
 
-  const { published } = await runInTransaction(async (tx) => {
-    const repo = createAdminContentRepository(tx);
+    const repo = createAdminContentWriter(tx);
     const newVersion = await repo.createModuleVersion({
       moduleId: input.moduleId,
       versionNo,

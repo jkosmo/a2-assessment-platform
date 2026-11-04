@@ -32,9 +32,12 @@ vi.mock("../../src/db/prisma.js", () => ({
 
 vi.mock("../../src/db/transaction.js", () => ({
   runInTransaction: (cb: (tx: unknown) => unknown) => {
+    // #934 skive 4a: seksjonen leses i den låste transaksjonen, og låsen tas med rå SQL først.
     lastTx = {
-      courseSection: { update: txSectionUpdate, delete: txSectionDelete },
+      courseSection: { update: txSectionUpdate, delete: txSectionDelete, findUnique: sectionFindUnique },
       courseSectionVersion: { deleteMany: txVersionDeleteMany },
+      $executeRaw: async () => 0,
+      $executeRawUnsafe: async () => 0,
     };
     return cb(lastTx);
   },

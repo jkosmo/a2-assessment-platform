@@ -25,6 +25,15 @@ const smoHeaders = {
   "x-user-roles": "SUBJECT_MATTER_OWNER",
 };
 
+// #934 skive 4a: slettingen får det forhåndsvisningen viste (det klienten sender). Uten det: 409.
+async function asPreviewed(courseId: string) {
+  const preview = await request(app).get(`/api/admin/content/courses/${courseId}/cascade-delete-preview`).set(adminHeaders);
+  return {
+    expectedDeletedModuleIds: (preview.body.deletableModules ?? []).map((m: { id: string }) => m.id),
+    expectedDeletedSectionIds: (preview.body.deletableSections ?? []).map((s: { id: string }) => s.id),
+  };
+}
+
 let seq = 0;
 const uniq = () => `ccd-${Date.now()}-${seq++}`;
 
@@ -156,7 +165,7 @@ describe("Course cascade delete (#762)", () => {
 
     const res = await request(app)
       .post(`/api/admin/content/courses/${courseId}/cascade-delete`)
-      .set(adminHeaders);
+      .set(adminHeaders).send(await asPreviewed(courseId));
     expect(res.status).toBe(200);
     expect(res.body.deletedCourseId).toBe(courseId);
     expect(res.body.deletedModuleIds).toContain(moduleId);
@@ -192,7 +201,7 @@ describe("Course cascade delete (#762)", () => {
     await expect(getAsset(before.blobPath)).resolves.toBeInstanceOf(Buffer);
 
     const courseId = await makeCourse([{ itemType: "SECTION", sectionId }]);
-    const res = await request(app).post(`/api/admin/content/courses/${courseId}/cascade-delete`).set(adminHeaders);
+    const res = await request(app).post(`/api/admin/content/courses/${courseId}/cascade-delete`).set(adminHeaders).send(await asPreviewed(courseId));
     expect(res.status).toBe(200);
     expect(res.body.deletedSectionIds).toContain(sectionId);
 
@@ -210,7 +219,7 @@ describe("Course cascade delete (#762)", () => {
 
     const res = await request(app)
       .post(`/api/admin/content/courses/${deleteCourseId}/cascade-delete`)
-      .set(adminHeaders);
+      .set(adminHeaders).send(await asPreviewed(deleteCourseId));
     expect(res.status).toBe(200);
     expect(res.body.deletedModuleIds).not.toContain(sharedModuleId);
     expect(res.body.sparedModuleIds).toContain(sharedModuleId);
@@ -232,7 +241,7 @@ describe("Course cascade delete (#762)", () => {
 
     const res = await request(app)
       .post(`/api/admin/content/courses/${courseId}/cascade-delete`)
-      .set(adminHeaders);
+      .set(adminHeaders).send(await asPreviewed(courseId));
     expect(res.status).toBe(400);
     const blockerModuleIds = (res.body.details?.blockers ?? []).map((b: { id: string }) => b.id);
     expect(blockerModuleIds).toContain(moduleId);
@@ -251,7 +260,7 @@ describe("Course cascade delete (#762)", () => {
 
     const res = await request(app)
       .post(`/api/admin/content/courses/${courseId}/cascade-delete`)
-      .set(adminHeaders);
+      .set(adminHeaders).send(await asPreviewed(courseId));
     expect(res.status).toBe(400);
     const blockerIds = (res.body.details?.blockers ?? []).map((b: { id: string }) => b.id);
     expect(blockerIds).toContain(courseId);
@@ -282,7 +291,7 @@ describe("Course cascade delete (#762)", () => {
     expect(res.body.blockers).toEqual([]);
 
     // Clean this fixture up explicitly so the preview-only course does not linger.
-    await request(app).post(`/api/admin/content/courses/${courseId}/cascade-delete`).set(adminHeaders);
+    await request(app).post(`/api/admin/content/courses/${courseId}/cascade-delete`).set(adminHeaders).send(await asPreviewed(courseId));
   });
 
   // Route-level guard: a SUBJECT_MATTER_OWNER (allowed onto the admin_content mount) gets 403 on both

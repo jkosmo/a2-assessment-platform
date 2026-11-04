@@ -23,7 +23,8 @@ const recordAuditEvent = vi.fn();
 
 vi.mock("../../src/db/prisma.js", () => ({
   // #934 skive 3: en modul publisert fra egen side gir kursene den ligger i en mindre versjon — her ligger den i ingen.
-  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ course: { findMany: async () => [] } })) },
+  // #934 skive 4a: innholdslåsen tas med rå SQL først i transaksjonen (runContentWrite).
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ course: { findMany: async () => [] }, $executeRaw: async () => 0, $executeRawUnsafe: async () => 0 })) },
 }));
 
 const adminContentRepositoryMock = {
@@ -50,6 +51,8 @@ const adminContentRepositoryMock = {
 vi.mock("../../src/modules/adminContent/adminContentRepository.js", () => ({
   adminContentRepository: adminContentRepositoryMock,
   createAdminContentRepository: () => adminContentRepositoryMock,
+  // #934 skive 4a: skriverne står for seg og tar en låst transaksjon.
+  createAdminContentWriter: () => adminContentRepositoryMock,
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({

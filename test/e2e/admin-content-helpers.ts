@@ -1066,7 +1066,26 @@ export async function mockCommonApis(page: Page, {
   // uten versjon. Uten et svar her feilet lagringen av innholdet i mockmiljøet, og navnet ble aldri sendt.
   // Bare PUT: GET faller videre, så spesifikasjoner som bruker modul-fallbacken (course.modules) er urørt.
   // Spesifikasjoner som registrerer sin egen items-rute, vinner (registrert senere).
+  // #934 skive 4a: skjemaet har ingen reserveliste lenger — feiler GET …/items, kan kurset ikke lagres. Mockens
+  // GET svarer derfor med kursets moduler som elementer (det reservelista tidligere laget av `course.modules`).
   await page.route("**/api/admin/content/courses/*/items", async (route: Route) => {
+    if (route.request().method() === "GET") {
+      const courseId = decodeURIComponent(new URL(route.request().url()).pathname.split("/").slice(-2)[0] ?? "");
+      const course = mutableCourses.find((item) => item.id === courseId);
+      if (!course) return route.fallback();
+      const items = (course.modules ?? []).map((m: { moduleId: string; sortOrder?: number; moduleTitle?: unknown }, index: number) => ({
+        id: `ci-${m.moduleId}`,
+        type: "MODULE",
+        sortOrder: m.sortOrder ?? index,
+        moduleId: m.moduleId,
+        sectionId: null,
+        title: m.moduleTitle ?? m.moduleId,
+        discussionsEnabled: true,
+        archivedAt: null,
+      }));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items }) });
+      return;
+    }
     if (route.request().method() !== "PUT") return route.fallback();
     await route.fulfill({ status: 204, body: "" });
   });

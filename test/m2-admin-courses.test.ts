@@ -1,4 +1,5 @@
 import request from "supertest";
+import { withRevision } from "./support/courseRevision.js";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { auditActions, auditEntityTypes } from "../src/observability/auditEvents.js";
@@ -83,25 +84,25 @@ describe("Admin course management", () => {
     const updateCourseResponse = await request(app)
       .put(`/api/admin/content/courses/${courseId}`)
       .set(adminHeaders)
-      .send({
+      .send(await withRevision(courseId, {
         title: {
           "en-GB": "Updated managed course",
         },
         description: {
           "en-GB": "Updated description from the admin UI.",
         },
-      });
+      }));
     expect(updateCourseResponse.status).toBe(200);
 
     const setModulesResponse = await request(app)
       .put(`/api/admin/content/courses/${courseId}/modules`)
       .set(adminHeaders)
-      .send({
+      .send(await withRevision(courseId, {
         modules: [
           { moduleId: moduleA.id, sortOrder: 2 },
           { moduleId: moduleB.id, sortOrder: 1 },
         ],
-      });
+      }));
     expect(setModulesResponse.status).toBe(204);
 
     const detailResponse = await request(app)

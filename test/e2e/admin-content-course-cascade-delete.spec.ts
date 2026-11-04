@@ -52,8 +52,10 @@ test.describe("course cascade delete (#762)", () => {
     await mockCascadePreview(page, PREVIEW);
 
     let deleteCalled = false;
+    let deleteBody: unknown = null;
     await page.route("**/api/admin/content/courses/*/cascade-delete", async (route: Route) => {
       deleteCalled = true;
+      deleteBody = route.request().postDataJSON();
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -84,6 +86,9 @@ test.describe("course cascade delete (#762)", () => {
     await confirmBtn.click();
 
     await expect.poll(() => deleteCalled).toBe(true);
+    // #934 skive 4a: det forhåndsvisningen sa ville bli slettet, sendes med. Har det endret seg når serveren har
+    // tatt innholdslåsen, svarer den 409 og sletter ingenting.
+    expect(deleteBody).toEqual({ expectedDeletedModuleIds: ["module-1"], expectedDeletedSectionIds: ["section-1"] });
     await expect(page.locator(".toast--success")).toContainText("slettet");
   });
 

@@ -31,6 +31,6 @@ export {
 } from "./adminContentQueries.js";
 export type { ModuleLibraryStatus } from "./adminContentQueries.js";
 
-export { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
+export { adminContentRepository, createAdminContentRepository, createAdminContentWriter } from "./adminContentRepository.js";
 
 export { hashBlueprint } from "./blueprintHash.js";

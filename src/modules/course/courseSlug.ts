@@ -1,5 +1,5 @@
 import { localizeContentText } from "../../i18n/content.js";
-import type { DbTransactionClient } from "../../db/transaction.js";
+import type { ContentWriteTx } from "../../db/contentLock.js";
 
 /**
  * 2.121.0: kursets navn i delingslenka, f.eks. «Kurs 7 – Hva er egentlig en KI-agent?» →
@@ -28,7 +28,8 @@ export function slugifyCourseTitle(title: string): string {
  * Setter kursets slug hvis den mangler, og returnerer den. Er navnet tatt, får det et nummer (`-2`, `-3` …).
  * Kalles ved publisering, i samme transaksjon.
  */
-export async function assignCourseSlugIfMissing(client: DbTransactionClient, courseId: string): Promise<string | null> {
+// #934 skive 4a: skriver kursraden, så den tar bare imot en transaksjon som holder innholdslåsen.
+export async function assignCourseSlugIfMissing(client: ContentWriteTx, courseId: string): Promise<string | null> {
   const course = await client.course.findUnique({ where: { id: courseId }, select: { slug: true, title: true } });
   if (!course) return null;
   if (course.slug) return course.slug;

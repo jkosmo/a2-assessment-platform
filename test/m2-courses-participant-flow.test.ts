@@ -1,4 +1,5 @@
 import request from "supertest";
+import { withRevision } from "./support/courseRevision.js";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 
@@ -240,11 +241,11 @@ describe("«Mine kurs»: rekkefølge (#1093)", () => {
     const detalj = await request(app).get(`/api/admin/content/courses/${id}`).set(admin);
     expect(detalj.body.course.sortOrder).toBe(3);
 
-    const nullet = await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send({ sortOrder: null });
+    const nullet = await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send(await withRevision(id, { sortOrder: null }));
     expect(nullet.status).toBe(200);
     expect((await request(app).get(`/api/admin/content/courses/${id}`).set(admin)).body.course.sortOrder).toBeNull();
 
-    const ugyldig = await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send({ sortOrder: -1 });
+    const ugyldig = await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send(await withRevision(id, { sortOrder: -1 }));
     expect(ugyldig.status).toBe(400);
   });
 
@@ -255,7 +256,7 @@ describe("«Mine kurs»: rekkefølge (#1093)", () => {
     // Eksporten krever minst ett element i kurset.
     const seksjon = await request(app).post("/api/admin/content/sections").set(admin).send({ title: { nb: `Seksjon ${stempel}`, nn: `Seksjon ${stempel}`, "en-GB": `Section ${stempel}` }, bodyMarkdown: { nb: "Tekst.", nn: "Tekst.", "en-GB": "Text." } });
     expect(seksjon.status, JSON.stringify(seksjon.body).slice(0, 300)).toBe(201);
-    const elementer = await request(app).put(`/api/admin/content/courses/${id}/items`).set(admin).send({ items: [{ type: "SECTION", sectionId: seksjon.body.section.id }] });
+    const elementer = await request(app).put(`/api/admin/content/courses/${id}/items`).set(admin).send(await withRevision(id, { items: [{ type: "SECTION", sectionId: seksjon.body.section.id }] }));
     expect(elementer.status, JSON.stringify(elementer.body).slice(0, 300)).toBe(204);
     const eksport = await request(app).get(`/api/admin/content/courses/${id}/export-package`).set(admin);
     expect(eksport.status, JSON.stringify(eksport.body).slice(0, 300)).toBe(200);

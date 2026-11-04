@@ -117,6 +117,9 @@ export interface AdminCourseDetail {
   versionMajor: number;
   versionMinor: number;
   certificateHolders: number;
+  /** #934 skive 4a: telleren kursskjemaet sender tilbake når det lagrer (`expectedRevision`). Har noen andre
+   *  lagret kurset siden, avvises lagringen med 409 `course_changed`. */
+  contentRevision: number;
   modules: Array<{
     moduleId: string;
     sortOrder: number;

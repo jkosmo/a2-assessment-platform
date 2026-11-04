@@ -1,4 +1,5 @@
 import request from "supertest";
+import { withRevision } from "./support/courseRevision.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
@@ -123,13 +124,13 @@ describe("2.119.0: varsel om nytt spørsmål går til kursets eiere", () => {
     const off = await request(app).get(`/api/admin/content/courses/${id}`).set(owner);
     expect(off.body.course.discussionOwnerNotifications).toBe(false);
 
-    const update = await request(app).put(`/api/admin/content/courses/${id}`).set(owner).send({ title, discussionOwnerNotifications: true });
+    const update = await request(app).put(`/api/admin/content/courses/${id}`).set(owner).send(await withRevision(id, { title, discussionOwnerNotifications: true }));
     expect(update.status).toBe(200);
     const on = await request(app).get(`/api/admin/content/courses/${id}`).set(owner);
     expect(on.body.course.discussionOwnerNotifications).toBe(true);
 
     // Utelatt = urørt; et kurs uten feltet starter på.
-    await request(app).put(`/api/admin/content/courses/${id}`).set(owner).send({ title });
+    await request(app).put(`/api/admin/content/courses/${id}`).set(owner).send(await withRevision(id, { title }));
     const still = await request(app).get(`/api/admin/content/courses/${id}`).set(owner);
     expect(still.body.course.discussionOwnerNotifications).toBe(true);
   });

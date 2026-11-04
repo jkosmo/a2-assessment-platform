@@ -1,4 +1,5 @@
 import request from "supertest";
+import { withRevision } from "./support/courseRevision.js";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
@@ -22,12 +23,12 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
     expect(create.status).toBe(201);
     const id = create.body.course.id as string;
 
-    const bRes = await request(app).put(`/api/admin/content/courses/${id}`).set(smoB).send({ title: L("hijack") });
+    const bRes = await request(app).put(`/api/admin/content/courses/${id}`).set(smoB).send(await withRevision(id, { title: L("hijack") }));
     expect(bRes.status).toBe(403);
     expect(bRes.body.error).toBe("content_ownership");
 
-    expect((await request(app).put(`/api/admin/content/courses/${id}`).set(smoA).send({ title: L("owner edit") })).status).toBe(200);
-    expect((await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send({ title: L("admin edit") })).status).toBe(200);
+    expect((await request(app).put(`/api/admin/content/courses/${id}`).set(smoA).send(await withRevision(id, { title: L("owner edit") }))).status).toBe(200);
+    expect((await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send(await withRevision(id, { title: L("admin edit") }))).status).toBe(200);
   });
 
   it("SECTION: non-owner SMO is blocked, owner + admin allowed", async () => {
@@ -128,7 +129,7 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
     const skriv = await request(app)
       .put(`/api/admin/content/courses/${id}/items`)
       .set(smoB)
-      .send({ items: [] });
+      .send(await withRevision(id, { items: [] }));
     expect(skriv.status, "en fremmed SMO skal fortsatt ikke kunne endre kurset").toBe(403);
     expect(skriv.body.error).toBe("content_ownership");
   });
@@ -209,14 +210,14 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
     const orphaned = await request(app)
       .put(`/api/admin/content/courses/${id}/items`)
       .set(smoA)
-      .send({ items: [] });
+      .send(await withRevision(id, { items: [] }));
     expect(orphaned.status).toBe(403);
     // ⚠️ Feilkoden, ikke bare statusen: `content_unowned` og `content_ownership` betyr to helt
     // ulike ting for den som leser meldingen — «ingen eier ennå» mot «ikke din».
     expect(orphaned.body.error).toBe("content_unowned");
 
     // Kontrollen motsatt vei: administrator går forbi eierskapssjekken og møter handleren.
-    expect((await request(app).put(`/api/admin/content/courses/${id}/items`).set(admin).send({ items: [] })).status)
+    expect((await request(app).put(`/api/admin/content/courses/${id}/items`).set(admin).send(await withRevision(id, { items: [] }))).status)
       .toBeLessThan(300);
   });
 
