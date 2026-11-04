@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.132.1 - 2026-11-04
+
+#934: rettinger fra kvalitetssjekken av 4a (runde 3) og 4b (runde 1).
+
+- **Import:** «Oppdater dette kurset» sammenligner nå med det planen faktisk ble regnet ut fra. En lagring i åpningen
+  mellom de to kunne bli overskrevet, og et element lagt inn da kunne bli tatt ut. Nå avvises importen (409), og
+  ingenting er endret.
+- **«Nye versjoner»:** eierskapet slås opp på transaksjonen, så oppslaget ikke står og venter på en ledig tilkobling
+  når andre står i kø bak innholdslåsen.
+- **E-post ved ny hovedversjon:** raden settes til `sending` rett før sendingen, ikke før oppslagene. En databasefeil i
+  oppslagene gjorde ellers at e-posten aldri ble sendt. Varer feilen til siste forsøk, går raden tilbake til `waiting`,
+  og jobben legger den inn på nytt.
+- **Lenkesperra** stopper også e-postadresser og domenenavn i kurstittelen, som `kurs@a-2.no` og `portal.a-2.no`.
+  E-postklienter gjør dem til lenker av seg selv. «ASP.NET» og «Node.js» går fortsatt.
+
 ## 2.132.0 - 2026-11-04
 
 #934 skive 4b: e-post til deltakerne når et kurs får en ny hovedversjon (`doc/DESIGN_934.md`, «4b — bygget»).

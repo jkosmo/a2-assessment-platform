@@ -635,8 +635,8 @@ export async function getCoursePendingVersions(courseId: string, actor: PendingV
   const moduleIds = courseItems.flatMap((item) => (item.itemType === "MODULE" && item.moduleId ? [item.moduleId] : []));
   const sectionIds = courseItems.flatMap((item) => (item.itemType === "SECTION" && item.sectionId ? [item.sectionId] : []));
   const [ownedModules, ownedSections] = await Promise.all([
-    listManageableContentIds({ contentType: "MODULE", contentIds: moduleIds, actorUserId: actor.userId, roles: actor.roles }),
-    listManageableContentIds({ contentType: "SECTION", contentIds: sectionIds, actorUserId: actor.userId, roles: actor.roles }),
+    listManageableContentIds({ contentType: "MODULE", contentIds: moduleIds, actorUserId: actor.userId, roles: actor.roles, reader }),
+    listManageableContentIds({ contentType: "SECTION", contentIds: sectionIds, actorUserId: actor.userId, roles: actor.roles, reader }),
   ]);
 
   const items: CoursePendingItem[] = [];

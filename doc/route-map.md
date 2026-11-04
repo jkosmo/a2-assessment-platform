@@ -12,7 +12,7 @@ This map covers all admin-content entry points and their status for pilot. Use i
 | `/admin-content/module/:moduleId/advanced` | **Retired (#896 S3c, v2.19.0)** — 301-redirects to `…/conversation`. The advanced editor is deleted; the workspace tabs replaced it | — | Legacy redirect |
 | `/admin-content/courses` | Course list (incl. ADMINISTRATOR-only «Slett kurs og ubrukt innhold» cascade delete, #762) | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/courses/new` | New course (conversational flow) | `admin-content-courses.html` | **Canonical** |
-| `/admin-content/courses/:courseId` | Course detail (builder: mixed modules + sections). #934 (2.129.0): shows the version («v3.2»), and asks «Hva slags endring er dette?» (minor or major version) when content changes in a course someone has a certificate for — see `FEATURE_SURFACE_MAP` §6b | `admin-content-courses.html` | **Canonical** |
+| `/admin-content/courses/:courseId` | Course detail (builder: mixed modules + sections). #934 (2.129.0): shows the version («v3.2»), and asks «Hva slags endring er dette?» (minor or major version) when content changes in a course someone has a certificate for. #934 (2.131.0): an existing course is always saved in one `PUT …/content` call with `expectedRevision` — see `FEATURE_SURFACE_MAP` §6b | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/sections` | Learning sections library + editor (#476) | `admin-content-sections.html` | **Canonical** |
 | `/admin-content/sections?id=<id>` or `?new` | Section editor (open existing / new) | `admin-content-sections.html` | **Canonical** |
 | `/admin-content/classes` | **Moved (#765)** — 301-redirects to `/deltakere/klasser` (now under the «Deltakere» area) | — | Legacy redirect |

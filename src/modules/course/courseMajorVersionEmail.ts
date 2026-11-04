@@ -14,9 +14,11 @@
 //      uten behandleren møter derfor aldri typen og kan ikke bruke opp forsøkene.
 //
 //   2. BEHANDLEREN i outboxen (`deliverCourseMajorVersionNotice`):
-//        - `queued → sending` med en betinget oppdatering (to forsøk på samme rad: bare ett slipper gjennom), og så
-//          det samme som jobben sjekker, EN GANG TIL — raden kan ha stått i køen mens noe endret seg (Codex runde 2
-//          nr. 14): avpublisert → tilbake til `waiting`; nyere versjon eller personen borte → `skipped`;
+//        - først det samme som jobben sjekker, EN GANG TIL — raden kan ha stått i køen mens noe endret seg (Codex
+//          runde 2 nr. 14): avpublisert → tilbake til `waiting`; nyere versjon eller personen borte → `skipped`;
+//        - så `queued → sending` med en betinget oppdatering, RETT FØR sendingen (to forsøk på samme rad: bare ett
+//          slipper gjennom). `sending` skal bety at e-posten kan ha gått: en feil i oppslagene før det lar raden stå
+//          i `queued`, så outboxen prøver igjen (QA-porten 2.132.0);
 //        - finner den raden i `sending`, ble et tidligere forsøk avbrutt, og e-posten kan ha gått. Raden blir
 //          `uncertain` og sendes ikke på nytt (samme valg som #1115);
 //        - sendt → `sent`. Sikker feil → tilbake til `queued`, og outboxen prøver igjen; siste forsøk → `failed`.
@@ -187,39 +189,40 @@ export async function deliverCourseMajorVersionNotice(
   // `sent`, `skipped`, `uncertain`, `failed`: ferdig. `waiting`: lagt tilbake; jobben lager en ny hendelse.
   if (notice.status !== COURSE_NOTICE_STATUS.queued) return;
 
-  const claimed = await prisma.courseVersionNotice.updateMany({
-    where: { id: notice.id, status: COURSE_NOTICE_STATUS.queued },
-    data: { status: COURSE_NOTICE_STATUS.sending },
-  });
-  if (claimed.count === 0) return;
-
   // Det samme som jobben sjekket, en gang til: raden kan ha stått i køen mens kurset ble avpublisert, fikk en nyere
   // hovedversjon, eller personen sluttet.
-  const [course, user] = await Promise.all([
-    prisma.course.findUnique({ where: { id: notice.courseId }, select: { title: true, publishedAt: true, archivedAt: true, versionMajor: true } }),
-    prisma.user.findUnique({
-      where: { id: notice.userId },
-      select: { email: true, name: true, preferredLocale: true, activeStatus: true, isAnonymized: true },
-    }),
-  ]);
+  let lookedUp;
+  try {
+    lookedUp = await lookUpNotice(notice);
+  } catch (error) {
+    // Ingenting er sendt. Gir outboxen opp nå, finnes det ingen hendelse igjen for raden: tilbake til `waiting`, så
+    // jobben legger den inn på nytt. Ellers ble den stående i `queued` for alltid (QA-porten 2.132.1).
+    if (options?.lastAttempt) {
+      await setStatus(notice.id, COURSE_NOTICE_STATUS.queued, { status: COURSE_NOTICE_STATUS.waiting, queuedAt: null });
+    }
+    throw error;
+  }
+  const { course, user, version } = lookedUp;
   const verdict = judgeNotice(notice, course, user);
   if (verdict.kind === "wait") {
-    await setStatus(notice.id, COURSE_NOTICE_STATUS.sending, { status: COURSE_NOTICE_STATUS.waiting, queuedAt: null });
+    await setStatus(notice.id, COURSE_NOTICE_STATUS.queued, { status: COURSE_NOTICE_STATUS.waiting, queuedAt: null });
     return;
   }
   if (verdict.kind === "skip" || !course || !user) {
-    await setStatus(notice.id, COURSE_NOTICE_STATUS.sending, {
+    await setStatus(notice.id, COURSE_NOTICE_STATUS.queued, {
       status: COURSE_NOTICE_STATUS.skipped,
       reason: verdict.kind === "skip" ? verdict.reason : "course_gone",
     });
     return;
   }
 
-  const version = await prisma.courseVersion.findUnique({
-    where: { courseId_versionMajor: { courseId: notice.courseId, versionMajor: notice.versionMajor } },
-    select: { changedItemCount: true },
-  });
   const locale = recipientLocale(user);
+
+  const claimed = await prisma.courseVersionNotice.updateMany({
+    where: { id: notice.id, status: COURSE_NOTICE_STATUS.queued },
+    data: { status: COURSE_NOTICE_STATUS.sending },
+  });
+  if (claimed.count === 0) return;
 
   let result: NotificationResult;
   try {
@@ -269,6 +272,21 @@ export async function deliverCourseMajorVersionNotice(
     reason,
   });
   throw new NoticeNotDeliveredError(`course major version notification not delivered: ${reason}`);
+}
+
+async function lookUpNotice(notice: { courseId: string; userId: string; versionMajor: number }) {
+  const [course, user, version] = await Promise.all([
+    prisma.course.findUnique({ where: { id: notice.courseId }, select: { title: true, publishedAt: true, archivedAt: true, versionMajor: true } }),
+    prisma.user.findUnique({
+      where: { id: notice.userId },
+      select: { email: true, name: true, preferredLocale: true, activeStatus: true, isAnonymized: true },
+    }),
+    prisma.courseVersion.findUnique({
+      where: { courseId_versionMajor: { courseId: notice.courseId, versionMajor: notice.versionMajor } },
+      select: { changedItemCount: true },
+    }),
+  ]);
+  return { course, user, version };
 }
 
 /** Betinget: endrer bare en rad som fortsatt står i `from`. */

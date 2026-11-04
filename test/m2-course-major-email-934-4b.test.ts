@@ -517,6 +517,35 @@ describe("#934 skive 4b — behandleren i outboxen", () => {
     expect((await notices(f.courseId)).map((r) => [r.status, r.queuedAt])).toEqual([["waiting", null]]);
   });
 
+  it("en feil i oppslagene før sendingen: raden står i `queued`, og neste forsøk sender (QA-porten 2.132.0)", async () => {
+    const f = await queuedNotices("oppslag", 1);
+    const send = okSend();
+    // Ingen `mockRestore`: på en Prisma-modell fjerner den funksjonen. Etter det ene kallet går spionen rett gjennom.
+    vi.spyOn(prisma.courseVersion, "findUnique").mockRejectedValueOnce(new Error("database borte"));
+    await expect(deliverCourseMajorVersionNotice(f.rader[0].id, { send })).rejects.toThrow("database borte");
+    expect(send).not.toHaveBeenCalled();
+    expect((await notices(f.courseId))[0].status).toBe("queued");
+
+    await deliverCourseMajorVersionNotice(f.rader[0].id, { send });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((await notices(f.courseId))[0].status).toBe("sent");
+  });
+
+  it("en feil i oppslagene på siste forsøk: raden går tilbake til `waiting`, så jobben legger den inn på nytt (QA-porten 2.132.1)", async () => {
+    const f = await queuedNotices("siste-oppslag", 1);
+    const send = okSend();
+    vi.spyOn(prisma.courseVersion, "findUnique").mockRejectedValueOnce(new Error("database borte"));
+    await expect(deliverCourseMajorVersionNotice(f.rader[0].id, { send, lastAttempt: true })).rejects.toThrow("database borte");
+    expect(send).not.toHaveBeenCalled();
+    expect((await notices(f.courseId))[0].status).toBe("waiting");
+
+    const summary = await runCourseMajorEmailSchedule({ onlyCourseIds: [f.courseId] });
+    expect(summary.queued).toBe(1);
+    await deliverCourseMajorVersionNotice(f.rader[0].id, { send });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((await notices(f.courseId))[0].status).toBe("sent");
+  });
+
   it("en kurstittel med en adresse: e-posten sendes aldri, raden blir `failed`", async () => {
     const f = await queuedNotices("lenke", 1);
     await prisma.course.update({ where: { id: f.courseId }, data: { title: JSON.stringify(L("Se www.a-2.no")) } });

@@ -66,6 +66,13 @@ export type IllustratedEmailInput = {
 
 /** Det lenkesperra ser etter. Samme mønster som enhetstestene for hver e-posttype. */
 const LINK_LIKE = /https?:|www\.|href/i;
+/**
+ * Det e-postklienter gjør til lenker av seg selv, uten `http` eller `www`: e-postadresser og domenenavn (QA-porten
+ * 2.132.0). Hvilke endelser en klient kjenner, varierer, så alt med små bokstaver rundt punktumet regnes som et domene
+ * (ingen liste over toppdomener). Små bokstaver med vilje: «ASP.NET» og «Node.js» er kursnavn, og da skal e-posten gå.
+ */
+const AUTOLINKED_EMAIL = /[^\s@]+@[^\s@]+\.[a-z]{2,}/i;
+const AUTOLINKED_DOMAIN = /\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b/;
 
 /**
  * Ble avsenderen bedt om å sende noe som ligner en lenke (typisk en tittel som inneholder en adresse)? Da sendes
@@ -112,7 +119,7 @@ export function renderIllustratedEmail(input: IllustratedEmailInput): Illustrate
   const alt = illustration.alt[input.locale];
   const texts = [input.subject, ...input.paragraphs, ...(input.reason ? [input.reason] : [])];
   for (const text of texts) {
-    if (LINK_LIKE.test(text)) throw new EmailContainsLinkError("text");
+    if (LINK_LIKE.test(text) || AUTOLINKED_EMAIL.test(text) || AUTOLINKED_DOMAIN.test(text)) throw new EmailContainsLinkError("text");
   }
 
   const plainText = [...input.paragraphs, ...(input.reason ? [input.reason] : [])].join("\n\n");

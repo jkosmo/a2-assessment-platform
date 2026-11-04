@@ -523,10 +523,12 @@ rettet og mutasjonssjekket der det finnes en test (se «Kjente mangler» nr. 16�
   - kurset har fått en nyere hovedversjon → `skipped`. E-posten om den nyeste gjelder;
   - personen er inaktiv eller anonymisert nå → `skipped`.
 - **Sendingen** (behandleren i outboxen):
-  - setter `queued → sending` med en betinget oppdatering, og **sjekker det samme som jobben en gang til** (Codex
-    runde 2 nr. 14): kurset publisert, versjonen fortsatt kursets nyeste, personen aktiv og ikke anonymisert.
-    Avpublisert → tilbake til `waiting`. Nyere versjon, eller personen borte → `skipped`. Raden kan altså ha stått i
-    køen mens noe endret seg, uten at en utdatert e-post går;
+  - **sjekker det samme som jobben en gang til** (Codex runde 2 nr. 14): kurset publisert, versjonen fortsatt kursets
+    nyeste, personen aktiv og ikke anonymisert. Avpublisert → tilbake til `waiting`. Nyere versjon, eller personen
+    borte → `skipped`. Raden kan altså ha stått i køen mens noe endret seg, uten at en utdatert e-post går;
+  - setter `queued → sending` med en betinget oppdatering **rett før sendingen** (QA-porten 2.132.0). En feil i
+    oppslagene før det lar raden stå i `queued`, så e-posten ikke går tapt. På siste forsøk går den tilbake til
+    `waiting`, så jobben legger den inn på nytt;
   - er raden alt `sent`, gjøres ingenting;
   - er den `sending`, ble et tidligere forsøk avbrutt, og e-posten kan ha gått. Raden blir `uncertain` og sendes
     ikke på nytt (samme valg som #1115);
@@ -957,9 +959,10 @@ e-post eller lekke data, med unntak av de korte utrullingsvinduene i nr. 1, som 
 18. **E-post ved ny hovedversjon: `skipped` er endelig** (4b). Er en person inaktiv eller anonymisert når jobben eller
     behandleren ser på raden, hoppes hen over for den versjonen — også om hen blir aktiv igjen (for eksempel etter en
     feil i synkroniseringen fra Entra). Hen ser den nye versjonen i Mine kurs neste gang hen logger inn.
-19. **En kurstittel som ligner en lenke** (`www.`, `http`, `href`) stopper e-posten for det kurset: radene blir
-    `failed` (`contains_link`). Firmapolicy er ingen lenker, og en adresse i ren tekst blir en lenke i Outlook. Ingen
-    varsler forfatteren; det står bare på radene.
+19. **En kurstittel som ligner en lenke** (`www.`, `http`, `href`, en e-postadresse eller et domenenavn med små
+    bokstaver, som `portal.a-2.no`) stopper e-posten for det kurset: radene blir `failed` (`contains_link`). Firmapolicy
+    er ingen lenker, og en adresse i ren tekst blir en lenke i Outlook. Ingen varsler forfatteren; det står bare på
+    radene. Domener skrevet med store bokstaver slipper gjennom, med vilje: «ASP.NET» er et kursnavn.
 20. **Ingen side viser radene** (4b). Status (`sent`, `uncertain`, `failed` …) står i databasen og i workerens
     `lastSummary`, ikke i grensesnittet.
 21. **To forsøk på samme rad samtidig** (en leiekontrakt som gikk ut mens ACS fortsatt svarte): det andre setter raden
@@ -968,6 +971,19 @@ e-post eller lekke data, med unntak av de korte utrullingsvinduene i nr. 1, som 
 22. **`COURSE_MAJOR_EMAIL_ENABLED` står ikke i Bicep** (`infra/azure/main.bicep`). Den settes for hånd på workeren.
     Workerens innstillinger skrives fullt ut av hver infrastrukturutrulling (`deploy-azure.yml`), så en slik utrulling
     fjerner den, og radene venter til den settes igjen. Ingen e-post går tapt.
+23. **Eierskapet sjekkes før innholdslåsen** (QA-porten 2.131.0, runde 3). Fjernes en forfatter som eier mens lagringen
+    står i kø bak låsen, går lagringen gjennom. Vinduet er sekunder, og forfatteren hadde tilgang da hen trykket.
+24. **Rubrikk-, oppgavemal- og flervalgsversjoner tar ikke innholdslåsen** (QA-porten 2.131.0, runde 3). En samtidig
+    lagring kan treffe den unike nøkkelen og gi en synlig feil. Ingenting går tapt, og forfatteren prøver igjen.
+25. **Kursbevis utstedes ennå uten delt lås** (QA-porten 2.132.0). Består noen siste modul idet en hovedversjon lages,
+    kan beviset komme etter at mottakerne er talt, og personen får ikke e-posten. Hen ser den nye versjonen i Mine kurs.
+    Rettes i 5a-1, som lar utstedelsen ta låsen.
+26. **En sikker sendefeil der lagringen også feiler** (QA-porten 2.132.0): feiler databasen rett etter at ACS svarte
+    `Failed`, står raden i `sending` og blir `uncertain`. Personen får ikke e-posten, men aldri to.
+27. **En ny hovedversjon i øyeblikket før sendingen** (QA-porten 2.132.0): e-posten om den forrige kan gå likevel, og
+    så den om den nyeste. Vinduet er det korte stykket mellom sjekken og sendingen.
+28. **Grensen på 20 i minuttet gjelder per worker** (QA-porten 2.132.0). Prod har én worker, så to overlapper bare i en
+    utrulling. Azure kan da strupe, og outboxen prøver igjen.
 
 ### Gjennomgang av planen
 

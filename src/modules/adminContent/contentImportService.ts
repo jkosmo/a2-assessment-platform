@@ -533,12 +533,22 @@ async function appendInactiveSectionVersion(
  * Ellers kunne planen for eksempel lagt en ny versjon oppå en versjon noen publiserte i mellomtiden, eller tatt ut
  * et element som nettopp ble lagt inn.
  */
-async function courseUpdateBasis(reader: DbTransactionClient | typeof prisma, courseId: string, plan: CourseUpdatePlan): Promise<string> {
+async function courseUpdateBasis(
+  reader: DbTransactionClient | typeof prisma,
+  courseId: string,
+  plan: CourseUpdatePlan,
+  // Det planen faktisk er regnet ut fra (QA-porten 2.131.0, runde 3). Leses grunnlaget på nytt etter planen, kan det
+  // vise en lagring planen ikke så, og sammenligningen etter låsen slipper den utdaterte planen gjennom.
+  seen?: {
+    course: { publishedAt: Date | null; contentRevision: number } | null;
+    items: Array<{ itemType: string; moduleId: string | null; sectionId: string | null }>;
+  },
+): Promise<string> {
   // Telleren er med (QA-porten 2.131.0, runde 2): en lagring fra kursskjemaet som bare endret navn, innstillinger
   // eller diskusjonsbryteren per element, endrer verken elementene eller versjonene — men importen ville skrevet
   // over den. Telleren øker ved hver lagring, så den fanger alle.
-  const course = await reader.course.findUnique({ where: { id: courseId }, select: { publishedAt: true, contentRevision: true } });
-  const items = await createCourseRepository(reader).findAllCourseItems(courseId);
+  const course = seen ? seen.course : await reader.course.findUnique({ where: { id: courseId }, select: { publishedAt: true, contentRevision: true } });
+  const items = seen ? seen.items : await createCourseRepository(reader).findAllCourseItems(courseId);
   const entries: string[] = [];
   for (const entry of plan.entries) {
     if (entry.action !== "update") continue;
@@ -730,6 +740,8 @@ export async function importCourseFromEnvelope(
       throw new DomainRuleError("origin_mismatch", "The file was exported from a different course; it cannot update this one.", { originCourseId, targetCourseId: options.targetCourseId });
     }
     const courseRepo = (await import("../course/courseRepository.js")).courseRepository;
+    // Kurset leses FØR elementene: kommer en lagring mellom de to, er telleren den gamle, og importen avvises etter låsen.
+    const targetCourse = await prisma.course.findUnique({ where: { id: options.targetCourseId }, select: { publishedAt: true, contentRevision: true } });
     const existingItems = await courseRepo.findAllCourseItems(options.targetCourseId);
     const existingSectionIds = existingItems.filter((i) => i.itemType === "SECTION" && i.section).map((i) => i.section!.id);
     const existingModuleIds = existingItems.filter((i) => i.itemType === "MODULE").map((i) => (i.moduleId ?? i.module?.id) as string).filter(Boolean);
@@ -737,12 +749,11 @@ export async function importCourseFromEnvelope(
     if (updatePlan.problems.length > 0) {
       throw new DomainRuleError("origin_mismatch", `The file does not match this course: ${updatePlan.problems.join("; ")}.`, { problems: updatePlan.problems });
     }
-    const targetCourse = await prisma.course.findUnique({ where: { id: options.targetCourseId }, select: { publishedAt: true } });
     if (!targetCourse) throw new DomainRuleError("import_target_not_found", "Target course not found for updateExisting.");
     targetCourseIsPublished = targetCourse.publishedAt != null;
     // #934 skive 4a: planen over er regnet ut FØR innholdslåsen (fila må leses og bildene lastes opp utenfor
     // transaksjonen). Det den bygger på, sjekkes på nytt etter låsen; se `courseUpdateBasis`.
-    planBasis = await courseUpdateBasis(prisma, options.targetCourseId, updatePlan);
+    planBasis = await courseUpdateBasis(prisma, options.targetCourseId, updatePlan, { course: targetCourse, items: existingItems });
     for (const entry of updatePlan.entries) {
       if (entry.action !== "update") continue;
       let keepLiveTitle = false;

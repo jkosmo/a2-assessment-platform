@@ -1,9 +1,11 @@
 import request from "supertest";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { runContentRead, runContentWrite } from "../src/db/contentLock.js";
 import { archiveModule } from "../src/modules/adminContent/adminContentCommands.js";
+import { courseRepository } from "../src/modules/course/courseRepository.js";
+import { getCoursePendingVersions } from "../src/modules/course/coursePublishService.js";
 
 // #934 skive 4a (doc/DESIGN_934.md, «4a — innholdslåsen, kursskjemaet og overgangen»):
 //   - ÉN lås for alt innhold; alt sjekkes etter den. To samtidige endringer venter på hverandre, og den andre ser
@@ -537,6 +539,55 @@ describe("#934 skive 4a: innholdslåsen — samtidige endringer venter på hvera
     expect(answer.body.error).toBe("import_target_changed");
     // Planen ville tatt ut s3 (fila kjenner den ikke). Den står.
     expect(await itemIds(course.id)).toEqual([s1, s2, s3]);
+  });
+
+  it("«Oppdater dette kurset»: en lagring rett etter at planen leste elementene, gir 409, og ingenting tas ut (QA-porten runde 3)", async () => {
+    const s1 = await createPublishedSection(tag("plan s1"));
+    const s2 = await createPublishedSection(tag("plan s2"));
+    const course = await prisma.course.create({
+      data: {
+        title: JSON.stringify(L(tag("plan-kurs"))),
+        certificationLevel: "basic",
+        publishedAt: new Date(),
+        slug: `lock-4a-plan-${RUN}-${seq++}`,
+        items: { create: [{ itemType: "SECTION", sectionId: s1, sortOrder: 0 }] },
+      },
+      select: { id: true },
+    });
+    const exported = await request(app).get(`/api/admin/content/courses/${course.id}/export-package`).set(ADMIN);
+    expect(exported.status, JSON.stringify(exported.body).slice(0, 300)).toBe(200);
+    const envelope = exported.body.envelope ?? exported.body;
+    // Akkurat i åpningen: planen har lest elementene (bare s1), og så legger noen inn s2.
+    const original = courseRepository.findAllCourseItems.bind(courseRepository);
+    const spy = vi.spyOn(courseRepository, "findAllCourseItems").mockImplementationOnce((async (courseId: string) => {
+      const seen = await original(courseId);
+      await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: s2, sortOrder: 1 } });
+      return seen;
+    }) as never);
+    const answer = await request(app).post("/api/admin/content/courses/import").set(ADMIN).send({ payload: envelope, mode: "updateExisting", targetId: course.id });
+    spy.mockRestore();
+    expect(answer.status, JSON.stringify(answer.body).slice(0, 300)).toBe(409);
+    expect(answer.body.error).toBe("import_target_changed");
+    expect(await itemIds(course.id)).toEqual([s1, s2]);
+  });
+
+  it("«nye versjoner» inne i låsen slår opp eierskapet på transaksjonen, ikke på en egen tilkobling (QA-porten runde 3)", async () => {
+    const s1 = await createPublishedSection(tag("eier s1"));
+    const course = await prisma.course.create({
+      data: {
+        title: JSON.stringify(L(tag("eier-kurs"))),
+        certificationLevel: "basic",
+        publishedAt: new Date(),
+        slug: `lock-4a-eier-${RUN}-${seq++}`,
+        items: { create: [{ itemType: "SECTION", sectionId: s1, sortOrder: 0 }] },
+      },
+      select: { id: true },
+    });
+    // Ingen `mockRestore`: på en Prisma-modell fjerner den funksjonen. Spionen går rett gjennom.
+    const spy = vi.spyOn(prisma.contentOwner, "findMany");
+    const before = spy.mock.calls.length;
+    await runContentRead((tx) => getCoursePendingVersions(course.id, { userId: "lock-4a-forfatter", roles: ["SUBJECT_MATTER_OWNER"] }, tx));
+    expect(spy.mock.calls.length - before).toBe(0);
   });
 
   it("«Oppdater dette kurset» mot en lagring som bare endret navnet: 409, og navnet fra skjemaet står (QA-porten runde 2)", async () => {

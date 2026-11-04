@@ -43,16 +43,20 @@ export function listContentOwnerUserIds(
  * assertContentOwnership would NOT throw. Same rule as decideOwnershipAccess: an ADMINISTRATOR manages
  * all; a non-admin manages only the ids they own (unowned → not manageable). Lets a list endpoint annotate
  * each row with `canManage`, so the UI can hide the action buttons the server would otherwise 403 on save.
+ *
+ * #934: `reader` er transaksjonen når kalleren holder innholdslåsen. Et oppslag utenfor den trenger en egen tilkobling,
+ * og den får det ikke hvis resten står i kø bak låsen (QA-porten 2.131.0, runde 3).
  */
 export async function listManageableContentIds(input: {
   contentType: ContentOwnerType;
   contentIds: string[];
   actorUserId: string;
   roles: string[];
+  reader?: DbTransactionClient | typeof prisma;
 }): Promise<Set<string>> {
   if (hasAnyRole(input.roles, ADMIN_ONLY)) return new Set(input.contentIds);
   if (input.contentIds.length === 0 || !input.actorUserId) return new Set();
-  const rows = await prisma.contentOwner.findMany({
+  const rows = await (input.reader ?? prisma).contentOwner.findMany({
     where: { contentType: input.contentType, contentId: { in: input.contentIds }, userId: input.actorUserId },
     select: { contentId: true },
   });

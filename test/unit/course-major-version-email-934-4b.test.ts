@@ -121,6 +121,15 @@ describe("#934 skive 4b: e-posten om ny hovedversjon", () => {
     }
   });
 
+  it("lenkesperra: e-postadresser og domenenavn blir lenker av seg selv; kursnavn med punktum går", () => {
+    for (const courseTitle of ["Kontakt kurs@a-2.no", "KURS@A-2.NO", "Les mer på portal.a-2.no", "a-2.no/kurs", "portal.example.de", "training.example.co.uk", "docs.example.dev"]) {
+      expect(() => buildCourseMajorVersionEmail({ locale: "nb", courseTitle, versionMajor: 2, changedItemCount: 1 }), courseTitle).toThrow(EmailContainsLinkError);
+    }
+    for (const courseTitle of ["ASP.NET grunnkurs", "Node.js for prosjektledere", "Versjon 2.0 av KI-kurset", "Kurs i HMS. Del 2"]) {
+      expect(() => buildCourseMajorVersionEmail({ locale: "nb", courseTitle, versionMajor: 2, changedItemCount: 1 }), courseTitle).not.toThrow();
+    }
+  });
+
   it("malen escaper teksten i HTML-en (en tittel kan ikke legge inn egne elementer)", () => {
     const e = renderIllustratedEmail({
       locale: "nb",
