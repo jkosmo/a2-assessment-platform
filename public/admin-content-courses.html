@@ -196,24 +196,8 @@
       .course-theme-option { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--color-border-soft); border-radius: 999px; background: var(--color-surface); font-size: 14px; font-weight: 400; cursor: pointer; }
       .course-theme-option:has(input:checked) { border-color: var(--color-primary); background: var(--color-primary-tint); font-weight: 600; }
       .course-theme-option input { width: 18px; height: 18px; margin: 0; accent-color: var(--color-primary); }
-      /* #934 skive 3: «Hva slags endring er dette?» — to valg med konsekvensen skrevet ut under. */
-      #courseVersionDialog { max-width: min(620px, calc(100vw - 24px)); }
-      .course-version-choices { border: none; padding: 0; margin: var(--space-2) 0; min-width: 0; display: grid; gap: 8px; }
-      .course-version-legend { font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 4px; }
-      .course-version-choice { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--color-border-soft); border-radius: 10px; background: var(--color-surface); font-weight: 400; cursor: pointer; }
-      .course-version-choice:has(input:checked) { border: 2px solid var(--color-primary); padding: 11px 13px; background: var(--color-primary-tint); }
-      .course-version-choice input { width: 18px; height: 18px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--color-primary); }
-      .course-version-hint { display: block; margin-top: 2px; font-size: 13px; color: var(--color-meta); }
-      .course-version-consequence { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--color-border-soft); background: var(--color-module-summary-bg); font-size: 14px; }
-      .course-version-consequence.is-major { border-color: var(--color-link-hover-border); }
-      .course-version-consequence p { margin: 0; }
-      .course-version-consequence ul { margin: 6px 0 0; padding-left: 20px; }
-      .course-version-consequence li + li { margin-top: 4px; }
-      /* #934 skive 4b: det ekstra «ja» når en hovedversjon sender e-post til over 200. */
-      .course-version-email-confirm { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; font-weight: 600; cursor: pointer; }
-      .course-version-email-confirm input { width: 18px; height: 18px; margin: 1px 0 0; flex-shrink: 0; accent-color: var(--color-primary); }
-      .course-version-email-confirm span { min-width: 0; overflow-wrap: anywhere; }
-      .course-version-consequence .course-version-email-missing { margin-top: 6px; color: var(--color-error); font-weight: 600; }
+      /* #934 skive 3: «Hva slags endring er dette?». Valget bor i shared.css, siden modulsiden bruker det også (5b). */
+      #courseVersionDialog, #pendingPublishDialog.is-versioned { max-width: min(620px, calc(100vw - 24px)); }
       .cascade-delete-heading { font-size: 13px; font-weight: 700; margin: var(--space-2) 0 4px; }
       .cascade-delete-body .cascade-publish-blocker { display: block; color: var(--color-meta); font-size: 12px; }
 

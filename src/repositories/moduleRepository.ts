@@ -12,6 +12,9 @@ export const moduleSummarySelect = {
     select: {
       id: true,
       versionNo: true,
+      // #934 skive 5b: modullista viser «v2.1». `versionNo` står som før.
+      versionMajor: true,
+      versionMinor: true,
       taskText: true,
       assessorExpectedContent: true,
       candidateTaskConstraints: true,

@@ -4,6 +4,7 @@ import { lifecycleBadge } from "./content-status-badge.js";
 import { createFormPage, formPageTexts } from "./form-page.js";
 import { createSettingsTab } from "./admin-content-settings-tab.js";
 import { createPublishFlow } from "./admin-content-publish.js";
+import { moduleVersionNumber } from "./version-label.js";
 import { createCriteriaTools } from "./admin-content-criteria.js";
 import { LEGACY_STRING_LOCALE, mergeLocaleInto } from "./localized-value.js";
 import {
@@ -936,7 +937,7 @@ function renderPreview() {
     const isDraft = !!cfg.moduleVersion && !isLive;
 
     const versionChainParts = [];
-    if (cfg.moduleVersion) versionChainParts.push(`Modul v${cfg.moduleVersion.versionNo}`);
+    if (cfg.moduleVersion) versionChainParts.push(`Modul v${moduleVersionNumber(cfg.moduleVersion) ?? cfg.moduleVersion.versionNo}`);
     if (cfg.rubricVersion) versionChainParts.push(`Rubrikk v${cfg.rubricVersion.versionNo}`);
     if (cfg.promptTemplateVersion) versionChainParts.push(`Prompt v${cfg.promptTemplateVersion.versionNo}`);
     if (cfg.mcqSetVersion) versionChainParts.push(`MCQ v${cfg.mcqSetVersion.versionNo}`);
@@ -2592,7 +2593,7 @@ async function loadModule(moduleId, options = {}) {
   const capturedTitle = localizeValue(bundle?.module?.title) || moduleId;
   const capturedIsLive = !!bundle?.module?.activeVersionId;
   const capturedIsArchived = !!bundle?.module?.archivedAt;
-  const capturedVersionNo = bundle?.selectedConfiguration?.moduleVersion?.versionNo ?? "?";
+  const capturedVersionNo = moduleVersionNumber(bundle?.selectedConfiguration?.moduleVersion) ?? bundle?.selectedConfiguration?.moduleVersion?.versionNo ?? "?";
   logResolveSlot(slot, () => {
     const statusNote = capturedIsArchived
       ? t("shell.module.archivedStatus")
@@ -3486,13 +3487,17 @@ function moduleStatusBadgesHtml() {
   const chains = bundle ? deriveModuleStatusChains(bundle) : null;
   const loaded = bundle?.selectedConfiguration?.moduleVersion ?? null;
   const loadedIsLive = !!loaded?.id && loaded.id === bundle?.module?.activeVersionId;
-  const liveNo = chains?.liveChain?.[0]?.versionNo ?? null;
+  // #934 skive 5b: «Publisert v2.1». Serveren uten nummer gir det merket viste før, «v5».
+  const liveVersion = (bundle?.versions?.moduleVersions ?? []).find((version) => version.id === bundle?.module?.activeVersionId);
+  const liveNo = moduleVersionNumber(liveVersion) ?? chains?.liveChain?.[0]?.versionNo ?? null;
   const parts = [];
   if (bundle?.module?.archivedAt) parts.push(lifecycleBadge({ lifecycle: "archived" }, t));
   else if (liveNo != null) parts.push(`<span class="status-badge status-badge--published">${escapeHtml(tf("stateRail.live.published", { versionNo: liveNo }))}</span>`);
-  const editingNo = loaded?.versionNo ?? null;
+  // Et utkast som aldri er publisert, har ikke noe nummer. Rekkefølgen av lagringer ved siden av «v2.1» ville sett ut som en høyere versjon.
+  const editingNo = moduleVersionNumber(loaded);
   if (sessionDraft && !loaded) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(t("stateRail.editing.workingDraft"))}</span>`);
   else if (editingNo != null && !loadedIsLive) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(tf("shell.header.draftVersion", { versionNo: editingNo }))}</span>`);
+  else if (loaded && !loadedIsLive) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
   else if (liveNo == null && bundle) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
   return parts.join(" ");
 }
@@ -5017,7 +5022,7 @@ const publishFlow = createPublishFlow({
   get selectedModuleId() { return selectedModuleId; },
   get bundle() { return bundle; },
   get contentLocale() { return contentLocale; },
-  t, logBot, logProgress, logResolveSlot, announceStatus, apiErrorText, getHeaders, loadModule, saveDraftBundleInBackground, showModuleActions, startDirectEditFlow, commitSessionDraftPatch,
+  t, tf, logBot, logProgress, logResolveSlot, announceStatus, apiErrorText, getHeaders, loadModule, saveDraftBundleInBackground, showModuleActions, startDirectEditFlow, commitSessionDraftPatch,
 });
 
 const settingsTab = createSettingsTab({

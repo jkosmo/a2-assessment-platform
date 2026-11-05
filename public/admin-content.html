@@ -50,6 +50,8 @@
       /* #1062: avkryssing i Innstillinger — etikett og boks på én linje, ikke shared.css sin fulle bredde. */
       .settings-check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-text); }
       .settings-check input[type="checkbox"] { width: auto; min-height: 0; margin: 0; }
+      /* #934 skive 5b: bredden fra shared.css kommer i tillegg til utfyllingen, og det flyter over på en telefon. */
+      #modulePublishDialog { box-sizing: border-box; width: min(620px, calc(100vw - 24px)); max-width: none; }
       .dialog-choice-body { font-size: 14px; line-height: 1.5; }
       .dialog-choice-body ul { margin: 8px 0 0; padding-left: 20px; }
       /* .row er et to-kolonners rutenett (skjema); knapperaden i dialogene er en flex-rad til høyre. */
@@ -552,6 +554,22 @@
       <dialog id="dialogChoice" aria-labelledby="dialogChoiceBody">
         <div id="dialogChoiceBody" class="dialog-choice-body"></div>
         <div id="dialogChoiceActions" class="dialog-actions"></div>
+      </dialog>
+
+      <!-- #934 skive 5b: hoved eller mindre for modulen, og ved hoved ett valg per kurs med kursbevis. Vises bare når
+           bryteren er på; ellers spør siden som før. Lytterne står på dialogen, tekstene settes når den åpnes. -->
+      <dialog id="modulePublishDialog" aria-labelledby="modulePublishTitle">
+        <h2 id="modulePublishTitle" class="dialog-title"></h2>
+        <div id="modulePublishNoticeHost"></div>
+        <div id="modulePublishKind"></div>
+        <div id="modulePublishCoursesBlock" hidden>
+          <p id="modulePublishCoursesIntro" class="small"></p>
+          <div id="modulePublishCourses"></div>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" id="modulePublishCancel" class="btn-secondary"></button>
+          <button type="button" id="modulePublishConfirm" class="btn-primary"></button>
+        </div>
       </dialog>
 
       <dialog id="dialogRevise" aria-labelledby="dialogReviseTitle">

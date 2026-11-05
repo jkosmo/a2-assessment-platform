@@ -18,6 +18,7 @@ import {
   captureLatestCriteriaState,
 } from "/static/criteria-editor.js";
 import { LEGACY_STRING_LOCALE, mergeLocaleInto } from "./localized-value.js";
+import { moduleVersionNumber } from "./version-label.js";
 
 /**
  * @param {object} ctx  se toppen av fila. Tilstand leses og skrives via egenskapene; funksjonene er
@@ -986,17 +987,19 @@ export function createSettingsTab(ctx) {
       const when = version.createdAt
         ? `<span class="version-when">${escapeHtml(formatDateTime(version.createdAt))}</span>`
         : "";
+      // #934 skive 5b: en publisert versjon har nummeret «2.1». En som aldri er publisert, har ikke noe nummer, og er et utkast.
+      const number = moduleVersionNumber(version);
       // No restore button on the version already loaded — it would copy the module onto itself.
       // aria-label carries the version number: a screen-reader user tabbing a list of five
       // identically-named "Restore" buttons has no way to tell which one goes where.
       const action = isCurrent
         ? ""
         : `<button type="button" class="btn-secondary version-restore" data-restore-version="${escapeHtml(version.id)}"
-            aria-label="${escapeHtml(tf("shell.versions.restoreVersionAria", { versionNo: version.versionNo }))}">${
+            aria-label="${escapeHtml(tf("shell.versions.restoreVersionAria", { versionNo: number ?? version.versionNo }))}">${
             escapeHtml(t("shell.versions.restore"))
           }</button>`;
       return `<li class="version-item">
-        <span class="version-no">${escapeHtml(tf("shell.versions.versionNo", { versionNo: version.versionNo }))}</span>
+        <span class="version-no">${escapeHtml(number ? tf("shell.versions.versionNo", { versionNo: number }) : tf("shell.versions.draftNo", { versionNo: version.versionNo }))}</span>
         ${when}${badges}${action}
       </li>`;
     });

@@ -756,6 +756,9 @@ export const courseExportPayloadSchema = z.object({
     certificationLevel: certificationLevelInputSchema.nullable(),
     // #1093: plassering i «Mine kurs». Valgfri, så eldre eksportfiler leses som før.
     sortOrder: z.number().int().min(0).max(9999).nullable().optional(),
+    // #934 skive 5b: kursets versjon da fila ble laget, som opplysning. Valgfri, så eldre filer leses som før. Importen leser dem ikke.
+    versionMajor: z.number().int().min(1).optional(),
+    versionMinor: z.number().int().min(0).optional(),
     // #1095: hvor fila kom fra, så den kan komme tilbake som en oppdatering av det samme kurset
     // (`mode: "updateExisting"`). Valgfri: filer fra skillets «lag kurs»-flyt og eldre filer har den ikke.
     origin: courseOriginSchema.optional(),

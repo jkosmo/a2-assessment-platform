@@ -1322,6 +1322,31 @@ dialog::backdrop {
   color: #8a5a00;
 }
 
+/* #934 skive 3: «Hva slags endring er dette?», to valg med konsekvensen skrevet ut under. Her fordi kurssiden og modulsiden bruker samme valg (5b). */
+.course-version-choices { border: none; padding: 0; margin: var(--space-2) 0; min-width: 0; display: grid; gap: 8px; }
+.course-version-legend { font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 4px; }
+.course-version-choice { display: flex; gap: 12px; align-items: flex-start; min-width: 0; padding: 12px 14px; border: 1px solid var(--color-border-soft); border-radius: 10px; background: var(--color-surface); font-weight: 400; cursor: pointer; }
+.course-version-choice:has(input:checked) { border: 2px solid var(--color-primary); padding: 11px 13px; background: var(--color-primary-tint); }
+.course-version-choice input { width: 18px; height: 18px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--color-primary); }
+.course-version-choice > span { min-width: 0; overflow-wrap: anywhere; }
+.course-version-hint { display: block; margin-top: 2px; font-size: 13px; color: var(--color-meta); }
+.course-version-consequence { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--color-border-soft); background: var(--color-module-summary-bg); font-size: 14px; }
+.course-version-consequence.is-major { border-color: var(--color-link-hover-border); }
+.course-version-consequence p { margin: 0; }
+.course-version-consequence ul { margin: 6px 0 0; padding-left: 20px; }
+.course-version-consequence li + li { margin-top: 4px; }
+/* #934 skive 4b: det ekstra «ja» når en hovedversjon sender e-post til over 200. */
+.course-version-email-confirm { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; font-weight: 600; cursor: pointer; }
+.course-version-email-confirm input { width: 18px; height: 18px; margin: 1px 0 0; flex-shrink: 0; accent-color: var(--color-primary); }
+.course-version-email-confirm span { min-width: 0; overflow-wrap: anywhere; }
+.course-version-consequence .course-version-email-missing { margin-top: 6px; color: var(--color-error); font-weight: 600; }
+/* #934 skive 5b: ett valg per kurs. Lange kurstitler brekker, også et langt ord uten mellomrom. */
+.course-version-course { min-width: 0; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border-soft); }
+.course-version-course-title { margin: 0 0 4px; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.course-version-course-this { font-size: 13px; font-weight: 400; color: var(--color-meta); }
+.course-version-course-facts { margin: 0; font-size: 13px; color: var(--color-meta); overflow-wrap: anywhere; }
+.course-version-notice { margin: 0 0 var(--space-2); font-size: 14px; font-weight: 600; color: var(--color-error); }
+
 /* #705-UX(B): felles handlings-knapperad + knapp i admin-listene, så alle fire listene (kurs/
    moduler/seksjoner/klasser) ser like ut. Tidligere definerte hver side sin egen .row-action-btn
    med ulik font/padding. Kanonisk definisjon her; sidene kan fortsatt overstyre om nødvendig.

@@ -1178,6 +1178,38 @@ deler modulen; 390 og 360 px med lange kurstitler; eksport og import tur-retur e
 
 **QA stopper på:** at dialogen kan sende uten svar for et kurs med kursbevis, eller at den flyter over på 390 px.
 
+#### 5b — bygget (2.136.0)
+
+Bryteren er av i alle miljøer. Da er publiseringen den samme som i 2.135.0, og det nye som vises er versjonsnummeret og feltene i eksporten.
+
+**Filene:**
+- `public/static/course-version-choice.js`: valget mellom mindre og hoved, flyttet fra `admin-content-courses.js`, og `mountAffectedCourses`, ett valg per kurs. Begge dialogene og de tre fra før bruker det. Stilene er flyttet til `shared.css`.
+- `public/static/admin-content-publish.js`: moduldialogen (`#modulePublishDialog` i `admin-content.html`).
+- `public/static/admin-content-courses.js`: «Publiser nye versjoner» og forklaringen av 409 på «Publiser kurs».
+- `public/static/version-label.js`: «v2.1».
+
+**Hvordan siden vet hvilken dialog den skal vise.** Serveren avgjør, ikke klienten:
+- Moduldialogen leser `GET …/publish-preview-versioned` først. `200` med kursene: valg per kurs. `409 module_versioning_not_active` eller `404`: alt under er koden fra før, med `passed-count` og #997-spørsmålet.
+- «Publiser nye versjoner» leser `affectedCourses` i `pending-versions`. Feltet finnes bare med bryteren på, så uten det er dialogen den gamle.
+- Det samme ved sending. `409 module_versioning_not_active` eller 404 fra de nye endepunktene gir den gamle veien. Ingenting er skrevet. Modulen går rett til #997-spørsmålet, og kurset leser `pending-versions` på nytt.
+- Begge retninger er testet: ny klient mot server med bryteren av, ny klient mot gammel server, bryteren som går av og som går på mens dialogen står.
+
+**Avgjørelser der planen var åpen:**
+- **Planen sa at dialogen skulle si at funksjonen ikke er slått på.** Det ville stoppet all publisering mens bryteren er av. Oppdraget for 5b (2026-11-05) sier derfor at den gamle dialogen brukes, uendret.
+- **En annen feil på forhåndsvisningen (500, 403, nett) stopper, med «prøv igjen».** Å falle tilbake ville gitt det gamle spørsmålet mens bryteren kan være på. Der kan avkrysningen gi 409, og «nei» gir mindre i alle kurs uten at noen ble spurt. Med bryteren av svarer ruta 409 så snart eierskapet er sjekket, så dette stopper ikke publisering med mindre den gamle ruta også ville feilet.
+- **Ikke noe spørsmål når versjonen har nummer, eller modulen aldri har vært publisert.** Et gitt nummer endres ikke (produkteier), og første publisering blir 1.0 uansett. Det sendes som `minor`.
+- **Et kurs uten kursbevis har ingen knapper.** Serveren gir det mindre uansett (`resolveCourseVersionKind`), så et valg ville forsvunnet uten at noen sa fra. Det står «Kurset får mindre versjon». Dialogen sender heller ikke noe svar for det: får kurset kursbevis etter at dialogen ble vist, avviser serveren, og forfatteren blir spurt. Et svar klienten fant på selv, ville gått gjennom uten at noen hadde tatt stilling.
+- **Hoved uten kurs går an.** Modulen får nytt hovednummer, og dialogen sier at bare nummeret endres.
+- **Avviste svar nullstilles.** Dialogen vises på nytt med ferske tall, hovedversjon står for modulen, og hvert kurs er tilbake på mindre. Dialogen sier fra. Et svar som overlever, kunne gjelde et annet tall enn det forfatteren så.
+- **«Publiser kurs» åpner «Publiser nye versjoner» etter 409,** i tillegg til teksten, som nevner modulene. Knappen finnes bare på kurssiden, og «Publiser kurs» kan trykkes fra lista.
+- **Dialogen lukkes før kallet** i moduldialogen, så et klikk til ikke kan publisere to ganger. Framdriften vises slik den gjør for resten av modulsiden.
+
+**Versjonsnummeret, der planen ikke stemte.** Planen sier at modullista viser «v5» i dag. Det gjelder deltakerens modulliste (`participant.js`). Forfatterens liste hadde ingen versjon. Den har fått merket kurslista allerede bruker, ved siden av statusen. Modulsidens hode og versjonshistorikken viste også `versionNo`, og er rettet. Et utkast har ikke noe nummer, så hodet sier bare «Utkast», og historikken «Utkast (lagring 6)»: «v6» ved siden av «v2.1» ville sett ut som en høyere versjon.
+
+**Rekkefølgen for produkteier** er den i «5a-3 — bygget», med `test/stage/release-2-136-dialogene.spec.ts` i tillegg i første steg. Testen virker både med bryteren av og på.
+
+**Bevis:** `test/e2e/admin-content-module-publish-934-5b.spec.ts`, `test/e2e/admin-content-course-pending-934-5b.spec.ts` (hva som sendes, begge retninger, 390 og 360 px med lange titler, tre språk), `test/e2e/module-version-number-934-5b.spec.ts`, `test/unit/version-number-export-934-5b.test.ts`, `test/m2-course-export-version-934-5b.test.ts` (eksport og import tur-retur gjennom rutene), `test/stage/release-2-136-dialogene.spec.ts` (bare API).
+
 ### Kjente mangler (bevisst ikke rettet)
 
 Ingen av disse kan miste innhold, gi feil kursbevis, la innhold gå live uten versjonsregelen, sende feil eller dobbel
@@ -1203,7 +1235,7 @@ to siste er regelen så lenge bryteren er av, og faller bort når den slås på 
 7. **E-post som venter** mens innstillingen er av, sendes når den slås på, hvis versjonen fortsatt er kursets nyeste.
    Den kan altså komme sent.
 8. **Den gamle avkrysningen** gir 409 mellom 5a-3 og 5b, når bryteren er på. Derfor går de i samme prodsetting. Teksten er den samme `client_outdated` som deltakeren får (2.133.0), så forfatteren
-   leser også «Har du skrevet et svar, er det lagret som kladd». Etter å ha lastet siden på nytt er det over.
+   leser også «Har du skrevet et svar, er det lagret som kladd». Etter å ha lastet siden på nytt er det over. Fra 2.136.0 gjelder det bare en fane fra før 2.136.0, eller en dialog som sto åpen da bryteren ble slått på. Der leser «Prøv igjen» serveren på nytt og gir den nye dialogen.
 9. **Seksjoner over flere hovedversjoner** (Codex runde 2 nr. 13). Seksjonsregelen sammenligner slutten av forrige
    hovedversjon med starten av den nåværende, slik den er avgjort. En lesing fra før hovedversjon 2, av en seksjon som
    ble endret i 2 og står uendret i 3, teller derfor i 3. Forrige utgave av planen ville rette det ved å se bakover
@@ -1323,7 +1355,7 @@ to siste er regelen så lenge bryteren er av, og faller bort når den slås på 
 48. **Statusrapporten per modul viser ikke «revidert» når bryteren er på** (5a-3). Den leser `CertificationStatus` (`reviewAppealReport.ts:182`), som planen sier, og `SUPERSEDED` skrives ikke lenger. En som besto en
     eldre hovedversjon, står der som bestått. Modulen har ikke noe kurs å måle kravet mot, så svaret er ikke feil, men kategorien blir stående tom for nye revisjoner. Kursrapporten viser «må ta ny versjon».
 49. **Tallene til den gamle dialogen leser modulstatus** (5a-3): `GET /modules/:id/passed-count` og `passedCount` i `pending-versions`. En som besto og strøk på nytt, telles ikke, selv om beståtten teller i et kurs. Dialogen
-    spør da ikke, og svaret er mindre, så ingen mister noe. Dialogen fra 5b bruker `affectedCourses` og `publish-preview-versioned`.
+    spør da ikke, og svaret er mindre, så ingen mister noe. Dialogen fra 5b bruker `affectedCourses` og `publish-preview-versioned`, så tallene brukes bare mens bryteren er av (2.136.0).
 50. **En forfatter som eier en modul, svarer også for kurs hen ikke eier** (5a-3). `publish-versioned` og `publish-pending-versioned` lister alle berørte kurs med tittel og antall kursbevis, og et svar «hoved» gir hovedversjon og e-post
     der. Planen sier «hvert kurs modulen ligger i», og deling mellom fagansvarlige er ønsket. Produkteier avgjør om det skal begrenses når dialogen fra 5b er sett.
 51. **En bestått uten krav eller uten versjonsnummer vises som «revidert»** (5a-3, med bryteren på). Den skal ikke telle, men forklaringen stemmer ikke. Det kan bare skje hvis tilbakefyllingen ikke er kjørt: `syncModuleRequirements` og
@@ -1331,6 +1363,11 @@ to siste er regelen så lenge bryteren er av, og faller bort når den slås på 
 52. **Sammenligningsrapporten har ingen mening etter bryteren** (5a-3). Den sammenligner med den gamle regelen, og da er forskjeller forventet, også krav som ikke er modulens nåværende hovedversjon. Den er ikke sperret, for den leser bare.
 53. **Datovinduet i kursrapporten kan gi et annet tall med bryteren på** (5a-3). Den gamle regelen så på siste bestått per modul. Den nye teller en bestått i perioden som teller i kurset, også om en nyere finnes utenfor perioden.
 54. **Beskjeden om nytt forsøk følger åpningen fra kurset** (5a-3). Åpnes modulen fra «Last moduler» i stedet for fra kursraden, vet ikke siden hvilket kurs det gjelder, og viser det gamle resultatet, som i dag. Et nytt forsøk kan startes derfra også.
+
+55. **«Publiser nye versjoner» vet ikke at en modul har fast nummer** (5b). En avpublisert modul uten nytt utkast står i lista med en versjon som har nummer. Svarer forfatteren hoved for et kurs den ligger i, avvises det (`409 module_version_number_fixed`), teksten sier hvorfor, og dialogen står. Forfatteren velger mindre, eller lagrer en ny versjon. Ingenting er skrevet. `affectedCourses` sier ikke noe om det per modul.
+56. **Avviste svar må gis på nytt** (5b). Det er valgt, se «5b — bygget», men med mange kurs er det noen klikk til.
+57. **Kalibreringssiden viser `versionNo`** (5b): versjonsvelgeren og tabellen. Det er et støtteverktøy, og nummeret der er det som står i rådataene. Seksjoner har ikke hoved og mindre, så `v3` i seksjonslista står.
+58. **Over 200 per kurs: «ja» nullstilles når valget byttes** (5b, som i 4b). Bytter forfatteren til mindre og tilbake, må det krysses av på nytt. Det er den trygge retningen.
 
 ### Gjennomgang av planen
 

@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { moduleVersionLabel } from "/static/version-label.js";
 import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
 import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
 import { runWithBusyButton } from "/static/busy-button.js";
@@ -1073,11 +1074,12 @@ function renderModules() {
     title.textContent = module.title;
     // v1.2.20 (#461): vis modul-versjon diskret etter tittelen så support kan reprodusere
     // hvilken versjon en deltaker har fått servert. Publiseringsdato vises i tooltip.
-    const versionNo = module.activeVersion?.versionNo;
-    if (versionNo != null) {
+    // #934 skive 5b: «v2.1», ikke lenger rekkefølgen av lagringer.
+    const versionLabel = moduleVersionLabel(module.activeVersion);
+    if (versionLabel) {
       const versionTag = document.createElement("span");
       versionTag.className = "module-version-tag";
-      versionTag.textContent = ` · v${versionNo}`;
+      versionTag.textContent = ` · ${versionLabel}`;
       if (module.activeVersion?.publishedAt) {
         try {
           const d = new Date(module.activeVersion.publishedAt);

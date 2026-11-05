@@ -10,17 +10,20 @@ import { LEGACY_STRING_LOCALE } from "./localized-value.js";
 import { supportedLocales } from "/static/i18n/admin-content-translations.js";
 import { apiFetch } from "/static/api-client.js";
 import { showToast } from "/static/toast.js";
-import { apiErrorCodeText } from "/static/api-error.js";
+import { apiErrorCode, apiErrorCodeText, apiErrorStatus } from "/static/api-error.js";
 import { localizeValueForLocale } from "/static/admin-content-preview.js";
 import { carryMcqAnswerKey, strictLocaleValue } from "/static/admin-content-localized-copy.js";
+import { createCourseVersionChoice } from "/static/course-version-choice.js";
+import { setHidden } from "/static/dom-visibility.js";
 
 /**
  * @param {object} ctx  skallets tilstand som get/set-egenskaper og skallets funksjoner som referanser.
  */
 export function createPublishFlow(ctx) {
   const {
-    t, logBot, logProgress, logResolveSlot, announceStatus, apiErrorText, getHeaders, loadModule, saveDraftBundleInBackground, showModuleActions, startDirectEditFlow, commitSessionDraftPatch,
+    t, tf, logBot, logProgress, logResolveSlot, announceStatus, apiErrorText, getHeaders, loadModule, saveDraftBundleInBackground, showModuleActions, startDirectEditFlow, commitSessionDraftPatch,
   } = ctx;
+  const { mountAffectedCourses } = createCourseVersionChoice({ t, tf });
 
 
   // #896 S4: which locale a value ACTUALLY has, with no fallback. localizeValueForLocale falls
@@ -414,7 +417,176 @@ export function createPublishFlow(ctx) {
     await saveDraftBundleInBackground({ afterSave: publishLatestDraftInBackground });
   }
 
+  // Publiseringen lyktes, uansett hvilket endepunkt den gikk gjennom.
+  async function afterPublished(slot, moduleId) {
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.publish.success"))}</strong>`);
+    showToast(t("shell.publish.success"), "success");
+    announceStatus(t("shell.publish.success"));
+    ctx.sessionDraft = null;
+    ctx.previewDraft = null;
+    ctx.latestSavedModuleVersionId = null;
+    // UX: etter publisering, last modulen på nytt (nå Live) og vis modul-handlinger
+    // ("Hva vil du gjøre med denne modulen?") i stedet for full modul-velger. loadModule
+    // avslutter med showModuleActions() og bevarer kontekst til modulen man nettopp
+    // publiserte; "Velg en annen modul" er fortsatt tilgjengelig derfra. Samme mønster
+    // som unpublishModuleInBackground.
+    await loadModule(moduleId);
+  }
+
+  function reportPublishFailure(slot, err) {
+    // #896 S4: a half-translated module is not a failure to report as a stack of JSON — it is a
+    // list of holes with an action that fills them.
+    const gateIssues = translationGateIssuesFrom(err);
+    if (gateIssues.length > 0) {
+      const otherBlockers = otherBlockingIssuesFrom(err);
+      logResolveSlot(slot, () => describeTranslationGate(gateIssues, otherBlockers), [
+        { labelKey: "shell.publish.translationGate.fillGaps", action: () => translateMissingLocalesThenPublish(gateIssues) },
+        { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
+      ]);
+      return;
+    }
+    const errMsg = apiErrorText(err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
+      // Uten argumenter: «prøv igjen» leser serveren på nytt, og kommer til riktig dialog.
+      { labelKey: "shell.action.retry", action: () => publishLatestDraftInBackground() },
+    ]);
+  }
+
   /**
+   * #934 skive 5b: gjelder svar per kurs her? Bryteren er av i alle miljøer til den slås på. Da svarer de nye endepunktene
+   * `409 module_versioning_not_active`, en gammel server svarer 404, og ingen av dem har skrevet noe. Da virker publiseringen som før.
+   * Å gjette ved en annen feil ville kunnet sette innhold live uten at forfatteren ble spurt, så da får forfatteren vite det.
+   */
+  function versioningNotHere(err) {
+    return apiErrorStatus(err) === 404 || apiErrorCode(err) === "module_versioning_not_active";
+  }
+
+  // #934 skive 5b: svarene gjelder ikke lenger det som står på serveren. Ingenting er skrevet. Dialogen vises på nytt med ferske tall.
+  const ANSWERS_ARE_STALE = new Set(["affected_courses_changed", "course_version_required", "major_email_confirm_required"]);
+
+  const versionUrl = (moduleId, moduleVersionId, tail) =>
+    `/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions/${encodeURIComponent(moduleVersionId)}/${tail}`;
+
+  /** `{ preview }` med svar per kurs, `{ preview: null }` når det ikke gjelder her, `{ error }` når vi ikke vet. */
+  async function readVersionedPreview(moduleId, moduleVersionId) {
+    try {
+      const preview = await apiFetch(versionUrl(moduleId, moduleVersionId, "publish-preview-versioned"), getHeaders);
+      // Et svar uten kursene er ikke dette endepunktet.
+      return { preview: preview?.moduleVersion && Array.isArray(preview.courses) ? preview : null };
+    } catch (err) {
+      return versioningNotHere(err) ? { preview: null } : { error: err };
+    }
+  }
+
+  async function sendVersionedPublish(moduleId, moduleVersionId, body) {
+    const slot = logProgress("shell.publish.progress");
+    slot.abortBtn.remove();
+    try {
+      await apiFetch(versionUrl(moduleId, moduleVersionId, "publish-versioned"), getHeaders, { method: "POST", body: JSON.stringify(body) });
+      await afterPublished(slot, moduleId);
+    } catch (err) {
+      if (versioningNotHere(err)) {
+        logResolveSlot(slot, () => "");
+        await publishLatestDraftInBackground({ withoutVersioning: true });
+        return;
+      }
+      if (ANSWERS_ARE_STALE.has(apiErrorCode(err))) {
+        logResolveSlot(slot, () => "");
+        await publishLatestDraftInBackground({ answersWereStale: true });
+        return;
+      }
+      reportPublishFailure(slot, err);
+    }
+  }
+
+  // Det dialogen står og spør om. Tomt når den er lukket, så et klikk ikke kan sende noe annet enn det som vises.
+  let moduleDialogState = null;
+
+  function modulePublishKindHtml(preview) {
+    const next = `${preview.currentMajor + 1}.0`;
+    return `<fieldset class="course-version-choices">
+      <legend class="course-version-legend">${escapeHtml(t("shell.publish.versioned.legend"))}</legend>
+      <label class="course-version-choice"><input type="radio" name="moduleVersionKind" value="minor" checked>
+        <span><strong>${escapeHtml(t("shell.publish.versioned.minor"))}</strong>
+        <span class="course-version-hint">${escapeHtml(t("shell.publish.versioned.minorHint"))}</span></span></label>
+      <label class="course-version-choice"><input type="radio" name="moduleVersionKind" value="major">
+        <span><strong>${escapeHtml(tf("shell.publish.versioned.major", { next }))}</strong>
+        <span class="course-version-hint">${escapeHtml(t("shell.publish.versioned.majorHint"))}</span></span></label>
+    </fieldset>`;
+  }
+
+  function selectedModuleKind(dialog) {
+    return dialog.querySelector('input[name="moduleVersionKind"]:checked')?.value === "major" ? "major" : "minor";
+  }
+
+  function confirmModulePublish(dialog) {
+    const state = moduleDialogState;
+    if (!state) return;
+    let body = { moduleVersion: "minor" };
+    if (selectedModuleKind(dialog) === "major") {
+      // Over 200 mottakere uten det ekstra «ja»: dialogen står, og ingenting publiseres.
+      const answers = state.affected.read();
+      if (!answers) return;
+      body = { moduleVersion: "major", ...answers };
+    }
+    // Dialogen lukkes før kallet, så et klikk til ikke kan publisere to ganger.
+    dialog.close();
+    void sendVersionedPublish(state.moduleId, state.moduleVersionId, body);
+  }
+
+  // Lytterne står på dialogen, som aldri tegnes på nytt. Innholdet gjør det, hver gang den åpnes.
+  function bindModulePublishDialog(dialog) {
+    if (dialog.dataset.bound === "1") return;
+    dialog.dataset.bound = "1";
+    dialog.addEventListener("change", (event) => {
+      if (event.target?.name === "moduleVersionKind") setHidden(document.getElementById("modulePublishCoursesBlock"), selectedModuleKind(dialog) !== "major");
+    });
+    dialog.addEventListener("click", (event) => {
+      const button = event.target?.closest?.("button");
+      if (button?.id === "modulePublishConfirm") confirmModulePublish(dialog);
+      if (button?.id === "modulePublishCancel") dialog.close();
+    });
+    // Esc er et nei, og lukker også dialogen.
+    dialog.addEventListener("close", () => {
+      moduleDialogState = null;
+      document.getElementById("modulePublishNoticeHost").innerHTML = "";
+    });
+  }
+
+  function openModulePublishDialog(moduleId, moduleVersionId, preview, { answersWereStale = false } = {}) {
+    const dialog = document.getElementById("modulePublishDialog");
+    if (!dialog || typeof dialog.showModal !== "function") {
+      // En gammel side uten dialogen. Å publisere uten å spørre ville tatt valget fra forfatteren.
+      logBot(() => t("errors.api.client_outdated"));
+      return;
+    }
+    bindModulePublishDialog(dialog);
+    document.getElementById("modulePublishTitle").textContent = t("shell.publish.versioned.title");
+    document.getElementById("modulePublishKind").innerHTML = modulePublishKindHtml(preview);
+    // Tegnes bare når det er noe å si: et tomt varsel i siden er fortsatt et varsel for en skjermleser.
+    document.getElementById("modulePublishNoticeHost").innerHTML = answersWereStale
+      ? `<p id="modulePublishNotice" class="course-version-notice" role="alert">${escapeHtml(t("courses.version.changedNotice"))}</p>`
+      : "";
+    document.getElementById("modulePublishCoursesIntro").textContent = preview.courses.length > 0
+      ? t("shell.publish.versioned.coursesIntro")
+      : t("shell.publish.versioned.noCourses");
+    const affected = mountAffectedCourses(document.getElementById("modulePublishCourses"), preview.courses, { prefix: "moduleCourseVersion" });
+    document.getElementById("modulePublishCancel").textContent = t("shell.action.cancel");
+    document.getElementById("modulePublishConfirm").textContent = t("shell.publish.versioned.confirm");
+    // Svarte forfatteren på kursene, står hovedversjon fortsatt, og kursene er tegnet på nytt med ferske tall.
+    if (answersWereStale) dialog.querySelector('input[name="moduleVersionKind"][value="major"]').checked = true;
+    setHidden(document.getElementById("modulePublishCoursesBlock"), selectedModuleKind(dialog) !== "major");
+    moduleDialogState = { moduleId, moduleVersionId, affected };
+    if (!dialog.open) dialog.showModal();
+  }
+
+  // To klikk på «Publiser» mens forhåndsvisningen er på vei, skal ikke gi to dialoger eller to kall.
+  let readingPreview = false;
+
+  /**
+   * #934 skive 5b: moduldialogen erstatter #997-avkrysningen når bryteren er på. Serveren avgjør det: svarer forhåndsvisningen, gjelder
+   * svar per kurs. Svarer den at bryteren er av, eller 404, er alt under som før.
+   *
    * #997: «bestått gjelder til modulen revideres» — og revisjonen er noe FORFATTEREN merker.
    *
    * Har noen bestått modulen fra før, spør vi før publiseringen: er dette en revisjon som gjør de
@@ -430,6 +602,30 @@ export function createPublishFlow(ctx) {
     if (!moduleId || !moduleVersionId) {
       logBot(() => t("shell.publish.versionRequired"));
       return;
+    }
+
+    if (options.supersedesEarlierPasses === undefined && !options.withoutVersioning) {
+      if (readingPreview) return;
+      readingPreview = true;
+      let read;
+      try {
+        read = await readVersionedPreview(moduleId, moduleVersionId);
+      } finally {
+        readingPreview = false;
+      }
+      if (read.error) {
+        const slot = logProgress("shell.publish.progress");
+        slot.abortBtn.remove();
+        reportPublishFailure(slot, read.error);
+        return;
+      }
+      if (read.preview) {
+        // Det finnes ikke noe valg om å endre et gitt nummer (produkteier), og første publisering blir 1.0 uansett.
+        const nothingToAsk = Number.isInteger(read.preview.moduleVersion.versionMajor) || !Number.isInteger(read.preview.currentMajor);
+        if (nothingToAsk) await sendVersionedPublish(moduleId, moduleVersionId, { moduleVersion: "minor" });
+        else openModulePublishDialog(moduleId, moduleVersionId, read.preview, { answersWereStale: options.answersWereStale === true });
+        return;
+      }
     }
 
     if (options.supersedesEarlierPasses === undefined) {
@@ -449,34 +645,9 @@ export function createPublishFlow(ctx) {
         getHeaders,
         { method: "POST", body: JSON.stringify({ supersedesEarlierPasses: options.supersedesEarlierPasses === true }) },
       );
-      logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.publish.success"))}</strong>`);
-      showToast(t("shell.publish.success"), "success");
-      announceStatus(t("shell.publish.success"));
-      ctx.sessionDraft = null;
-      ctx.previewDraft = null;
-      ctx.latestSavedModuleVersionId = null;
-      // UX: etter publisering, last modulen på nytt (nå Live) og vis modul-handlinger
-      // ("Hva vil du gjøre med denne modulen?") i stedet for full modul-velger. loadModule
-      // avslutter med showModuleActions() og bevarer kontekst til modulen man nettopp
-      // publiserte; "Velg en annen modul" er fortsatt tilgjengelig derfra. Samme mønster
-      // som unpublishModuleInBackground.
-      await loadModule(moduleId);
+      await afterPublished(slot, moduleId);
     } catch (err) {
-      // #896 S4: a half-translated module is not a failure to report as a stack of JSON — it is a
-      // list of holes with an action that fills them.
-      const gateIssues = translationGateIssuesFrom(err);
-      if (gateIssues.length > 0) {
-        const otherBlockers = otherBlockingIssuesFrom(err);
-        logResolveSlot(slot, () => describeTranslationGate(gateIssues, otherBlockers), [
-          { labelKey: "shell.publish.translationGate.fillGaps", action: () => translateMissingLocalesThenPublish(gateIssues) },
-          { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
-        ]);
-        return;
-      }
-      const errMsg = apiErrorText(err);
-      logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
-        { labelKey: "shell.action.retry", action: publishLatestDraftInBackground },
-      ]);
+      reportPublishFailure(slot, err);
     }
   }
 

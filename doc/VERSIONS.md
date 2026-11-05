@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.136.0 - 2026-11-05
+
+#934 skive 5b: dialogene og versjonsnummeret (`doc/DESIGN_934.md`, «5b — bygget»). **Bryteren er av i alle miljøer, og med den av er publiseringen den samme som før.** Bare versjonsnummeret og eksporten er nye da.
+
+- **Moduldialogen** (når bryteren er på): først hoved eller mindre for modulen. Velges hoved, får hvert kurs modulen ligger i og som har vært ute, sitt eget valg, med antall kursbevis og antall som får e-post. Mindre er valgt fra start. Over 200 mottakere krever et ekstra «ja». Et kurs uten kursbevis får mindre uansett, så det har ingen knapper, bare beskjeden.
+- **«Publiser nye versjoner»** (når bryteren er på): ett valg per berørt kurs, dette kurset først. #997-spørsmålet faller bort.
+- **«Publiser kurs»** med en modul som har vært publisert før: teksten forklarer hvorfor og nevner modulene, og «Publiser nye versjoner» åpnes. Ingenting skjer der uten et klikk.
+- **Serveren avgjør hvilken dialog som vises.** Svarer forhåndsvisningen `409 module_versioning_not_active` eller 404, er dialogen den gamle, uendret. Det samme ved sending: går bryteren av mens dialogen står, tar den gamle veien over. Ved en annen feil får forfatteren vite det, og ingenting publiseres.
+- **Avviste svar:** har kursene eller tallene endret seg (`course_version_required`, `affected_courses_changed`, `major_email_confirm_required`), vises dialogen på nytt med ferske tall, og den sier fra. Hvert kurs er tilbake på mindre.
+- **Versjonsnummeret:** deltakerens modulliste, modulsidens hode og versjonshistorikken viser «v2.1», og forfatterens modulliste har fått samme merke som kurslista. `versionNo` står i API-et som før. Nye felt: `activeVersionMajor` og `activeVersionMinor` i `GET …/modules/library`, `versionMajor` og `versionMinor` på `activeVersion` i `/api/modules` og på versjonene i `GET …/modules/:id/export`.
+- **Kurseksporten** har `versionMajor` og `versionMinor` som opplysning. Importen leser dem ikke.
+- **Opprydding:** valget mellom mindre og hovedversjon er flyttet fra `admin-content-courses.js` til `public/static/course-version-choice.js`, og stilene til `shared.css`, siden modulsiden bruker det samme.
+- **Ved utrulling:** ingen migrering. Kjør `test/stage/release-2-136-dialogene.spec.ts`. Bryteren slås på etterpå, slik «5a-3 — bygget» sier.
+
 ## 2.135.0 - 2026-11-05
 
 #934 skive 5a-3: bryteren og regelen om beståtte per kurs (`doc/DESIGN_934.md`, «5a-3 — bygget»). **Bryteren er av, og da endres ingenting for noen.** Den slås på sammen med 5b.

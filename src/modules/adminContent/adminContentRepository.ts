@@ -46,7 +46,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           updatedAt: true,
           activeVersionId: true,
           activeVersion: {
-            select: { id: true, versionNo: true },
+            select: { id: true, versionNo: true, versionMajor: true, versionMinor: true },
           },
           versions: {
             orderBy: { versionNo: "desc" },
@@ -207,6 +207,8 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
             select: {
               id: true,
               versionNo: true,
+              versionMajor: true,
+              versionMinor: true,
               taskText: true,
               assessorExpectedContent: true,
               modelAnswer: true,

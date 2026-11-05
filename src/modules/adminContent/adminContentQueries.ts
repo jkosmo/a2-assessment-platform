@@ -58,6 +58,9 @@ export async function listLibraryModules(
     updatedAt: module.updatedAt.toISOString(),
     activeVersionId: module.activeVersionId,
     activeVersionNo: module.activeVersion?.versionNo ?? null,
+    // #934 skive 5b: det lista viser, «v2.1».
+    activeVersionMajor: module.activeVersion?.versionMajor ?? null,
+    activeVersionMinor: module.activeVersion?.versionMinor ?? null,
     latestVersionNo: module.versions[0]?.versionNo ?? null,
     ownedByMe: ownedIds.has(module.id),
     // #787 slice 5: admin manages all; a non-admin manages only modules they own (unowned → admin-only).
@@ -109,6 +112,9 @@ export async function getModuleContentBundle(moduleId: string) {
   const moduleVersions = module.versions.map((version) => ({
     id: version.id,
     versionNo: version.versionNo,
+    // #934 skive 5b: det forfatteren ser, «v2.1». `null` for en versjon som aldri er publisert.
+    versionMajor: version.versionMajor,
+    versionMinor: version.versionMinor,
     taskText: decodeLocalizedText(version.taskText) ?? version.taskText,
     assessorExpectedContent: decodeLocalizedText(version.assessorExpectedContent) ?? version.assessorExpectedContent,
     modelAnswer: version.modelAnswer ? (decodeLocalizedText(version.modelAnswer) ?? version.modelAnswer) : undefined,
@@ -307,6 +313,10 @@ export async function buildCourseExportEnvelope(
         description: (course.description ? decodeLocalizedText(course.description) : null) as never,
         certificationLevel: (course.certificationLevel ? decodeLocalizedText(course.certificationLevel) : null) as never,
         sortOrder: course.sortOrder ?? null,
+        // #934 skive 5b: versjonen kurset hadde da fila ble laget, som opplysning. Importen leser dem ikke: versjonen hører til kurset
+        // i det miljøet det står, og endres bare av `applyCourseVersionChange`.
+        versionMajor: course.versionMajor,
+        versionMinor: course.versionMinor,
         origin: { courseId: course.id, exportedAt: new Date().toISOString() },
         audit: {
           publishedAt: course.publishedAt ? new Date(course.publishedAt).toISOString() : null,

@@ -24,7 +24,8 @@ import {
 } from "/static/participant-console-state.js";
 import { describeImportError } from "/static/import-error.js";
 import { describeAltWarnings, describePackageCueWarnings, describeRubricWarnings } from "/static/mcq-cue-warnings.js";
-import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
+import { apiErrorBody, apiErrorCode, apiErrorCodeText, apiErrorStatus, describeApiError } from "/static/api-error.js";
+import { courseVersionLabel, createCourseVersionChoice, versionRequestBody } from "/static/course-version-choice.js";
 import { flushQueuedToast, queueToast, showToast } from "/static/toast.js";
 import {
   detectCoursesRoute,
@@ -49,6 +50,7 @@ const DETAIL_LOCALES = ["nb", "nn", "en-GB"];
 let currentLocale = resolveInitialLocale(supportedLocales);
 
 const { t, tf } = createTranslator(adminContentTranslations, () => currentLocale);
+const { courseVersionHoldersText, courseVersionAnswer, mountCourseVersionChoice, mountAffectedCourses } = createCourseVersionChoice({ t, tf });
 
 // #972: én vei ut for hver fanget apiFetch-feil på denne siden. Åtte steder sendte tidligere
 // `err.message` rett i en toast, med en norsk setning som `??`-reserve — og viste dermed
@@ -421,6 +423,16 @@ async function commitCoursePublish(courseId, publishItems, triggerButton = null,
       await renderDetailView(courseId);
     }
   } catch (err) {
+    // #934 skive 5b: en modul som har vært ute før, skal ikke gå live uten at det er spurt per kurs. Serveren viser hit, så
+    // teksten sier det og hvilke moduler, og «Publiser nye versjoner» åpnes. Ingenting skjer der uten et klikk.
+    if (apiErrorCode(err) === "course_publish_has_republished_modules") {
+      if (triggerButton) triggerButton.disabled = false;
+      const modules = apiErrorBody(err)?.details?.modules;
+      const names = Array.isArray(modules) ? modules.map((module) => localizedText(module?.title) || module?.moduleId).filter(Boolean).join(", ") : "";
+      showToast(describeApiError(err, t).headline, "warning", names);
+      await openPendingPublishDialog(courseId);
+      return;
+    }
     apiErrorToast(err);
     if (triggerButton) triggerButton.disabled = false;
   }
@@ -622,7 +634,21 @@ function pendingPublishButtons() {
 
 let pendingPublishTarget = null; // { courseId, versionIds }
 
-async function openPendingPublishDialog(courseId) {
+/**
+ * #934 skive 5b: ett valg per berørt kurs, når serveren lister kursene. `affectedCourses` finnes bare når bryteren er på. Med den av, og
+ * mot en gammel server, er dialogen den samme som før.
+ */
+function mountPendingCourses(host, target, affected, changed) {
+  host.innerHTML = `${changed ? `<p class="course-version-notice" role="alert">${escapeHtml(t("courses.version.changedNotice"))}</p>` : ""}
+    <p class="dialog-text"><strong>${escapeHtml(t("courses.version.pendingCoursesHeading"))}</strong><br>${escapeHtml(t("courses.version.pendingCoursesIntro"))}</p>
+    <div data-affected-courses></div>`;
+  target.affected = mountAffectedCourses(host.querySelector("[data-affected-courses]"), affected, {
+    prefix: "pendingCourseVersion",
+    currentCourseId: target.courseId,
+  });
+}
+
+async function openPendingPublishDialog(courseId, { changed = false } = {}) {
   const dialog = document.getElementById("pendingPublishDialog");
   if (!dialog || typeof dialog.showModal !== "function") return;
   // Alltid ferskt: det forfatteren svarer på, skal være det som står i kurset nå.
@@ -634,8 +660,11 @@ async function openPendingPublishDialog(courseId) {
   if (items.length === 0) return;
 
   const blocked = !pending.publishable;
-  const asksRevision = !blocked && Number(pending.passedTotal) > 0;
-  pendingPublishTarget = { courseId, versionIds: items.map((item) => item.versionId) };
+  const versioned = Array.isArray(pending.affectedCourses);
+  // #934 skive 5b: med svar per kurs faller #997-spørsmålet bort.
+  const asksRevision = !versioned && !blocked && Number(pending.passedTotal) > 0;
+  pendingPublishTarget = { courseId, versionIds: items.map((item) => item.versionId), versioned };
+  dialog.classList.toggle("is-versioned", versioned);
 
   document.getElementById("pendingPublishTitle").textContent = blocked
     ? t("adminContent.courses.pendingPublish.blockedTitle")
@@ -657,10 +686,15 @@ async function openPendingPublishDialog(courseId) {
 
   // #934 skive 3: mindre eller hovedversjon for kurset — bare når noen har kursbevis (da har kurset vært ute).
   const versionHost = document.getElementById("pendingPublishVersion");
-  const asksVersion = !blocked && Number(pending.course?.certificateHolders) > 0;
+  const asksVersion = !versioned && !blocked && Number(pending.course?.certificateHolders) > 0;
   pendingPublishTarget.asksVersion = asksVersion;
   pendingPublishTarget.course = pending.course ?? null;
-  if (versionHost) {
+  if (versioned) {
+    const showCourses = !blocked && pending.affectedCourses.length > 0;
+    setHidden(versionHost, !showCourses);
+    if (showCourses) mountPendingCourses(versionHost, pendingPublishTarget, pending.affectedCourses, changed);
+    else versionHost.innerHTML = "";
+  } else if (versionHost) {
     setHidden(versionHost, !asksVersion);
     if (asksVersion) {
       mountCourseVersionChoice(versionHost, "pendingCourseVersion", pending.course);
@@ -696,6 +730,22 @@ async function openPendingPublishDialog(courseId) {
   if (!dialog.open) dialog.showModal();
 }
 
+// #934 skive 5b: svarene gjelder ikke lenger det som står på serveren. Ingenting er skrevet. Dialogen tegnes på nytt med ferske tall, og
+// forfatteren svarer igjen. 404 og `module_versioning_not_active` betyr at svar per kurs ikke gjelder her. Da gir den ferske lesingen den
+// gamle dialogen.
+const PENDING_ANSWERS_STALE = new Set([
+  "pending_versions_changed",
+  "affected_courses_changed",
+  "course_version_required",
+  "major_email_confirm_required",
+  "module_versioning_not_active",
+]);
+
+function pendingAnswersAreStale(err) {
+  const status = apiErrorStatus(err);
+  return status === 404 || status === 422 || PENDING_ANSWERS_STALE.has(apiErrorCode(err));
+}
+
 async function commitPendingPublish(supersedesEarlierPasses) {
   const target = pendingPublishTarget;
   if (!target) return;
@@ -706,11 +756,14 @@ async function commitPendingPublish(supersedesEarlierPasses) {
     ? courseVersionAnswer(document.getElementById("pendingPublishVersion"), "pendingCourseVersion", target.course)
     : undefined;
   if (target.asksVersion && !versionAnswer) return;
+  // #934 skive 5b: det samme per kurs. Uten berørte kurs er det ingenting å lese, og settet er tomt.
+  const courseAnswers = target.versioned ? (target.affected ? target.affected.read() : { expectedCourseIds: [] }) : null;
+  if (target.versioned && !courseAnswers) return;
   for (const button of [buttons.confirm, buttons.keep, buttons.supersede]) button.disabled = true;
   try {
-    const result = await runWithWorkDialog(t("adminContent.work.publishing"), () => apiFetch(`/api/admin/content/courses/${encodeURIComponent(target.courseId)}/publish-pending`, getHeaders, {
+    const result = await runWithWorkDialog(t("adminContent.work.publishing"), () => apiFetch(`/api/admin/content/courses/${encodeURIComponent(target.courseId)}/${target.versioned ? "publish-pending-versioned" : "publish-pending"}`, getHeaders, {
       method: "POST",
-      body: JSON.stringify({
+      body: JSON.stringify(target.versioned ? { versionIds: target.versionIds, ...courseAnswers } : {
         versionIds: target.versionIds,
         ...(supersedesEarlierPasses === undefined ? {} : { supersedesEarlierPasses }),
         // #934 skive 3: svaret sendes bare når spørsmålet ble stilt; ellers bestemmer tjeneren (mindre).
@@ -722,6 +775,16 @@ async function commitPendingPublish(supersedesEarlierPasses) {
     showToast(tf("adminContent.courses.pendingPublish.published", { count: result?.publishedItems?.length ?? 0 }), "success");
     await refreshCourseView(target.courseId);
   } catch (err) {
+    if (target.versioned) {
+      if (pendingAnswersAreStale(err)) {
+        showToast(t("adminContent.courses.pendingPublish.changed"), "warning");
+        await openPendingPublishDialog(target.courseId, { changed: true });
+        return;
+      }
+      apiErrorToast(err);
+      for (const button of [buttons.confirm, buttons.keep, buttons.supersede]) button.disabled = false;
+      return;
+    }
     if (err?.status === 409 || err?.status === 422) {
       // Noe er endret, eller noe stopper: vis lista slik den er nå, i stedet for en feil uten neste steg.
       showToast(t("adminContent.courses.pendingPublish.changed"), "warning");
@@ -754,11 +817,6 @@ function initPendingPublishDialog() {
 // kursets nåværende hovedversjon, stilles ikke spørsmålet. Tjeneren eier reglene (og gjør en hovedversjon
 // uten kursbevis til mindre); dialogen viser konsekvensen.
 
-function courseVersionLabel(course) {
-  if (!Number.isInteger(course?.versionMajor)) return "";
-  return `v${course.versionMajor}.${Number.isInteger(course.versionMinor) ? course.versionMinor : 0}`;
-}
-
 function courseVersionChipHtml(course) {
   const label = courseVersionLabel(course);
   return label ? ` <span class="status-chip course-version-chip" title="${escapeHtml(t("courses.version.chipTitle"))}">${escapeHtml(label)}</span>` : "";
@@ -790,114 +848,6 @@ function courseItemChanges(beforeKey, afterList) {
     removed: before.filter((key) => !afterSet.has(key)).length,
     moved: a.length - lcs[a.length][b.length],
   };
-}
-
-function courseVersionHoldersText(course) {
-  const n = Number(course?.certificateHolders) || 0;
-  return n === 1
-    ? tf("courses.version.holdersOne", { major: course.versionMajor })
-    : tf("courses.version.holdersMany", { n, major: course.versionMajor });
-}
-
-function courseVersionChoiceHtml(name, course) {
-  const major = course.versionMajor;
-  const minor = Number.isInteger(course.versionMinor) ? course.versionMinor : 0;
-  return `<fieldset class="course-version-choices">
-      <legend class="course-version-legend">${escapeHtml(t("courses.version.legend"))}</legend>
-      <label class="course-version-choice"><input type="radio" name="${name}" value="minor" checked>
-        <span><strong>${escapeHtml(tf("courses.version.minor", { next: `${major}.${minor + 1}` }))}</strong>
-        <span class="course-version-hint">${escapeHtml(t("courses.version.minorHint"))}</span></span></label>
-      <label class="course-version-choice"><input type="radio" name="${name}" value="major">
-        <span><strong>${escapeHtml(tf("courses.version.major", { next: `${major + 1}.0` }))}</strong>
-        <span class="course-version-hint">${escapeHtml(tf("courses.version.majorHint", { major }))}</span></span></label>
-    </fieldset>
-    <div class="course-version-consequence" data-version-consequence aria-live="polite"></div>`;
-}
-
-function selectedCourseVersion(host, name) {
-  return host?.querySelector(`input[name="${name}"]:checked`)?.value === "major" ? "major" : "minor";
-}
-
-/** Svaret som felt i et kall: `{ [versionField]: "major" | "minor", confirmEmailRecipients? }`, eller ingenting. */
-function versionRequestBody(answer, versionField) {
-  if (!answer) return {};
-  return {
-    [versionField]: answer.version,
-    ...(answer.confirmEmailRecipients !== undefined ? { confirmEmailRecipients: answer.confirmEmailRecipients } : {}),
-  };
-}
-
-// #934 skive 4b: over så mange mottakere krever en hovedversjon et ekstra «ja» (produkteier 2026-11-03). Samme tall
-// som serveren (`MAJOR_EMAIL_CONFIRM_THRESHOLD`); serveren teller på nytt og avviser med 409 uten bekreftelsen.
-const MAJOR_EMAIL_CONFIRM_THRESHOLD = 200;
-
-/** Hvor mange en hovedversjon sender e-post til, eller null når serveren ikke sier det (eldre server). */
-function majorEmailRecipients(course) {
-  return Number.isInteger(course?.majorEmailRecipients) ? course.majorEmailRecipients : null;
-}
-
-function majorEmailLineHtml(course, next) {
-  const n = majorEmailRecipients(course);
-  if (n === null) return "";
-  const text = n === 0
-    ? t("courses.version.majorEmailNone")
-    : n === 1 ? tf("courses.version.majorEmailOne", { next }) : tf("courses.version.majorEmailMany", { n, next });
-  const confirm = n > MAJOR_EMAIL_CONFIRM_THRESHOLD
-    ? `<label class="course-version-email-confirm"><input type="checkbox" data-email-confirm>
-        <span>${escapeHtml(tf("courses.version.majorEmailConfirm", { n }))}</span></label>
-      <p class="course-version-email-missing" data-email-confirm-missing hidden>${escapeHtml(tf("courses.version.majorEmailConfirmMissing", { n }))}</p>`
-    : "";
-  return `<li>${escapeHtml(text)}${confirm}</li>`;
-}
-
-function renderCourseVersionConsequence(host, course, choice) {
-  const box = host?.querySelector("[data-version-consequence]");
-  if (!box) return;
-  const major = course.versionMajor;
-  const next = `${major + 1}.0`;
-  box.classList.toggle("is-major", choice === "major");
-  box.innerHTML = choice === "major"
-    ? `<p><strong>${escapeHtml(tf("courses.version.majorConsequenceTitle", { next }))}</strong></p>
-      <ul>
-        <li>${escapeHtml(tf("courses.version.majorKeep", { major, next }))}</li>
-        <li>${escapeHtml(tf("courses.version.majorCounts", { major }))}</li>
-        <li>${escapeHtml(t("courses.version.majorReport"))}</li>
-        ${majorEmailLineHtml(course, next)}
-      </ul>`
-    : `<p>${escapeHtml(t("courses.version.minorConsequence"))}</p>`;
-}
-
-/**
- * #934 skive 4b: svaret fra valget, klart til å sendes: `{ version, confirmEmailRecipients }`. Hovedversjon sender
- * tallet dialogen viste; serveren krever det over grensen. Mangler det ekstra «ja» over grensen, gir den `null`,
- * viser hvorfor og flytter fokus til avkrysningen — da sendes ingenting.
- */
-function courseVersionAnswer(host, name, course) {
-  const version = selectedCourseVersion(host, name);
-  if (version !== "major") return { version };
-  const n = majorEmailRecipients(course);
-  if (n !== null && n > MAJOR_EMAIL_CONFIRM_THRESHOLD) {
-    const box = host?.querySelector("[data-email-confirm]");
-    if (!box?.checked) {
-      const missing = host?.querySelector("[data-email-confirm-missing]");
-      if (missing) missing.hidden = false;
-      box?.focus();
-      return null;
-    }
-  }
-  return n === null ? { version } : { version, confirmEmailRecipients: n };
-}
-
-/** Tegn valget i `host` og hold konsekvensen (og ev. en knappetekst) i takt med det. */
-function mountCourseVersionChoice(host, name, course, onChange) {
-  host.innerHTML = courseVersionChoiceHtml(name, course);
-  const update = () => {
-    const choice = selectedCourseVersion(host, name);
-    renderCourseVersionConsequence(host, course, choice);
-    onChange?.(choice);
-  };
-  for (const input of host.querySelectorAll(`input[name="${name}"]`)) input.addEventListener("change", update);
-  update();
 }
 
 /**

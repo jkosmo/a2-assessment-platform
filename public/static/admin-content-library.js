@@ -3,6 +3,7 @@ const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "./html-escape.js";
 import { createListPage } from "./list-page.js";
 import { lifecycleBadge, lifecycleOf } from "./content-status-badge.js";
+import { moduleVersionLabel } from "./version-label.js";
 import {
   supportedLocales,
   localeLabels,
@@ -176,6 +177,12 @@ function resolveActiveWorkspaceRoles() {
 // Lista (den felles listesida)
 // ---------------------------------------------------------------------------
 
+// #934 skive 5b: versjonen som er ute, i samme merke som i kurslista. En modul uten aktiv versjon har ikke noe å vise.
+function moduleVersionChipHtml(m) {
+  const label = moduleVersionLabel({ versionMajor: m.activeVersionMajor, versionMinor: m.activeVersionMinor, versionNo: m.activeVersionNo });
+  return label ? ` <span class="status-chip module-version-chip" title="${escapeHtml(t("library.versionChipTitle"))}">${escapeHtml(label)}</span>` : "";
+}
+
 function getListPage() {
   if (listPage) return listPage;
   listPage = createListPage({
@@ -215,7 +222,7 @@ function getListPage() {
       // #894: hvilke språk tittelen MANGLER. Står ved siden av navnet fordi det er navnet det
       // gjelder — ikke modulens tilstand.
       { key: "lang", label: t("ui.lang.col"), className: "col-lang", sortValue: (m) => manglendeSpraak(m).length, render: (m) => spraakMerkeHtml(m, tf) },
-      { key: "status", label: t("ui.status"), className: "col-status", render: (m) => lifecycleBadge(m, t) },
+      { key: "status", label: t("ui.status"), className: "col-status", render: (m) => lifecycleBadge(m, t) + moduleVersionChipHtml(m) },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (m) => certBadge(m.certificationLevel) },
       { key: "courses", label: t("library.col.usedInCourses"), className: "col-courses", sortValue: (m) => m.courseCount ?? 0, render: (m) => (m.courseCount > 0
         ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${m.courseCount} kurs">${m.courseCount}</button>`
