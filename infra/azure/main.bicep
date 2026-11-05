@@ -217,6 +217,9 @@ param appealSlaMonitorIntervalMs int = 600000
 ])
 param participantNotificationChannel string = 'log'
 
+@description('#934 skive 4b: e-post ved ny hovedversjon av et kurs. Leses bare av workeren. Av som standard.')
+param courseMajorEmailEnabled bool = false
+
 @description('Optional webhook endpoint for participant notifications.')
 @secure()
 param participantNotificationWebhookUrl string = ''
@@ -979,6 +982,10 @@ resource workerAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         {
           name: 'PROCESS_ROLE'
           value: 'worker'
+        }
+        {
+          name: 'COURSE_MAJOR_EMAIL_ENABLED'
+          value: string(courseMajorEmailEnabled)
         }
         {
           name: 'SKIP_MIGRATE'

@@ -1481,3 +1481,10 @@ kunstig. Finner KI ingen, sier den fra. 3–6 elementer (færre er gjetting, fle
 Revisjon beholder typen med mindre forfatteren ber om det generelt. Elementene utleveres alltid stokket og
 aldri i riktig rekkefølge. Status: avklart. Se `doc/DESIGN_1077.md`.
 
+
+## Kursbevis for et begrenset kurs krever at personen er tildelt kurset (2026-11-05)
+
+Produkteier: en deltaker skal ikke få kursbevis for et RESTRICTED kurs hen ikke er tildelt, heller ikke når modulen er bestått
+gjennom et åpent kurs. Kravet til kursbevis sjekker ikke synlighet i dag, og den kan altså gi bevis for et kurs personen aldri
+kunne åpne. Status: besluttet, ikke bygget. Egen sak etter #934. På en kopi av prod 2026-11-05 hadde ingen fått et slikt bevis:
+ett begrenset kurs, to kursbevis, begge tildelt.

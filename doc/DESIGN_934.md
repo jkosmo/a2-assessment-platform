@@ -1239,9 +1239,8 @@ to siste er regelen så lenge bryteren er av, og faller bort når den slås på 
 21. **To forsøk på samme rad samtidig** (en leiekontrakt som gikk ut mens ACS fortsatt svarte): det andre setter raden
     `uncertain`, og det første kan da ikke skrive `sent`. E-posten går én gang, men raden kan si `uncertain` om en som
     gikk. Samme valg som #1115.
-22. **`COURSE_MAJOR_EMAIL_ENABLED` står ikke i Bicep** (`infra/azure/main.bicep`). Den settes for hånd på workeren.
-    Workerens innstillinger skrives fullt ut av hver infrastrukturutrulling (`deploy-azure.yml`), så en slik utrulling
-    fjerner den, og radene venter til den settes igjen. Ingen e-post går tapt.
+22. *(Lukket 2026-11-05: `COURSE_MAJOR_EMAIL_ENABLED` står i Bicep, av som standard, og styres av GitHub-variabelen med samme navn.
+    En infrastrukturutrulling setter den til verdien i variabelen, så en verdi satt for hånd på workeren overlever ikke.)*
 23. **Eierskapet sjekkes før innholdslåsen** (QA-porten 2.131.0, runde 3). Fjernes en forfatter som eier mens lagringen
     står i kø bak låsen, går lagringen gjennom. Vinduet er sekunder, og forfatteren hadde tilgang da hen trykket.
 24. **Rubrikk-, oppgavemal- og flervalgsversjoner tar ikke innholdslåsen** (QA-porten 2.131.0, runde 3). En samtidig
@@ -1349,6 +1348,17 @@ to siste er regelen så lenge bryteren er av, og faller bort når den slås på 
 - **Ingen flere runder** (produkteier 2026-11-04). QA-porten tar hver skive når den er bygget.
 
 ### Spørsmål til produkteier
+
+**E-posten i en ekte innboks** (stage, 2026-11-05, `test/stage/manuell-934-epost-outlook.spec.ts`): kom fram i Outlook til jko@a-2.no. Båtbildet
+vises, ingen lenker, riktig tittel, versjon og språk. Produkteier har sett den.
+
+**Besvart 2026-11-05, alle anbefalingene:**
+- Forfatteren får ikke beskjed når en lenkelignende kurstittel stopper e-posten. Raden står som `failed` med `contains_link`.
+- Den engelske ordlyden med «boatyard» står.
+- Forfatteren laster siden på nytt etter `409 course_changed`. Ingen sammenslåing.
+- «Kjente mangler» nr. 23 står.
+- Nr. 47: meldingen om at oppgaven er endret, kommer etter 5a-3.
+- Et begrenset kurs skal kreve at personen er tildelt kurset, også for kursbevis. Egen sak etter #934, se `doc/DECISIONS.md`.
 
 **Besvart 2026-11-03: ja til alle anbefalingene (a–e), og ja til grensen i b): over 200 mottakere krever et ekstra
 «ja» i dialogen. Svar f: ja.**
