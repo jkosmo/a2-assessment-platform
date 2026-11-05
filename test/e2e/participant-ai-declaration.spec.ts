@@ -125,10 +125,15 @@ test("participant: declaring autonomous shows the nudge; 'go back' cancels, 'sub
   await page.locator('.ai-declaration-opt[data-v="autonomous"]').click();
   await expect(page.locator("#createSubmission")).toBeEnabled();
 
+  // 2.134.1: siden sier hva valget gjør FØR deltakeren leverer. En deltaker følte seg lurt av «Påvirker ikke karakteren».
+  await expect(page.locator("#aiDeclaration")).toContainText("Påvirker ikke poengene dine");
+  await expect(page.locator('.ai-declaration-opt[data-v="autonomous"]')).toContainText("En sensor leser da besvarelsen");
+
   // Submitting shows the reflective nudge; choosing "go back" cancels — nothing is submitted.
   await page.locator("#createSubmission").click();
   const nudge = page.locator(".ai-nudge-overlay");
   await expect(nudge).toBeVisible();
+  await expect(nudge).toContainText("leser en sensor besvarelsen før du får resultatet");
   await nudge.locator('[data-nudge="back"]').click();
   await expect(nudge).toBeHidden();
   expect(submitCount).toBe(0);

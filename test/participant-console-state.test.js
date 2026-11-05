@@ -13,7 +13,33 @@ import {
   sanitizeAppealStatuses,
   sanitizeMockRolePresets,
   upsertModuleDraft,
+  markCourseModuleStarted,
 } from "../public/participant-console-state.js";
+
+describe("2.134.1: kursdetaljene i minnet etter en innlevering", () => {
+  it("«ikke startet» blir «påbegynt» for modulen, i alle kurs; andre moduler og andre statuser står", () => {
+    const details = {
+      a: {
+        items: [
+          { type: "MODULE", moduleId: "m1", moduleStatus: "NOT_STARTED" },
+          { type: "MODULE", moduleId: "m2", moduleStatus: "NOT_STARTED" },
+          { type: "SECTION", sectionId: "s1" },
+        ],
+        modules: [{ moduleId: "m1", moduleStatus: "NOT_STARTED" }],
+      },
+      b: { items: [{ type: "MODULE", moduleId: "m1", moduleStatus: "PASSED" }] },
+      c: { items: [{ type: "MODULE", moduleId: "m1", moduleStatus: "REVISED_RETAKE_REQUIRED" }] },
+      d: null,
+    };
+    expect(markCourseModuleStarted(details, "m1")).toEqual(["a"]);
+    expect(details.a.items[0].moduleStatus).toBe("IN_PROGRESS");
+    expect(details.a.modules[0].moduleStatus).toBe("IN_PROGRESS");
+    expect(details.a.items[1].moduleStatus).toBe("NOT_STARTED");
+    expect(details.b.items[0].moduleStatus).toBe("PASSED");
+    expect(details.c.items[0].moduleStatus).toBe("REVISED_RETAKE_REQUIRED");
+    expect(markCourseModuleStarted(details, "m1")).toEqual([]);
+  });
+});
 
 describe("participant console state helpers", () => {
   it("#934 5a-1: finner teksten i kladden som ikke har noe felt på siden", () => {

@@ -42,6 +42,7 @@ import { groupCoursesByTheme, hasAnyTheme } from "/static/course-theme-groups.js
 import {
   buildModuleCardViewModels,
   deriveParticipantFlowGateState,
+  markCourseModuleStarted,
   earlierResultToShow,
   isAssessmentResultReady,
   findMatchingPreset,
@@ -1273,6 +1274,9 @@ function noteLatestSubmission(moduleId, patch) {
   const module = loadedModules.find((m) => m?.id === moduleId);
   if (!module) return;
   module.participantStatus = { ...(module.participantStatus ?? {}), ...patch };
+  for (const courseId of markCourseModuleStarted(courseDetailCache, moduleId)) {
+    renderCourseDetailModules(courseId, courseDetailCache[courseId]);
+  }
 }
 
 // 2.126.0: modulen slik den sto rett etter vurderingen — det leverte svaret (skrivebeskyttet), resultatet,

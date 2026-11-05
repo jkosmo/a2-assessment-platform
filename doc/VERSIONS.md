@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.134.1 - 2026-11-05
+
+Tilbakemelding fra en deltaker: «Jeg føler meg lurt», og «ikke startet» etter innlevering.
+
+- **KI-erklæringen sier nå hva den gjør, før deltakeren leverer.** Merkelappen sa «Påvirker ikke karakteren», men «KI skrev det meste» og
+  «Lever likevel» sender besvarelsen til sensor, og det sto først etter innlevering. Nå: «Påvirker ikke poengene dine», «En sensor leser da
+  besvarelsen» på valget, og dialogen sier hva som skjer om deltakeren leverer likevel. Regelen er uendret. Se `doc/DECISIONS.md`.
+- **Kursets status etter innlevering.** Statusen ble bare hentet på nytt etter en bestått, så en sak hos sensor eller et stryk sto som «Ikke
+  startet» til siden ble lastet på nytt. Nå «Påbegynt» med en gang. «Til vurdering» krever en endring på serveren og kommer senere.
+
 ## 2.134.0 - 2026-11-05
 
 #934 skive 5a-2: grunnmuren for beståtte per kurs, ved siden av dagens regel (`doc/DESIGN_934.md`, «5a-2 — bygget»). Ingen

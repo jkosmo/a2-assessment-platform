@@ -321,6 +321,26 @@ export function earlierResultToShow(participantStatus, draft, draftIsMeaningful)
   return submissionId;
 }
 
+/**
+ * 2.134.1: en innlevering er opprettet, så modulen er ikke lenger «ikke startet». Kursdetaljene i minnet hentes ellers bare på nytt
+ * etter en bestått, så en sak hos sensor eller et stryk sto som «ikke startet» til siden ble lastet på nytt. Svarer med kursene som
+ * ble endret. Samme overgang som serveren gjør (`moduleStatusOf` i routes/courses.ts).
+ */
+export function markCourseModuleStarted(courseDetails, moduleId) {
+  const changed = [];
+  for (const [courseId, course] of Object.entries(courseDetails ?? {})) {
+    for (const list of [course?.items, course?.modules]) {
+      for (const entry of list ?? []) {
+        if (entry?.moduleId === moduleId && entry.moduleStatus === "NOT_STARTED") {
+          entry.moduleStatus = "IN_PROGRESS";
+          if (!changed.includes(courseId)) changed.push(courseId);
+        }
+      }
+    }
+  }
+  return changed;
+}
+
 export function deriveParticipantFlowGateState(flowState, options = {}) {
   const hasSubmission = flowState?.hasSubmission === true;
   const hasMcqSubmission = flowState?.hasMcqSubmission === true;
