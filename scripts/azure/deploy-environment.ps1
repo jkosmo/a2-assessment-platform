@@ -52,6 +52,7 @@
   [int]$AppealOverdueAlertThreshold = 1,
   [int]$AppealSlaMonitorIntervalMs = 600000,
   [string]$ParticipantNotificationChannel = "log",
+  [string]$CourseMajorEmailEnabled = "false",
   [string]$ParticipantNotificationWebhookUrl = "",
   [int]$ParticipantNotificationWebhookTimeoutMs = 5000,
   [string]$AcsEmailSenderDisplayName = "A-2 læringsplattform",
@@ -702,6 +703,7 @@ az deployment group create `
               appealOverdueAlertThreshold=$AppealOverdueAlertThreshold `
               appealSlaMonitorIntervalMs=$AppealSlaMonitorIntervalMs `
               participantNotificationChannel=$ParticipantNotificationChannel `
+              courseMajorEmailEnabled=$CourseMajorEmailEnabled `
               participantNotificationWebhookUrl=$ParticipantNotificationWebhookUrl `
               participantNotificationWebhookTimeoutMs=$ParticipantNotificationWebhookTimeoutMs `
               acsEmailSenderDisplayName=$AcsEmailSenderDisplayName `
