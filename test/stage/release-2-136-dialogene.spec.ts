@@ -140,7 +140,7 @@ test("modullistene har nummeret, og `versionNo` står som før", async () => {
 
   const pakke = await api("GET", `/api/admin/content/modules/${tilstand.moduleId}/export`);
   expect(pakke.status, pakke.tekst.slice(0, 300)).toBe(200);
-  const versjoner = (pakke.json.versions?.moduleVersions ?? pakke.json.bundle?.versions?.moduleVersions) as Array<Record<string, unknown>>;
+  const versjoner = pakke.json.moduleExport.versions.moduleVersions as Array<Record<string, unknown>>;
   expect(versjoner.find((version) => version.id === tilstand.utkast)).toMatchObject({ versionNo: 2, versionMajor: 1, versionMinor: 1 });
 });
 
