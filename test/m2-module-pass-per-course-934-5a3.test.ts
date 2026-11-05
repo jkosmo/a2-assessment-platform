@@ -1054,6 +1054,17 @@ describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
     expect(await versionOf(a)).toMatch(/^1\./);
   });
 
+  it("det gamle endepunktet med avkrysning, uten at noen har bestått og uten andre kurs: også 409", async () => {
+    const { moduleId } = await publishedModule();
+    const courseId = await newCourse([moduleId]);
+    const v2 = await newVersion(moduleId);
+    await switchOn();
+    const response = await pendingOld(courseId, { versionIds: [v2], supersedesEarlierPasses: true });
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe("client_outdated");
+    expect(await activeVersionOf(moduleId)).not.toBe(v2);
+  });
+
   it("det gamle endepunktet, hovedversjon av kurset med en ny modul: 409 client_outdated, for valget kan ikke heve kravet per kurs", async () => {
     const { moduleId, a, u, v2 } = await pendingOldContract();
     await switchOn();

@@ -54,6 +54,8 @@ describe("2.134.1: kursdetaljene i minnet etter en innlevering", () => {
     expect(details.b.items[0].moduleStatus).toBe("PASSED");
     expect(details.c.items[0].moduleStatus).toBe("REVISED_RETAKE_REQUIRED");
     expect(markCourseModuleStarted(details, "m1")).toEqual([]);
+  });
+});
 
 describe("#934 5a-3: kursdetaljene i minnet etter en ny bestått", () => {
   it("tar bort «ta den på nytt» for modulen, i alle kurs, og rører ikke andre moduler", () => {
