@@ -1,7 +1,7 @@
 # Modules — task, assessment criteria, multiple-choice questions
 
 Contents: [Free-text modules](#free-text-modules) · [Example answer](#example-answer) · [Multiple-choice questions](#multiple-choice-questions) ·
-[Select all that apply](#select-all-that-apply) · [Put in the right order](#put-in-the-right-order) · [Fill in the missing word](#fill-in-the-missing-word) · [The cue check](#the-cue-check)
+[Practice: a draw and a review](#practice-a-draw-and-a-review) · [Select all that apply](#select-all-that-apply) · [Put in the right order](#put-in-the-right-order) · [Fill in the missing word](#fill-in-the-missing-word) · [The cue check](#the-cue-check)
 
 A module tests. Write it from the source, in the course's one language, at the level agreed at
 gate 3 ([course-design.md](course-design.md#level-and-scope)).
@@ -102,6 +102,25 @@ pass.
   is found by recognition. Say it the way it would come up in the work.
 
 The platform shuffles the options for the learner, so their position does not matter.
+
+## Practice: a draw and a review
+
+Two settings under `activeVersion.assessmentPolicy.mcq` decide how the question bank is used
+([package-schema.md](package-schema.md#a-module)). Both are off by default, and both are made for
+practice and revision. An author can also change them on the module's settings page.
+
+- **`questionsPerAttempt`** (a whole number, 1–500): how many of the bank's questions a learner gets
+  in each attempt, drawn at random. Left out, she gets all of them. It only does anything when the
+  bank has more questions than that, so write the bank larger: enough that a second attempt mostly
+  meets other questions. Every question must stand alone, because any of them may be left out, and
+  no question may lean on the answer to another.
+- **`reviewAfterSubmit`** (`true`): after she submits, the learner sees each question with her own
+  answer, the right answer and the `rationale`. This hands out the answer key: in a test the next
+  learner could get it from the previous one.
+
+Turn them on for a practice or revision module when the author asks for one, or ask when the purpose
+is practice. **Leave them off for a test unless the author says otherwise**, and say at gate 4 which
+are on. The pass mark counts the questions she was given, not the whole bank.
 
 ## Select all that apply
 

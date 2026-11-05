@@ -193,6 +193,16 @@ A multiple-choice module has no `taskText`, `rubric` or `promptTemplate`, and ha
 "assessmentPolicy": { "passRules": { "mcqMinPercent": 75 } }
 ```
 
+A practice module can also draw from the bank and show the answers after submission
+([modules.md](modules.md#practice-a-draw-and-a-review)):
+
+```json
+"assessmentPolicy": {
+  "passRules": { "mcqMinPercent": 75 },
+  "mcq": { "questionsPerAttempt": 10, "reviewAfterSubmit": true }
+}
+```
+
 `correctAnswer` is written out in full and equals one of `options` exactly — in every language.
 Write three or four options. A module with both has the free-text fields and `mcqSet`.
 

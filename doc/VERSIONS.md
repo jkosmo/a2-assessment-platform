@@ -4,6 +4,10 @@ This document tracks release versions and what each version includes.
 
 ## 2.135.0 - 2026-11-05
 
+Skillet (uten kode, i samme versjon): `references/modules.md` og `package-schema.md` beskriver `assessmentPolicy.mcq.questionsPerAttempt` og
+`reviewAfterSubmit`, med når de passer. Plattformen leste dem fra før; skillet visste ikke om dem. `test/stage/skill-mcq-draw-and-review.spec.ts`
+viser at de virker gjennom skillets egen konvolutt.
+
 #934 skive 5a-3: bryteren og regelen om beståtte per kurs (`doc/DESIGN_934.md`, «5a-3 — bygget»). **Bryteren er av, og da endres ingenting for noen.** Den slås på sammen med 5b.
 
 - **Bryteren** er en rad i `PlatformConfig` (`module_pass_per_course = on`). App og worker leser den i samme transaksjon som avgjørelsen, uten mellomlagring. `npm run module-credit:switch-on` slår den på under innholdslåsen.
