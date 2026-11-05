@@ -28,8 +28,9 @@ import { discussionsRouter } from "./discussions.js";
 
 const coursesRouter = Router();
 
-// #934 skive 5a-1: valgfri i skjemaet, som ved innleveringen, så en fane fra før utrullingen får `409 client_outdated`.
-const markSectionReadSchema = z.object({ sectionVersionId: z.string().optional() });
+// #934 skive 5a-1: valgfri i skjemaet, som ved innleveringen, så en fane fra før utrullingen får `409 client_outdated`. Også
+// `null`: GET-ruta kan svare det, og siden sender verdien uendret tilbake.
+const markSectionReadSchema = z.object({ sectionVersionId: z.string().nullish() });
 
 // #495/T-QA-2: diskusjon/Q&A under kurs-stien så authz arver «har tilgang til publisert kurs».
 // mergeParams lar sub-routeren lese :courseId. Registreres tidlig; de spesifikke metodene/stiene

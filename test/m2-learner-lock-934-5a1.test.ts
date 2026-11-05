@@ -325,7 +325,7 @@ describe("#934 5a-1: lesingen sender versjonen deltakeren så", () => {
   it("versjonen mangler (en fane fra før utrullingen): 409 client_outdated, og ingenting er skrevet", async () => {
     const { headers, userId } = await learner();
     const course = await createCourse("lesing-mangler");
-    for (const body of [undefined, {}, { sectionVersionId: "" }]) {
+    for (const body of [undefined, {}, { sectionVersionId: "" }, { sectionVersionId: null }]) {
       const response = await post(headers, course.courseId, course.section.sectionId, body);
       expect(response.status).toBe(409);
       expect(response.body.error).toBe("client_outdated");

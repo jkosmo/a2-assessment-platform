@@ -920,7 +920,8 @@ rapportene leser som før. Det som er endret for noen, er to avvisninger ved pub
   gir derfor ny hovedversjon også når versjonen alt var ute, og versjonen plasseres der revisjonen skjedde. Da ligger de eldre
   versjonene under den, og et vedtak på en av dem, fattet etter revisjonen, teller ikke (Codex, 2026-11-05). En versjon som alt har
   fått et nummer (av ny kode, eller en tidligere kjøring), beholder det.
-- **En revisjon uten beståtte** (`supersededCount: 0` i sporet) blir mindre i historikken, slik planen sier. Den ugyldiggjør
+- **En revisjon uten beståtte** (`supersededCount: 0` i sporet) blir mindre i historikken, slik planen sier, med mindre en statusrad
+  peker på versjonen: da mistet noen en bestått, og den blir hoved. Den ugyldiggjør
   likevel beståtte fra før seg: en som strøk på nytt før revisjonen, sto som ikke bestått og skal ikke få noe tilbake.
 - **«Ferdig vurdert innlevering»** kan ikke leses av statusen på innleveringen. En åpen anke setter en bestått innlevering til
   `UNDER_REVIEW`, og beståtten står til anken er avgjort (`appealService.ts:55`). Regelen speiler hvilke vedtak som faktisk gikk
@@ -955,12 +956,14 @@ JOIN "AssessmentDecision" d ON d.id = cs."latestDecisionId"
 WHERE cs.status = 'SUPERSEDED' AND d."moduleVersionId" = cs."supersededByVersionId"
 GROUP BY cs."moduleId", cs."supersededByVersionId";
 
--- 3. Revisjoner uten spor: SUPERSEDED-rader uten en `module_passes_superseded` for samme modul og versjon. Skal gi null rader.
+-- 3. Revisjoner uten spor: SUPERSEDED-rader uten en `module_passes_superseded` med beståtte for samme modul og versjon. En rad med
+--    null beståtte teller ikke som spor. Skal gi null rader.
 SELECT cs."moduleId", cs."supersededByVersionId", count(*) AS rows FROM "CertificationStatus" cs
 WHERE cs.status = 'SUPERSEDED' AND NOT EXISTS (
   SELECT 1 FROM "AuditEvent" a
   WHERE a.action = 'module_passes_superseded' AND a."entityType" = 'module' AND a."entityId" = cs."moduleId"
     AND a."metadataJson" LIKE '%' || cs."supersededByVersionId" || '%'
+    AND a."metadataJson" NOT LIKE '%"supersededCount":0%'
 )
 GROUP BY cs."moduleId", cs."supersededByVersionId";
 ```
@@ -989,6 +992,13 @@ på nytt; beståttene; årsakene), `test/m2-module-credit-934-5a2.test.ts` (rute
 versjoner», kalibrering, import og kursets elementer; alle fire vedtakssporene; tilbakefyllingen; `SUPERSEDED` på samme versjon;
 kontrollcasene for rapporten), `test/content-lock-write-guard.test.js` (nye tabeller under låsene, og skrivingene ett sted, med
 kontrollcase), `test/stage/release-2-134-modulversjon.spec.ts`.
+
+**QA-porten** (2026-11-05), samlet for 2.132.1, 5a-1 og 5a-2:
+- Codex runde 1, hele området: NO-GO. Revisjon på en versjon som alt var ute, sammen med et sent vedtak. Rettet.
+- Codex runde 2, hele området: NO-GO. En rad med null beståtte skjulte en revisjon uten spor, og versjonen ble lest etter at svaret
+  var kopiert. Begge rettet, og valideringen på leseruta er lagt til.
+- Runde 3, bare rettingene: Codex stoppet på utgiftstaket. En lokal agent med samme sjekkliste ga GO, med små funn som er rettet eller
+  står som nr. 47. Det er ikke det samme som Codex. Kjør Codex på disse rettingene før prod, om taket er hevet.
 
 #### 5a-3 — den nye regelen slås på
 
@@ -1216,6 +1226,10 @@ to siste er dagens regel, som først endres i 5a-3.
     tilbakestillingen på outboxens siste forsøk, blir raden stående som `queued`, uten hendelse. Jobben leser bare `waiting` og
     gamle `sending`, så personen får ingen e-post og ingen ser det. Ingen får feil eller dobbel e-post, så det stopper ikke
     utrulling. Rettes med en oppsamling av gamle `queued`-rader, men det må tenkes gjennom så det ikke gir dobbel sending.
+47. **Oppgaven kan bytte versjon på skjermen uten beskjed** (5a-1, gjennomlesing 2026-11-05). Byttes språk eller trykkes «Last
+    moduler», hentes lista på nytt, og oppgaveteksten tegnes som den nye versjonen. Er felt-id-ene like, står svaret urørt, og en
+    innlevering gir 201 på den nye versjonen, ikke 409. Deltakeren ser den nye oppgaven når hen leverer, og svaret vurderes mot den,
+    så versjonen stemmer. Det hen ikke får, er beskjed om at oppgaven er endret. Produkteier avgjør om det er godt nok.
 
 ### Gjennomgang av planen
 
