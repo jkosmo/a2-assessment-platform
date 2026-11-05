@@ -985,7 +985,18 @@ hovedversjon, og aktive versjoner som er lavere enn kravet (nr. 45). Rapporten h
 3. `dotenv -e .env.<miljø> -- npm run module-credit:backfill`. Koden er 2 hvis noe var opptatt: kjør på nytt.
 4. `dotenv -e .env.<miljø> -- npm run module-credit:compare -- --out rapport.json`. Koden er 0 når alt er forklart.
 5. Kjør steg 3 og 4 en gang til. Tallene skal være like.
-6. Før prod: gjør 3 og 4 på en pseudonymisert kopi av prod (oppskriften fra 2026-10-24), slik planen krever. Det er ikke gjort.
+6. Før prod: gjør 3 og 4 på en pseudonymisert kopi av prod, slik planen krever. Gjort, se under.
+
+**Prøvekjørt på en kopi av prod** (2026-11-05, kode `bb60c0c6`, data til 2026-11-04, lokal database, pseudonymisert og uten svartekster):
+- migreringene fra prods nivå til 2.134.0 gikk gjennom;
+- lesespørring 1 ga 0, og 2 og 3 ga ingen rader. Prod har ingen `SUPERSEDED`-rader og ingen `module_passes_superseded` i sporet, så #997 er aldri
+  brukt der. Historikktilfellene med revisjoner, og «Kjente mangler» nr. 45, gjelder derfor ikke dataene i prod i dag;
+- tilbakefyllingen: 70 moduler, 114 versjoner nummerert, 63 krav, 104 beståtte for 17 deltakere, ingen ugyldiggjort. Alle versjoner ble hovedversjon 1;
+- rapporten: 103 sammenlignet, ingen forskjeller, ingen hull, kode 0. Ingen tilfeller av nr. 41;
+- andre kjøring ga 0 nye nummer og samme rapport, tegn for tegn.
+
+Selve kjøringen i prod må gjøres etter utrullingen, for dataene endrer seg. Slik ble kopien tatt: ingen fil på disk, rett inn i den lokale databasen,
+og produkteier kjørte brannmurregelen, fordi sikkerhetsfilteret ikke slipper den gjennom fra agenten.
 
 **Bevis:** `test/unit/module-credit-934-5a2.test.ts` (nummereringen, også revisjon på samme versjon og en versjon som er aktivert
 på nytt; beståttene; årsakene), `test/m2-module-credit-934-5a2.test.ts` (rutene for publisering, «Publiser kurs», «Publiser nye
