@@ -14,7 +14,22 @@ import {
   sanitizeMockRolePresets,
   upsertModuleDraft,
   markCourseModuleStarted,
+  aiReviewRoutingLive,
 } from "../public/participant-console-state.js";
+
+describe("2.134.1: går «KI skrev det meste» til sensor?", () => {
+  const live = { enabled: true, shadowMode: false };
+  it("samme regel som serveren: modulens egen innstilling først, så den globale", () => {
+    expect(aiReviewRoutingLive(live, { assessmentPolicy: null })).toBe(true);
+    expect(aiReviewRoutingLive(live, null)).toBe(true);
+    expect(aiReviewRoutingLive({ enabled: true, shadowMode: true }, null)).toBe(false);
+    expect(aiReviewRoutingLive({ enabled: false, shadowMode: false }, null)).toBe(false);
+    expect(aiReviewRoutingLive(live, { assessmentPolicy: { aiInfluence: { shadowMode: true } } })).toBe(false);
+    expect(aiReviewRoutingLive(live, { assessmentPolicy: { aiInfluence: { enabled: false } } })).toBe(false);
+    expect(aiReviewRoutingLive({ enabled: false, shadowMode: true }, { assessmentPolicy: { aiInfluence: { enabled: true, shadowMode: false } } })).toBe(true);
+    expect(aiReviewRoutingLive(undefined, null)).toBe(false);
+  });
+});
 
 describe("2.134.1: kursdetaljene i minnet etter en innlevering", () => {
   it("«ikke startet» blir «påbegynt» for modulen, i alle kurs; andre moduler og andre statuser står", () => {

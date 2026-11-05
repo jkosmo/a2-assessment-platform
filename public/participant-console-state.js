@@ -322,6 +322,17 @@ export function earlierResultToShow(participantStatus, draft, draftIsMeaningful)
 }
 
 /**
+ * 2.134.1: går «KI skrev det meste» til sensor for denne modulen? Samme regel som `evaluateAiInfluence` på serveren: modulens egen
+ * innstilling først, så den globale. I skyggemodus rutes ingen, og da skal siden ikke love det.
+ */
+export function aiReviewRoutingLive(globalRules, module) {
+  const own = module?.assessmentPolicy?.aiInfluence;
+  const enabled = own?.enabled ?? globalRules?.enabled;
+  const shadowMode = own?.shadowMode ?? globalRules?.shadowMode;
+  return enabled === true && shadowMode !== true;
+}
+
+/**
  * 2.134.1: en innlevering er opprettet, så modulen er ikke lenger «ikke startet». Kursdetaljene i minnet hentes ellers bare på nytt
  * etter en bestått, så en sak hos sensor eller et stryk sto som «ikke startet» til siden ble lastet på nytt. Svarer med kursene som
  * ble endret. Samme overgang som serveren gjør (`moduleStatusOf` i routes/courses.ts).

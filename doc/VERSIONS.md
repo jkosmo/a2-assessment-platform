@@ -7,10 +7,11 @@ This document tracks release versions and what each version includes.
 Tilbakemelding fra en deltaker: «Jeg føler meg lurt», og «ikke startet» etter innlevering.
 
 - **KI-erklæringen sier nå hva den gjør, før deltakeren leverer.** Merkelappen sa «Påvirker ikke karakteren», men «KI skrev det meste» og
-  «Lever likevel» sender besvarelsen til sensor, og det sto først etter innlevering. Nå: «Påvirker ikke poengene dine», «En sensor leser da
-  besvarelsen» på valget, og dialogen sier hva som skjer om deltakeren leverer likevel. Regelen er uendret. Se `doc/DECISIONS.md`.
+  «Lever likevel» sender besvarelsen til sensor, og det sto først etter innlevering. Nå: «Påvirker ikke poengene dine», og der regelen er
+  aktiv for modulen, står «En sensor leser da besvarelsen» på valget, og dialogen sier hva som skjer om deltakeren leverer likevel. I skyggemodus
+  rutes ingen, og da sies det ikke. Regelen er uendret. Se `doc/DECISIONS.md`.
 - **Kursets status etter innlevering.** Statusen ble bare hentet på nytt etter en bestått, så en sak hos sensor eller et stryk sto som «Ikke
-  startet» til siden ble lastet på nytt. Nå «Påbegynt» med en gang. «Til vurdering» krever en endring på serveren og kommer senere.
+  startet» til siden ble lastet på nytt. Nå «Påbegynt» med en gang, på modulen og kurset, uten at noe tegnes på nytt (en usendt tekst i kursdiskusjonen ville ellers gått tapt). «Til vurdering» krever en endring på serveren og kommer senere.
 
 ## 2.134.0 - 2026-11-05
 

@@ -1493,4 +1493,4 @@ ett begrenset kurs, to kursbevis, begge tildelt.
 
 En deltaker meldte: «Jeg føler meg lurt». Merkelappen sa «Påvirker ikke karakteren», men «KI skrev det meste» og «Lever likevel» sender
 besvarelsen til sensor (#475), og det sto først etter innlevering. Produkteier valgte å beholde regelen og si den på forhånd: «Påvirker ikke
-poengene dine», «En sensor leser da besvarelsen» på valget, og en setning i dialogen. Alternativet var å fjerne regelen. Status: gjort i 2.134.1.
+poengene dine», «En sensor leser da besvarelsen» på valget, og en setning i dialogen, begge der regelen er aktiv for modulen. Alternativet var å fjerne regelen. Status: gjort i 2.134.1.

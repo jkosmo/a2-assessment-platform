@@ -127,6 +127,7 @@ test("participant: declaring autonomous shows the nudge; 'go back' cancels, 'sub
 
   // 2.134.1: siden sier hva valget gjør FØR deltakeren leverer. En deltaker følte seg lurt av «Påvirker ikke karakteren».
   await expect(page.locator("#aiDeclaration")).toContainText("Påvirker ikke poengene dine");
+  await expect(page.locator("#aiDeclarationReviewNotice")).toBeVisible();
   await expect(page.locator('.ai-declaration-opt[data-v="autonomous"]')).toContainText("En sensor leser da besvarelsen");
 
   // Submitting shows the reflective nudge; choosing "go back" cancels — nothing is submitted.
@@ -147,6 +148,45 @@ test("participant: declaring autonomous shows the nudge; 'go back' cancels, 'sub
   expect(postedBody).toMatchObject({
     processSignals: { declaration: "autonomous", insistedAfterPrompt: true },
   });
+});
+
+for (const [navn, aiInfluence, policy] of [
+  ["skyggemodus globalt", { enabled: true, shadowMode: true }, null],
+  ["modulen er i skyggemodus, selv om regelen er aktiv globalt", { enabled: true, shadowMode: false }, { aiInfluence: { shadowMode: true } }],
+  ["modulen har slått regelen av", { enabled: true, shadowMode: false }, { aiInfluence: { enabled: false } }],
+] as const) {
+  test(`2.134.1, ${navn}: ingen rutes til sensor, så valget lover det ikke`, async ({ page }) => {
+    await mockBase(page, aiInfluence);
+    await page.route("**/api/modules**", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ modules: [{ ...ESSAY_MODULE, assessmentPolicy: policy }] }) }),
+    );
+    await page.addInitScript(() => {
+      try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+    });
+    await selectEssayModule(page);
+    await expect(page.locator("#aiDeclaration")).toBeVisible();
+    await expect(page.locator("#aiDeclaration")).toContainText("Påvirker ikke poengene dine");
+    await expect(page.locator("#aiDeclarationReviewNotice")).toBeHidden();
+  });
+}
+
+test("2.134.1, modulen er i skyggemodus: dialogen lover ikke sensor heller", async ({ page }) => {
+  await mockBase(page, { enabled: true, shadowMode: false });
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ modules: [{ ...ESSAY_MODULE, assessmentPolicy: { aiInfluence: { shadowMode: true } } }] }) }),
+  );
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+  await selectEssayModule(page);
+  for (const ta of await page.locator("#submissionFields textarea").all()) {
+    await ta.fill("Et tilstrekkelig langt fritekstsvar for vurdering.");
+  }
+  await page.locator('.ai-declaration-opt[data-v="autonomous"]').click();
+  await page.locator("#createSubmission").click();
+  const nudge = page.locator(".ai-nudge-overlay");
+  await expect(nudge).toBeVisible();
+  await expect(nudge).not.toContainText("sensor");
 });
 
 test("participant: a non-autonomous declaration submits directly with no nudge", async ({ page }) => {
