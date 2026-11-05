@@ -173,6 +173,10 @@ describe("computeModulePasses: siste vedtak per innlevering", () => {
     expect(latestDecisionOf([decision("a", { finalisedAt: at(1) }), decision("b", { finalisedAt: at(3) })])?.id).toBe("b");
   });
 
+  it("to vedtak med samme tidspunkt: slektskapet avgjør, ikke id-en", () => {
+    expect(latestDecisionOf([decision("z"), decision("a", { parentDecisionId: "z" })])?.id).toBe("a");
+  });
+
   it("et automatisk vedtak sendt til manuell vurdering teller ikke, selv om det sier bestått", () => {
     expect(compute([submission("s", [decision("d")], { hasManualReview: true, submissionStatus: "UNDER_REVIEW" })])).toEqual([]);
   });

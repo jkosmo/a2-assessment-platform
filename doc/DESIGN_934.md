@@ -634,7 +634,7 @@ av, lenke i tittelen, to forsøk samtidig), `test/unit/course-major-version-emai
 px). Mutasjonssjekket: 45 av 45 røde (M18, køen uten betingelse, overlevde først — testen med to runder samtidig
 avhenger av tidspunkter; `queueNotice` ble skilt ut og testet direkte).
 
-**QA-porten** (2026-11-04): ikke kjørt — Codex-kontoen hadde nådd utgiftstaket. Produkteier kjører den etterpå.
+**QA-porten** for rettingene i 2.132.1 (2026-11-05): samlet med 5a-1 og 5a-2, se «5a-2 — bygget».
 
 ### 5a — modulens beståtte status per kurs
 
@@ -805,7 +805,7 @@ samme ferske (kurset i utstedelsen, modulversjonen i innleveringen, medlemskapet
 etter låsene i en test der den raske sjekken stopper først (kappløpstesten måler den). En femte, «kladden lagres ved 409»,
 overlevde fordi autolagringen og `beforeunload` allerede gjør det. Den koden er fjernet.
 
-**QA-porten** (2026-11-04): ikke kjørt — Codex-kontoen hadde nådd utgiftstaket. Produkteier kjører den etterpå.
+**QA-porten** (2026-11-05): samlet med 2.132.1 og 5a-2, se «5a-2 — bygget».
 
 #### 5a-2 — grunnmur, uten endret regel
 

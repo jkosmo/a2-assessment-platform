@@ -589,6 +589,20 @@ describe("#934 5a-2: hvert vedtaksspor skriver ModulePass", () => {
     expect(report.ok).toBe(false);
   });
 
+  it("en anke som står fast ved bestått: raden følger det nye vedtaket", async () => {
+    const { moduleId, versionId } = await publishedModule();
+    const u = await learner();
+    const { submissionId, decisionId } = await legacyPass(u.userId, moduleId, versionId);
+    await backfillModuleCredit({ moduleIds: [moduleId], userIds: [u.userId] });
+    const appealId = await appealed(u.userId, submissionId);
+    const response = await request(app).post(`/api/appeals/${appealId}/resolve`).set(HANDLER).send({ passFailTotal: true, decisionReason: "Bestått etter anke.", resolutionNote: "Ny vurdering er gjort." });
+    expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
+    const rows = await passesOf(u.userId, moduleId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.decisionId).not.toBe(decisionId);
+    expect(rows[0]!.invalidatedAt).toBeNull();
+  });
+
   it("et stryk på en ANNEN innlevering rører ikke beståtten (svar f), og status skrives som før", async () => {
     const { moduleId, versionId } = await publishedModule();
     const courseId = await courseWith([moduleId]);
