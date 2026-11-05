@@ -41,6 +41,7 @@ import { buildCriteriaPanel, buildCriterionScoreList } from "/static/assessment-
 import { groupCoursesByTheme, hasAnyTheme } from "/static/course-theme-groups.js";
 import {
   buildModuleCardViewModels,
+  courseRetakeApplies,
   deriveParticipantFlowGateState,
   earlierResultToShow,
   isAssessmentResultReady,
@@ -191,6 +192,8 @@ let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 let loadedModules = [];
 let hasLoadedModules = false;
 let selectedModuleId = "";
+// #934 skive 5a-3: modulen er åpnet fra et kurs som sier at den må tas på nytt (`retakeRequired`). Står til et nytt vedtak kommer.
+let courseRetakeModuleId = null;
 let autosaveTimer = null;
 let flowState = {
   hasSubmission: false,
@@ -719,15 +722,22 @@ function renderSubmissionFields(fields) {
   applySubmissionReadMode();
 }
 
+function renderSelectedModuleStatus(selectedModule) {
+  // #934 skive 5a-3: «Fullført» ville stått feil her. Kurset sier at modulen må tas på nytt.
+  const statusSummary = selectedModule && courseRetakeModuleId === selectedModule.id
+    ? t("courses.module.revisedRetakeHint")
+    : formatModuleStatusSummary(selectedModule);
+  selectedModuleStatus.textContent = statusSummary;
+  selectedModuleStatus.classList.toggle("hidden", statusSummary.length === 0);
+}
+
 function renderSelectedModuleSummary() {
   const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
   selectedModuleIdInput.value = selectedModule?.id ?? "";
   selectedModuleTitle.textContent = selectedModule?.title ?? t("submission.selectedModuleNone");
   selectedModuleDescription.textContent = selectedModule?.description ?? "";
   selectedModuleDescription.classList.toggle("hidden", !(selectedModule?.description ?? "").trim());
-  const statusSummary = formatModuleStatusSummary(selectedModule);
-  selectedModuleStatus.textContent = statusSummary;
-  selectedModuleStatus.classList.toggle("hidden", statusSummary.length === 0);
+  renderSelectedModuleStatus(selectedModule);
   // ⚠️ #1051: HTML-EN ER RENDRET OG SANITERT PÅ SERVEREN, som for seksjoner. Skill-en skriver
   // oppgaveteksten i markdown, og `textContent` viste den som rå tegn: «## Oppgave» og «**uthevet**».
   //
@@ -1179,7 +1189,7 @@ function syncParticipantModuleWorkspace(options = {}) {
 }
 
 function activateParticipantModule(moduleId, options = {}) {
-  const { scrollIntoView = false, logSelection = true } = options;
+  const { scrollIntoView = false, logSelection = true, retakeRequired = false } = options;
   const nextModule = loadedModules.find((module) => module?.id === moduleId) ?? null;
   if (!nextModule) {
     return false;
@@ -1190,6 +1200,7 @@ function activateParticipantModule(moduleId, options = {}) {
   // En lås satt mens forrige moduls resultat ble hentet, gjelder ikke denne modulen.
   releaseEarlierResultLock();
   selectedModuleId = moduleId;
+  courseRetakeModuleId = retakeRequired ? moduleId : null;
   resetFlowStateForModuleContext();
   renderModules();
   renderSelectedModuleSummary();
@@ -1202,10 +1213,12 @@ function activateParticipantModule(moduleId, options = {}) {
   // #2 fix: don't auto-start for an already-passed module (avoids a needless retake / 409).
   // #978: ⚠️ dette er det ENE stedet som med vilje ser bort fra statusen. En bestått-men-under-
   // vurdering modul skal ikke autostarte et nytt forsøk. Se begrunnelsen i /static/outcome.js.
-  const alreadyPassed = hasPassingDecision(nextModule.participantStatus?.latestDecision?.passFailTotal);
+  // #934 skive 5a-3: unntaket er en bestått som ikke lenger teller i kurset modulen ble åpnet fra. Da skal et nytt forsøk starte.
+  const retakeNow = courseRetakeApplies(retakeRequired, nextModule.participantStatus);
+  const alreadyPassed = !retakeNow && hasPassingDecision(nextModule.participantStatus?.latestDecision?.passFailTotal);
   // 2.126.0: har deltakeren et resultat, vises det — med anke-knappen ved stryk — i stedet for at et nytt
   // forsøk starter av seg selv. «Prøv igjen» står ved resultatet.
-  const earlierSubmissionId = previewModeEnabled ? null : earlierResultToShow(
+  const earlierSubmissionId = previewModeEnabled || retakeNow ? null : earlierResultToShow(
     nextModule.participantStatus,
     readModuleDraftMap()[nextModule.id],
     // #934 skive 5a-1: å vise forrige resultat ville merket kladden som levert, og teksten som ikke passer i feltene, ville gått tapt.
@@ -1261,7 +1274,9 @@ async function openCourseModule(courseId, moduleId) {
     throw new Error(t("courses.module.unavailable"));
   }
 
-  activateParticipantModule(moduleId, { scrollIntoView: true });
+  // #934 skive 5a-3: kursets status, ikke bare siste vedtak. Samme modul kan telle i ett kurs og ikke i et annet.
+  const entry = courseDetailCache[courseId]?.items?.find((item) => item?.type === "MODULE" && item.moduleId === moduleId);
+  activateParticipantModule(moduleId, { scrollIntoView: true, retakeRequired: entry?.retakeRequired === true });
 
   if (courseDetailCache[courseId]) {
     renderCourseDetailModules(courseId, courseDetailCache[courseId]);
@@ -1273,6 +1288,11 @@ function noteLatestSubmission(moduleId, patch) {
   const module = loadedModules.find((m) => m?.id === moduleId);
   if (!module) return;
   module.participantStatus = { ...(module.participantStatus ?? {}), ...patch };
+  // #934 skive 5a-3: beskjeden står til deltakeren har bestått. Et nytt stryk endrer ikke at modulen må tas på nytt.
+  if (courseRetakeModuleId === moduleId && isSettledPass({ passFailTotal: patch.latestDecision?.passFailTotal, submissionStatus: patch.latestStatus })) {
+    courseRetakeModuleId = null;
+    if (selectedModuleId === moduleId) renderSelectedModuleStatus(module);
+  }
 }
 
 // 2.126.0: modulen slik den sto rett etter vurderingen — det leverte svaret (skrivebeskyttet), resultatet,

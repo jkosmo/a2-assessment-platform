@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.135.0 - 2026-11-05
+
+#934 skive 5a-3: bryteren og regelen om beståtte per kurs (`doc/DESIGN_934.md`, «5a-3 — bygget»). **Bryteren er av, og da endres ingenting for noen.** Den slås på sammen med 5b.
+
+- **Bryteren** er en rad i `PlatformConfig` (`module_pass_per_course = on`). App og worker leser den i samme transaksjon som avgjørelsen, uten mellomlagring. `npm run module-credit:switch-on` slår den på under innholdslåsen.
+- **Med bryteren på:** en bestått teller i et kurs når hovedversjonen er minst kravet for kurset og modulen. Porten for kursbevis, «Mine kurs», kursdetaljen og kursrapporten leser det gjennom én funksjon. Et stryk på en annen innlevering tar ikke beståtten, en anke som snur en bestått tar den, og en bestått på gammel versjon teller ikke der kravet er hevet. `SUPERSEDED` skrives ikke, og #997-e-posten går ikke.
+- **Nye endepunkter** med svar per kurs: `POST …/module-versions/:id/publish-versioned`, `GET …/publish-preview-versioned` og `POST …/courses/:courseId/publish-pending-versioned`. `pending-versions` lister `affectedCourses`. Før bryteren: `409 module_versioning_not_active`, og ingenting er skrevet.
+- **Gamle kontrakter med bryteren på:** avkrysningen, eller «Publiser nye versjoner» som berører andre kurs med kursbevis, gir `409 client_outdated`. «Publiser kurs» med en modul som har vært publisert før, gir `409 course_publish_has_republished_modules`.
+- **Deltakeren:** modulen åpnet fra kurset bruker kursets status. «Må tas på nytt» vises, og et nytt forsøk starter (`retakeRequired`, bare med bryteren på).
+
 ## 2.134.0 - 2026-11-05
 
 #934 skive 5a-2: grunnmuren for beståtte per kurs, ved siden av dagens regel (`doc/DESIGN_934.md`, «5a-2 — bygget»). Ingen

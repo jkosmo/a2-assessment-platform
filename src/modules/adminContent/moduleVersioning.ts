@@ -266,6 +266,35 @@ export async function raiseModuleRequirements(locked: ContentWriteTx, moduleId: 
 }
 
 /**
+ * #934 skive 5a-3: kurset fikk hovedversjon på grunn av en ny versjon av modulen. Kravet heves i dette kurset, og bare her: et
+ * kurs som valgte mindre, beholder sitt. Det senkes aldri. Svarer om det faktisk ble hevet. Kalles fra
+ * `applyCourseVersionChange`, i transaksjonen som lager hovedversjonen.
+ */
+export async function raiseModuleRequirementInCourse(locked: ContentWriteTx, courseId: string, moduleId: string, major: number): Promise<boolean> {
+  const created = await locked.courseModuleRequirement.createMany({ data: [{ courseId, moduleId, minModuleMajor: major }], skipDuplicates: true });
+  if (created.count > 0) return true;
+  const raised = await locked.courseModuleRequirement.updateMany({
+    where: { courseId, moduleId, minModuleMajor: { lt: major } },
+    data: { minModuleMajor: major },
+  });
+  return raised.count > 0;
+}
+
+/** #934 skive 5a-3: modulene som har vært ute før: publisert, med nummer, eller noen har levert på dem. */
+export async function findModulesPublishedBefore(client: Pick<DbTransactionClient, "moduleVersion">, moduleIds: string[]): Promise<Set<string>> {
+  if (moduleIds.length === 0) return new Set();
+  const rows = await client.moduleVersion.findMany({
+    where: {
+      moduleId: { in: moduleIds },
+      OR: [{ publishedAt: { not: null } }, { versionMajor: { not: null } }, { submissions: { some: {} } }],
+    },
+    distinct: ["moduleId"],
+    select: { moduleId: true },
+  });
+  return new Set(rows.map((row) => row.moduleId));
+}
+
+/**
  * Kursets elementer er endret: en ny modul får krav lik sin nåværende hovedversjon, og en modul som er tatt ut, mister raden.
  * En modul som allerede ligger i kurset, står urørt: kravet senkes aldri, og heves bare av en hovedversjon. Kalles der
  * elementene skrives (`setCourseItems`, `setCourseModules` og kursskjemaet), i samme transaksjon.

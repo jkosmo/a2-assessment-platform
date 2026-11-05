@@ -20,6 +20,7 @@ import { auditActions, auditEntityTypes } from "../../observability/auditEvents.
 import type { DbTransactionClient } from "../../db/transaction.js";
 import type { ContentWriteTx } from "../../db/contentLock.js";
 import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js";
+import { raiseModuleRequirementInCourse } from "../adminContent/moduleVersioning.js";
 
 export type CourseVersionChoice = "major" | "minor";
 
@@ -44,20 +45,21 @@ export const NO_SECTION_SNAPSHOT: SectionSnapshot = { before: {}, after: async (
 
 /**
  * #934 skive 4b: hvor mange elementer som er nye eller endret i en ny hovedversjon — det e-posten forteller.
- * Seksjoner med ny versjon eller nye i kurset, og moduler som er levende i kurset nå, men ikke var det før. En modul
- * med ny versjon telles ikke her; fra 5a-3 telles moduler med hevet krav (doc/DESIGN_934.md).
+ * Seksjoner med ny versjon eller nye i kurset, moduler som er levende i kurset nå, men ikke var det før, og (5a-3) moduler med
+ * hevet krav. En modul med ny versjon som ikke hevet kravet, telles ikke: for deltakeren er ingenting nytt å ta.
  */
 export function countChangedItems(
   before: SectionVersions,
   after: SectionVersions,
   modulesBefore: string[],
   modulesAfter: string[],
+  raisedModuleIds: string[] = [],
 ): number {
   const sections = Object.keys(after).filter(
     (sectionId) => !Object.prototype.hasOwnProperty.call(before, sectionId) || before[sectionId] !== after[sectionId],
   ).length;
   const wasLive = new Set(modulesBefore);
-  const modules = new Set(modulesAfter.filter((moduleId) => !wasLive.has(moduleId))).size;
+  const modules = new Set([...modulesAfter.filter((moduleId) => !wasLive.has(moduleId)), ...raisedModuleIds]).size;
   return sections + modules;
 }
 
@@ -178,6 +180,8 @@ export type CourseVersionBump = {
   kind: CourseVersionChoice;
   from: { major: number; minor: number };
   to: { major: number; minor: number };
+  /** #934 skive 5a-3: modulene som fikk hevet kravet i kurset. Bare der det er noen. */
+  raisedModuleIds?: string[];
 };
 
 /**
@@ -190,10 +194,65 @@ export type CourseVersionBump = {
  *
  * #934 skive 4b: `confirmEmailRecipients` er tallet dialogen viste da forfatteren sa ja til å sende e-post til
  * over `MAJOR_EMAIL_CONFIRM_THRESHOLD` mottakere. Se `applyCourseVersionChange`.
+ *
+ * #934 skive 5a-3: `raiseModules` er modulene som fikk ny hovedversjon sammen med denne endringen. Blir det hovedversjon av
+ * kurset, heves kravet deres her. Blir det mindre, skjer ingenting. Slik kan ikke kursets versjon og kravet komme fra to svar.
  */
 export type CourseVersionRequest =
-  | { kind: "question"; answer?: CourseVersionChoice; confirmEmailRecipients?: number }
+  | { kind: "question"; answer?: CourseVersionChoice; confirmEmailRecipients?: number; raiseModules?: Array<{ moduleId: string; major: number }> }
   | { kind: "minor" };
+
+/**
+ * Regelen for om et kurs får hovedversjon: svaret er hoved, og noen har kursbevis for den nåværende hovedversjonen. Uten
+ * bevis finnes det ingen å gjelde for (svar d). Én funksjon, for dialogen, publiseringen og kravet må si det samme.
+ */
+export function resolveCourseVersionKind(answer: CourseVersionChoice | undefined, certificateHolders: number): CourseVersionChoice {
+  return answer === "major" && certificateHolders > 0 ? "major" : "minor";
+}
+
+/** #934 skive 5a-3: et kurs en publisering berører, med tallene dialogen viser. Samme funksjoner som publiseringen bruker. */
+export type AffectedCourse = {
+  courseId: string;
+  /** Som lagret. Ruta lokaliserer. */
+  title: string;
+  published: boolean;
+  archived: boolean;
+  versionMajor: number;
+  versionMinor: number;
+  certificateHolders: number;
+  majorEmailRecipients: number;
+};
+
+/**
+ * Kursene som har et av elementene, og som har vært ute, også avpubliserte og arkiverte. Samme avgrensning som
+ * `applyCourseVersionChange`, som ikke gir et kurs som aldri har vært ute, noen versjon.
+ */
+export async function findAffectedCourses(
+  client: Pick<DbTransactionClient, "course" | "courseCompletion" | "user">,
+  refs: Array<{ sectionId: string } | { moduleId: string }>,
+): Promise<AffectedCourse[]> {
+  if (refs.length === 0) return [];
+  const courses = await client.course.findMany({
+    where: { OR: refs.map((one) => ({ items: { some: one } })) },
+    select: { id: true, title: true, publishedAt: true, archivedAt: true, versionMajor: true, versionMinor: true },
+    orderBy: { id: "asc" },
+  });
+  const affected: AffectedCourse[] = [];
+  for (const course of courses) {
+    if (!(await isCourseEverPublished(client, course.id))) continue;
+    affected.push({
+      courseId: course.id,
+      title: course.title,
+      published: course.publishedAt != null,
+      archived: course.archivedAt != null,
+      versionMajor: course.versionMajor,
+      versionMinor: course.versionMinor,
+      certificateHolders: await countCertificateHolders(client, course.id, course.versionMajor),
+      majorEmailRecipients: await countMajorVersionRecipients(client, course.id),
+    });
+  }
+  return affected;
+}
 
 /**
  * ⚠️ DEN ENE VEIEN til en ny kursversjon. Alle måter innhold går live på i et kurs, eller kursets versjon
@@ -240,10 +299,11 @@ export async function applyCourseVersionChange(
   const choice: CourseVersionChoice = request.kind === "question" && request.answer ? request.answer : "minor";
   // Hovedversjon er et valg som gjelder kursbevis. Har ingen bevis for denne hovedversjonen, finnes det
   // ingen å gjelde for — og en hovedversjon ville bare krevd ny lesing av dem som er midt i kurset.
-  const kind: CourseVersionChoice = choice === "major" && holders > 0 ? "major" : "minor";
+  const kind = resolveCourseVersionKind(choice, holders);
 
   let to: { major: number; minor: number };
   let emailRecipients: number | undefined;
+  const raisedModuleIds: string[] = [];
   if (kind === "minor") {
     to = { major: from.major, minor: from.minor + 1 };
     await client.course.update({ where: { id: courseId }, data: { versionMinor: to.minor } });
@@ -263,7 +323,11 @@ export async function applyCourseVersionChange(
     }
     const now = new Date();
     const after = await snapshot.after();
-    const changedItemCount = countChangedItems(before, after, snapshot.modulesBefore, await snapshot.modulesAfter());
+    // #934 skive 5a-3: kravet heves i samme transaksjon, i kursene som fikk hovedversjon. Det er ingen glipe (sannhetstabellen).
+    for (const raise of request.kind === "question" ? (request.raiseModules ?? []) : []) {
+      if (await raiseModuleRequirementInCourse(client, courseId, raise.moduleId, raise.major)) raisedModuleIds.push(raise.moduleId);
+    }
+    const changedItemCount = countChangedItems(before, after, snapshot.modulesBefore, await snapshot.modulesAfter(), raisedModuleIds);
     // Raden for versjonen som slutter: det som gjaldt rett før endringen. Fantes den (kurset har hatt en
     // hovedversjon før), skrives slutten av den over starten — regelen sammenligner slutten av N−1 med
     // starten av N, så en seksjon som fikk ny versjon INNENFOR N−1 (mindre versjon, #1095) ikke telles
@@ -300,11 +364,12 @@ export async function applyCourseVersionChange(
         from: `${from.major}.${from.minor}`,
         to: `${to.major}.${to.minor}`,
         ...(emailRecipients !== undefined ? { emailRecipients } : {}),
+        ...(raisedModuleIds.length > 0 ? { raisedModuleIds } : {}),
       },
     },
     client,
   );
-  return { kind, from, to };
+  return { kind, from, to, ...(raisedModuleIds.length > 0 ? { raisedModuleIds } : {}) };
 }
 
 /**

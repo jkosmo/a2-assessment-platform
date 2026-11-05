@@ -28,7 +28,8 @@ import {
   findThemeIdsForCourse,
   findLocalizedThemesForCourses,
 } from "../modules/course/index.js";
-import { generationLocaleSchema, importBodySchema, normalizeImportPayload, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { generationLocaleSchema, importBodySchema, normalizeImportPayload, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema, publishPendingVersionedBodySchema } from "../modules/adminContent/adminContentSchemas.js";
+import { publishCoursePendingVersioned } from "../modules/course/versionedPublishService.js";
 import { courseAdminLinks } from "../modules/adminContent/adminUiLinks.js";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { hasAnyRole, ADMIN_ONLY } from "../auth/roleSets.js";
@@ -678,7 +679,13 @@ adminCoursesRouter.get("/:courseId/pending-versions", requireContentOwnership("C
       userId: request.context?.userId ?? "",
       roles: request.context?.roles ?? [],
     });
-    response.json(pending);
+    // #934 skive 5a-3: `affectedCourses` finnes bare når bryteren er på. Titlene lokaliseres her, som i de andre rutene.
+    const locale = requestLocale(request);
+    response.json(
+      pending.affectedCourses
+        ? { ...pending, affectedCourses: pending.affectedCourses.map((course) => ({ ...course, title: localizeContentText(locale, course.title) ?? course.title })) }
+        : pending,
+    );
   } catch (error) {
     next(error);
   }
@@ -702,6 +709,26 @@ adminCoursesRouter.post("/:courseId/publish-pending", requireContentOwnership("C
   }
   try {
     const result = await publishCoursePendingVersions(
+      request.params.courseId,
+      { userId: request.context?.userId ?? "", roles: request.context?.roles ?? [] },
+      parsed.data,
+    );
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #934 skive 5a-3: «Publiser nye versjoner» med svar per kurs. Svar for alle berørte kurs, listet i `affectedCourses` over. Før
+// bryteren: `409 module_versioning_not_active`. Agent-tokenet slipper ikke til.
+adminCoursesRouter.post("/:courseId/publish-pending-versioned", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = publishPendingVersionedBodySchema.safeParse(request.body ?? {});
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const result = await publishCoursePendingVersioned(
       request.params.courseId,
       { userId: request.context?.userId ?? "", roles: request.context?.roles ?? [] },
       parsed.data,

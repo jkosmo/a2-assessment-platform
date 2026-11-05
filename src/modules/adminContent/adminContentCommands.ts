@@ -24,6 +24,8 @@ import { recipientLocale } from "../../i18n/recipientLocale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 import { applyMinorVersionToCoursesContaining } from "../course/courseVersioning.js";
+import { clientOutdatedForVersionChoice, isModulePassPerCourseOn } from "../course/modulePassSwitch.js";
+import type { ModuleVersionKind } from "./moduleVersioning.js";
 
 type CreateRubricVersionInput = {
   moduleId: string;
@@ -1008,11 +1010,18 @@ export async function publishModuleVersion(
   // #934 skive 3: `courseVersionHandledByCaller` — «Publiser nye versjoner» og «Publiser kurs» avgjør kursets
   // versjon selv. Alle andre (modulens egen side, modulimport) gir kursene modulen ligger i en mindre versjon;
   // modulens eget hoved/mindre-valg per kurs kommer i skive 5.
-  options?: { supersedesEarlierPasses?: boolean; courseVersionHandledByCaller?: boolean },
+  // #934 skive 5a-3: `moduleVersionKind` brukes bare av de nye endepunktene (`versionedPublishService.ts`), som står for kursene
+  // selv: versjonen, kravet og e-posten per kurs. Da gjelder ingenting av #997 her.
+  options?: { supersedesEarlierPasses?: boolean; courseVersionHandledByCaller?: boolean; moduleVersionKind?: ModuleVersionKind },
 ) {
   const now = new Date();
 
   const run = async (client: ContentWriteTx) => {
+    // #934 skive 5a-3: avkrysningen sier ingenting om kursene og kan ikke oversettes trygt. Bryteren leses i denne transaksjonen,
+    // etter låsen. Så skriver ingenting `SUPERSEDED`, og ingen #997-e-post går, når den er på.
+    if (options?.supersedesEarlierPasses && (await isModulePassPerCourseOn(client))) {
+      throw clientOutdatedForVersionChoice({ moduleId });
+    }
     // #796: the read runs on the tx client when composing an import, so it sees the just-created module.
     // #934 skive 4a: og etter innholdslåsen, så «hva var aktiv før» er det som faktisk byttes ut.
     const module = await ensureModuleExists(moduleId, createAdminContentRepository(client));
@@ -1022,10 +1031,11 @@ export async function publishModuleVersion(
       actorId,
       now,
       // #934 skive 5a-2: speiler dagens regel. Avkrysningen gir ny hovedversjon; alt annet er mindre, også modulimporten.
-      options?.supersedesEarlierPasses ? "major" : "minor",
+      options?.moduleVersionKind ?? (options?.supersedesEarlierPasses ? "major" : "minor"),
+      options?.moduleVersionKind ? "per_course" : "all_courses",
     );
     // Et nytt forsøk på en versjon som alt er aktiv, setter ingenting live — ingen ny kursversjon (QA-porten).
-    if (module.activeVersionId !== moduleVersionId && !options?.courseVersionHandledByCaller) {
+    if (module.activeVersionId !== moduleVersionId && !options?.courseVersionHandledByCaller && !options?.moduleVersionKind) {
       await applyMinorVersionToCoursesContaining(client, { moduleId }, actorId);
     }
 
@@ -1334,7 +1344,7 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
       assessmentPolicyJson: assessmentPolicyCodec.serialize(newPolicy),
     });
     // #934 skive 5a-2: kalibrering endrer bare tersklene. Mindre versjon, som for kursene under.
-    const published = await repo.publishModuleVersion(input.moduleId, newVersion.id, input.actorId, now, "minor");
+    const published = await repo.publishModuleVersion(input.moduleId, newVersion.id, input.actorId, now, "minor", "per_course");
     // #934 skive 3: nye terskler er levende i kursene modulen ligger i — mindre versjon for dem.
     await applyMinorVersionToCoursesContaining(tx, { moduleId: input.moduleId }, input.actorId);
 

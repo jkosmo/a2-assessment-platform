@@ -1,4 +1,4 @@
-import { isAppealableFail } from "/static/outcome.js";
+import { isAppealableFail, isSettledPass } from "/static/outcome.js";
 
 const allowedMockRoles = new Set([
   "PARTICIPANT",
@@ -319,6 +319,21 @@ export function earlierResultToShow(participantStatus, draft, draftIsMeaningful)
   if (typeof submissionId !== "string" || !submissionId || !(isAssessmentResultReady(status) || status === "REJECTED")) return null;
   if (draftIsMeaningful && draft?.submittedAs !== submissionId) return null;
   return submissionId;
+}
+
+/**
+ * #934 skive 5a-3: modulen er åpnet fra et kurs som sier at den må tas på nytt. Siste vedtak sier bestått, men det gjaldt en versjon
+ * som ikke lenger teller i dette kurset. Da skal siden starte et nytt forsøk, ikke vise det gamle resultatet som om alt var i orden.
+ * Har deltakeren alt begynt på nytt (strøket, eller saken vurderes), går siden som vanlig: resultatet, med anke og «Prøv igjen».
+ *
+ * `retakeRequired` kommer bare fra kursdetaljen med den nye regelen. Uten den er oppførselen som før.
+ */
+export function courseRetakeApplies(retakeRequired, participantStatus) {
+  if (retakeRequired !== true) return false;
+  return isSettledPass({
+    passFailTotal: participantStatus?.latestDecision?.passFailTotal,
+    submissionStatus: participantStatus?.latestStatus,
+  });
 }
 
 export function deriveParticipantFlowGateState(flowState, options = {}) {

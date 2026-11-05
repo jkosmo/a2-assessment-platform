@@ -47,6 +47,11 @@ fills only the gaps. Same gate on the course cascade (`/admin-content/courses`) 
 auto-publish. No new route; the behaviour is on
 `POST .../module-versions/:id/publish`. See `doc/API_REFERENCE.md` → "Publish translation gate".
 
+**#934 slice 5a-3 — versioned publishing (2.135.0).** No new page; the dialogs come in 5b. New routes behind the switch `module_pass_per_course`, `409 module_versioning_not_active` until it is on:
+`GET /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish-preview-versioned`,
+`POST /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish-versioned` and
+`POST /api/admin/content/courses/:courseId/publish-pending-versioned`. See `doc/API_REFERENCE.md`.
+
 **#896 S5 — version history.** **Innstillinger** lists the module's saved versions with a
 «Gjenopprett» action on each one that is not currently loaded. Restoring copies that version
 forward as a new **draft** — history is append-only — and the workspace switches to **Rediger** so

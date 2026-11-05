@@ -517,6 +517,7 @@ describe("admin content service", () => {
       "admin-1",
       expect.any(Date),
       "minor",
+      "all_courses",
     );
     expect(recordAuditEvent).toHaveBeenCalledWith({
       entityType: "module_version",

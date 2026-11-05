@@ -1,0 +1,200 @@
+import { test, expect, type Page, type Route } from "@playwright/test";
+
+// #934 skive 5a-3 (doc/DESIGN_934.md, «Deltakerens vei»): modulsiden åpnet fra kurset bruker kursets status, ikke bare siste vedtak.
+// Siste vedtak sier bestått, men det gjaldt en versjon som ikke lenger teller i kurset. Da skal «må tas på nytt» vises, og et nytt
+// forsøk starte. Kjører den ekte participant.js mot falske API-er. Serversiden står i test/m2-module-pass-per-course-934-5a3.test.ts.
+
+const json = (body: unknown, status = 200) => ({ status, contentType: "application/json", body: JSON.stringify(body) });
+
+type Status = { latestSubmissionId: string; latestStatus: string; latestDecision: { passFailTotal: boolean; totalScore?: number } | null } | null;
+
+const PASSED_ON_OLD_VERSION: Status = { latestSubmissionId: "s-old", latestStatus: "COMPLETED", latestDecision: { passFailTotal: true, totalScore: 90 } };
+const FAILED_RETAKE: Status = { latestSubmissionId: "s-old", latestStatus: "COMPLETED", latestDecision: { passFailTotal: false, totalScore: 20 } };
+
+const HINT = "Modulen er revidert etter at du besto den";
+
+function result(passed: boolean) {
+  return {
+    status: "COMPLETED",
+    decision: { passFailTotal: passed, decisionType: "AUTOMATIC" },
+    scoreComponents: { totalScore: passed ? 100 : 20, mcqScaledScore: passed ? 100 : 20, practicalScaledScore: 0 },
+    participantGuidance: {},
+  };
+}
+
+async function mock(page: Page, options: { retakeRequired?: boolean; status?: Status; moduleStatus?: string } = {}) {
+  const state = {
+    moduleStatus: options.moduleStatus ?? "REVISED_RETAKE_REQUIRED",
+    retakeRequired: options.retakeRequired ?? true,
+    status: options.status ?? PASSED_ON_OLD_VERSION,
+    completions: [{ courseId: "c1", certificateId: "bevis-1", completedAt: "2026-01-01T10:00:00.000Z", courseTitle: "Kurset", versionMajor: 1, versionMinor: 0, current: false }] as Array<Record<string, unknown>>,
+  };
+  const calls = { created: [] as Array<Record<string, unknown>>, earlierResults: 0, mcqStarts: 0 };
+
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* standardspråk */ }
+  });
+  await page.route("**/participant/config", (route: Route) =>
+    route.fulfill(json({
+      authMode: "mock",
+      navigation: { items: [], workspaceItems: [] },
+      identityDefaults: { participant: { userId: "participant-1", email: "p@x.no", name: "P", department: "X", roles: ["PARTICIPANT"] } },
+      calibrationWorkspace: { accessRoles: [] },
+      flow: {},
+      output: {},
+    })),
+  );
+  await page.route("**/version", (route: Route) => route.fulfill(json({ version: "test" })));
+  await page.route("**/api/me", (route: Route) => route.fulfill(json({ user: { roles: ["PARTICIPANT"] }, consent: { accepted: true, currentVersion: "1.0" } })));
+  await page.route("**/api/queue-counts", (route: Route) => route.fulfill(json({ counts: {} })));
+  await page.route("**/api/courses", (route: Route) =>
+    route.fulfill(json({
+      courses: [{
+        id: "c1",
+        title: "Kurset",
+        description: null,
+        moduleCount: 1,
+        progress: {
+          completed: state.moduleStatus === "PASSED" ? 1 : 0,
+          total: 1,
+          moduleCompleted: state.moduleStatus === "PASSED" ? 1 : 0,
+          moduleTotal: 1,
+          sectionCompleted: 0,
+          sectionTotal: 0,
+          courseStatus: state.moduleStatus === "PASSED" ? "COMPLETED" : "IN_PROGRESS",
+        },
+      }],
+    })),
+  );
+  await page.route("**/api/courses/completions", (route: Route) => route.fulfill(json({ completions: state.completions })));
+  await page.route("**/api/courses/enrollments", (route: Route) => route.fulfill(json({ enrollments: [] })));
+  await page.route("**/api/courses/c1", (route: Route) =>
+    route.fulfill(json({
+      course: {
+        id: "c1",
+        title: "Kurset",
+        items: [{
+          type: "MODULE",
+          moduleId: "m-1",
+          courseItemId: "i-1",
+          sortOrder: 0,
+          title: "Modulen",
+          moduleStatus: state.moduleStatus,
+          ...(state.retakeRequired ? { retakeRequired: true } : {}),
+          available: true,
+          required: true,
+          discussionsEnabled: false,
+        }],
+      },
+    })),
+  );
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill(json({
+      modules: [{
+        id: "m-1",
+        title: "Modulen",
+        description: null,
+        assessmentMode: "MCQ_ONLY",
+        submissionSchema: null,
+        assessmentPolicy: null,
+        taskText: null,
+        activeVersion: { id: "mv-2", versionNo: 2 },
+        participantStatus: state.status,
+      }],
+    })),
+  );
+  await page.route("**/api/submissions", (route: Route) => {
+    calls.created.push(route.request().postDataJSON() as Record<string, unknown>);
+    return route.fulfill(json({ submission: { id: "s-new", submissionStatus: "SUBMITTED" } }, 201));
+  });
+  await page.route("**/api/modules/*/mcq/start**", (route: Route) => {
+    calls.mcqStarts += 1;
+    return route.fulfill(json({ attemptId: "a1", questions: [{ id: "q1", stem: "Spørsmål på den nye versjonen", options: ["A", "B"] }] }));
+  });
+  await page.route("**/api/modules/*/mcq/submit", (route: Route) => route.fulfill(json({ assessmentComplete: true })));
+  await page.route("**/api/submissions/s-new/result", (route: Route) => {
+    // Serveren: beståtten på den nye versjonen teller, og beviset for hovedversjon 2 er utstedt.
+    state.moduleStatus = "PASSED";
+    state.retakeRequired = false;
+    state.status = { latestSubmissionId: "s-new", latestStatus: "COMPLETED", latestDecision: { passFailTotal: true, totalScore: 100 } };
+    state.completions = [
+      ...state.completions,
+      { courseId: "c1", certificateId: "bevis-2", completedAt: "2026-11-05T10:00:00.000Z", courseTitle: "Kurset", versionMajor: 2, versionMinor: 0, current: true },
+    ];
+    return route.fulfill(json({ ...result(true), submissionId: "s-new" }));
+  });
+  await page.route("**/api/submissions/s-old/result", (route: Route) => {
+    calls.earlierResults += 1;
+    return route.fulfill(json({ ...result(state.status === PASSED_ON_OLD_VERSION), submissionId: "s-old" }));
+  });
+  await page.route(/\/api\/submissions\/s-old$/, (route: Route) => route.fulfill(json({ submission: { id: "s-old", response: {} } })));
+  await page.route("**/api/submissions/*/mcq-review", (route: Route) => route.fulfill(json({ enabled: false, questions: [] })));
+  return { state, calls };
+}
+
+async function openModuleFromCourse(page: Page) {
+  await page.goto("/participant");
+  await page.locator(".course-accordion-header").click();
+  await page.locator(".course-module-row").first().click();
+}
+
+test.describe("#934 5a-3: modulen åpnet fra kurset", () => {
+  test("kurset sier «ta den på nytt»: siden sier det, starter et nytt forsøk, deltakeren består, og får kursbevis for den nye versjonen", async ({ page }) => {
+    const { calls } = await mock(page);
+    await openModuleFromCourse(page);
+
+    // «Må tas på nytt» vises, ikke «Fullført» fra forrige vedtak.
+    await expect(page.locator("#selectedModuleStatus")).toContainText(HINT);
+    await expect(page.locator("#selectedModuleStatus")).not.toContainText("Fullført");
+
+    // Et nytt forsøk starter på den nye versjonen. Det gamle resultatet legger seg ikke over.
+    await expect.poll(() => calls.created.length).toBe(1);
+    expect(calls.created[0]).toMatchObject({ moduleId: "m-1", moduleVersionId: "mv-2" });
+    await expect(page.locator(".mcq-question-card")).toContainText("Spørsmål på den nye versjonen");
+    expect(calls.earlierResults).toBe(0);
+
+    await page.locator("input[name='q_q1']").first().check();
+    await page.locator("#submitMcq").click();
+    await expect(page.locator("#resultSummary .result-headline")).toContainText("Bestått");
+    // Nytt vedtak: beskjeden om nytt forsøk er borte.
+    await expect(page.locator("#selectedModuleStatus")).not.toContainText(HINT);
+
+    // Fra serverens svar, etter innlasting: modulen er bestått, og kurset er fullført i versjon 2.
+    await page.reload();
+    await expect(page.locator(".course-accordion-item--done")).toBeVisible();
+    await page.goto("/participant");
+    await page.locator(".course-accordion-header").first().click();
+    await expect(page.locator(".course-module-row").first()).toContainText("Bestått");
+  });
+
+  test("KONTROLL: med bryteren av (uten feltet) er siden som i 2.134.0. Forrige resultat vises, og ingenting starter av seg selv", async ({ page }) => {
+    const { calls } = await mock(page, { retakeRequired: false });
+    await openModuleFromCourse(page);
+    await expect.poll(() => calls.earlierResults).toBe(1);
+    await expect(page.locator("#resultSummary")).toHaveAttribute("data-has-result", "true");
+    await expect(page.locator("#selectedModuleStatus")).not.toContainText(HINT);
+    await page.waitForTimeout(300);
+    expect(calls.created).toHaveLength(0);
+    // Raden sier fortsatt «revidert»: det gjør den i 2.134.0 også, for `SUPERSEDED`.
+    await expect(page.locator(".course-module-row").first()).toContainText("Revidert");
+  });
+
+  test("har deltakeren alt strøket på nytt: resultatet vises, med anke og «Prøv igjen», og beskjeden står", async ({ page }) => {
+    const { calls } = await mock(page, { status: FAILED_RETAKE });
+    await openModuleFromCourse(page);
+    await expect.poll(() => calls.earlierResults).toBe(1);
+    await expect(page.locator("#resultSummary")).toHaveAttribute("data-has-result", "true");
+    await expect(page.locator("#selectedModuleStatus")).toContainText(HINT);
+    await page.waitForTimeout(300);
+    expect(calls.created).toHaveLength(0);
+  });
+
+  test("en modul som teller i dette kurset: ingen beskjed, og ingenting starter", async ({ page }) => {
+    const { calls } = await mock(page, { retakeRequired: false, moduleStatus: "PASSED" });
+    await openModuleFromCourse(page);
+    await expect.poll(() => calls.earlierResults).toBe(1);
+    await expect(page.locator("#selectedModuleStatus")).not.toContainText(HINT);
+    await page.waitForTimeout(300);
+    expect(calls.created).toHaveLength(0);
+  });
+});

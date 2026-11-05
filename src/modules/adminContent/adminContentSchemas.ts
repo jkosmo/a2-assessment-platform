@@ -930,6 +930,41 @@ export const importBodySchema = z.object({
   { message: "targetId is required when mode is replaceExisting", path: ["targetId"] },
 );
 
+// #934 skive 5a-3: de nye endepunktene med svar per kurs. `strict`: et felt serveren ikke kjenner, avvises. Forrige gang fjernet
+// skjemaet `courseVersions` uten å si fra, og forfatterens valg ville forsvunnet.
+const versionChoiceSchema = z.enum(["major", "minor"]);
+const courseVersionsSchema = z.record(z.string().min(1), versionChoiceSchema);
+const expectedCourseIdsSchema = z.array(z.string().min(1)).max(1000);
+// Tallet dialogen viste per kurs, da forfatteren sa ja til e-post til mange (4b).
+const emailConfirmationsSchema = z.record(z.string().min(1), z.number().int().min(0));
+
+export const publishModuleVersionedBodySchema = z
+  .object({
+    moduleVersion: versionChoiceSchema,
+    courseVersions: courseVersionsSchema.optional(),
+    expectedCourseIds: expectedCourseIdsSchema.optional(),
+    confirmEmailRecipients: emailConfirmationsSchema.optional(),
+  })
+  .strict()
+  .superRefine((body, context) => {
+    if (body.moduleVersion === "major" && !body.expectedCourseIds) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["expectedCourseIds"], message: "A major version needs the courses the dialog showed." });
+    }
+    // Mindre for modulen er mindre i alle kurs. Et svar som sier noe annet, skal ikke forsvinne uten at noen sier fra.
+    if (body.moduleVersion === "minor" && Object.values(body.courseVersions ?? {}).includes("major")) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["courseVersions"], message: "A minor version of the module gives a minor version in every course." });
+    }
+  });
+
+export const publishPendingVersionedBodySchema = z
+  .object({
+    versionIds: z.array(z.string().min(1)).max(1000),
+    courseVersions: courseVersionsSchema.optional(),
+    expectedCourseIds: expectedCourseIdsSchema,
+    confirmEmailRecipients: emailConfirmationsSchema.optional(),
+  })
+  .strict();
+
 export function parseRequest<T>(schema: z.ZodType<T>, body: unknown): { data: T; error?: never } | { data?: never; error: z.ZodIssue[] } {
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

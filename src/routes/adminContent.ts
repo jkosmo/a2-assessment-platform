@@ -1,5 +1,10 @@
-import { Router, type Request } from "express";
-import { mcqQuestionTypeFields } from "../modules/adminContent/adminContentSchemas.js";
+import { Router, type Request, type Response } from "express";
+import { mcqQuestionTypeFields, publishModuleVersionedBodySchema } from "../modules/adminContent/adminContentSchemas.js";
+import { prisma } from "../db/prisma.js";
+import { localizeContentText } from "../i18n/content.js";
+import { findAffectedCourses } from "../modules/course/courseVersioning.js";
+import { assertModuleVersioningActive } from "../modules/course/modulePassSwitch.js";
+import { publishModuleVersioned } from "../modules/course/versionedPublishService.js";
 import { z } from "zod";
 import {
   createModule,
@@ -975,6 +980,72 @@ const publishModuleVersionBodySchema = z.object({
   supersedesEarlierPasses: z.boolean().optional(),
 });
 
+/**
+ * #372: blueprint-aware pre-publish gate for one version. Blocks if any blocking issue surfaces; warnings are returned but do not
+ * block (the author can choose to publish anyway via the existing UI flow). `null`: the version is not on this module.
+ * #934 skive 5a-3: felles for den gamle ruta og `publish-versioned`, så de to ikke kan svare ulikt.
+ */
+async function evaluateModuleVersionGate(moduleId: string, moduleVersionId: string) {
+  const bundle = await getModuleContentBundle(moduleId);
+  const moduleVersionData = bundle.versions.moduleVersions.find((v) => v.id === moduleVersionId);
+  if (!moduleVersionData) return null;
+  const mcqSetVersion = bundle.versions.mcqSetVersions.find(
+    (v) => v.id === moduleVersionData.mcqSetVersionId,
+  );
+  const rawBlueprint = (moduleVersionData as { assessmentBlueprint?: string | null }).assessmentBlueprint;
+  // #896 S4 / #955 / #956: ÉN gate, felles med kaskaden og importen (`evaluateModulePublishGate`).
+  // Denne døra har DEKODEDE verdier fra bundelen (LocalizedText-objekter, `options` ikke
+  // `optionsJson`), så de serialiseres tilbake til lagringsformatet gaten leser. Å sende de dekodede
+  // objektene rett inn kompilerte til `[object Object]` i et tidligere utkast av dette.
+  const serialize = (value: unknown): string | null =>
+    value === null || value === undefined ? null : localizedTextCodec.serialize(value as never);
+  return evaluateModulePublishGate({
+    module: {
+      title: serialize(bundle.module.title),
+      description: serialize(bundle.module.description),
+      archivedAt: bundle.module.archivedAt ?? null,
+    },
+    version: {
+      taskText: serialize(moduleVersionData.taskText),
+      candidateTaskConstraints: serialize(moduleVersionData.candidateTaskConstraints),
+      assessorExpectedContent: serialize(moduleVersionData.assessorExpectedContent),
+      modelAnswer: serialize(moduleVersionData.modelAnswer),
+      assessmentBlueprint: typeof rawBlueprint === "string" ? rawBlueprint : null,
+    },
+    mcqQuestions: (mcqSetVersion?.questions ?? []).map((question) => ({
+      stem: serialize(question.stem),
+      optionsJson: JSON.stringify((question.options ?? []).map((option) => serialize(option))),
+      correctAnswer: serialize(question.correctAnswer ?? null),
+      rationale: serialize(question.rationale),
+    })),
+  });
+}
+
+/** Svarer 404 eller 422 når versjonen ikke kan publiseres. `true`: den kan det. */
+function respondUnlessPublishable(
+  response: Response,
+  validation: Awaited<ReturnType<typeof evaluateModuleVersionGate>>,
+): validation is NonNullable<Awaited<ReturnType<typeof evaluateModuleVersionGate>>> {
+  // #705: G1 must be single-source — no unguarded fallthrough. A version that isn't present on the
+  // module can't be validated, so it can't be published; reject instead of publishing blind.
+  if (!validation) {
+    response.status(404).json({
+      error: "module_version_not_found",
+      message: "The module version to publish was not found on this module.",
+    });
+    return false;
+  }
+  if (!validation.valid) {
+    response.status(422).json({
+      error: "publish_blocked_by_validation",
+      message: "Pre-publish validation found blocking issues. See `issues` for details.",
+      issues: validation.issues,
+    });
+    return false;
+  }
+  return true;
+}
+
 adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/publish", async (request, response) => {
   const actorId = request.context?.userId;
   if (!actorId) {
@@ -991,60 +1062,8 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
 
-    // #372: Run blueprint-aware pre-publish gate. Blocks if any blocking
-    // issue surfaces; warnings are returned but do not block (the author
-    // can choose to publish anyway via the existing UI flow).
-    const bundle = await getModuleContentBundle(request.params.moduleId);
-    const moduleVersionData = bundle.versions.moduleVersions.find(
-      (v) => v.id === request.params.moduleVersionId,
-    );
-    // #705: G1 must be single-source — no unguarded fallthrough. A version that isn't present on the
-    // module can't be validated, so it can't be published; reject instead of publishing blind.
-    if (!moduleVersionData) {
-      response.status(404).json({
-        error: "module_version_not_found",
-        message: "The module version to publish was not found on this module.",
-      });
-      return;
-    }
-    const mcqSetVersion = bundle.versions.mcqSetVersions.find(
-      (v) => v.id === moduleVersionData.mcqSetVersionId,
-    );
-    const rawBlueprint = (moduleVersionData as { assessmentBlueprint?: string | null }).assessmentBlueprint;
-    // #896 S4 / #955 / #956: ÉN gate, felles med kaskaden og importen (`evaluateModulePublishGate`).
-    // Denne døra har DEKODEDE verdier fra bundelen (LocalizedText-objekter, `options` ikke
-    // `optionsJson`), så de serialiseres tilbake til lagringsformatet gaten leser. Å sende de dekodede
-    // objektene rett inn kompilerte til `[object Object]` i et tidligere utkast av dette.
-    const serialize = (value: unknown): string | null =>
-      value === null || value === undefined ? null : localizedTextCodec.serialize(value as never);
-    const validation = evaluateModulePublishGate({
-      module: {
-        title: serialize(bundle.module.title),
-        description: serialize(bundle.module.description),
-        archivedAt: bundle.module.archivedAt ?? null,
-      },
-      version: {
-        taskText: serialize(moduleVersionData.taskText),
-        candidateTaskConstraints: serialize(moduleVersionData.candidateTaskConstraints),
-        assessorExpectedContent: serialize(moduleVersionData.assessorExpectedContent),
-        modelAnswer: serialize(moduleVersionData.modelAnswer),
-        assessmentBlueprint: typeof rawBlueprint === "string" ? rawBlueprint : null,
-      },
-      mcqQuestions: (mcqSetVersion?.questions ?? []).map((question) => ({
-        stem: serialize(question.stem),
-        optionsJson: JSON.stringify((question.options ?? []).map((option) => serialize(option))),
-        correctAnswer: serialize(question.correctAnswer ?? null),
-        rationale: serialize(question.rationale),
-      })),
-    });
-    if (!validation.valid) {
-      response.status(422).json({
-        error: "publish_blocked_by_validation",
-        message: "Pre-publish validation found blocking issues. See `issues` for details.",
-        issues: validation.issues,
-      });
-      return;
-    }
+    const validation = await evaluateModuleVersionGate(request.params.moduleId, request.params.moduleVersionId);
+    if (!respondUnlessPublishable(response, validation)) return;
     // Warnings still go through; surfaced in response so the UI can display them.
     const moduleVersion = await publishModuleVersion(
       request.params.moduleId,
@@ -1054,6 +1073,74 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
       { supersedesEarlierPasses: parsedBody.data.supersedesEarlierPasses === true },
     );
     response.json({ moduleVersion, validationWarnings: validation.issues });
+  } catch (error) {
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
+    response.status(400).json({ error: "publish_module_version_failed", message: "Could not publish module version." });
+  }
+});
+
+// #934 skive 5a-3: tallene dialogen viser før publiseringen: kursene modulen ligger i og som har vært ute, med antall kursbevis og
+// antall som får e-post. De samme funksjonene som publiseringen bruker. Før bryteren: `409 module_versioning_not_active`.
+adminContentRouter.get("/modules/:moduleId/module-versions/:moduleVersionId/publish-preview-versioned", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    await assertModuleVersioningActive(prisma);
+    const version = await prisma.moduleVersion.findFirst({
+      where: { id: request.params.moduleVersionId, moduleId: request.params.moduleId },
+      select: { id: true, versionNo: true, versionMajor: true, versionMinor: true },
+    });
+    if (!version) {
+      response.status(404).json({ error: "module_version_not_found", message: "The module version to publish was not found on this module." });
+      return;
+    }
+    const highest = await prisma.moduleVersion.aggregate({ where: { moduleId: request.params.moduleId }, _max: { versionMajor: true } });
+    const locale = requestLocale(request);
+    const courses = await findAffectedCourses(prisma, [{ moduleId: request.params.moduleId }]);
+    response.json({
+      moduleId: request.params.moduleId,
+      moduleVersion: version,
+      currentMajor: highest._max.versionMajor,
+      courses: courses.map((course) => ({ ...course, title: localizeContentText(locale, course.title) ?? course.title })),
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
+    response.status(400).json({ error: "publish_preview_failed", message: "Could not preview publishing." });
+  }
+});
+
+// #934 skive 5a-3: publisering med svar per kurs (doc/DESIGN_934.md, «5a-3»). Rollen settes av monteringen av /api/admin/content,
+// eierskapet her. Agent-tokenet slipper ikke til (`agentTokenScope.ts`). En gammel server svarer 404, så ingenting lagres med feil regel.
+adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/publish-versioned", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const parsedBody = publishModuleVersionedBodySchema.safeParse(request.body ?? {});
+  if (!parsedBody.success) {
+    response.status(400).json({ error: "validation_error", issues: parsedBody.error.issues });
+    return;
+  }
+  try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    // Her først, så en ny klient mot en server med bryteren av får riktig svar også for et utkast som stopper i porten under. Det
+    // som avgjør, er sjekken etter låsen i `publishModuleVersioned`.
+    await assertModuleVersioningActive(prisma);
+    const validation = await evaluateModuleVersionGate(request.params.moduleId, request.params.moduleVersionId);
+    if (!respondUnlessPublishable(response, validation)) return;
+    const result = await publishModuleVersioned(request.params.moduleId, request.params.moduleVersionId, actorId, parsedBody.data);
+    response.json({ ...result, validationWarnings: validation.issues });
   } catch (error) {
     if (error instanceof AppError) {
       respondWithAppError(response, error);

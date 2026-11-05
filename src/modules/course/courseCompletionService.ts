@@ -76,9 +76,10 @@ async function findCompletionToIssue(
   // Truly empty course (no modules AND no sections) is never completable.
   if (moduleIds.length === 0 && requiredSectionIds.length === 0) return null;
 
+  // #934 skive 5a-3: regelen velges der, ut fra bryteren. I den låste veien er bryteren og beståttene lest i samme transaksjon.
   if (moduleIds.length > 0) {
-    const passedCount = await repo.countPassedModulesForUser(userId, moduleIds);
-    if (passedCount < moduleIds.length) return null;
+    const progress = await repo.findModuleProgress({ userIds: [userId], courses: [{ courseId: course.id, moduleIds }] });
+    if (progress.passedModuleIds(userId, course.id).size < moduleIds.length) return null;
   }
 
   if (requiredSectionIds.length > 0) {

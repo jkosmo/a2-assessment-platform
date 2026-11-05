@@ -9,7 +9,8 @@ import { createAssessmentDecision, createMcqOnlyDecision } from "../src/modules/
 import { recordModulePassFromDecision } from "../src/modules/certification/modulePass.js";
 import { reconcileCourseCompletionsForUser } from "../src/modules/course/index.js";
 import { findCreditedModuleIds } from "../src/modules/course/moduleCredit.js";
-import { backfillModuleCredit, MODULE_PASS_SWITCH_KEY } from "../src/modules/course/moduleCreditBackfill.js";
+import { backfillModuleCredit } from "../src/modules/course/moduleCreditBackfill.js";
+import { MODULE_PASS_SWITCH_KEY } from "../src/modules/course/modulePassSwitch.js";
 import { compareModuleCredit } from "../src/modules/course/moduleCreditComparison.js";
 import { recordAuditEvent } from "../src/services/auditService.js";
 import { auditActions, auditEntityTypes } from "../src/observability/auditEvents.js";

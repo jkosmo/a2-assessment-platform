@@ -48,7 +48,8 @@ export interface CourseModuleEntry {
 // Klienten utledet før «ikke påkrevd» fra `available: false` og tilbød «Avslutt kurset» i kurs
 // serveren ikke ville utstedt bevis for. Feltet finnes for at den ikke skal måtte gjette.
 export type CourseSequenceItem =
-  | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS" | "REVISED_RETAKE_REQUIRED"; discussionsEnabled: boolean; available: boolean; required: boolean }
+  // #934 skive 5a-3: `retakeRequired` finnes bare med den nye regelen, og sier til modulsiden at den skal tilby et nytt forsøk.
+  | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS" | "REVISED_RETAKE_REQUIRED"; retakeRequired?: true; discussionsEnabled: boolean; available: boolean; required: boolean }
   // #944: `available` er PÅKREVD på begge variantene. Var det valgfritt på SECTION, ville en kaller
   // som glemte det fått `undefined` — som er falsy, men også umulig å skille fra «ikke vurdert».
   // Typen tvinger nå fram et svar, slik at neste sti ikke kan la det stå åpent i stillhet.

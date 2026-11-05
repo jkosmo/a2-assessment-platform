@@ -13,9 +13,10 @@ import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 const findPublishedCoursesWithModuleDetails = vi.fn();
 const findCourseCompletionsForLearnerReport = vi.fn();
 const countCourseCompletions = vi.fn();
-const countPassedUsersForModule = vi.fn();
 const countUsersWithSubmissionsForModule = vi.fn();
-const findPassedUserIdsForModule = vi.fn();
+// #934 skive 5a-3: den ene veien til fremdrift i kurs. Regelen måles i test/m2-module-pass-per-course-934-5a3.test.ts.
+const findModuleProgress = vi.fn();
+const noProgress = { passedUserIds: () => new Set<string>() };
 // #996: kursets publikum er nå en UNION av tildelte, fullførere og AKTIVE — det siste dekker
 // ENTRA-klasser, som ikke er oppløsbare via `resolveCourseAudience`.
 const findLearnerSubmissionsForModules = vi.fn();
@@ -35,9 +36,8 @@ vi.mock("../../src/modules/course/courseRepository.js", () => ({
     findPublishedCoursesWithModuleDetails,
     findCourseCompletionsForLearnerReport,
     countCourseCompletions,
-    countPassedUsersForModule,
     countUsersWithSubmissionsForModule,
-    findPassedUserIdsForModule,
+    findModuleProgress,
     findLearnerSubmissionsForModules,
     findCourseItemsForParticipant,
     findReadSectionIdsForCourseParticipants,
@@ -96,9 +96,8 @@ describe("#969 course report — enrolledParticipants is the course audience", (
     findPublishedCoursesWithModuleDetails.mockReset();
     findCourseCompletionsForLearnerReport.mockReset().mockResolvedValue([]);
     countCourseCompletions.mockReset().mockResolvedValue(0);
-    countPassedUsersForModule.mockReset().mockResolvedValue(0);
     countUsersWithSubmissionsForModule.mockReset().mockResolvedValue(0);
-    findPassedUserIdsForModule.mockReset().mockResolvedValue([]);
+    findModuleProgress.mockReset().mockResolvedValue(noProgress);
     findLearnerSubmissionsForModules.mockReset().mockResolvedValue([]);
     resolveCourseAudience.mockReset().mockResolvedValue([]);
     findUserIdsInDepartment.mockReset().mockResolvedValue([]);
@@ -231,8 +230,7 @@ describe("#996: publikummet dekker også dem som bare har vært aktive", () => {
   beforeEach(() => {
     findPublishedCoursesWithModuleDetails.mockReset();
     findCourseCompletionsForLearnerReport.mockReset().mockResolvedValue([]);
-    countPassedUsersForModule.mockReset().mockResolvedValue(0);
-    findPassedUserIdsForModule.mockReset().mockResolvedValue([]);
+    findModuleProgress.mockReset().mockResolvedValue(noProgress);
     findLearnerSubmissionsForModules.mockReset().mockResolvedValue([]);
     resolveCourseAudience.mockReset().mockResolvedValue([]);
     findUserIdsInDepartment.mockReset().mockResolvedValue([]);
@@ -299,7 +297,7 @@ describe("#996: kursdrilldownen bruker samme publikum som sammendraget", () => {
     findPublishedCoursesWithModuleDetails.mockReset();
     findCourseCompletionsForLearnerReport.mockReset().mockResolvedValue([]);
     findLearnerSubmissionsForModules.mockReset().mockResolvedValue([]);
-    findPassedUserIdsForModule.mockReset().mockResolvedValue([]);
+    findModuleProgress.mockReset().mockResolvedValue(noProgress);
     resolveCourseAudience.mockReset().mockResolvedValue([]);
     findUserIdsInDepartment.mockReset().mockResolvedValue([]);
     findUsersByIds.mockReset().mockResolvedValue([]);

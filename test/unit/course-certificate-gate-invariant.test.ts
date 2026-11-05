@@ -6,8 +6,8 @@ import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 // `DUE_SOON`) står i CERTIFICATION_PASSED_STATUSES.
 //
 // Denne testen pinner nettopp det, gjennom den ekte porten: courseCompletionService →
-// courseRepository.countPassedModulesForUser → `status: { in: CERTIFICATION_PASSED_STATUSES }`.
-// Den falske Prisma-klienten under evaluerer `in`-filteret på ekte rader, så den måler regelen og
+// `findModuleProgress` (moduleCredit.ts, med bryteren av) → `isCertificationPassed` → CERTIFICATION_PASSED_STATUSES.
+// Den falske Prisma-klienten under evaluerer `in`-filtrene på ekte rader, så den måler regelen og
 // ikke en mock som svarer det testen håper.
 //
 // ⚠️ Mutasjonsmål: krymp CERTIFICATION_PASSED_STATUSES til ["ACTIVE"] (den «opplagte» forenklingen
@@ -57,14 +57,13 @@ function createFakeClient(certifications: CertRow[]) {
         { id: "item-1", courseId: COURSE_ID, itemType: "MODULE", moduleId: MODULE_ID, section: null },
       ],
     },
+    // #934 skive 5a-3: bryteren er av (ingen rad). Da er det denne regelen som gjelder.
+    platformConfig: {
+      findUnique: async () => null,
+    },
     certificationStatus: {
-      count: async ({ where }: { where: { userId: string; moduleId: { in: string[] }; status: { in: string[] } } }) =>
-        certifications.filter(
-          (row) =>
-            row.userId === where.userId &&
-            where.moduleId.in.includes(row.moduleId) &&
-            where.status.in.includes(row.status),
-        ).length,
+      findMany: async ({ where }: { where: { userId: { in: string[] }; moduleId: { in: string[] } } }) =>
+        certifications.filter((row) => where.userId.in.includes(row.userId) && where.moduleId.in.includes(row.moduleId)),
     },
     courseSectionRead: {
       findMany: async () => [],

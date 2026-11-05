@@ -1,6 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import type { ReportFilters } from "../reporting/types.js";
-import { CERTIFICATION_PASSED_STATUSES } from "../certification/certificationRepository.js";
+import { findModuleProgress, type ModuleProgressInput } from "./moduleCredit.js";
 import { sectionAvailableWhere } from "./sectionAvailability.js";
 import { countCertificateHolders, loadSectionReadRules, readCountsForCurrentVersion, type SectionSnapshot } from "./courseVersioning.js";
 import type { LearnerContentTx } from "../../db/contentLock.js";
@@ -33,23 +33,19 @@ function buildCompletionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo"
   };
 }
 
-function buildCertificationWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
-  return {
-    ...(filters.dateFrom || filters.dateTo
-      ? {
-          passedAt: {
-            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
-            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
-          },
-        }
-      : {}),
-    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
-  };
-}
-
 type CourseRepositoryClient = Pick<
   typeof prisma,
-  "course" | "courseItem" | "courseCompletion" | "courseSectionRead" | "courseVersion" | "certificationStatus" | "submission" | "$queryRaw"
+  | "course"
+  | "courseItem"
+  | "courseCompletion"
+  | "courseSectionRead"
+  | "courseVersion"
+  | "certificationStatus"
+  | "courseModuleRequirement"
+  | "modulePass"
+  | "platformConfig"
+  | "submission"
+  | "$queryRaw"
 >;
 
 // #934 skive 3: seksjon → aktiv seksjonsversjon for seksjonene kurset inneholder nå. Øyeblikksbildet en
@@ -100,24 +96,10 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       }));
     },
 
-    countPassedModulesForUser(userId: string, moduleIds: string[]) {
-      return client.certificationStatus.count({
-        where: {
-          userId,
-          moduleId: { in: moduleIds },
-          status: { in: CERTIFICATION_PASSED_STATUSES },
-        },
-      });
-    },
-
-    findUserCertificationStatusesForModules(userId: string, moduleIds: string[]) {
-      return client.certificationStatus.findMany({
-        where: {
-          userId,
-          moduleId: { in: moduleIds },
-        },
-        select: { moduleId: true, status: true },
-      });
+    // #934 skive 5a-3: den ene veien til fremdrift i kurs (`moduleCredit.ts`), på denne klienten. Bryteren og beståttene leses
+    // altså i den transaksjonen kalleren eventuelt står i. Ingen andre metoder her svarer på «har deltakeren bestått».
+    findModuleProgress(input: ModuleProgressInput) {
+      return findModuleProgress(client, input);
     },
 
     // #934: et kursbevis gjelder sin hovedversjon. «Har deltakeren bevis?» spørres derfor alltid for
@@ -203,18 +185,6 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       return rows
         .filter((r) => readCountsForCurrentVersion(rules.get(r.courseId), r.sectionId, r.readAt))
         .map(({ courseId, sectionId }) => ({ courseId, sectionId }));
-    },
-
-    // The set of the user's PASSED module ids among the given modules (one query across every course's
-    // modules). The caller counts per course by intersecting with each course's module ids.
-    findPassedModuleIds(userId: string, moduleIds: string[]) {
-      if (moduleIds.length === 0) return Promise.resolve([] as string[]);
-      return client.certificationStatus
-        .findMany({
-          where: { userId, moduleId: { in: moduleIds }, status: { in: CERTIFICATION_PASSED_STATUSES } },
-          select: { moduleId: true },
-        })
-        .then((rows) => rows.map((r) => r.moduleId));
     },
 
     // SECTION course-item ids for many courses at once (one query), for the listing's section counts.
@@ -545,40 +515,6 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           ...buildCompletionWhere(filters),
         },
       });
-    },
-
-    countPassedUsersForModule(moduleId: string, filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
-      return client.certificationStatus.count({
-        where: {
-          moduleId,
-          status: { in: CERTIFICATION_PASSED_STATUSES },
-          ...buildCertificationWhere(filters),
-        },
-      });
-    },
-
-    /**
-     * HVEM som besto modulen, ikke bare hvor mange.
-     *
-     * ⚠️ #996: `countPassedUsersForModule` gir et TALL, og et tall kan ikke unioneres eller
-     * snittes mot kursets publikum. Det var derfor `moduleBreakdown.passRate` fortsatt kunne vise
-     * 400 %: telleren var sertifiseringer i vinduet, nevneren var innleveringer i vinduet, og de to
-     * målte ulike mennesker.
-     *
-     * Med ID-ene kan brøken bli det den utgir seg for: «av dem som er med i kurset, hvor mange
-     * besto denne modulen». Samme kur som #969 én etasje ned.
-     */
-    findPassedUserIdsForModule(moduleId: string, filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
-      return client.certificationStatus
-        .findMany({
-          where: {
-            moduleId,
-            status: { in: CERTIFICATION_PASSED_STATUSES },
-            ...buildCertificationWhere(filters),
-          },
-          select: { userId: true },
-        })
-        .then((rows) => rows.map((r) => r.userId));
     },
 
     countUsersWithSubmissionsForModule(

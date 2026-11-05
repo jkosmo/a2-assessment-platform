@@ -22,7 +22,6 @@ import {
 } from "../modules/course/index.js";
 import type { CourseListItem, CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
 import { queryLatestSubmissionsForModules } from "../modules/submission/submissionRepository.js";
-import { isCertificationPassed } from "../modules/certification/certificationRepository.js";
 import { hasCertificateBackground } from "../modules/platformConfig/certificateBackgroundService.js";
 import { discussionsRouter } from "./discussions.js";
 
@@ -65,9 +64,13 @@ coursesRouter.get("/", async (request, response, next) => {
     const courseIds = courses.map((course) => course.id);
     const allModuleIds = courses.flatMap((course) => course.modules.map((m) => m.moduleId));
 
-    const [sectionRows, passedModuleIds, readRows, latestSubmissions] = await Promise.all([
+    const [sectionRows, moduleProgress, readRows, latestSubmissions] = await Promise.all([
       courseRepository.findCourseItemSectionIdsForCourses(courseIds),
-      courseRepository.findPassedModuleIds(userId, allModuleIds),
+      // #934 skive 5a-3: beståtte per kurs. Samme modul kan telle i ett kurs og ikke i et annet.
+      courseRepository.findModuleProgress({
+        userIds: [userId],
+        courses: courses.map((course) => ({ courseId: course.id, moduleIds: course.modules.map((m) => m.moduleId) })),
+      }),
       courseRepository.findReadSectionIdsForCourses(userId, courseIds),
       allModuleIds.length > 0 ? queryLatestSubmissionsForModules(userId, allModuleIds) : Promise.resolve([]),
     ]);
@@ -78,7 +81,6 @@ coursesRouter.get("/", async (request, response, next) => {
       if (list) list.push(row.sectionId);
       else sectionIdsByCourse.set(row.courseId, [row.sectionId]);
     }
-    const passedModuleSet = new Set(passedModuleIds);
     const readSectionsByCourse = new Map<string, Set<string>>();
     for (const row of readRows) {
       const set = readSectionsByCourse.get(row.courseId);
@@ -93,7 +95,8 @@ coursesRouter.get("/", async (request, response, next) => {
       // #938/#945: samme filter som kursdetaljen og bevisporten — den tredje telleren.
       const moduleIds = course.modules.filter((m) => m.module?.archivedAt == null).map((m) => m.moduleId);
       const sectionIds = sectionIdsByCourse.get(course.id) ?? [];
-      const passed = moduleIds.filter((id) => passedModuleSet.has(id)).length;
+      const passedInCourse = moduleProgress.passedModuleIds(userId, course.id);
+      const passed = moduleIds.filter((id) => passedInCourse.has(id)).length;
       const readSet = readSectionsByCourse.get(course.id);
       const readCount = readSet ? sectionIds.filter((id) => readSet.has(id)).length : 0;
       const total = moduleIds.length + sectionIds.length;
@@ -281,21 +284,30 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     // «to tellere er uenige» som saken handlet om, bare på modulsiden. Jeg hadde fikset
     // seksjonstellingen og glemt denne.
     const moduleIds = course.modules.filter((cm) => cm.module?.archivedAt == null).map((cm) => cm.moduleId);
-    const [certStatuses, passedCount, latestSubmissions] = await Promise.all([
-      courseRepository.findUserCertificationStatusesForModules(userId, moduleIds),
-      courseRepository.countPassedModulesForUser(userId, moduleIds),
+    const [moduleProgress, latestSubmissions] = await Promise.all([
+      // #934 skive 5a-3: den ene veien til fremdrift i kurs, som porten for kursbevis. Teller og modulstatus leser det samme.
+      courseRepository.findModuleProgress({ userIds: [userId], courses: [{ courseId: course.id, moduleIds }] }),
       moduleIds.length > 0
         ? queryLatestSubmissionsForModules(userId, moduleIds)
         : Promise.resolve([]),
     ]);
+    const passedCount = moduleProgress.passedModuleIds(userId, course.id).size;
 
-    const certStatusByModuleId = new Map(certStatuses.map((cs) => [cs.moduleId, cs.status]));
     const latestSubmissionByModuleId = new Map<string, (typeof latestSubmissions)[number]>();
     for (const submission of latestSubmissions) {
       if (!latestSubmissionByModuleId.has(submission.moduleId)) {
         latestSubmissionByModuleId.set(submission.moduleId, submission);
       }
     }
+
+    // #997: REVIDERT er en EGEN tilstand, ikke «ikke påbegynt»: en modul som var bestått og plutselig ikke er det, uten
+    // forklaring, er verre enn ingenting. #934 skive 5a-3: én regel for `items` og `modules` under.
+    const moduleStatusOf = (moduleId: string) => {
+      const standing = moduleProgress.standing(userId, course.id, moduleId);
+      if (standing === "PASSED") return "PASSED" as const;
+      if (standing === "REVISED") return "REVISED_RETAKE_REQUIRED" as const;
+      return latestSubmissionByModuleId.has(moduleId) ? ("IN_PROGRESS" as const) : ("NOT_STARTED" as const);
+    };
 
     // Mixed module/section sequence (#491/P1) with per-section read state (#492).
     // #958: deltakerdøra. Seksjoner deltakeren ikke kan åpne er allerede filtrert bort, og hvert
@@ -348,12 +360,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         };
       }
       const moduleId = item.moduleId ?? item.module?.id ?? "";
-      const certStatus = certStatusByModuleId.get(moduleId);
-      const passed = isCertificationPassed(certStatus);
-      // #997: revidert etter at deltakeren besto. EGEN tilstand, ikke «ikke påbegynt»: en modul som
-      // var bestått og plutselig ikke er det, uten forklaring, er verre enn ingenting.
-      const superseded = certStatus === "SUPERSEDED";
-      const hasStarted = latestSubmissionByModuleId.has(moduleId);
+      const moduleStatus = moduleStatusOf(moduleId);
       // #502-followup/#958: regelen bor nå i `findCourseItemsForParticipant`. Ruta leser en
       // avgjørelse i stedet for å ta en — feltene den ble regnet ut av finnes ikke her lenger.
       //
@@ -367,7 +374,10 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         moduleId,
         courseItemId: item.id,
         title: localizeContentText(locale, item.module?.title ?? "") ?? item.module?.title ?? moduleId,
-        moduleStatus: passed ? "PASSED" : superseded ? "REVISED_RETAKE_REQUIRED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
+        moduleStatus,
+        // #934 skive 5a-3: «ta den på nytt» fra kurset, så modulsiden ikke leser siste vedtak og tror den er ferdig. Feltet finnes
+        // bare med den nye regelen: med bryteren av skal svaret og siden være som i 2.134.0.
+        ...(moduleProgress.rule === "per_course" && moduleStatus === "REVISED_RETAKE_REQUIRED" ? { retakeRequired: true as const } : {}),
         discussionsEnabled: item.discussionsEnabled,
         available,
         required: item.required,
@@ -410,7 +420,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       // ikke — og da sa samme respons to ting samtidig: `moduleCount: 0` og `progress 0/0`, mens
       // `modules[]` inneholdt en arkivert modul som `NOT_STARTED`.
       //
-      // Verre enn et skjevt tall: sertifiseringsoppslaget (`certStatusByModuleId`) bygges bare for
+      // Verre enn et skjevt tall: oppslaget av beståtte (`moduleProgress`) bygges bare for
       // ikke-arkiverte moduler, så en modul deltakeren FAKTISK BESTO før arkiveringen kom tilbake
       // som «ikke påbegynt». En eldre klient som leser denne flaten viser da en klikkbar modul som
       // resten av responsen sier ikke finnes i kravet.
@@ -419,19 +429,13 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       // fra `course.modules` er hele fiksen — én kilde, ikke to.
       modules: course.modules
         .filter((cm) => moduleIds.includes(cm.moduleId))
-        .map((cm) => {
-          const certStatus = certStatusByModuleId.get(cm.moduleId);
-          const passed = isCertificationPassed(certStatus);
-          const superseded = certStatus === "SUPERSEDED";
-          const hasStarted = latestSubmissionByModuleId.has(cm.moduleId);
-          return {
-            moduleId: cm.moduleId,
-            sortOrder: cm.sortOrder,
-            title: localizeContentText(locale, cm.module.title) ?? cm.module.title,
-            // #997: samme tre-deling som i `items` over — én regel, to steder som viser den.
-            moduleStatus: passed ? "PASSED" : superseded ? "REVISED_RETAKE_REQUIRED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
-          };
-        }),
+        .map((cm) => ({
+          moduleId: cm.moduleId,
+          sortOrder: cm.sortOrder,
+          title: localizeContentText(locale, cm.module.title) ?? cm.module.title,
+          // #997: samme tre-deling som i `items` over — én regel, to steder som viser den.
+          moduleStatus: moduleStatusOf(cm.moduleId),
+        })),
       items,
     };
 

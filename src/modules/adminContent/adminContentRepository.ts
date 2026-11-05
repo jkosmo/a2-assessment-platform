@@ -683,7 +683,16 @@ export function createAdminContentWriter(client: ContentWriteTx) {
 
     // #934 skive 5a-2: det ene stedet en modulversjon settes live, og det ene stedet den får versjonsnummer. `versionKind` er
     // påkrevd, så en ny vei må si hva den er. Nummeret regnes ut før noe skrives; en avvist publisering endrer ingenting.
-    async publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string, now: Date, versionKind: ModuleVersionKind) {
+    // #934 skive 5a-3: `requirements` sier hvem som hever kravet ved en hovedversjon. `all_courses` er #997-regelen, global, og
+    // kan bare nås med bryteren av. `per_course`: kalleren hever det i kursene som fikk hovedversjon (`applyCourseVersionChange`).
+    async publishModuleVersion(
+      moduleId: string,
+      moduleVersionId: string,
+      actorId: string,
+      now: Date,
+      versionKind: ModuleVersionKind,
+      requirements: "all_courses" | "per_course",
+    ) {
       const moduleVersion = await client.moduleVersion.findUnique({
         where: { id: moduleVersionId },
         select: {
@@ -726,7 +735,7 @@ export function createAdminContentWriter(client: ContentWriteTx) {
 
       // Hevet i samme transaksjon som versjonen settes live: det er ingen glipe (sannhetstabellen). En versjon som alt har
       // nummer, kommer aldri hit som hoved; `resolvePublishNumber` har avvist den.
-      if (versionKind === "major") {
+      if (versionKind === "major" && requirements === "all_courses") {
         await raiseModuleRequirements(client, moduleId, number.major);
       }
 

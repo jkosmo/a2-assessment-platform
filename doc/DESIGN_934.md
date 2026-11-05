@@ -1,6 +1,6 @@
 # #934 — hovedversjon og mindre versjon for kurs og moduler
 
-Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0, skive 2 i 2.128.0, skive 3 i 2.129.0; skive 4–5 gjenstår.
+Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0, skive 2 i 2.128.0, skive 3 i 2.129.0, 4a i 2.131.0, 4b i 2.132.0, 5a-1 i 2.133.0, 5a-2 i 2.134.0 og 5a-3 i 2.135.0 (bryteren er av); 5b gjenstår.
 Skisse: https://claude.ai/artifact/AyQpYXMQSDHW8WL8YPe34n
 
 ## Hva produkteier har bestemt (2026-11-01)
@@ -1081,6 +1081,81 @@ kontrollcase), `test/stage/release-2-134-modulversjon.spec.ts`.
 bestå på nytt»; et kursbevis uten at kravet er oppfylt; en vei inn som går utenom; eller at forfatterens valg
 forsvinner uten at noen sier fra.
 
+#### 5a-3 — bygget (2.135.0)
+
+Bryteren er av i alle miljøer, og med den av er alt som i 2.134.0. Det er testet regel for regel, med en kontroll for hver test med
+bryteren på.
+
+**Filene:**
+- `src/modules/course/modulePassSwitch.ts`: bryteren (`isModulePassPerCourseOn`). Raden leses hver gang, på samme klient som avgjørelsen.
+  Ingen mellomlagring. Vakta nekter det.
+- `src/modules/course/moduleCredit.ts`: `findModuleProgress`, den ene veien til fremdrift i kurs. Den velger regel ut fra bryteren: av =
+  `CertificationStatus`, på = `passCountsForCourse` med kravet per kurs.
+- `src/modules/course/versionedPublishService.ts`: de to nye publiseringene, i rekkefølgen planen sier.
+- `src/modules/course/courseVersioning.ts`: `findAffectedCourses` (settet og tallene), `resolveCourseVersionKind` (hoved bare når svaret er
+  hoved og noen har kursbevis), og `raiseModules` på `applyCourseVersionChange`, så versjonen, kravet og e-posten kommer fra samme kall.
+- `scripts/maintenance/switch-on-module-pass.ts` (`npm run module-credit:switch-on`): slår bryteren på under den eksklusive låsen. Det finnes
+  med vilje ingen «av».
+
+**Lesere av fremdrift i kurs** (grepet 2026-11-05). Alle går gjennom `courseRepository.findModuleProgress` → `moduleCredit.ts:213`:
+- porten for kursbevis: `courseCompletionService.ts:81`, altså alle tre veiene inn (workeren, lesingen og kursbevissiden). I den låste
+  veien er bryteren, kravet og beståttene lest i samme transaksjon;
+- «Mine kurs»: `routes/courses.ts:70`;
+- kursdetaljen: `routes/courses.ts:289`, med `moduleStatusOf` (`:305`) for både `items` og `modules`. `retakeRequired` settes på `:380`;
+- kursrapporten: `courseReport.ts:176` (kursraden) og `:267` (deltakerradene). CSV-eksporten (`routes/reports.ts:417, 440`) går gjennom de samme.
+
+Metodene `countPassedModulesForUser`, `findUserCertificationStatusesForModules`, `findPassedModuleIds`, `countPassedUsersForModule` og
+`findPassedUserIdsForModule` er fjernet fra kursrepositoriet, så en ny leser ikke kan bruke dem.
+
+**Lesere av `CertificationStatus` som står igjen, og hvorfor.** Ingen av dem er fremdrift i kurs:
+- `moduleCredit.ts:157`: regelen med bryteren av;
+- `reportingRepository.ts:237` → `reviewAppealReport.ts:182`: statusrapporten per modul, uten kurs, som planen sier («Kjente mangler» nr. 48);
+- `certificationRepository.ts:65` (`findPassedCertificationsForModule`): #997-e-posten med bryteren av (`adminContentCommands.ts:1044`), og tallene til
+  den gamle dialogen (`routes/adminContent.ts:966`, `coursePublishService.ts:673`), nr. 49;
+- `certificationRepository.ts:88` (`findByUserAndModule`): vakta mot nedgradering, som før;
+- `moduleCreditComparison.ts:115`, `moduleCreditBackfill.ts:128` og `moduleVersioning.ts:176`: rapporten og tilbakefyllingen, som regner på den gamle regelen med vilje;
+- `routes/me.ts:139`: innsynseksporten viser det som er lagret.
+
+**Skrivere av `SUPERSEDED` på modulstatus:** bare `certificationRepository.ts:80`, kalt bare fra `adminContentCommands.ts:1050`, og der er bryteren sjekket
+først (`:1022`): med den på er svaret `409 client_outdated` før noe skrives. Alle andre `SUPERSEDED` i koden er innleveringer, anker og saker, en annen sak.
+
+**Veier jeg fant utenfor planen:**
+- Modulsiden leste siste vedtak på tre steder, ikke ett: `alreadyPassed` (planens `participant.js:1203`), `earlierResultToShow`, som viste det gamle resultatet over et
+  nytt forsøk, og `formatModuleStatusSummary`, som skrev «Fullført». Alle tre følger nå kursets status.
+- Teksten `courses.module.revisedRetakeHint` fantes, men ble aldri brukt. Den er det som vises nå.
+- Den gamle `publish-pending` sjekker #997-svaret også før låsen. Den sjekken ville gitt `400 revision_answer_required` med bryteren på, så den leser bryteren den også. Det er sjekken etter låsen som avgjør.
+- Tilbakefyllingen leste bryteren én gang, utenfor låsen. Nå også i hver transaksjon.
+- `GET /modules/:id/passed-count` leser modulstatus. Det står, se nr. 49.
+
+**Avgjørelser der planen var åpen:**
+- **Regelen velges i `findModuleProgress`, ikke i `findCreditedModuleIds`.** Leserne trenger også «besto en versjon som ikke teller» (`REVISED_RETAKE_REQUIRED`), og
+  den gamle regelen. Selve regelen er fortsatt `passCountsForCourse`. `findCreditedModules` står for rapporten, som skal lese den nye regelen også med bryteren av.
+- **`retakeRequired` er et nytt felt på kursdetaljen, og finnes bare med bryteren på.** `REVISED_RETAKE_REQUIRED` kan også komme fra en `SUPERSEDED`-rad med bryteren av, og da
+  skal modulsiden være som i 2.134.0. Uten feltet ville en deltaker med en slik rad fått ny oppførsel ved utrullingen.
+- **Et nytt forsøk starter bare når siste vedtak er en avgjort bestått.** Har deltakeren strøket på nytt, eller saken vurderes, går siden som vanlig: resultatet, med anke og «Prøv igjen».
+  Ellers ville anke-knappen forsvunnet. Beskjeden står til deltakeren har bestått.
+- **Det gamle `publish-pending` med bryteren på gir modulene MINDRE,** også når `courseVersion` er hoved. En klient som sa nei til revisjon, eller aldri ble spurt, skal ikke ta beståtten
+  fra noen. Kurset får hovedversjon, og seksjonene som er endret, leses på nytt. Det gjelder en utdatert fane; dialogen fra 5b bruker det nye endepunktet.
+- **`expectedCourseIds` kreves bare når modulen er hoved.** Mindre spør ikke om kursene, så settet avgjør ingenting. Det er også derfor `moduleVersion: "minor"` med
+  `courseVersions: { x: "major" }` gir `400 validation_error`: det valget ville ellers forsvunnet.
+- **`409 affected_courses_changed`** er koden når settet er endret, eller et svar gjelder et kurs som ikke er berørt. Teksten står på alle tre språkene.
+- **Et kurs som aldri har vært ute, er ikke berørt:** ingen versjon, ingen spørsmål, og kravet står (sannhetstabellen). Et svar for det gir 409. Et arkivert kurs som har vært ute, er berørt, som i dag
+  (`applyMinorVersionToCoursesContaining` tar det med).
+- **Skjemaene er `strict`.** Et felt serveren ikke kjenner, er `400`. Det er lærdommen fra Codex runde 2: skjemaet fjernet `courseVersions` uten å si fra.
+- **Datovinduet i kursrapporten** gjelder `ModulePass.passedAt` med bryteren på, og `CertificationStatus.passedAt` med den av.
+
+**Rekkefølgen for produkteier,** når 5b er ute, først stage, så prod om kvelden. Det er planens rekkefølge, med kommandoene:
+1. Rull ut. App og worker viser ny versjon (`/version` på begge). Bryteren er av. Kjør `test/stage/release-2-135-bryteren-av.spec.ts`.
+2. `dotenv -e .env.<miljø> -- npm run module-credit:backfill`, så `dotenv -e .env.<miljø> -- npm run module-credit:compare`. Koden skal være 0.
+3. `dotenv -e .env.<miljø> -- npm run module-credit:switch-on`.
+
+Fast regel: når bryteren er på, rulles det aldri tilbake til kode eldre enn 2.135.0, og den slås ikke av igjen etter at første krav er hevet. Feil rettes framover. Skriptet har derfor ingen «av».
+
+**Bevis:** `test/m2-module-pass-per-course-934-5a3.test.ts` (gjennom rutene: alle bevisene i planen, med en kontroll med bryteren av for hver regel),
+`test/content-lock-write-guard.test.js` (ny del: leserne, relasjonene, `SUPERSEDED` og bryteren, med kontrollcaser), `test/unit/module-pass-switch-934-5a3.test.ts` (reglene uten database, skjemaene og
+agent-tokenet), `test/e2e/participant-course-retake-934-5a3.spec.ts` (den ekte `participant.js` mot falske API-er: e2e-oppsettet har ingen database, så serverens del av den samme veien står i integrasjonstesten),
+`test/stage/release-2-135-bryteren-av.spec.ts` (bare API, med bryteren av).
+
 ### 5b — dialogene og versjonsnummeret
 
 - **Moduldialogen** erstatter #997-avkrysningen (`admin-content-publish.js:435–513`) og bruker
@@ -1105,7 +1180,7 @@ deler modulen; 390 og 360 px med lange kurstitler; eksport og import tur-retur e
 
 Ingen av disse kan miste innhold, gi feil kursbevis, la innhold gå live uten versjonsregelen, sende feil eller dobbel
 e-post eller lekke data, med unntak av de korte utrullingsvinduene i nr. 1, som produkteier har godtatt, nr. 30, og nr. 41. De
-to siste er dagens regel, som først endres i 5a-3.
+to siste er regelen så lenge bryteren er av, og faller bort når den slås på (målt, se nr. 30 og 41).
 
 1. **Gammel og ny server side om side under en utrulling** (Codex runde 2 nr. 1, 8, 12 om tømming, og 15). Mens begge
    kjører, kan en lagring gå til den gamle uten tellerkontroll, en gammel server kan fatte vedtak uten `ModulePass`,
@@ -1125,7 +1200,8 @@ to siste er dagens regel, som først endres i 5a-3.
    Raden står som `uncertain`. Personen kan gå glipp av én e-post. Samme valg som #1115.
 7. **E-post som venter** mens innstillingen er av, sendes når den slås på, hvis versjonen fortsatt er kursets nyeste.
    Den kan altså komme sent.
-8. **Den gamle avkrysningen** gir 409 mellom 5a-3 og 5b. Derfor går de i samme prodsetting.
+8. **Den gamle avkrysningen** gir 409 mellom 5a-3 og 5b, når bryteren er på. Derfor går de i samme prodsetting. Teksten er den samme `client_outdated` som deltakeren får (2.133.0), så forfatteren
+   leser også «Har du skrevet et svar, er det lagret som kladd». Etter å ha lastet siden på nytt er det over.
 9. **Seksjoner over flere hovedversjoner** (Codex runde 2 nr. 13). Seksjonsregelen sammenligner slutten av forrige
    hovedversjon med starten av den nåværende, slik den er avgjort. En lesing fra før hovedversjon 2, av en seksjon som
    ble endret i 2 og står uendret i 3, teller derfor i 3. Forrige utgave av planen ville rette det ved å se bakover
@@ -1186,7 +1262,8 @@ to siste er dagens regel, som først endres i 5a-3.
     flervalgsmodul på v1 (innleveringen lages med en gang), forfatteren publiserer v2 med #997, og deltakeren svarer på de
     gamle spørsmålene en time etter. Flervalgsinnsendingen har ingen versjonssjekk, så det kommer ingen 409. Det samme
     gjelder vurderingskøen og en manuell vurdering eller anke som ender med bestått uker etter. Ingen lås kan rette dette.
-    Slik har det vært siden #997, også i prod. Faller bort i 5a-3, der versjonen avgjør (sannhetstabellen: «Nei i C»).
+    Slik har det vært siden #997, også i prod. **Faller bort når bryteren slås på:** versjonen avgjør (sannhetstabellen: «Nei i C»). Målt begge veier i
+    `test/m2-module-pass-per-course-934-5a3.test.ts`, «innlevering på 1.x vurdert etter at 2.0 kom», med kontroll med bryteren av.
 31. **Workeren finner kursene uten lås** (`checkAndIssueCourseCompletions`). Får et kurs modulen i det øyeblikket, sjekkes ikke
     det kurset. Kravet måles riktig; beviset kommer når deltakeren åpner kursbevissiden. Gjelder også et kurs som
     publiseres i det øyeblikket.
@@ -1218,7 +1295,8 @@ to siste er dagens regel, som først endres i 5a-3.
     kommer alltid etter innleveringen. Statusen står som bestått, og kursbevis kan utstedes. Slik har det vært siden vakta kom. Det er
     ikke rettet her, for ingen utfall skal endres i 5a-2. `ModulePass` er rett, så det faller bort i 5a-3. Rapporten lister dem
     (`overturned_pass_kept_by_old_rule`) som ikke forventet, så de må ses på før bryteren slås på. Produkteier avgjør om det skal
-    rettes før 5a-3, og hva som skjer med dem som alt har fått bevis.
+    rettes før 5a-3, og hva som skjer med dem som alt har fått bevis. **Faller bort når bryteren slås på:** innleveringen teller ikke, og et nytt bevis utstedes ikke. Et bevis som alt er utstedt, står: det
+    er permanent. Målt begge veier i `test/m2-module-pass-per-course-934-5a3.test.ts`. Kopien av prod hadde ingen slike.
 42. **Den nyeste versjonen kan ha lavere hovedversjon enn den høyeste** (5a-2). Publiseres v4 først og et eldre utkast v3 etterpå med
     avkrysning, er v3 2.0 og v4 1.1. «Publiser nye versjoner» viser v4 som ventende, og gir `409 module_version_outdated`. Forfatteren
     må lagre en ny versjon. Krever to utkast samtidig og en avkrysning på det eldste.
@@ -1241,6 +1319,17 @@ to siste er dagens regel, som først endres i 5a-3.
     moduler», hentes lista på nytt, og oppgaveteksten tegnes som den nye versjonen. Er felt-id-ene like, står svaret urørt, og en
     innlevering gir 201 på den nye versjonen, ikke 409. Deltakeren ser den nye oppgaven når hen leverer, og svaret vurderes mot den,
     så versjonen stemmer. Det hen ikke får, er beskjed om at oppgaven er endret. Produkteier avgjør om det er godt nok.
+48. **Statusrapporten per modul viser ikke «revidert» når bryteren er på** (5a-3). Den leser `CertificationStatus` (`reviewAppealReport.ts:182`), som planen sier, og `SUPERSEDED` skrives ikke lenger. En som besto en
+    eldre hovedversjon, står der som bestått. Modulen har ikke noe kurs å måle kravet mot, så svaret er ikke feil, men kategorien blir stående tom for nye revisjoner. Kursrapporten viser «må ta ny versjon».
+49. **Tallene til den gamle dialogen leser modulstatus** (5a-3): `GET /modules/:id/passed-count` og `passedCount` i `pending-versions`. En som besto og strøk på nytt, telles ikke, selv om beståtten teller i et kurs. Dialogen
+    spør da ikke, og svaret er mindre, så ingen mister noe. Dialogen fra 5b bruker `affectedCourses` og `publish-preview-versioned`.
+50. **En forfatter som eier en modul, svarer også for kurs hen ikke eier** (5a-3). `publish-versioned` og `publish-pending-versioned` lister alle berørte kurs med tittel og antall kursbevis, og et svar «hoved» gir hovedversjon og e-post
+    der. Planen sier «hvert kurs modulen ligger i», og deling mellom fagansvarlige er ønsket. Produkteier avgjør om det skal begrenses når dialogen fra 5b er sett.
+51. **En bestått uten krav eller uten versjonsnummer vises som «revidert»** (5a-3, med bryteren på). Den skal ikke telle, men forklaringen stemmer ikke. Det kan bare skje hvis tilbakefyllingen ikke er kjørt: `syncModuleRequirements` og
+    publiseringen holder radene ved like, og rapporten lister hull og er rød. Derfor står tilbakefylling og rapport rett før bryteren i rekkefølgen.
+52. **Sammenligningsrapporten har ingen mening etter bryteren** (5a-3). Den sammenligner med den gamle regelen, og da er forskjeller forventet, også krav som ikke er modulens nåværende hovedversjon. Den er ikke sperret, for den leser bare.
+53. **Datovinduet i kursrapporten kan gi et annet tall med bryteren på** (5a-3). Den gamle regelen så på siste bestått per modul. Den nye teller en bestått i perioden som teller i kurset, også om en nyere finnes utenfor perioden.
+54. **Beskjeden om nytt forsøk følger åpningen fra kurset** (5a-3). Åpnes modulen fra «Last moduler» i stedet for fra kursraden, vet ikke siden hvilket kurs det gjelder, og viser det gamle resultatet, som i dag. Et nytt forsøk kan startes derfra også.
 
 ### Gjennomgang av planen
 

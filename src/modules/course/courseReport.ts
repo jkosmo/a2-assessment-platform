@@ -172,23 +172,26 @@ export async function getCourseReport(
       // var uenige. Nå er telleren en delmengde av nevneren per konstruksjon.
       // #966: arkiverte moduler utelates også her. En arkivert modul med egen pass-rate i lista,
       // ved siden av rader som sier «4/4», er det samme to-tall-problemet én etasje ned.
-      const moduleBreakdown = await Promise.all(
-        activeModules.map(async (cm) => {
-          const passedIds = await courseRepository.findPassedUserIdsForModule(cm.moduleId, filters);
-          const passedUsers = passedIds.filter((id) => participantIds.has(id)).length;
-          const enrolledUsers = participantIds.size;
-          return {
-            moduleId: cm.moduleId,
-            moduleTitle: localizeContentText(locale, cm.module.title) ?? cm.module.title,
-            sortOrder: cm.sortOrder,
-            passedUsers,
-            enrolledUsers,
-            passRate: enrolledUsers > 0
-              ? Math.round((passedUsers / enrolledUsers) * 100) / 100
-              : null,
-          };
-        }),
-      );
+      // #934 skive 5a-3: hvem som har bestått, per kurs, fra den ene veien til fremdrift i kurs.
+      const moduleProgress = await courseRepository.findModuleProgress({
+        courses: [{ courseId: course.id, moduleIds: activeModules.map((cm) => cm.moduleId) }],
+        filters,
+      });
+      const moduleBreakdown = activeModules.map((cm) => {
+        const passedIds = [...moduleProgress.passedUserIds(course.id, cm.moduleId)];
+        const passedUsers = passedIds.filter((id) => participantIds.has(id)).length;
+        const enrolledUsers = participantIds.size;
+        return {
+          moduleId: cm.moduleId,
+          moduleTitle: localizeContentText(locale, cm.module.title) ?? cm.module.title,
+          sortOrder: cm.sortOrder,
+          passedUsers,
+          enrolledUsers,
+          passRate: enrolledUsers > 0
+            ? Math.round((passedUsers / enrolledUsers) * 100) / 100
+            : null,
+        };
+      });
 
       return {
         courseId: course.id,
@@ -260,11 +263,8 @@ export async function getCourseLearnerReport(
     filters,
   );
   // #1116: hvem som har bestått hver modul, med samme spørring og filtre som kursraden.
-  const passedByModule = new Map(
-    await Promise.all(
-      moduleIds.map(async (moduleId) => [moduleId, new Set(await courseRepository.findPassedUserIdsForModule(moduleId, filters))] as const),
-    ),
-  );
+  // #934 skive 5a-3: per kurs, fra den ene veien til fremdrift i kurs.
+  const moduleProgress = await courseRepository.findModuleProgress({ courses: [{ courseId: course.id, moduleIds }], filters });
 
   // #966: seksjonskravet hentes fra SAMME dør som bevisporten bruker — deltakerdøra. Den utelater
   // seksjoner deltakeren ikke kan åpne, så et krav som aldri kan oppfylles kan ikke oppstå her.
@@ -381,7 +381,7 @@ export async function getCourseLearnerReport(
     const scores: number[] = [];
 
     // #1116: «bestått» er sertifiseringsstatusen, samme svar som kursbeviset og kursraden over
-    // (findPassedUserIdsForModule). Før leste raden vedtaket på siste forsøk, med en svarteliste
+    // (`findModuleProgress`). Før leste raden vedtaket på siste forsøk, med en svarteliste
     // (`=== "UNDER_REVIEW"`): etter en revisjon (#997) står vedtaket fortsatt som bestått, mens
     // statusen sier at modulen må tas på nytt — og detaljen viste «Fullført» der beviset nektet.
     // Det som ikke er bestått, er under vurdering så lenge siste forsøk ikke er avgjort
@@ -392,7 +392,7 @@ export async function getCourseLearnerReport(
       if (typeof latestDecision?.totalScore === "number") {
         scores.push(latestDecision.totalScore);
       }
-      if (passedByModule.get(moduleId)?.has(learner.participantId)) {
+      if (moduleProgress.passedUserIds(course.id, moduleId).has(learner.participantId)) {
         passedModules += 1;
       } else if (!latest) {
         continue;

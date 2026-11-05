@@ -10,9 +10,7 @@ import { runContentWrite, runLearnerWrite } from "../../db/contentLock.js";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../errors/AppError.js";
 import { backfillModuleVersionsAndRequirements, findLatestRevisionAtByModule } from "../adminContent/moduleVersioning.js";
-
-/** Bryteren i 5a-3 (doc/DESIGN_934.md, «5a-3»). Den finnes ikke ennå, men er raden tilbakefyllingen må respektere. */
-export const MODULE_PASS_SWITCH_KEY = "module_pass_per_course";
+import { isModulePassPerCourseOn, type SwitchReader } from "./modulePassSwitch.js";
 
 export type PassDecision = {
   id: string;
@@ -98,11 +96,22 @@ export function computeModulePasses(input: {
   return rows;
 }
 
+/**
+ * Tilbakefyllingen nekter med regelen på: kravene er forfatterens valg, og `invalidatedAt` settes ikke lenger. Bryteren leses
+ * også i hver transaksjon, så en som slår den på midt i kjøringen, stopper resten.
+ */
+async function refuseIfSwitchedOn(client: SwitchReader) {
+  if (await isModulePassPerCourseOn(client)) {
+    throw new AppError("module_credit_backfill_refused", 409, "The per-course rule is switched on. The backfill would overwrite the authors' choices, so it does not run.");
+  }
+}
+
 /** Bygger beståttene for én deltaker på nytt. Radene slettes og lages igjen, i én transaksjon under deltakerlåsen. */
 async function rebuildModulePassesForUser(userId: string, moduleIds: string[] | undefined) {
   return runLearnerWrite(
     userId,
     async (tx) => {
+      await refuseIfSwitchedOn(tx);
       const moduleFilter = moduleIds ? { moduleId: { in: moduleIds } } : {};
       const submissions = await tx.submission.findMany({
         where: { userId, ...moduleFilter, decisions: { some: {} } },
@@ -149,17 +158,17 @@ export type ModuleCreditBackfillResult = {
  * deltakere. En modul eller deltaker som ikke får låsen, hoppes over og listes, og neste kjøring tar dem.
  */
 export async function backfillModuleCredit(scope?: { moduleIds?: string[]; userIds?: string[] }): Promise<ModuleCreditBackfillResult> {
-  const switchRow = await prisma.platformConfig.findUnique({ where: { key: MODULE_PASS_SWITCH_KEY }, select: { value: true } });
-  if (switchRow?.value === "on") {
-    throw new AppError("module_credit_backfill_refused", 409, "The per-course rule is switched on. The backfill would overwrite the authors' choices, so it does not run.");
-  }
+  await refuseIfSwitchedOn(prisma);
 
   const result: ModuleCreditBackfillResult = { modules: 0, versionsNumbered: 0, requirements: 0, users: 0, passes: 0, invalidated: 0, busy: { modules: [], users: [] } };
 
   const moduleIds = scope?.moduleIds ?? (await prisma.module.findMany({ select: { id: true } })).map((row) => row.id);
   for (const moduleId of moduleIds) {
     try {
-      const done = await runContentWrite((tx) => backfillModuleVersionsAndRequirements(tx, moduleId));
+      const done = await runContentWrite(async (tx) => {
+        await refuseIfSwitchedOn(tx);
+        return backfillModuleVersionsAndRequirements(tx, moduleId);
+      });
       result.modules += 1;
       result.versionsNumbered += done.numbered;
       result.requirements += done.requirements;
