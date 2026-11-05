@@ -336,6 +336,18 @@ export function courseRetakeApplies(retakeRequired, participantStatus) {
   });
 }
 
+/**
+ * #934 skive 5a-3: en ny bestått er det kurset ventet på. Kursdetaljene i minnet sier «ta den på nytt» til neste oppdatering, og den
+ * kan feile. Da ville et nytt klikk startet enda et forsøk.
+ */
+export function clearCourseRetakeFlag(courseDetails, moduleId) {
+  for (const course of Object.values(courseDetails ?? {})) {
+    for (const item of course?.items ?? []) {
+      if (item?.type === "MODULE" && item.moduleId === moduleId && item.retakeRequired) item.retakeRequired = false;
+    }
+  }
+}
+
 export function deriveParticipantFlowGateState(flowState, options = {}) {
   const hasSubmission = flowState?.hasSubmission === true;
   const hasMcqSubmission = flowState?.hasMcqSubmission === true;

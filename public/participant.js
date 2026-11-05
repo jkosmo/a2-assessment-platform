@@ -42,6 +42,7 @@ import { buildCriteriaPanel, buildCriterionScoreList } from "/static/assessment-
 import { groupCoursesByTheme, hasAnyTheme } from "/static/course-theme-groups.js";
 import {
   buildModuleCardViewModels,
+  clearCourseRetakeFlag,
   courseRetakeApplies,
   deriveParticipantFlowGateState,
   earlierResultToShow,
@@ -1290,6 +1291,9 @@ function noteLatestSubmission(moduleId, patch) {
   const module = loadedModules.find((m) => m?.id === moduleId);
   if (!module) return;
   module.participantStatus = { ...(module.participantStatus ?? {}), ...patch };
+  if (isSettledPass({ passFailTotal: patch.latestDecision?.passFailTotal, submissionStatus: patch.latestStatus })) {
+    clearCourseRetakeFlag(courseDetailCache, moduleId);
+  }
   // #934 skive 5a-3: beskjeden står til deltakeren har bestått. Et nytt stryk endrer ikke at modulen må tas på nytt.
   if (courseRetakeModuleId === moduleId && isSettledPass({ passFailTotal: patch.latestDecision?.passFailTotal, submissionStatus: patch.latestStatus })) {
     courseRetakeModuleId = null;

@@ -13,7 +13,23 @@ import {
   sanitizeAppealStatuses,
   sanitizeMockRolePresets,
   upsertModuleDraft,
+  clearCourseRetakeFlag,
 } from "../public/participant-console-state.js";
+
+describe("#934 5a-3: kursdetaljene i minnet etter en ny bestått", () => {
+  it("tar bort «ta den på nytt» for modulen, i alle kurs, og rører ikke andre moduler", () => {
+    const details = {
+      a: { items: [{ type: "MODULE", moduleId: "m1", retakeRequired: true }, { type: "MODULE", moduleId: "m2", retakeRequired: true }, { type: "SECTION", sectionId: "s1" }] },
+      b: { items: [{ type: "MODULE", moduleId: "m1", retakeRequired: true }] },
+      c: null,
+    };
+    clearCourseRetakeFlag(details, "m1");
+    expect(details.a.items[0].retakeRequired).toBe(false);
+    expect(details.b.items[0].retakeRequired).toBe(false);
+    expect(details.a.items[1].retakeRequired).toBe(true);
+    expect(details.a.items[2]).toEqual({ type: "SECTION", sectionId: "s1" });
+  });
+});
 
 describe("participant console state helpers", () => {
   it("#934 5a-1: finner teksten i kladden som ikke har noe felt på siden", () => {

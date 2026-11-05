@@ -3,6 +3,7 @@ import { mcqQuestionTypeFields, publishModuleVersionedBodySchema } from "../modu
 import { prisma } from "../db/prisma.js";
 import { localizeContentText } from "../i18n/content.js";
 import { findAffectedCourses } from "../modules/course/courseVersioning.js";
+import { hasValidModulePass } from "../modules/course/moduleCredit.js";
 import { assertModuleVersioningActive } from "../modules/course/modulePassSwitch.js";
 import { publishModuleVersioned } from "../modules/course/versionedPublishService.js";
 import { z } from "zod";
@@ -1108,6 +1109,7 @@ adminContentRouter.get("/modules/:moduleId/module-versions/:moduleVersionId/publ
       moduleId: request.params.moduleId,
       moduleVersion: version,
       currentMajor: highest._max.versionMajor,
+      anyonePassed: await hasValidModulePass(prisma, request.params.moduleId),
       courses: courses.map((course) => ({ ...course, title: localizeContentText(locale, course.title) ?? course.title })),
     });
   } catch (error) {

@@ -1197,7 +1197,7 @@ Bryteren er av i alle miljøer. Da er publiseringen den samme som i 2.135.0, og 
 **Avgjørelser der planen var åpen:**
 - **Planen sa at dialogen skulle si at funksjonen ikke er slått på.** Det ville stoppet all publisering mens bryteren er av. Oppdraget for 5b (2026-11-05) sier derfor at den gamle dialogen brukes, uendret.
 - **En annen feil på forhåndsvisningen (500, 403, nett) stopper, med «prøv igjen».** Å falle tilbake ville gitt det gamle spørsmålet mens bryteren kan være på. Der kan avkrysningen gi 409, og «nei» gir mindre i alle kurs uten at noen ble spurt. Med bryteren av svarer ruta 409 så snart eierskapet er sjekket, så dette stopper ikke publisering med mindre den gamle ruta også ville feilet.
-- **Ikke noe spørsmål når versjonen har nummer, eller modulen aldri har vært publisert.** Et gitt nummer endres ikke (produkteier), og første publisering blir 1.0 uansett. Det sendes som `minor`.
+- **Ikke noe spørsmål når versjonen har nummer, modulen aldri har vært publisert, eller ingen har bestått.** Et gitt nummer endres ikke (produkteier), første publisering blir 1.0 uansett, og uten beståtte er det ingenting å ha konsekvens for (tabellen over spørsmålene). Forhåndsvisningen sender `anyonePassed`. Det sendes som `minor`.
 - **Et kurs uten kursbevis har ingen knapper.** Serveren gir det mindre uansett (`resolveCourseVersionKind`), så et valg ville forsvunnet uten at noen sa fra. Det står «Kurset får mindre versjon». Dialogen sender heller ikke noe svar for det: får kurset kursbevis etter at dialogen ble vist, avviser serveren, og forfatteren blir spurt. Et svar klienten fant på selv, ville gått gjennom uten at noen hadde tatt stilling.
 - **Hoved uten kurs går an.** Modulen får nytt hovednummer, og dialogen sier at bare nummeret endres.
 - **Avviste svar nullstilles.** Dialogen vises på nytt med ferske tall, hovedversjon står for modulen, og hvert kurs er tilbake på mindre. Dialogen sier fra. Et svar som overlever, kunne gjelde et annet tall enn det forfatteren så.
@@ -1209,6 +1209,8 @@ Bryteren er av i alle miljøer. Da er publiseringen den samme som i 2.135.0, og 
 **Rekkefølgen for produkteier** er den i «5a-3 — bygget», med `test/stage/release-2-136-dialogene.spec.ts` i tillegg i første steg. Testen virker både med bryteren av og på.
 
 **Bevis:** `test/e2e/admin-content-module-publish-934-5b.spec.ts`, `test/e2e/admin-content-course-pending-934-5b.spec.ts` (hva som sendes, begge retninger, 390 og 360 px med lange titler, tre språk), `test/e2e/module-version-number-934-5b.spec.ts`, `test/unit/version-number-export-934-5b.test.ts`, `test/m2-course-export-version-934-5b.test.ts` (eksport og import tur-retur gjennom rutene), `test/stage/release-2-136-dialogene.spec.ts` (bare API).
+
+**QA-porten** (2026-11-05, Codex, samlet for de siste rettingene i 2.134.0, 5a-3 og 5b): GO. Tre mindre funn er rettet: kursdetaljen i minnet sa «ta den på nytt» etter en ny bestått, og et nytt klikk kunne startet enda et forsøk; dialogen ble stående med knappene av hvis noen andre hadde publisert alt; og moduldialogen spurte selv om ingen hadde bestått. Codex fikk ikke lest selve saken på GitHub og vurderte mot dette dokumentet.
 
 ### Kjente mangler (bevisst ikke rettet)
 

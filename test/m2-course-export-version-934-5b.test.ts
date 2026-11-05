@@ -122,7 +122,7 @@ describe("#934 skive 5b — modullistene har nummeret", () => {
 
     const eksportert = await request(app).get(`/api/admin/content/modules/${moduleId}/export`).set(admin);
     expect(eksportert.status, JSON.stringify(eksportert.body).slice(0, 300)).toBe(200);
-    const versjoner = (eksportert.body.versions?.moduleVersions ?? eksportert.body.bundle?.versions?.moduleVersions ?? []) as Array<Record<string, unknown>>;
+    const versjoner = eksportert.body.moduleExport.versions.moduleVersions as Array<Record<string, unknown>>;
     expect(versjoner.find((version) => version.id === moduleVersionId)).toMatchObject({ versionNo, versionMajor: 1, versionMinor: 0 });
 
     const deltaker = await request(app).get(`/api/modules/${moduleId}`).set(admin);

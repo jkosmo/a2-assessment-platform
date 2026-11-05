@@ -566,7 +566,7 @@ const PROGRESS_READERS = new Map([
   ],
   [
     "modulePass",
-    new Set(["modules/course/moduleCredit.ts:readPerCourseRule", "modules/course/moduleCredit.ts:findCreditedModules", "modules/course/moduleCreditComparison.ts:compareModuleCredit"]),
+    new Set(["modules/course/moduleCredit.ts:readPerCourseRule", "modules/course/moduleCredit.ts:findCreditedModules", "modules/course/moduleCredit.ts:hasValidModulePass", "modules/course/moduleCreditComparison.ts:compareModuleCredit"]),
   ],
   [
     "courseModuleRequirement",

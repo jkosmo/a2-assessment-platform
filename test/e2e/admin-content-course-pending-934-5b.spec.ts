@@ -161,6 +161,17 @@ test.describe("#934 skive 5b — «Publiser nye versjoner» med bryteren på", (
     });
   }
 
+  test("noen andre har publisert alt mens dialogen sto: dialogen lukkes, og den blir ikke stående med knappene av", async ({ page }) => {
+    const calls = await setup(page, {
+      pendings: [ON([kurs("course-1")]), ON([kurs("course-1")]), pending({ items: [], affectedCourses: [] })],
+      publishes: [{ status: 409, body: { error: "pending_versions_changed", message: "x" } }],
+    });
+    await page.goto(`${COURSE}?publishPending=1`);
+    await page.locator("#pendingPublishConfirmBtn").click();
+    await expect.poll(() => calls.versioned.length).toBe(1);
+    await expect(page.locator("#pendingPublishDialog")).toBeHidden();
+  });
+
   test("en annen feil: lokalisert toast, dialogen står, og knappen virker", async ({ page }) => {
     const calls = await setup(page, {
       pendings: [ON([kurs("course-1")])],

@@ -872,6 +872,10 @@ describe("#934 5a-3: modulens egen dialog", () => {
     const response = await request(app).get(`/api/admin/content/modules/${moduleId}/module-versions/${versionId}/publish-preview-versioned`).set(admin());
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
     expect(response.body.currentMajor).toBe(1);
+    expect(response.body.anyonePassed).toBe(true);
+    const nobody = await publishedModule();
+    const none = await request(app).get(`/api/admin/content/modules/${nobody.moduleId}/module-versions/${nobody.versionId}/publish-preview-versioned`).set(admin());
+    expect(none.body.anyonePassed).toBe(false);
     const rows = response.body.courses as Array<{ courseId: string; certificateHolders: number; majorEmailRecipients: number; published: boolean; title: string }>;
     expect(rows.map((row) => row.courseId).sort()).toEqual([a, b].sort());
     expect(rows.map((row) => row.courseId)).not.toContain(draftCourse);
@@ -1108,6 +1112,19 @@ describe("#934 5a-3: kursrapporten", () => {
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
     return response.body.rows as Array<{ participantId: string; status: string; passedModules: number }>;
   };
+
+  it("datovinduet gjelder også med den nye regelen: en bestått utenfor vinduet telles ikke", async () => {
+    const { moduleId, a } = await twoCoursesWithCertificates();
+    await switchOn();
+    const within = async (dateFrom: string) => {
+      const response = await request(app).get("/api/reports/courses").query({ courseId: a, dateFrom }).set(READER);
+      expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
+      const row = response.body.rows.find((one: { courseId: string }) => one.courseId === a) as { moduleBreakdown: Array<{ moduleId: string; passedUsers: number }> };
+      return row.moduleBreakdown.find((one) => one.moduleId === moduleId)?.passedUsers;
+    };
+    expect(await within("2000-01-01T00:00:00.000Z")).toBe(1);
+    expect(await within("2999-01-01T00:00:00.000Z")).toBe(0);
+  });
 
   it("per kurs: i A står deltakeren som «må ta ny versjon» og uten bestått modul, i B er hen fullført", async () => {
     const { moduleId, a, b, u } = await twoCoursesWithCertificates();

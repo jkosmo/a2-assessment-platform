@@ -65,6 +65,11 @@ export async function findCreditedModules(
   return [...credited.values()];
 }
 
+/** Har noen bestått modulen, så det finnes noen en ny hovedversjon kan ha konsekvens for? Moduldialogen spør bare da. */
+export async function hasValidModulePass(client: Pick<typeof prisma, "modulePass">, moduleId: string): Promise<boolean> {
+  return (await client.modulePass.findFirst({ where: { moduleId, invalidatedAt: null }, select: { id: true } })) !== null;
+}
+
 /** Modulene som teller for denne deltakeren i dette kurset, etter den nye regelen. */
 export async function findCreditedModuleIds(client: CreditReader, userId: string, courseId: string): Promise<string[]> {
   const rows = await findCreditedModules(client, { userIds: [userId], courseIds: [courseId] });

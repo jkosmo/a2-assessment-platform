@@ -620,8 +620,11 @@ export function createPublishFlow(ctx) {
         return;
       }
       if (read.preview) {
-        // Det finnes ikke noe valg om å endre et gitt nummer (produkteier), og første publisering blir 1.0 uansett.
-        const nothingToAsk = Number.isInteger(read.preview.moduleVersion.versionMajor) || !Number.isInteger(read.preview.currentMajor);
+        // Det finnes ikke noe valg om å endre et gitt nummer (produkteier), og første publisering blir 1.0 uansett. Har ingen bestått,
+        // er det ingenting å ha konsekvens for: ingen spørsmål, mindre (DESIGN_934, tabellen over spørsmålene).
+        const nothingToAsk = Number.isInteger(read.preview.moduleVersion.versionMajor)
+          || !Number.isInteger(read.preview.currentMajor)
+          || read.preview.anyonePassed === false;
         if (nothingToAsk) await sendVersionedPublish(moduleId, moduleVersionId, { moduleVersion: "minor" });
         else openModulePublishDialog(moduleId, moduleVersionId, read.preview, { answersWereStale: options.answersWereStale === true });
         return;

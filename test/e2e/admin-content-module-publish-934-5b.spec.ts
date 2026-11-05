@@ -265,6 +265,14 @@ test.describe("#934 skive 5b — bryteren på", () => {
     await expect(dialog(page)).toBeHidden();
   });
 
+  test("ingen har bestått: ikke noe valg, den sendes som mindre", async ({ page }) => {
+    const calls = await setup(page, { previews: [on([kurs("a")], { anyonePassed: false })] });
+    await clickPublish(page);
+    await expect.poll(() => calls.versioned.length).toBe(1);
+    expect(calls.versioned[0]).toEqual({ moduleVersion: "minor" });
+    await expect(dialog(page)).toBeHidden();
+  });
+
   test("første publisering: ikke noe valg", async ({ page }) => {
     const calls = await setup(page, { previews: [on([], { currentMajor: null })] });
     await clickPublish(page);

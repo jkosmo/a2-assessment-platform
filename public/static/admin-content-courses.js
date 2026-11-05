@@ -653,11 +653,23 @@ async function openPendingPublishDialog(courseId, { changed = false } = {}) {
   if (!dialog || typeof dialog.showModal !== "function") return;
   // Alltid ferskt: det forfatteren svarer på, skal være det som står i kurset nå.
   const pending = await loadPendingVersions(courseId);
-  if (!pending) return;
+  if (!pending) {
+    // Lesingen feilet mens dialogen står: knappene ble slått av ved sending, og skal virke igjen.
+    if (dialog.open) for (const button of Object.values(pendingPublishButtons())) if (button) button.disabled = false;
+    return;
+  }
   pendingVersions = pending;
   const items = pending.items ?? [];
   const notOwned = pending.notOwnedItems ?? [];
-  if (items.length === 0) return;
+  if (items.length === 0) {
+    // #934 skive 5b: noen andre har publisert alt mens dialogen sto. Det er ingenting å svare på lenger.
+    if (dialog.open) {
+      pendingPublishTarget = null;
+      dialog.close();
+      await refreshCourseView(courseId);
+    }
+    return;
+  }
 
   const blocked = !pending.publishable;
   const versioned = Array.isArray(pending.affectedCourses);
