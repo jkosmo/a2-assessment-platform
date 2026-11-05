@@ -346,6 +346,9 @@ export function clearCourseRetakeFlag(courseDetails, moduleId) {
       if (item?.type === "MODULE" && item.moduleId === moduleId && item.retakeRequired) item.retakeRequired = false;
     }
   }
+}
+
+/**
  * 2.134.1: går «KI skrev det meste» til sensor for denne modulen? Samme regel som `evaluateAiInfluence` på serveren: modulens egen
  * innstilling først, så den globale. I skyggemodus rutes ingen, og da skal siden ikke love det.
  */

@@ -724,7 +724,6 @@ export async function publishCoursePendingVersions(
   // #934 skive 5a-3: den gamle kontrakten etter bryteren. Avgjøres på nytt etter låsen under; her er det bare for at
   // spørsmålet om #997 ikke skal stilles når det ikke lenger gjelder.
   const perCourseRule = await isModulePassPerCourseOn(prisma);
-  if (perCourseRule && input.supersedesEarlierPasses === true) throw clientOutdatedForVersionChoice({ courseId });
 
   // Det forfatteren så, er det som publiseres. Et annet sett (noen lagret en ny versjon, eller
   // publiserte én, etter at dialogen ble åpnet) betyr at svaret ble gitt på noe annet.

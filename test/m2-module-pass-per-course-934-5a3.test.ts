@@ -942,6 +942,15 @@ describe("#934 5a-3 bevis: «Publiser kurs» med en modul som har vært publiser
   }
   const publishCourse = (courseId: string) => request(app).post(`/api/admin/content/courses/${courseId}/publish`).set(admin()).send({ publishItems: true });
 
+  it("en modul som har vært ute uten nummer (gammel kode): også 409", async () => {
+    const { moduleId, courseId } = await unpublishedWithNewDraft();
+    await prisma.moduleVersion.updateMany({ where: { moduleId }, data: { versionMajor: null, versionMinor: null } });
+    await switchOn();
+    const response = await publishCourse(courseId);
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe("course_publish_has_republished_modules");
+  });
+
   it("avpublisert modul, nytt utkast, «Publiser kurs»: 409 med modulene, og ingenting er publisert", async () => {
     const { moduleId, v2, courseId } = await unpublishedWithNewDraft();
     await switchOn();
@@ -1101,6 +1110,54 @@ describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
   });
 });
 
+describe("#934 5a-3: hull mutasjonene viste", () => {
+  it("et kurs uten kursbevis trenger ikke svar: dialogen fra 5b sender ingen, og publiseringen går", async () => {
+    const { moduleId, a, b, u } = await twoCoursesWithCertificates();
+    expect(u.userId).toBeTruthy();
+    const withoutCertificates = await newCourse([moduleId]);
+    await switchOn();
+    await majorIn(moduleId, { [a]: "major", [b]: "minor" }, [a, b, withoutCertificates]);
+    expect(await requirementOf(a, moduleId)).toBe(2);
+    expect(await requirementOf(withoutCertificates, moduleId)).toBe(1);
+  });
+
+  it("kravet senkes aldri: en hovedversjon under et krav som står høyere, rører det ikke", async () => {
+    const { moduleId, a, b } = await twoCoursesWithCertificates();
+    await prisma.courseModuleRequirement.update({ where: { courseId_moduleId: { courseId: a, moduleId } }, data: { minModuleMajor: 7 } });
+    await switchOn();
+    await majorIn(moduleId, { [a]: "major", [b]: "minor" }, [a, b]);
+    expect(await requirementOf(a, moduleId)).toBe(7);
+  });
+
+  it("et kurs uten krav får det når det får hovedversjon", async () => {
+    const { moduleId, a, b } = await twoCoursesWithCertificates();
+    await prisma.courseModuleRequirement.delete({ where: { courseId_moduleId: { courseId: a, moduleId } } });
+    await switchOn();
+    await majorIn(moduleId, { [a]: "major", [b]: "minor" }, [a, b]);
+    expect(await requirementOf(a, moduleId)).toBe(2);
+  });
+
+  it("publiseringsporten gjelder også det nye endepunktet: 422, og ingenting er publisert", async () => {
+    const { moduleId } = await publishedModule();
+    const active = await activeVersionOf(moduleId);
+    const set = await request(app).post(`/api/admin/content/modules/${moduleId}/mcq-set-versions`).set(admin()).send({
+      title: T("Sett"),
+      questions: [{ stem: { nb: "Bare på bokmål?" }, options: [T("Riktig"), T("Galt")], correctAnswer: T("Riktig"), rationale: T("Fordi.") }],
+    });
+    expect(set.status, JSON.stringify(set.body).slice(0, 300)).toBe(201);
+    const version = await request(app).post(`/api/admin/content/modules/${moduleId}/module-versions`).set(admin()).send({
+      assessmentMode: "MCQ_ONLY",
+      mcqSetVersionId: set.body.mcqSetVersion.id,
+    });
+    expect(version.status, JSON.stringify(version.body).slice(0, 300)).toBe(201);
+    await switchOn();
+    const response = await publishVersioned(moduleId, version.body.moduleVersion.id, { moduleVersion: "minor" });
+    expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(422);
+    expect(response.body.error).toBe("publish_blocked_by_validation");
+    expect(await activeVersionOf(moduleId)).toBe(active);
+  });
+});
+
 describe("#934 5a-3: kursrapporten", () => {
   const summary = async (courseId: string) => {
     const response = await request(app).get("/api/reports/courses").query({ courseId }).set(READER);
@@ -1114,7 +1171,9 @@ describe("#934 5a-3: kursrapporten", () => {
   };
 
   it("datovinduet gjelder også med den nye regelen: en bestått utenfor vinduet telles ikke", async () => {
-    const { moduleId, a } = await twoCoursesWithCertificates();
+    const { moduleId, a, u } = await twoCoursesWithCertificates();
+    // Tildelt, så deltakeren er med i rapporten uansett vinduet. Da er det vinduet på beståtten som avgjør tallet.
+    await prisma.courseEnrollment.create({ data: { userId: u.userId, courseId: a, source: "SELF" } });
     await switchOn();
     const within = async (dateFrom: string) => {
       const response = await request(app).get("/api/reports/courses").query({ courseId: a, dateFrom }).set(READER);

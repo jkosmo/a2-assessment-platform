@@ -109,6 +109,8 @@ test.describe("#934 skive 5b — «Publiser nye versjoner» med bryteren på", (
     const blockers = [{ code: "translation_incomplete", message: "x", field: "title", missingLocales: ["nn"] }];
     const calls = await setup(page, { pendings: [pending({ affectedCourses: [kurs("course-1")], publishable: false, items: [{ type: "MODULE", id: "mod-1", title: "Modul 1", versionId: "mod-1-v2", isNew: false, publishable: false, blockers, passedCount: 0 }] })] });
     await page.goto(`${COURSE}?publishPending=1`);
+    // Først når dialogen står, sier «skjult» noe: før det er alt i den skjult.
+    await expect(page.locator("#pendingPublishCancelBtn")).toBeVisible();
     await expect(page.locator("#pendingPublishVersion")).toBeHidden();
     await expect(page.locator("#pendingPublishConfirmBtn")).toBeHidden();
     await page.locator("#pendingPublishCancelBtn").click();
