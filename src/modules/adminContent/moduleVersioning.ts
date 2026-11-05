@@ -35,15 +35,16 @@ function isHigher(a: ModuleVersionNumber, b: ModuleVersionNumber) {
 /**
  * Nummerene versjonene uten nummer skal ha, i publiseringsrekkefølge. Ren funksjon.
  *   - Første versjon er 1.0, også om den står som revisjon: det var ingen å ta noe fra.
- *   - En versjon i `startsMajor` starter en ny hovedversjon. De andre er mindre.
+ *   - En versjon i `revisions` starter en ny hovedversjon, og plasseres der revisjonen skjedde. De andre er mindre. Da ligger
+ *     alle versjoner som var ute før revisjonen, under den, så et sent vedtak på en av dem ikke kan telle.
  *   - En versjon som har nummer, beholder det. Det er det «et nummer som er gitt, endres ikke» betyr, og det gjør en ny
  *     kjøring ufarlig.
  */
 export function numberModuleVersions(
   versions: NumberingVersion[],
-  startsMajor: ReadonlySet<string>,
+  revisions: ReadonlyMap<string, Date | null>,
 ): Map<string, ModuleVersionNumber> {
-  const order = (v: NumberingVersion) => (v.publishedAt ?? v.createdAt).getTime();
+  const order = (v: NumberingVersion) => Math.max((v.publishedAt ?? v.createdAt).getTime(), revisions.get(v.id)?.getTime() ?? 0);
   const walk = versions.filter((v) => v.live).sort((a, b) => order(a) - order(b) || a.versionNo - b.versionNo);
   const key = (n: ModuleVersionNumber) => `${n.major}.${n.minor}`;
   const taken = new Set(
@@ -58,7 +59,7 @@ export function numberModuleVersions(
       if (!current || isHigher(own, current)) current = own;
       continue;
     }
-    const major = startsMajor.has(version.id);
+    const major = revisions.has(version.id);
     let next: ModuleVersionNumber = !current
       ? { major: 1, minor: 0 }
       : major
@@ -75,46 +76,37 @@ export function numberModuleVersions(
   return assigned;
 }
 
-/** En rad i revisjonssporet som er lest ut: `module_passes_superseded` eller `module_version_published`. */
+/** En `module_passes_superseded`-rad i revisjonssporet, lest ut. */
 export type RevisionTrailEvent = {
-  action: string;
-  chainSeq: bigint;
-  /** Versjonen hendelsen gjelder. */
+  at: Date;
+  /** Versjonen revisjonen pekte på. */
   versionId: string | null;
-  /** Bare for `module_passes_superseded`. */
   supersededCount: number | null;
 };
 
 /**
- * Hvilke versjoner startet en ny hovedversjon? Ren funksjon.
- *   - En rad i revisjonssporet med minst én bestått, der versjonen ble publisert for første gang i samme slengen.
+ * Hvilke versjoner startet en ny hovedversjon, og når? Ren funksjon. Svaret er versjonen og tidspunktet for siste revisjon.
+ *   - En rad i revisjonssporet med minst én bestått.
  *   - En revisjon uten beståtte blir mindre: den rørte ingen (doc/DESIGN_934.md).
- *   - En revisjon på en versjon som alt hadde vært publisert (samme versjon, eller en som ble aktivert på nytt), gir ikke ny
- *     hovedversjon: versjonen «var nummerert fra før». Beståttene den tok bort, ugyldiggjøres for seg
- *     (`computeModulePasses`), så de teller ikke uansett.
+ *   - En revisjon på en versjon som alt var ute (samme versjon, eller en som ble aktivert på nytt), gir også ny hovedversjon.
+ *     I historikken er ingen nummer gitt ennå. Uten dette kunne et vedtak på en eldre versjon, fattet etter revisjonen, telle
+ *     under den nye regelen (Codex, 2026-11-05).
  *   - En versjon som bare står som `supersededByVersionId`, uten rad i sporet: da vet vi ikke når. Den regnes som ny
  *     hovedversjon. `module_passes_superseded` slettes ikke av oppryddingen, så dette skal ikke finnes; lesespørringen i
  *     `scripts/maintenance/module-credit-precheck.sql` sjekker det.
  */
-export function findVersionsStartingMajor(trail: RevisionTrailEvent[], supersededByVersionIds: Iterable<string>): Set<string> {
-  const publishes = new Map<string, bigint>();
-  for (const event of trail) {
-    if (event.action !== auditActions.adminContent.moduleVersionPublished || !event.versionId) continue;
-    const earliest = publishes.get(event.versionId);
-    if (earliest === undefined || event.chainSeq < earliest) publishes.set(event.versionId, event.chainSeq);
-  }
-  const starts = new Set<string>();
+export function findVersionsStartingMajor(trail: RevisionTrailEvent[], supersededByVersionIds: Iterable<string>): Map<string, Date | null> {
+  const starts = new Map<string, Date | null>();
   const seenInTrail = new Set<string>();
   for (const event of trail) {
-    if (event.action !== auditActions.adminContent.modulePassesSuperseded || !event.versionId) continue;
+    if (!event.versionId) continue;
     seenInTrail.add(event.versionId);
     if (!event.supersededCount) continue;
-    const firstPublish = publishes.get(event.versionId);
-    if (firstPublish !== undefined && firstPublish < event.chainSeq) continue;
-    starts.add(event.versionId);
+    const known = starts.get(event.versionId);
+    if (!known || event.at > known) starts.set(event.versionId, event.at);
   }
   for (const versionId of supersededByVersionIds) {
-    if (!seenInTrail.has(versionId)) starts.add(versionId);
+    if (!seenInTrail.has(versionId)) starts.set(versionId, null);
   }
   return starts;
 }
@@ -172,22 +164,13 @@ export async function numberModuleHistory(locked: ContentWriteTx, moduleId: stri
   if (!versions.some((v) => v.live && v.versionMajor === null)) return new Map();
 
   const trailRows = await locked.auditEvent.findMany({
-    where: {
-      OR: [
-        { entityType: auditEntityTypes.module, entityId: moduleId, action: auditActions.adminContent.modulePassesSuperseded },
-        { entityType: auditEntityTypes.moduleVersion, entityId: { in: versions.map((v) => v.id) }, action: auditActions.adminContent.moduleVersionPublished },
-      ],
-    },
-    select: { action: true, chainSeq: true, entityId: true, metadataJson: true },
+    where: { entityType: auditEntityTypes.module, entityId: moduleId, action: auditActions.adminContent.modulePassesSuperseded },
+    select: { timestamp: true, metadataJson: true },
   });
   const trail: RevisionTrailEvent[] = trailRows.map((row) => {
-    if (row.action === auditActions.adminContent.moduleVersionPublished) {
-      return { action: row.action, chainSeq: row.chainSeq, versionId: row.entityId, supersededCount: null };
-    }
     const metadata = metadataOf(row.metadataJson);
     return {
-      action: row.action,
-      chainSeq: row.chainSeq,
+      at: row.timestamp,
       versionId: typeof metadata.moduleVersionId === "string" ? metadata.moduleVersionId : null,
       supersededCount: typeof metadata.supersededCount === "number" ? metadata.supersededCount : null,
     };

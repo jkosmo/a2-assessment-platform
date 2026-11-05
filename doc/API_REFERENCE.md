@@ -32,6 +32,7 @@ See [DOMAIN_LIFECYCLE.md](DOMAIN_LIFECYCLE.md) for the full ownership model.
 | Method | Route | Role(s) |
 |---|---|---|
 | `GET` | `/api/me` | any authenticated |
+| `GET` | `/api/me/data` | any authenticated. What is stored about the caller. Since 2.134.0 also `profile.modulePasses`: `moduleId`, `moduleVersionId`, `submissionId`, `passedAt`, `invalidatedAt` |
 | `GET` | `/api/modules` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
 | `GET` | `/api/modules/completed?limit=<n>` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
 | `GET` | `/api/modules/:moduleId` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |

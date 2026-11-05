@@ -916,9 +916,10 @@ rapportene leser som før. Det som er endret for noen, er to avvisninger ved pub
   under utrullingen retter seg ved neste publisering eller tilbakefylling.
 - **En versjon er «ute»** når den er publisert, er aktiv, eller noen har levert på den. Bare `publishedAt` holder ikke: da kunne
   et vedtak havne på en versjon uten nummer, som aldri teller.
-- **«Med mindre den var nummerert fra før» i historikken:** en revisjon gir ny hovedversjon bare om versjonen ble publisert for
-  første gang i samme transaksjon. Det sjekkes i revisjonssporet: en tidligere `module_version_published` for samme versjon
-  betyr at den alt var ute. Beståttene den tok bort, ugyldiggjøres uansett.
+- **«Med mindre den var nummerert fra før» i historikken:** det gjelder et nummer som faktisk er gitt. En revisjon med beståtte
+  gir derfor ny hovedversjon også når versjonen alt var ute, og versjonen plasseres der revisjonen skjedde. Da ligger de eldre
+  versjonene under den, og et vedtak på en av dem, fattet etter revisjonen, teller ikke (Codex, 2026-11-05). En versjon som alt har
+  fått et nummer (av ny kode, eller en tidligere kjøring), beholder det.
 - **En revisjon uten beståtte** (`supersededCount: 0` i sporet) blir mindre i historikken, slik planen sier. Den ugyldiggjør
   likevel beståtte fra før seg: en som strøk på nytt før revisjonen, sto som ikke bestått og skal ikke få noe tilbake.
 - **«Ferdig vurdert innlevering»** kan ikke leses av statusen på innleveringen. En åpen anke setter en bestått innlevering til
@@ -1206,10 +1207,11 @@ to siste er dagens regel, som først endres i 5a-3.
     som `invalidated_but_old_rule_counts`.
 44. **Rapporten er ingen fast avlesning** (5a-2). Den leser uten lås, så en publisering eller et vedtak underveis kan gi en
     forskjell som er borte ved neste kjøring. Den sammenligner per modul; hva det betyr for et kursbevis, står ikke i den.
-45. **En eldre versjon som ble aktivert på nytt etter en revisjon** (5a-2, historikk). Gammel kode tillot det. Tilbakefyllingen gir
-    den det gamle nummeret og setter kravet til den høyeste hovedversjonen. Med den nye regelen kan da ingen bestå modulen slik at
-    det teller. Ny kode avviser det samme (`409 module_version_outdated`), så det kan bare gjelde historikk. Rapporten lister dem
-    (`activeVersionBelowRequirement`) og er rød. Før bryteren slås på, må forfatteren publisere en ny versjon av modulen.
+45. **En eldre versjon som ble aktivert på nytt etter en revisjon, uten avkrysning** (5a-2, historikk). Gammel kode tillot det.
+    Tilbakefyllingen gir den det gamle nummeret og setter kravet til den høyeste hovedversjonen. Med den nye regelen kan da ingen
+    bestå modulen slik at det teller. Ny kode avviser det samme (`409 module_version_outdated`), så det kan bare gjelde historikk.
+    Rapporten lister dem (`activeVersionBelowRequirement`) og er rød. Før bryteren slås på, må forfatteren publisere en ny versjon av
+    modulen.
 
 ### Gjennomgang av planen
 

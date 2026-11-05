@@ -6,6 +6,7 @@ import { prisma } from "../src/db/prisma.js";
 import { runContentWrite, runLearnerWrite, type LearnerTx } from "../src/db/contentLock.js";
 import { publishModuleVersion } from "../src/modules/adminContent/adminContentCommands.js";
 import { createAssessmentDecision, createMcqOnlyDecision } from "../src/modules/assessment/decisionService.js";
+import { recordModulePassFromDecision } from "../src/modules/certification/modulePass.js";
 import { reconcileCourseCompletionsForUser } from "../src/modules/course/index.js";
 import { findCreditedModuleIds } from "../src/modules/course/moduleCredit.js";
 import { backfillModuleCredit, MODULE_PASS_SWITCH_KEY } from "../src/modules/course/moduleCreditBackfill.js";
@@ -728,7 +729,7 @@ describe("#934 5a-2: tilbakefyllingen", () => {
     expect(await findCreditedModuleIds(prisma, v.userId, courseId)).toEqual([moduleId]);
   });
 
-  it("SUPERSEDED på samme versjon som vedtaket: ugyldiggjort, teller ikke, og gir ingen ny hovedversjon", async () => {
+  it("SUPERSEDED på samme versjon som vedtaket, og den eneste versjonen: ugyldiggjort, teller ikke, og forblir 1.0", async () => {
     const { moduleId, versionId } = await publishedModule();
     const courseId = await courseWith([moduleId]);
     const u = await learner();
@@ -812,7 +813,51 @@ describe("#934 5a-2: tilbakefyllingen", () => {
     expect(await passesOf(v.userId, moduleId)).toHaveLength(1);
   });
 
-  it("en versjon som ble aktivert på nytt med revisjon, gir ingen ny hovedversjon, men tar beståttene", async () => {
+  it("revisjon på en versjon som alt var ute, og et vedtak på en eldre versjon etterpå: teller ikke, også når vedtaket kommer etter tilbakefyllingen", async () => {
+    const { moduleId, versionId: v1 } = await publishedModule();
+    const courseId = await courseWith([moduleId]);
+    const v2 = await draft(moduleId, 2);
+    await publishOk(moduleId, v2);
+    const before = await learner();
+    await legacyPass(before.userId, moduleId, v2);
+    await runContentWrite(async (tx) => {
+      await recordAuditEvent({ entityType: auditEntityTypes.module, entityId: moduleId, action: auditActions.adminContent.modulePassesSuperseded, actorId: undefined, metadata: { moduleId, moduleVersionId: v2, supersededCount: 1, notifiedCount: 1 } }, tx);
+      await tx.certificationStatus.updateMany({ where: { moduleId }, data: { status: "SUPERSEDED", supersededByVersionId: v2 } });
+    });
+    const late = await learner();
+    await legacyPass(late.userId, moduleId, v1);
+    const sameVersion = await learner();
+    await legacyPass(sameVersion.userId, moduleId, v2);
+    await forgetNumbers(moduleId);
+    await forgetRequirements(moduleId);
+
+    await backfillModuleCredit(scope(moduleId, before, late, sameVersion));
+    expect([await numberOf(v1), await numberOf(v2)]).toEqual(["1.0", "2.0"]);
+    expect(await requirementOf(courseId, moduleId)).toBe(2);
+    expect(await findCreditedModuleIds(prisma, before.userId, courseId)).toEqual([]);
+    expect(await findCreditedModuleIds(prisma, late.userId, courseId)).toEqual([]);
+    expect(await findCreditedModuleIds(prisma, sameVersion.userId, courseId)).toEqual([moduleId]);
+
+    const report = await compareModuleCredit(scope(moduleId, before, late, sameVersion));
+    expect(report.differences.map((d) => [d.userId, d.reason, d.expected])).toEqual([[late.userId, "pass_on_old_version_after_revision", true]]);
+    expect(report.ok).toBe(true);
+
+    // Sensoren godkjenner den gamle innleveringen etter tilbakefyllingen, gjennom koden som skriver raden.
+    const afterBackfill = await learner();
+    const decided = await legacyDecision(afterBackfill.userId, moduleId, v1);
+    await runLearnerWrite(afterBackfill.userId, (tx: LearnerTx) => recordModulePassFromDecision(tx, {
+      id: decided.decisionId,
+      submissionId: decided.submissionId,
+      moduleVersionId: v1,
+      passFailTotal: true,
+      finalisedAt: decided.finalisedAt,
+      submission: { userId: afterBackfill.userId, moduleId },
+    }));
+    expect(await passesOf(afterBackfill.userId, moduleId)).toHaveLength(1);
+    expect(await findCreditedModuleIds(prisma, afterBackfill.userId, courseId)).toEqual([]);
+  });
+
+  it("en versjon som ble aktivert på nytt med revisjon, blir høyest, og den den tok over for, teller ikke", async () => {
     const { moduleId, versionId: v1 } = await publishedModule();
     const courseId = await courseWith([moduleId]);
     const v2 = await draft(moduleId, 2);
@@ -827,9 +872,12 @@ describe("#934 5a-2: tilbakefyllingen", () => {
     });
     await forgetNumbers(moduleId);
     await backfillModuleCredit(scope(moduleId, u));
-    expect([await numberOf(v1), await numberOf(v2)]).toEqual(["1.0", "1.1"]);
-    expect(await requirementOf(courseId, moduleId)).toBe(1);
+    expect([await numberOf(v2), await numberOf(v1)]).toEqual(["1.0", "2.0"]);
+    expect(await requirementOf(courseId, moduleId)).toBe(2);
     expect(await findCreditedModuleIds(prisma, u.userId, courseId)).toEqual([]);
+    const report = await compareModuleCredit(scope(moduleId, u));
+    expect(report.structure.activeVersionBelowRequirement).toEqual([]);
+    expect(report.ok).toBe(true);
   });
 
   it("gamle rader: en versjon som er aktiv, eller har innleveringer, uten publiseringstid, får nummer; et utkast får det ikke", async () => {

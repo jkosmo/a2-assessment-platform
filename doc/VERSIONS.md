@@ -19,6 +19,8 @@ leser bytter regel; det skjer i 5a-3.
 - **Tilbakefylling og rapport, som egne steg:** `npm run module-credit:backfill` regner alt ut på nytt og kan kjøres flere
   ganger, med korte låser. `npm run module-credit:compare` regner ut gammel og ny regel side om side og lister forskjellene med
   årsak. Lesespørringene står i `scripts/maintenance/module-credit-precheck.sql`. Ingen av dem er kjørt mot stage eller prod.
+- **Revisjoner i historikken:** en revisjon med beståtte gir ny hovedversjon også når versjonen alt var ute, så et sent vedtak
+  på en eldre versjon ikke kan telle. Rapporten lister aktive versjoner som er lavere enn kravet («Kjente mangler» nr. 45).
 - **Funnet underveis:** en anke som snur en bestått, tar ikke beståtten i dagens regel («Kjente mangler» nr. 41). Ikke rettet her.
 - **Ved utrulling:** migreringen er bare utvidelse. Gammel kode leser og skriver ikke det nye. Det den gjør i vinduet, retter
   tilbakefyllingen.
