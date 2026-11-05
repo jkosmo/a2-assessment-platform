@@ -29,6 +29,16 @@ viser at de virker gjennom skillets egen konvolutt.
 - **Nye endepunkter** med svar per kurs: `POST …/module-versions/:id/publish-versioned`, `GET …/publish-preview-versioned` og `POST …/courses/:courseId/publish-pending-versioned`. `pending-versions` lister `affectedCourses`. Før bryteren: `409 module_versioning_not_active`, og ingenting er skrevet.
 - **Gamle kontrakter med bryteren på:** avkrysningen, eller «Publiser nye versjoner» som berører andre kurs med kursbevis, gir `409 client_outdated`. «Publiser kurs» med en modul som har vært publisert før, gir `409 course_publish_has_republished_modules`.
 - **Deltakeren:** modulen åpnet fra kurset bruker kursets status. «Må tas på nytt» vises, og et nytt forsøk starter (`retakeRequired`, bare med bryteren på).
+## 2.134.1 - 2026-11-05
+
+Tilbakemelding fra en deltaker: «Jeg føler meg lurt», og «ikke startet» etter innlevering.
+
+- **KI-erklæringen sier nå hva den gjør, før deltakeren leverer.** Merkelappen sa «Påvirker ikke karakteren», men «KI skrev det meste» og
+  «Lever likevel» sender besvarelsen til sensor, og det sto først etter innlevering. Nå: «Påvirker ikke poengene dine», og der regelen er
+  aktiv for modulen, står «En sensor leser da besvarelsen» på valget, og dialogen sier hva som skjer om deltakeren leverer likevel. I skyggemodus
+  rutes ingen, og da sies det ikke. Regelen er uendret. Se `doc/DECISIONS.md`.
+- **Kursets status etter innlevering.** Statusen ble bare hentet på nytt etter en bestått, så en sak hos sensor eller et stryk sto som «Ikke
+  startet» til siden ble lastet på nytt. Nå «Påbegynt» med en gang, på modulen og kurset, uten at noe tegnes på nytt (en usendt tekst i kursdiskusjonen ville ellers gått tapt). «Til vurdering» krever en endring på serveren og kommer senere.
 
 ## 2.134.0 - 2026-11-05
 

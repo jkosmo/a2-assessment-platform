@@ -346,6 +346,34 @@ export function clearCourseRetakeFlag(courseDetails, moduleId) {
       if (item?.type === "MODULE" && item.moduleId === moduleId && item.retakeRequired) item.retakeRequired = false;
     }
   }
+ * 2.134.1: går «KI skrev det meste» til sensor for denne modulen? Samme regel som `evaluateAiInfluence` på serveren: modulens egen
+ * innstilling først, så den globale. I skyggemodus rutes ingen, og da skal siden ikke love det.
+ */
+export function aiReviewRoutingLive(globalRules, module) {
+  const own = module?.assessmentPolicy?.aiInfluence;
+  const enabled = own?.enabled ?? globalRules?.enabled;
+  const shadowMode = own?.shadowMode ?? globalRules?.shadowMode;
+  return enabled === true && shadowMode !== true;
+}
+
+/**
+ * 2.134.1: en innlevering er opprettet, så modulen er ikke lenger «ikke startet». Kursdetaljene i minnet hentes ellers bare på nytt
+ * etter en bestått, så en sak hos sensor eller et stryk sto som «ikke startet» til siden ble lastet på nytt. Svarer med kursene som
+ * ble endret. Samme overgang som serveren gjør (`moduleStatusOf` i routes/courses.ts).
+ */
+export function markCourseModuleStarted(courseDetails, moduleId) {
+  const changed = [];
+  for (const [courseId, course] of Object.entries(courseDetails ?? {})) {
+    for (const list of [course?.items, course?.modules]) {
+      for (const entry of list ?? []) {
+        if (entry?.moduleId === moduleId && entry.moduleStatus === "NOT_STARTED") {
+          entry.moduleStatus = "IN_PROGRESS";
+          if (!changed.includes(courseId)) changed.push(courseId);
+        }
+      }
+    }
+  }
+  return changed;
 }
 
 export function deriveParticipantFlowGateState(flowState, options = {}) {

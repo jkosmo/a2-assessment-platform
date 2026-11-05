@@ -45,6 +45,8 @@ import {
   clearCourseRetakeFlag,
   courseRetakeApplies,
   deriveParticipantFlowGateState,
+  aiReviewRoutingLive,
+  markCourseModuleStarted,
   earlierResultToShow,
   isAssessmentResultReady,
   findMatchingPreset,
@@ -920,7 +922,8 @@ function aiDeclarationEnabled() {
 // Live routing/nudge only when enabled AND not in shadow mode. In shadow mode we still collect the
 // declaration (the pilot dataset) but show no nudge and route no one.
 function aiDeclarationNudgeLive() {
-  return aiDeclarationEnabled() && participantRuntimeConfig?.aiInfluence?.shadowMode !== true;
+  // 2.134.1: samme regel som serveren, med modulens egen innstilling. Dialogen, teksten og rutingen kan ikke si hver sin ting.
+  return aiReviewRoutingLive(participantRuntimeConfig?.aiInfluence, resolveSelectedModule(loadedModules, selectedModuleId));
 }
 
 // The declaration applies to free-text submissions only (MCQ-only modules have no deliverable).
@@ -963,6 +966,8 @@ function applyAiDeclarationVisibility() {
   const applies = aiDeclarationApplies();
   setHidden(aiDeclarationBlock, !applies);
   if (!applies) clearAiDeclarationSelection();
+  const reviewNotice = document.getElementById("aiDeclarationReviewNotice");
+  if (reviewNotice) setHidden(reviewNotice, !aiDeclarationNudgeLive());
 }
 
 async function confirmAiNudge() {
@@ -978,6 +983,7 @@ async function confirmAiNudge() {
         </div>
         <div class="ai-nudge-body">
           <p>${escapeHtmlP(t("ai.nudge.body"))}</p>
+          <p>${escapeHtmlP(t("ai.nudge.review"))}</p>
           <div class="why">${escapeHtmlP(t("ai.nudge.why"))}</div>
         </div>
         <div class="ai-nudge-foot">
@@ -1286,11 +1292,41 @@ async function openCourseModule(courseId, moduleId) {
   }
 }
 
+/**
+ * 2.134.1: modulen er ikke lenger «ikke startet» når innleveringen er opprettet. Bare merkelappene byttes. Å tegne kursdetaljen på nytt ville
+ * slettet en usendt tekst i kursdiskusjonen (QA-porten).
+ */
+function courseModuleBadge(courseId, moduleId) {
+  const entry = courseDetailCache[courseId]?.items?.find((item) => item?.type === "MODULE" && item.moduleId === moduleId);
+  if (!entry) return null;
+  return document.getElementById(`courseDetail_${courseId}`)?.querySelector(`.course-item[data-key="${courseItemKey(entry)}"] .module-status-badge`) ?? null;
+}
+
+function showCourseModuleStarted(moduleId) {
+  for (const courseId of markCourseModuleStarted(courseDetailCache, moduleId)) {
+    const badge = courseModuleBadge(courseId, moduleId);
+    if (badge) {
+      badge.textContent = t("courses.module.inProgress");
+      badge.classList.add("retake");
+    }
+    const course = participantCourses.find((one) => one.id === courseId);
+    if (course?.progress?.courseStatus !== "NOT_STARTED") continue;
+    course.progress.courseStatus = "IN_PROGRESS";
+    for (const item of document.querySelectorAll(`.course-accordion-item[data-course-id="${courseId}"]`)) {
+      const pill = item.querySelector(".course-accordion-header .module-status-badge:not(.course-new-version-badge)");
+      if (!pill) continue;
+      pill.textContent = t("courses.status.inProgress");
+      pill.classList.add("retake");
+    }
+  }
+}
+
 /** 2.126.0: hold modulens siste innlevering oppdatert i denne økta (statusen hentes bare ved sidelasting). */
 function noteLatestSubmission(moduleId, patch) {
   const module = loadedModules.find((m) => m?.id === moduleId);
   if (!module) return;
   module.participantStatus = { ...(module.participantStatus ?? {}), ...patch };
+  showCourseModuleStarted(moduleId);
   if (isSettledPass({ passFailTotal: patch.latestDecision?.passFailTotal, submissionStatus: patch.latestStatus })) {
     clearCourseRetakeFlag(courseDetailCache, moduleId);
   }

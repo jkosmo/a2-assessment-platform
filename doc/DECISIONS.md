@@ -1488,3 +1488,9 @@ Produkteier: en deltaker skal ikke få kursbevis for et RESTRICTED kurs hen ikke
 gjennom et åpent kurs. Kravet til kursbevis sjekker ikke synlighet i dag, og den kan altså gi bevis for et kurs personen aldri
 kunne åpne. Status: besluttet, ikke bygget. Egen sak etter #934. På en kopi av prod 2026-11-05 hadde ingen fått et slikt bevis:
 ett begrenset kurs, to kursbevis, begge tildelt.
+
+## KI-erklæringen sier hva den gjør, før deltakeren leverer (2026-11-05)
+
+En deltaker meldte: «Jeg føler meg lurt». Merkelappen sa «Påvirker ikke karakteren», men «KI skrev det meste» og «Lever likevel» sender
+besvarelsen til sensor (#475), og det sto først etter innlevering. Produkteier valgte å beholde regelen og si den på forhånd: «Påvirker ikke
+poengene dine», «En sensor leser da besvarelsen» på valget, og en setning i dialogen, begge der regelen er aktiv for modulen. Alternativet var å fjerne regelen. Status: gjort i 2.134.1.
