@@ -91,22 +91,20 @@ export type RevisionTrailEvent = {
  *   - En revisjon på en versjon som alt var ute (samme versjon, eller en som ble aktivert på nytt), gir også ny hovedversjon.
  *     I historikken er ingen nummer gitt ennå. Uten dette kunne et vedtak på en eldre versjon, fattet etter revisjonen, telle
  *     under den nye regelen (Codex, 2026-11-05).
- *   - En versjon som bare står som `supersededByVersionId`, uten rad i sporet: da vet vi ikke når. Den regnes som ny
- *     hovedversjon. `module_passes_superseded` slettes ikke av oppryddingen, så dette skal ikke finnes; lesespørringen i
+ *   - En versjon som `supersededByVersionId` peker på, men som ikke har en rad med beståtte i sporet: da vet vi ikke når, men
+ *     statusraden viser at noen mistet en bestått. Den regnes som ny hovedversjon, også om sporet har en annen rad med null
+ *     beståtte. `module_passes_superseded` slettes ikke av oppryddingen, så dette skal ikke finnes; lesespørringen i
  *     `scripts/maintenance/module-credit-precheck.sql` sjekker det.
  */
 export function findVersionsStartingMajor(trail: RevisionTrailEvent[], supersededByVersionIds: Iterable<string>): Map<string, Date | null> {
   const starts = new Map<string, Date | null>();
-  const seenInTrail = new Set<string>();
   for (const event of trail) {
-    if (!event.versionId) continue;
-    seenInTrail.add(event.versionId);
-    if (!event.supersededCount) continue;
+    if (!event.versionId || !event.supersededCount) continue;
     const known = starts.get(event.versionId);
     if (!known || event.at > known) starts.set(event.versionId, event.at);
   }
   for (const versionId of supersededByVersionIds) {
-    if (!seenInTrail.has(versionId)) starts.set(versionId, null);
+    if (!starts.has(versionId)) starts.set(versionId, null);
   }
   return starts;
 }

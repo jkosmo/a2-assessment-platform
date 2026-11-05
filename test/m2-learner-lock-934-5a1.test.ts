@@ -313,10 +313,19 @@ describe("#934 5a-1: lesingen sender versjonen deltakeren så", () => {
     expect(await reads(userId, course.courseId)).toEqual([]);
   });
 
+  it("lesing med en versjon som ikke er tekst: 400 validation_error, og ingenting er skrevet", async () => {
+    const { headers, userId } = await learner();
+    const course = await createCourse("lesing-ugyldig");
+    const response = await post(headers, course.courseId, course.section.sectionId, { sectionVersionId: 7 });
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("validation_error");
+    expect(await reads(userId, course.courseId)).toEqual([]);
+  });
+
   it("versjonen mangler (en fane fra før utrullingen): 409 client_outdated, og ingenting er skrevet", async () => {
     const { headers, userId } = await learner();
     const course = await createCourse("lesing-mangler");
-    for (const body of [undefined, {}, { sectionVersionId: "" }, { sectionVersionId: 7 }]) {
+    for (const body of [undefined, {}, { sectionVersionId: "" }]) {
       const response = await post(headers, course.courseId, course.section.sectionId, body);
       expect(response.status).toBe(409);
       expect(response.body.error).toBe("client_outdated");

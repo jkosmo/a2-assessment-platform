@@ -129,9 +129,12 @@ describe("findVersionsStartingMajor: hvilke versjoner startet en ny hovedversjon
     expect([...findVersionsStartingMajor([], ["v5"])]).toEqual([["v5", null]]);
   });
 
-  it("raden i sporet avgjør også når statusraden peker på versjonen", () => {
+  it("en rad med beståtte gir tidspunktet også når statusraden peker på versjonen", () => {
     expect([...findVersionsStartingMajor([revision("v2", 2, 3)], ["v2"])]).toEqual([["v2", at(2)]]);
-    expect(findVersionsStartingMajor([revision("v2", 2, 0)], ["v2"]).size).toBe(0);
+  });
+
+  it("en rad med null beståtte skjuler ikke at statusraden peker på versjonen: noen mistet en bestått", () => {
+    expect([...findVersionsStartingMajor([revision("v2", 2, 0)], ["v2"])]).toEqual([["v2", null]]);
   });
 });
 

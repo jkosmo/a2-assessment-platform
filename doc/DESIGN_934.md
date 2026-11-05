@@ -1212,6 +1212,10 @@ to siste er dagens regel, som først endres i 5a-3.
     bestå modulen slik at det teller. Ny kode avviser det samme (`409 module_version_outdated`), så det kan bare gjelde historikk.
     Rapporten lister dem (`activeVersionBelowRequirement`) og er rød. Før bryteren slås på, må forfatteren publisere en ny versjon av
     modulen.
+46. **En e-post om hovedversjon kan utebli ved et databasebrudd på siste forsøk** (4b, Codex 2026-11-05). Feiler både oppslaget og
+    tilbakestillingen på outboxens siste forsøk, blir raden stående som `queued`, uten hendelse. Jobben leser bare `waiting` og
+    gamle `sending`, så personen får ingen e-post og ingen ser det. Ingen får feil eller dobbel e-post, så det stopper ikke
+    utrulling. Rettes med en oppsamling av gamle `queued`-rader, men det må tenkes gjennom så det ikke gir dobbel sending.
 
 ### Gjennomgang av planen
 

@@ -71,6 +71,44 @@ test.describe("#934 5a-1: innleveringen", () => {
     expect(posted).toMatchObject({ moduleId: "m-1", moduleVersionId: "mv-1" });
   });
 
+  test("modullista byttes mens refleksjonsdialogen står åpen: svaret sendes med versjonen det ble skrevet til", async ({ page }) => {
+    await mockModule(page);
+    await page.route("**/participant/config", (route: Route) =>
+      route.fulfill(json({
+        authMode: "mock",
+        navigation: { items: [], workspaceItems: [] },
+        identityDefaults: { participant: { userId: "participant-1", email: "p@x.no", name: "P", department: "X", roles: ["PARTICIPANT"] } },
+        calibrationWorkspace: { accessRoles: [] },
+        flow: { autoStartAfterMcq: false },
+        output: {},
+        aiInfluence: { enabled: true, shadowMode: false },
+      })),
+    );
+    let posted: Record<string, unknown> | null = null;
+    await page.route("**/api/submissions", (route: Route) => {
+      posted = route.request().postDataJSON();
+      return route.fulfill(json(CHANGED, 409));
+    });
+    await openModuleAndWrite(page);
+    await page.locator('.ai-declaration-opt[data-v="autonomous"]').click();
+    await page.locator("#createSubmission").click();
+    const nudge = page.locator(".ai-nudge-overlay");
+    await expect(nudge).toBeVisible();
+
+    // Språkbyttet henter modullista på nytt, og nå er v2 aktiv.
+    await page.route("**/api/modules**", (route: Route) =>
+      route.fulfill(json({ modules: [{ ...MODULE, activeVersion: { id: "mv-2", versionNo: 2 } }] })),
+    );
+    const refetched = page.waitForResponse("**/api/modules**");
+    await page.locator("#localeSelect").selectOption("en-GB");
+    await refetched;
+    await nudge.locator('[data-nudge="insist"]').click();
+
+    await expect.poll(() => posted !== null).toBe(true);
+    expect(posted).toMatchObject({ moduleVersionId: "mv-1" });
+    expect(Object.values((posted as unknown as { responseJson: Record<string, string> }).responseJson)).toContain(ANSWER);
+  });
+
   for (const [code, body, text] of [
     ["module_version_changed", CHANGED, "Oppgaven er endret siden du åpnet siden"],
     ["client_outdated", OUTDATED, "Siden du har åpen, er utdatert"],

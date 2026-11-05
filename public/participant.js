@@ -3197,6 +3197,11 @@ createSubmissionButton.addEventListener("click", async () => {
       }
 
       const moduleId = selectedModuleId;
+      // #934 skive 5a-1: versjonen siden viser, lest samtidig med svaret og før noe venter. Dialogen under kan stå åpen mens
+      // `loadedModules` byttes (språkbytte), og da ville et svar på den gamle versjonen blitt sendt med den nye. Er versjonen
+      // ikke lenger aktiv, svarer serveren 409. Svaret står i feltene og i kladden (autolagringen hvert kvarte sekund, og
+      // `beforeunload`), så det er der etter at siden er lastet på nytt.
+      const seenVersionId = resolveSelectedModule(loadedModules, moduleId)?.activeVersion?.id;
       const responseJson = {};
       for (const field of currentSubmissionFields) {
         const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
@@ -3227,10 +3232,6 @@ createSubmissionButton.addEventListener("click", async () => {
 
       // MCQ-only modules send an empty submission (no free-text); acknowledgement is implicit
       // since there is no deliverable to take responsibility for (#525).
-      // #934 skive 5a-1: versjonen siden viser. `loadedModules` tegnes hver gang den byttes, så dette er versjonen
-      // deltakeren har foran seg. Er den ikke lenger aktiv, svarer serveren 409. Svaret står i feltene og i kladden
-      // (autolagringen hvert kvarte sekund, og `beforeunload`), så det er der etter at siden er lastet på nytt.
-      const seenVersionId = resolveSelectedModule(loadedModules, moduleId)?.activeVersion?.id;
       const body = await apiFetch("/api/submissions", headers, {
         method: "POST",
         body: JSON.stringify({

@@ -21,6 +21,9 @@ leser bytter regel; det skjer i 5a-3.
   årsak. Lesespørringene står i `scripts/maintenance/module-credit-precheck.sql`. Ingen av dem er kjørt mot stage eller prod.
 - **Revisjoner i historikken:** en revisjon med beståtte gir ny hovedversjon også når versjonen alt var ute, så et sent vedtak
   på en eldre versjon ikke kan telle. Rapporten lister aktive versjoner som er lavere enn kravet («Kjente mangler» nr. 45).
+- **Rettinger i 5a-1 etter Codex:** deltakersiden leser versjonen samtidig med svaret, før refleksjonsdialogen kan stå åpen. Ellers
+  kunne et svar på v1 bli sendt med v2 hvis modullista ble hentet på nytt i mellomtiden. `POST` for lest seksjon validerer nå
+  `sectionVersionId` med Zod: annet enn tekst gir `400 validation_error`.
 - **Funnet underveis:** en anke som snur en bestått, tar ikke beståtten i dagens regel («Kjente mangler» nr. 41). Ikke rettet her.
 - **Ved utrulling:** migreringen er bare utvidelse. Gammel kode leser og skriver ikke det nye. Det den gjør i vinduet, retter
   tilbakefyllingen.

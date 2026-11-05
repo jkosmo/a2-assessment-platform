@@ -775,6 +775,28 @@ describe("#934 5a-2: tilbakefyllingen", () => {
     expect(missing.some((row) => row.moduleId === moduleId)).toBe(true);
   });
 
+  it("en revisjon uten spor skjules ikke av en annen rad med null beståtte: ny hovedversjon, og lesespørringen sier fra", async () => {
+    const { moduleId, versionId: v1 } = await publishedModule();
+    const courseId = await courseWith([moduleId]);
+    const v2 = await draft(moduleId, 2);
+    await publishOk(moduleId, v2);
+    const u = await learner();
+    await legacyPass(u.userId, moduleId, v1);
+    await runContentWrite(async (tx) => {
+      await tx.certificationStatus.updateMany({ where: { moduleId }, data: { status: "SUPERSEDED", supersededByVersionId: v2 } });
+      await recordAuditEvent({ entityType: auditEntityTypes.module, entityId: moduleId, action: auditActions.adminContent.modulePassesSuperseded, actorId: undefined, metadata: { moduleId, moduleVersionId: v2, supersededCount: 0, notifiedCount: 0 } }, tx);
+    });
+    const sql = readFileSync("scripts/maintenance/module-credit-precheck.sql", "utf8");
+    const withoutTrail = sql.split(";").map((part) => part.trim()).filter(Boolean)[2]!;
+    const missing = await prisma.$queryRawUnsafe<Array<{ moduleId: string }>>(withoutTrail);
+    expect(missing.some((row) => row.moduleId === moduleId)).toBe(true);
+
+    await forgetNumbers(moduleId);
+    await backfillModuleCredit(scope(moduleId, u));
+    expect([await numberOf(v1), await numberOf(v2)]).toEqual(["1.0", "2.0"]);
+    expect(await requirementOf(courseId, moduleId)).toBe(2);
+  });
+
   it("gamle DUE og EXPIRED er bestått i begge regler", async () => {
     for (const status of ["DUE", "EXPIRED"] as const) {
       const { moduleId, versionId } = await publishedModule();

@@ -11,11 +11,13 @@ JOIN "AssessmentDecision" d ON d.id = cs."latestDecisionId"
 WHERE cs.status = 'SUPERSEDED' AND d."moduleVersionId" = cs."supersededByVersionId"
 GROUP BY cs."moduleId", cs."supersededByVersionId";
 
--- 3. Revisjoner uten spor: SUPERSEDED-rader uten en `module_passes_superseded` for samme modul og versjon. Skal gi null rader.
+-- 3. Revisjoner uten spor: SUPERSEDED-rader uten en `module_passes_superseded` med beståtte for samme modul og versjon. En rad med
+--    null beståtte teller ikke som spor. Skal gi null rader.
 SELECT cs."moduleId", cs."supersededByVersionId", count(*) AS rows FROM "CertificationStatus" cs
 WHERE cs.status = 'SUPERSEDED' AND NOT EXISTS (
   SELECT 1 FROM "AuditEvent" a
   WHERE a.action = 'module_passes_superseded' AND a."entityType" = 'module' AND a."entityId" = cs."moduleId"
     AND a."metadataJson" LIKE '%' || cs."supersededByVersionId" || '%'
+    AND a."metadataJson" NOT LIKE '%"supersededCount":0%'
 )
 GROUP BY cs."moduleId", cs."supersededByVersionId";

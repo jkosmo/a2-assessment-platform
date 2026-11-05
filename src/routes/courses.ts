@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { courseRepository, createCourseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
 import { runContentReadForLearner } from "../db/contentLock.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
@@ -26,6 +27,9 @@ import { hasCertificateBackground } from "../modules/platformConfig/certificateB
 import { discussionsRouter } from "./discussions.js";
 
 const coursesRouter = Router();
+
+// #934 skive 5a-1: valgfri i skjemaet, som ved innleveringen, så en fane fra før utrullingen får `409 client_outdated`.
+const markSectionReadSchema = z.object({ sectionVersionId: z.string().optional() });
 
 // #495/T-QA-2: diskusjon/Q&A under kurs-stien så authz arver «har tilgang til publisert kurs».
 // mergeParams lar sub-routeren lese :courseId. Registreres tidlig; de spesifikke metodene/stiene
@@ -495,6 +499,11 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     response.status(401).json({ error: "unauthorized" });
     return;
   }
+  const parsed = markSectionReadSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
   try {
     // #959: ÉN dør. Signaturen krever hvem som spør, så synligheten kan ikke bli glemt her —
     // og `null` dekker alle tre årsakene (finnes ikke / ikke publisert / ikke synlig for deg)
@@ -508,7 +517,7 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     if (!course) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
-    const seenVersionId: unknown = request.body?.sectionVersionId;
+    const seenVersionId = parsed.data.sectionVersionId;
     // #946: markeringen og bevisporten commiter sammen. Sto tidligere som to uavhengige skriv:
     // seksjonen ble markert lest, og feilet porten etterpå, var kurset ferdig uten at noe bevis
     // ble utstedt — og ingenting rettet det før deltakeren selv åpnet bevissiden.
@@ -532,7 +541,7 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
       }
       // #934 skive 5a-1: en fane fra før utrullingen sender ikke versjonen, og en som har stått åpen, kan ha lest en
       // eldre tekst. Lesingen registreres bare på versjonen deltakeren faktisk så. Ingenting er skrevet ved 409.
-      if (typeof seenVersionId !== "string" || seenVersionId.length === 0) {
+      if (!seenVersionId) {
         throw new ConflictError("client_outdated", "This page is out of date. Nothing was recorded; reload the page.", { sectionId: request.params.sectionId });
       }
       const section = await tx.courseSection.findUnique({ where: { id: request.params.sectionId }, select: { activeVersionId: true } });
