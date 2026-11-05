@@ -1349,7 +1349,7 @@ to siste er regelen så lenge bryteren er av, og faller bort når den slås på 
 
 ### Spørsmål til produkteier
 
-**E-posten i en ekte innboks** (stage, 2026-11-05, `test/stage/manuell-934-epost-outlook.spec.ts`): kom fram i Outlook til jko@a-2.no. Båtbildet
+**E-posten i en ekte innboks** (stage, 2026-11-05, `test/stage/manuell-934-epost-outlook.spec.ts`): kom fram i Outlook til testkontoen. Båtbildet
 vises, ingen lenker, riktig tittel, versjon og språk. Produkteier har sett den.
 
 **Besvart 2026-11-05, alle anbefalingene:**
