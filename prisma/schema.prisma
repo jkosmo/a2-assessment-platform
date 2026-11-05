@@ -118,6 +118,8 @@ model User {
   agentAuthoringTokens          AgentAuthoringToken[]    @relation("AgentAuthoringTokens")
   contentOwnerships             ContentOwner[]           @relation("ContentOwnerships")
   courseVersionNotices          CourseVersionNotice[]
+  // #934 skive 5a-2: beståtte per innlevering.
+  modulePasses                  ModulePass[]
 }
 
 // AA-3 (#651): kortlivet, scopet token for agent-orkestrerte draft-operasjoner.
@@ -260,6 +262,9 @@ model Module {
   rubricVersions         RubricVersion[]
   promptTemplateVersions PromptTemplateVersion[]
   courseItems            CourseItem[]
+  // #934 skive 5a-2: beståtte per innlevering, og den laveste hovedversjonen som teller per kurs.
+  modulePasses           ModulePass[]
+  courseRequirements     CourseModuleRequirement[]
 }
 
 // Whether a module bundles a free-text submission (LLM-graded) plus MCQ, or is MCQ-only
@@ -275,6 +280,10 @@ model ModuleVersion {
   id                       String                 @id @default(cuid())
   moduleId                 String
   versionNo                Int
+  // #934 skive 5a-2: versjonsnummeret, hoved.mindre. Tomt for utkast. Settes én gang, første gang versjonen
+  // publiseres, under den eksklusive innholdslåsen, og endres aldri etterpå. `versionNo` står som løpenummer.
+  versionMajor             Int?
+  versionMinor             Int?
   // taskText / rubricVersionId / promptTemplateVersionId are free-text-assessment specific and
   // are null for MCQ_ONLY modules (#525). They remain set for FREETEXT_PLUS_MCQ and FREETEXT_ONLY.
   taskText                 String?
@@ -306,8 +315,12 @@ model ModuleVersion {
   llmEvaluations           LLMEvaluation[]
   // #997: sertifiseringer denne versjonen gjorde foreldet (revisjon merket ved publisering).
   supersededCertifications CertificationStatus[]  @relation("SupersededCertifications")
+  modulePasses             ModulePass[]
 
   @@unique([moduleId, versionNo])
+  // #934 skive 5a-2: to publiseringer kan ikke få samme nummer. PostgreSQL regner tomme verdier som ulike, så utkast
+  // treffer ikke nøkkelen.
+  @@unique([moduleId, versionMajor, versionMinor])
   @@index([moduleId, publishedAt])
 }
 
@@ -336,6 +349,7 @@ model Submission {
   appeals            Appeal[]
   manualReviews      ManualReview[]
   assessmentJobs     AssessmentJob[]
+  modulePass         ModulePass?
 
   @@index([userId, submittedAt])
   @@index([moduleId, submittedAt])
@@ -511,6 +525,7 @@ model AssessmentDecision {
   parentDecision          AssessmentDecision?    @relation("DecisionLineage", fields: [parentDecisionId], references: [id], onDelete: SetNull)
   childDecisions          AssessmentDecision[]   @relation("DecisionLineage")
   certifications          CertificationStatus[]
+  modulePasses            ModulePass[]
 
   @@index([submissionId, finalisedAt])
 }
@@ -589,6 +604,53 @@ model CertificationStatus {
 
   @@unique([userId, moduleId])
   @@index([moduleId, status])
+}
+
+// #934 skive 5a-2 (doc/DESIGN_934.md, «5a»): én rad per bestått innlevering. Skrives der alle vedtak går gjennom
+// (`upsertCertificationStatusFromDecision`), under deltakerlåsen. Et senere stryk på SAMME innlevering sletter raden; et
+// stryk på en annen rører den ikke (produkteier 2026-11-03, svar f). Ingen leser fremdrift herfra før 5a-3.
+//
+// Radene kan bygges på nytt fra vedtakene (tilbakefyllingen), så de følger det de er regnet ut fra: sletting
+// av innlevering, vedtak, versjon, modul eller bruker tar raden med seg, og ingen gammel kode blir stoppet av dem.
+model ModulePass {
+  id              String             @id @default(cuid())
+  userId          String
+  moduleId        String
+  submissionId    String             @unique
+  decisionId      String
+  moduleVersionId String
+  // Når vedtaket ble fattet. Regelen ser ikke på tidspunktet (doc/DESIGN_934.md, «Hvorfor dagens #997 ikke holder»).
+  passedAt        DateTime
+  // Settes bare av tilbakefyllingen, for beståtte som #997 tok bort. En slik rad teller aldri.
+  invalidatedAt   DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module          Module             @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  submission      Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  decision        AssessmentDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  moduleVersion   ModuleVersion      @relation(fields: [moduleVersionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, moduleId])
+  @@index([moduleId])
+  @@index([moduleVersionId])
+  @@index([decisionId])
+}
+
+// #934 skive 5a-2: for hvert kurs og hver modul i det, den laveste hovedversjonen av modulen som teller der. Heves bare av
+// en hovedversjon, senkes aldri, og raden slettes når modulen tas ut av kurset. Skrives under innholdslåsen.
+model CourseModuleRequirement {
+  id             String   @id @default(cuid())
+  courseId       String
+  moduleId       String
+  minModuleMajor Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module         Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, moduleId])
+  @@index([moduleId])
 }
 
 model AuditEvent {
@@ -688,6 +750,8 @@ model Course {
   discussionThreads  DiscussionThread[]
   // 2.102.0: tema samler kursene i «Mine kurs». Et kurs kan ha flere, eller ingen.
   themes             CourseThemeAssignment[]
+  // #934 skive 5a-2: den laveste hovedversjonen av hver modul som teller i dette kurset.
+  moduleRequirements CourseModuleRequirement[]
 }
 
 // 2.102.0: et tema i «Mine kurs» (produkteier 2026-10-25: «det blir relativt mange kurs som er

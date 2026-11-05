@@ -12,7 +12,10 @@ const findByUserAndModule = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 // #934 skive 5a-1: transaksjonen er påkrevd. Den holder deltakerlåsen.
-const TX = {} as never;
+// #934 skive 5a-2: og den skriver raden per innlevering (`test/m2-module-credit-934-5a2.test.ts` måler det mot databasen).
+const modulePassUpsert = vi.fn();
+const modulePassDeleteMany = vi.fn();
+const TX = { modulePass: { upsert: modulePassUpsert, deleteMany: modulePassDeleteMany } } as never;
 
 vi.mock("../../src/repositories/decisionRepository.js", () => ({
   createDecisionRepository: () => ({

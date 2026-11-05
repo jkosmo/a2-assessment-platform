@@ -139,6 +139,10 @@ meRouter.get("/data", async (request, response, next) => {
           certifications: {
             select: { moduleId: true, status: true, passedAt: true, expiryDate: true, updatedAt: true },
           },
+          // #934 skive 5a-2: det som er lagret om hvilke innleveringer som har bestått. Ingen leser fremdrift herfra ennå.
+          modulePasses: {
+            select: { moduleId: true, moduleVersionId: true, submissionId: true, passedAt: true, invalidatedAt: true },
+          },
         },
       }),
       prisma.submission.findMany({

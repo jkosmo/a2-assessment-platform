@@ -210,6 +210,17 @@ Text in a draft for fields the module no longer has is carried along and shown r
 `apiFetch` (`api-client.js`) retries `503 content_busy` after 1, 2 and 4 seconds, on every call outside `/api/admin/` and `/api/calibration/`. Guards:
 `test/content-lock-write-guard.test.js`, `test/m2-learner-lock-934-5a1.test.ts`,
 `test/e2e/participant-seen-version-934-5a1.spec.ts`, `test/dom/api-client-content-busy.dom.test.js`.
+**Module version numbers, requirement per course, passes per submission (#934 slice 5a-2, 2.134.0).** Written next to today's rule;
+no reader of progress has moved (that is 5a-3). `ModuleVersion.versionMajor`/`versionMinor` are set in one place,
+`createAdminContentWriter(tx).publishModuleVersion` (`resolvePublishNumber` in `moduleVersioning.ts`), under the exclusive content
+lock, with history lacking numbers numbered first (`numberModuleHistory`). `CourseModuleRequirement` is written only in
+`moduleVersioning.ts`: `raiseModuleRequirements` on a major version, `syncModuleRequirements` wherever course items are written
+(`writeCourseItems`, `setCourseModules`). `ModulePass` is written by `recordModulePassFromDecision`, called from
+`upsertCertificationStatusFromDecision`, before its downgrade guard. `findCreditedModuleIds`/`findCreditedModules`
+(`moduleCredit.ts`) is the rule 5a-3 switches on. Backfill `npm run module-credit:backfill` (`moduleCreditBackfill.ts`), comparison
+`npm run module-credit:compare` (`moduleCreditComparison.ts`), read-only checks `scripts/maintenance/module-credit-precheck.sql`. `409
+module_version_number_fixed` and `409 module_version_outdated`: texts in `participant-translations.js`. Guards:
+`test/content-lock-write-guard.test.js` (placement of these writes), `test/m2-module-credit-934-5a2.test.ts`.
 
 **Guards:** `test/m2-course-versions-934.test.ts` (through the routes),
 `test/e2e/admin-content-course-version-934.spec.ts` (dialogs), `test/e2e/course-versions-934.spec.ts`

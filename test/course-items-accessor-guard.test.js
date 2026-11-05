@@ -47,6 +47,18 @@ const RAW_READ = /\.courseItem\s*\.\s*findMany\b/g;
  */
 const EXCEPTIONS = [
   {
+    file: "modules/adminContent/moduleVersioning.ts",
+    reason:
+      "#934 skive 5a-2: kravet per kurs og modul. Hvilke kurs modulen ligger i, og hvilke moduler kurset har, for å skrive "
+      + "kravet. Også arkiverte og avpubliserte teller, så en tilgjengelighetsregel ville gitt feil svar.",
+  },
+  {
+    file: "modules/course/moduleCreditComparison.ts",
+    reason:
+      "#934 skive 5a-2: sammenligningsrapporten går gjennom alle par av kurs og modul på plattformen. Ingen visning, "
+      + "og ingen deltakerflate.",
+  },
+  {
     file: "modules/course/contentLifecycle.ts",
     reason:
       "findCoursesForSections — omvendt oppslag (seksjon → kurs) for «Brukt i kurs»-kolonnen i "

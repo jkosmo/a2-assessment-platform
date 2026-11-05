@@ -353,6 +353,15 @@ Two rules for clients:
   locale is the supported way to say "not translated". The same holds for an optional field the
   content does not have (`rationale`, `description`): omit the key.
 
+#### Module version numbers (#934 slice 5a-2)
+
+`POST …/module-versions/:moduleVersionId/publish` and `POST /api/calibration/workspace/publish-thresholds` also return
+`versionMajor` and `versionMinor`. The number is given once, the first time a version is published: 1.0, then a minor version
+unless `supersedesEarlierPasses: true`, which starts a new major version. Two refusals, with nothing written:
+
+- **409 `module_version_number_fixed`**: `supersedesEarlierPasses: true` on a version that already has a number.
+- **409 `module_version_outdated`**: the version belongs to a lower major version than the module's highest.
+
 #### Publish translation gate (#896 S4)
 
 Publishing is blocked when a participant-facing field is missing one of the three locales

@@ -862,6 +862,133 @@ retter neste kjøring av tilbakefyllingen.
 **QA stopper på:** en vei som setter en modul live, endrer et kurs eller fatter et vedtak uten å skrive de nye radene,
 eller at en bestått som #997 tok bort, teller igjen.
 
+#### 5a-2 — bygget (2.134.0)
+
+**Hva som leser det nye:** bare sammenligningsrapporten. `CertificationStatus`, kursbeviset, «Mine kurs», kursdetaljen og
+rapportene leser som før. Det som er endret for noen, er to avvisninger ved publisering, se «Det forfatteren merker», og
+`GET /api/me/data`, som nå også viser radene i `ModulePass`, fordi den skal vise det som er lagret om personen.
+
+**Filene:**
+- `src/modules/adminContent/moduleVersioning.ts`: nummereringen (`numberModuleVersions` og `findVersionsStartingMajor` er rene
+  funksjoner), `resolvePublishNumber`, `raiseModuleRequirements` og `syncModuleRequirements`.
+- `src/modules/certification/modulePass.ts`: raden per innlevering.
+- `src/modules/course/moduleCredit.ts`: `findCreditedModuleIds` og `findCreditedModules`, den ene regelen 5a-3 skal bruke.
+- `src/modules/course/moduleCreditBackfill.ts` og `moduleCreditComparison.ts`, med skriptene `npm run module-credit:backfill`
+  og `npm run module-credit:compare` (`scripts/maintenance/`), og lesespørringene i
+  `scripts/maintenance/module-credit-precheck.sql`.
+
+**Veier inn** (grepet 2026-11-04). Vakta `test/content-lock-write-guard.test.js` nekter alle andre, se under.
+- *Setter en modulversjon live, og gir nummer:* bare `createAdminContentWriter(tx).publishModuleVersion`
+  (`adminContentRepository.ts`). `versionKind` er påkrevd. Kallerne:
+  - `publishModuleVersion` (`adminContentCommands.ts`): avkrysningen gir hoved, ellers mindre. Den kalles fra modulens egen
+    rute (`POST …/module-versions/:id/publish`), «Publiser kurs» (`publishCourseCascade`, alltid mindre), «Publiser nye
+    versjoner» (`publishCoursePendingVersions`, hoved bare når avkrysset og noen har bestått den modulen), og modulimporten
+    (`contentImportService.ts`, alltid mindre, også kursimporten som går gjennom den);
+  - `publishModuleVersionWithThresholds` (kalibreringen, `POST /api/calibration/workspace/publish-thresholds`): mindre.
+  - *Agent-tokenet* kan ikke publisere: `agentTokenScope.ts` slipper bare gjennom modulimport med `autoPublish: false` og
+    `mode: createNew`, utkast, og `PUT …/items` på upubliserte kurs.
+  - `archiveModule`, `unpublishModule` og `courseCascadeDeleteService` setter bare modulens `activeVersionId` til `null`. Ingen av
+    dem gir eller tar nummer.
+- *Skriver versjonsnummeret:* `publishModuleVersion` over, og `numberModuleHistory` (for historikk uten nummer, kalt ved
+  publisering, ved `syncModuleRequirements` og av tilbakefyllingen). `createModuleVersion` kan ikke sette det.
+- *Skriver kursets elementer, og kaller derfor `syncModuleRequirements`:* `writeCourseItems` (fra `setCourseItems` og
+  `updateCourse`, altså `PUT …/items`, `PUT …/content`, importen som oppdaterer, og agent-tokenet) og
+  `setCourseModules` (`PUT …/modules`, importen som bytter ut alt). Unntak: `courseCascadeDeleteService` sletter hele kurset,
+  og fremmednøkkelen tar radene.
+- *Skriver kravet:* bare `moduleVersioning.ts` (`raiseModuleRequirements`, `syncModuleRequirements` og tilbakefyllingen).
+  Sletting av kurs eller modul tar radene med seg (CASCADE).
+- *Fatter et vedtak, og går derfor gjennom `upsertCertificationStatusFromDecision`:* `createMcqOnlyDecision` og
+  `createAssessmentDecision` (`decisionService.ts`; en sak som går til manuell vurdering, skriver verken status eller rad), og
+  `appendDecisionWithLineage` fra `manualReviewService` og `appealService`. Raden skrives FØR vakta mot nedgradering, som
+  returnerer tidlig. `decisionRepository.createAssessmentDecision` er det eneste stedet et vedtak lages.
+- *Skriver `ModulePass`:* `recordModulePassFromDecision` og tilbakefyllingen. Sletting følger innlevering, vedtak, versjon,
+  modul og bruker (CASCADE). Ingen kode sletter innleveringer eller vedtak i dag.
+- *Leser det nye:* `findCreditedModules` (rapporten) og `GET /api/me/data`. `ModuleVersion.versionMajor` og `versionMinor` står
+  i svaret fra publiseringsrutene og kalibreringen, og i revisjonssporet `module_version_published`.
+- *Kursbevis, status og øvrige lesere:* uendret. De er listet i «Lesere av kursbevis» og flyttes i 5a-3.
+- *Utenfor `src/`:* `prisma/seedCore.ts` og `scripts/runtime/bootstrapSeed.mjs` lager aktive versjoner direkte. De kjøres bare i test
+  og utenfor prod. Radene får nummer ved neste publisering eller tilbakefylling, og vakta ser dem ikke. Ingen skript i
+  `scripts/maintenance/` setter en modul live eller skriver kursets elementer.
+
+**Avgjørelser der planen var åpen:**
+- **Historikk uten nummer** får nummer av samme funksjon, enten det skjer ved publisering eller i tilbakefyllingen. Derfor kan
+  ingen publisering regne feil fra en tom historikk, om noen publiserer etter utrullingen og før tilbakefyllingen. Gammel kode
+  under utrullingen retter seg ved neste publisering eller tilbakefylling.
+- **En versjon er «ute»** når den er publisert, er aktiv, eller noen har levert på den. Bare `publishedAt` holder ikke: da kunne
+  et vedtak havne på en versjon uten nummer, som aldri teller.
+- **«Med mindre den var nummerert fra før» i historikken:** en revisjon gir ny hovedversjon bare om versjonen ble publisert for
+  første gang i samme transaksjon. Det sjekkes i revisjonssporet: en tidligere `module_version_published` for samme versjon
+  betyr at den alt var ute. Beståttene den tok bort, ugyldiggjøres uansett.
+- **En revisjon uten beståtte** (`supersededCount: 0` i sporet) blir mindre i historikken, slik planen sier. Den ugyldiggjør
+  likevel beståtte fra før seg: en som strøk på nytt før revisjonen, sto som ikke bestått og skal ikke få noe tilbake.
+- **«Ferdig vurdert innlevering»** kan ikke leses av statusen på innleveringen. En åpen anke setter en bestått innlevering til
+  `UNDER_REVIEW`, og beståtten står til anken er avgjort (`appealService.ts:55`). Regelen speiler hvilke vedtak som faktisk gikk
+  gjennom `upsertCertificationStatusFromDecision`: siste vedtak per innlevering, når det er bestått, unntatt et automatisk vedtak
+  på en innlevering som har en manuell vurdering, og unntatt `SUPERSEDED` og `REJECTED`. Vedtak fra før #948 kan si bestått
+  mens saken lå hos sensor; de teller ikke, og status ble aldri skrevet for dem.
+- **Mangler kravet eller nummeret, teller beståtten ikke** i den nye regelen. Rapporten lister det.
+- **Tilbakefyllingen nekter å kjøre** når `module_pass_per_course = on`. Da er kravene forfatterens valg.
+
+**Det forfatteren merker** (sannhetstabellen, de to siste radene). Dette er det eneste utfallet i skiva som endrer seg, og det
+står i planen:
+- den aktive versjonen, eller en annen versjon som har nummer, publisert med avkrysningen: `409 module_version_number_fixed`.
+  I dag tar det beståtten fra alle og sender e-post. Forfatteren kan nå det fra «Publiser» på en modul uten nytt utkast, når noen
+  har bestått, ved å svare ja på spørsmålet;
+- en versjon med lavere hovedversjon enn den høyeste: `409 module_version_outdated`. Det nås bare gjennom API-et; siden
+  publiserer den nyeste. «Gjenopprett» lager en ny versjon.
+
+Teksten står i `participant-translations.js`. Ingenting er skrevet ved 409.
+
+**Lesespørringer før tilbakefyllingen** (`scripts/maintenance/module-credit-precheck.sql`, bare SELECT; integrasjonstesten kjører
+fila). Ikke kjørt mot stage eller prod ennå.
+
+```sql
+-- 1. SUPERSEDED-rader som peker på samme versjon som vedtaket de tok bort (Codex runde 2 nr. 7).
+SELECT count(*) AS same_version_superseded FROM "CertificationStatus" cs
+JOIN "AssessmentDecision" d ON d.id = cs."latestDecisionId"
+WHERE cs.status = 'SUPERSEDED' AND d."moduleVersionId" = cs."supersededByVersionId";
+
+-- 2. De samme radene per modul og versjon, så det kan sjekkes for hånd.
+SELECT cs."moduleId", cs."supersededByVersionId", count(*) AS rows FROM "CertificationStatus" cs
+JOIN "AssessmentDecision" d ON d.id = cs."latestDecisionId"
+WHERE cs.status = 'SUPERSEDED' AND d."moduleVersionId" = cs."supersededByVersionId"
+GROUP BY cs."moduleId", cs."supersededByVersionId";
+
+-- 3. Revisjoner uten spor: SUPERSEDED-rader uten en `module_passes_superseded` for samme modul og versjon. Skal gi null rader.
+SELECT cs."moduleId", cs."supersededByVersionId", count(*) AS rows FROM "CertificationStatus" cs
+WHERE cs.status = 'SUPERSEDED' AND NOT EXISTS (
+  SELECT 1 FROM "AuditEvent" a
+  WHERE a.action = 'module_passes_superseded' AND a."entityType" = 'module' AND a."entityId" = cs."moduleId"
+    AND a."metadataJson" LIKE '%' || cs."supersededByVersionId" || '%'
+)
+GROUP BY cs."moduleId", cs."supersededByVersionId";
+```
+
+`module_passes_superseded` er ikke blant handlingene `auditRetentionService.ts` rydder, så sporet skal stå. Spørring 3 sjekker at
+det stemmer. Rader den finner, ugyldiggjøres likevel av tilbakefyllingen, for de står som `SUPERSEDED`.
+
+**Rapporten:** per deltaker, kurs og modul, gammel og ny regel, med årsak og `expected`. Forventet er
+`retake_failed_after_pass` og `pass_on_old_version_after_revision`. Alle andre årsaker er feil, og koden blir 1:
+`overturned_pass_kept_by_old_rule` (se «Kjente mangler» nr. 41), `superseded_pass_counts_again`,
+`invalidated_but_old_rule_counts`, `missing_requirement`, `pass_on_unnumbered_version` og `unexplained`. I tillegg lister den hull
+i dataene: versjoner som er ute uten nummer, manglende krav, krav uten element, krav som ikke er modulens nåværende
+hovedversjon, og aktive versjoner som er lavere enn kravet (nr. 45). Rapporten har id-er, ingen navn eller e-post.
+
+**Rekkefølgen for produkteier,** først stage, så prod om kvelden:
+1. Rull ut 2.134.0. Migreringen kjører ved oppstart, og er bare utvidelse. Kjør `test/stage/release-2-134-modulversjon.spec.ts`
+   (stage).
+2. Kjør lesespørringene over. Noter tallet i 1. Spørring 3 skal gi null rader; gir den rader, se på dem før du går videre.
+3. `dotenv -e .env.<miljø> -- npm run module-credit:backfill`. Koden er 2 hvis noe var opptatt: kjør på nytt.
+4. `dotenv -e .env.<miljø> -- npm run module-credit:compare -- --out rapport.json`. Koden er 0 når alt er forklart.
+5. Kjør steg 3 og 4 en gang til. Tallene skal være like.
+6. Før prod: gjør 3 og 4 på en pseudonymisert kopi av prod (oppskriften fra 2026-10-24), slik planen krever. Det er ikke gjort.
+
+**Bevis:** `test/unit/module-credit-934-5a2.test.ts` (nummereringen, også revisjon på samme versjon og en versjon som er aktivert
+på nytt; beståttene; årsakene), `test/m2-module-credit-934-5a2.test.ts` (rutene for publisering, «Publiser kurs», «Publiser nye
+versjoner», kalibrering, import og kursets elementer; alle fire vedtakssporene; tilbakefyllingen; `SUPERSEDED` på samme versjon;
+kontrollcasene for rapporten), `test/content-lock-write-guard.test.js` (nye tabeller under låsene, og skrivingene ett sted, med
+kontrollcase), `test/stage/release-2-134-modulversjon.spec.ts`.
+
 #### 5a-3 — den nye regelen slås på
 
 - **Bryteren er en rad i `PlatformConfig`** (`module_pass_per_course = on`), ikke en miljøinnstilling. App og worker
@@ -955,7 +1082,8 @@ deler modulen; 390 og 360 px med lange kurstitler; eksport og import tur-retur e
 ### Kjente mangler (bevisst ikke rettet)
 
 Ingen av disse kan miste innhold, gi feil kursbevis, la innhold gå live uten versjonsregelen, sende feil eller dobbel
-e-post eller lekke data, med unntak av de korte utrullingsvinduene i nr. 1, som produkteier har godtatt.
+e-post eller lekke data, med unntak av de korte utrullingsvinduene i nr. 1, som produkteier har godtatt, nr. 30, og nr. 41. De
+to siste er dagens regel, som først endres i 5a-3.
 
 1. **Gammel og ny server side om side under en utrulling** (Codex runde 2 nr. 1, 8, 12 om tømming, og 15). Mens begge
    kjører, kan en lagring gå til den gamle uten tellerkontroll, en gammel server kan fatte vedtak uten `ModulePass`,
@@ -1058,6 +1186,30 @@ e-post eller lekke data, med unntak av de korte utrullingsvinduene i nr. 1, som 
     Hvert nytt forsøk teller mot grensen på 10 innleveringer, så et tredje klikk i en lang travel periode kan gi 429.
 38. **`assertNotNested` ser bare de låste veiene.** `runInTransaction` eller `recordAuditEvent` uten `tx` inne i en lås stoppes
     ikke. Gjennomlesingen fant ingen slike kall i vedtaks- og vurderingsveiene den leste.
+39. **Et hull i historikken kan gi et nummer ute av rekkefølge** (5a-2). En versjon uten nummer som ligger foran en med nummer i
+    publiseringsrekkefølgen, får neste ledige nummer, ikke det den ville fått da. Det krever rader uten `publishedAt`, eller at
+    gammel kode publiserte i utrullingsvinduet; publisering og tilbakefylling fyller hull før noe nytt gis. Nummeret er likevel unikt.
+40. **En avkrysning uten beståtte** (5a-2). Fra nå gir den ny hovedversjon, som planen sier. I historikken ble den mindre, for den
+    rørte ingen. Siden spør bare når noen har bestått, så dette krever et eget API-kall. Kravet blir høyere uten at noen merker det.
+41. **En anke som snur en bestått, tar ikke beståtten i dag** (funnet i 5a-2, målt i `test/m2-module-credit-934-5a2.test.ts`). Vakta
+    mot nedgradering i `upsertCertificationStatusFromDecision` sammenligner `passedAt` med innleveringens `submittedAt`, og et vedtak
+    kommer alltid etter innleveringen. Statusen står som bestått, og kursbevis kan utstedes. Slik har det vært siden vakta kom. Det er
+    ikke rettet her, for ingen utfall skal endres i 5a-2. `ModulePass` er rett, så det faller bort i 5a-3. Rapporten lister dem
+    (`overturned_pass_kept_by_old_rule`) som ikke forventet, så de må ses på før bryteren slås på. Produkteier avgjør om det skal
+    rettes før 5a-3, og hva som skjer med dem som alt har fått bevis.
+42. **Den nyeste versjonen kan ha lavere hovedversjon enn den høyeste** (5a-2). Publiseres v4 først og et eldre utkast v3 etterpå med
+    avkrysning, er v3 2.0 og v4 1.1. «Publiser nye versjoner» viser v4 som ventende, og gir `409 module_version_outdated`. Forfatteren
+    må lagre en ny versjon. Krever to utkast samtidig og en avkrysning på det eldste.
+43. **Tilbakefyllingen mot en samtidig revisjon** (5a-2). Den holder korte låser, så en revisjon kan komme mellom modulen og
+    deltakeren. Da ligger beståtten igjen uten `invalidatedAt`, men kravet er hevet, så den teller ikke. Neste kjøring retter det.
+    Grensen er tidspunkter fra revisjonssporet og vedtaket: et vedtak i samme millisekund kan havne på feil side. Rapporten viser det
+    som `invalidated_but_old_rule_counts`.
+44. **Rapporten er ingen fast avlesning** (5a-2). Den leser uten lås, så en publisering eller et vedtak underveis kan gi en
+    forskjell som er borte ved neste kjøring. Den sammenligner per modul; hva det betyr for et kursbevis, står ikke i den.
+45. **En eldre versjon som ble aktivert på nytt etter en revisjon** (5a-2, historikk). Gammel kode tillot det. Tilbakefyllingen gir
+    den det gamle nummeret og setter kravet til den høyeste hovedversjonen. Med den nye regelen kan da ingen bestå modulen slik at
+    det teller. Ny kode avviser det samme (`409 module_version_outdated`), så det kan bare gjelde historikk. Rapporten lister dem
+    (`activeVersionBelowRequirement`) og er rød. Før bryteren slås på, må forfatteren publisere en ny versjon av modulen.
 
 ### Gjennomgang av planen
 

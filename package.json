@@ -1,6 +1,6 @@
 {
   "name": "a2-assessment-platform",
-  "version": "2.133.1",
+  "version": "2.134.0",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
@@ -23,6 +23,8 @@
     "maint:collapse-duplicated-titles": "tsx scripts/maintenance/collapse-duplicated-titles.ts",
     "maint:report-partial-translations": "tsx scripts/maintenance/collapse-duplicated-titles.ts --report",
     "maint:repair-unreadable-svg-assets": "tsx scripts/maintenance/repair-unreadable-svg-assets.ts",
+    "module-credit:backfill": "tsx scripts/maintenance/backfill-module-credit.ts",
+    "module-credit:compare": "tsx scripts/maintenance/compare-module-credit.ts",
     "complexity": "tsx scripts/complexity/report.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node scripts/runtime/startup.mjs",

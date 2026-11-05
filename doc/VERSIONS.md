@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.134.0 - 2026-11-05
+
+#934 skive 5a-2: grunnmuren for beståtte per kurs, ved siden av dagens regel (`doc/DESIGN_934.md`, «5a-2 — bygget»). Ingen
+leser bytter regel; det skjer i 5a-3.
+
+- **Versjonsnummer på modulversjoner:** hoved.mindre, satt første gang versjonen publiseres, under innholdslåsen, ett sted.
+  Avkrysningen «erstatter tidligere bestått» gir ny hovedversjon; alt annet er mindre, også kalibrering og modulimport. Svaret
+  fra publiseringen har `versionMajor` og `versionMinor`.
+- **Kravet per kurs og modul** (`CourseModuleRequirement`): en ny modul i et kurs får sin nåværende hovedversjon, en som tas ut,
+  mister raden, og en hovedversjon hever kravet i alle kurs modulen ligger i. Det speiler dagens globale regel.
+- **Beståtte per innlevering** (`ModulePass`), skrevet der alle vedtak går gjennom. Et stryk på samme innlevering tar raden. Et
+  stryk på en annen gjør det ikke. `GET /api/me/data` viser dem.
+- **To nye avvisninger, fra planen:** `409 module_version_number_fixed` når en versjon som har nummer, publiseres med
+  avkrysningen, og `409 module_version_outdated` når en versjon med lavere hovedversjon publiseres på nytt. Ingenting er skrevet.
+- **Tilbakefylling og rapport, som egne steg:** `npm run module-credit:backfill` regner alt ut på nytt og kan kjøres flere
+  ganger, med korte låser. `npm run module-credit:compare` regner ut gammel og ny regel side om side og lister forskjellene med
+  årsak. Lesespørringene står i `scripts/maintenance/module-credit-precheck.sql`. Ingen av dem er kjørt mot stage eller prod.
+- **Funnet underveis:** en anke som snur en bestått, tar ikke beståtten i dagens regel («Kjente mangler» nr. 41). Ikke rettet her.
+- **Ved utrulling:** migreringen er bare utvidelse. Gammel kode leser og skriver ikke det nye. Det den gjør i vinduet, retter
+  tilbakefyllingen.
+
 ## 2.133.1 - 2026-11-04
 
 #934 skive 5a-1, retting etter en uavhengig gjennomlesing. Codex-sjekken er ikke kjørt (utgiftstaket).

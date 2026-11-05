@@ -34,6 +34,7 @@ async function claimRevisionForItemWrite(client: ContentWriteTx, courseId: strin
   await claimCourseRevision(client, courseId, revision?.expected);
 }
 import { createCourseRepository } from "./courseRepository.js";
+import { syncModuleRequirements } from "../adminContent/moduleVersioning.js";
 
 // #934 skive 3: kursets innhold er rekkefølgen av moduler og seksjoner. Diskusjonsbryteren per element er
 // ikke innhold — å slå den av eller på gir ingen ny versjon.
@@ -476,6 +477,8 @@ async function writeCourseItems(
         })),
       });
     }
+    // #934 skive 5a-2: krav for nye moduler, sletting for dem som er tatt ut, i samme transaksjon som elementene.
+    await syncModuleRequirements(client, courseId);
     await client.course.update({ where: { id: courseId }, data: { updatedAt: new Date() } });
     // #803: itemsUpdated audit commits atomically with the item rewrite.
     await recordAuditEvent(
@@ -552,6 +555,8 @@ export async function setCourseModules(
     if (moduleRows.length + sectionRows.length > 0) {
       await client.courseItem.createMany({ data: [...moduleRows, ...sectionRows] });
     }
+    // #934 skive 5a-2: samme som i `writeCourseItems`.
+    await syncModuleRequirements(client, courseId);
     await client.course.update({
       where: { id: courseId },
       data: { updatedAt: new Date() },

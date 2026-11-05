@@ -27,9 +27,10 @@ const LOCK_FILE = "db/contentLock.ts";
 
 // Innholdstabellene (doc/DESIGN_934.md, «Én hjelpefunksjon»), pluss `CourseVersion`: den skrives bare av
 // versjonsendringen, og den skal også holde låsen.
-const CONTENT_MODELS = new Set(["courseItem", "course", "module", "moduleVersion", "courseSection", "courseSectionVersion", "sectionAsset", "courseVersion"]);
+// #934 skive 5a-2: `CourseModuleRequirement` er hvilke moduler et kurs krever, så den skrives under samme lås.
+const CONTENT_MODELS = new Set(["courseItem", "course", "module", "moduleVersion", "courseSection", "courseSectionVersion", "sectionAsset", "courseVersion", "courseModuleRequirement"]);
 const WRITE_OPS = new Set(["create", "createMany", "createManyAndReturn", "update", "updateMany", "updateManyAndReturn", "upsert", "delete", "deleteMany"]);
-const CONTENT_TABLES_SQL = /"(CourseItem|Course|Module|ModuleVersion|CourseSection|CourseSectionVersion|SectionAsset|CourseVersion)"/;
+const CONTENT_TABLES_SQL = /"(CourseItem|Course|Module|ModuleVersion|CourseSection|CourseSectionVersion|SectionAsset|CourseVersion|CourseModuleRequirement)"/;
 
 // Bevisste unntak (doc/DESIGN_934.md, «Kjente mangler» nr. 3): vedlikeholdsskript som kjøres for hånd, én gang,
 // ikke mens forfattere arbeider. Unntaket er per FUNKSJON, så en ny skriver i samme fil ikke slipper gjennom.
@@ -87,9 +88,11 @@ const LEARNER_MODELS = new Map([
   ["courseSectionRead", ALL_WRITES],
   ["assessmentDecision", ALL_WRITES],
   ["certificationStatus", ALL_WRITES],
+  // #934 skive 5a-2: beståtte per innlevering.
+  ["modulePass", ALL_WRITES],
   ["submission", new Set(["create", "createMany", "createManyAndReturn", "upsert"])],
 ]);
-const LEARNER_TABLES_SQL = /"(CourseCompletion|CourseSectionRead|AssessmentDecision|CertificationStatus)"|INSERT\s+INTO\s+"Submission"/i;
+const LEARNER_TABLES_SQL = /"(CourseCompletion|CourseSectionRead|AssessmentDecision|CertificationStatus|ModulePass)"|INSERT\s+INTO\s+"Submission"/i;
 
 function holdsLearnerLock(checker, expression) {
   const type = checker.getTypeAtLocation(expression);
@@ -229,6 +232,7 @@ export async function probeGlobal() { await prisma.courseSection.update({ where:
 export async function probeAlias() { await runContentWrite(async (tx) => { const d = tx.module; return d.count(); }); }
 export async function probeLocked() { await runContentWrite(async (tx) => tx.courseItem.deleteMany({ where: { courseId: "x" } })); }
 export async function probeParam(tx: ContentWriteTx) { await tx.sectionAsset.deleteMany({ where: { sectionId: "x" } }); }
+export async function probeRequirement() { await prisma.courseModuleRequirement.deleteMany({ where: { moduleId: "x" } }); }
 // @ts-expect-error — det er nettopp feilen: en transaksjon uten låsen sendt til en som krever den.
 export async function probePass() { await runInTransaction(async (tx) => probeParam(tx)); }
 `;
@@ -275,7 +279,8 @@ describe("#934 skive 4a: alt som skriver innhold, holder innholdslåsen", () => 
     expect(out.some((v) => /courseSection\.update uten innholdslåsen \(probeGlobal\)/.test(v)), out.join("\n")).toBe(true);
     expect(out.some((v) => /som verdi/.test(v)), out.join("\n")).toBe(true);
     expect(out.some((v) => /sender en klient uten innholdslåsen til probeParam \(probePass\)/.test(v)), out.join("\n")).toBe(true);
-    expect(out).toHaveLength(4);
+    expect(out.some((v) => /courseModuleRequirement\.deleteMany uten innholdslåsen \(probeRequirement\)/.test(v)), out.join("\n")).toBe(true);
+    expect(out).toHaveLength(5);
     expect(locked).toHaveLength(2);
   }, 120_000);
 
@@ -300,6 +305,7 @@ export async function probeDecisionGlobal() { await prisma.assessmentDecision.cr
 export async function probeReadGlobal() { await prisma.courseSectionRead.upsert(data); }
 export async function probeStatusGlobal() { await prisma.certificationStatus.upsert(data); }
 export async function probeSubmissionGlobal() { await prisma.submission.create({ data }); }
+export async function probePassGlobal() { await prisma.modulePass.deleteMany({ where: { userId: "u" } }); }
 export async function probeAlias() { await runLearnerWrite("u", async (tx) => { const d = tx.courseCompletion; return d.count(); }); }
 export async function probeStatusUpdate() { await prisma.submission.update(data); }
 export async function probeLearner() { await runLearnerWrite("u", async (tx) => tx.assessmentDecision.create({ data })); }
@@ -340,13 +346,14 @@ describe("#934 skive 5a-1: det en deltaker har gjort, skrives under deltakerlås
       /courseSectionRead\.upsert uten deltakerlåsen \(probeReadGlobal\)/,
       /certificationStatus\.upsert uten deltakerlåsen \(probeStatusGlobal\)/,
       /submission\.create uten deltakerlåsen \(probeSubmissionGlobal\)/,
+      /modulePass\.deleteMany uten deltakerlåsen \(probePassGlobal\)/,
       /som verdi/,
       /sender en klient uten deltakerlåsen til probeParam \(probePass\)/,
     ]) {
       expect(out.some((v) => expected.test(v)), `${expected}\n${out.join("\n")}`).toBe(true);
     }
     // `submission.update` er vurderingsjobbens, og står ikke her. De fire låste er ikke med.
-    expect(out).toHaveLength(8);
+    expect(out).toHaveLength(9);
     expect(locked).toHaveLength(4);
   }, 120_000);
 
@@ -359,5 +366,175 @@ describe("#934 skive 5a-1: det en deltaker har gjort, skrives under deltakerlås
     expect(caught('await tx.$executeRawUnsafe(\'INSERT INTO "Submission" VALUES (1)\')')).toHaveLength(1);
     expect(caught('await tx.$queryRaw<Row[]>`DELETE FROM "CertificationStatus"`')).toHaveLength(1);
     expect(caught('await tx.$queryRaw`SELECT * FROM "CourseCompletion"`')).toEqual([]);
+    expect(caught('await tx.$executeRaw`DELETE FROM "ModulePass"`')).toHaveLength(1);
+    expect(caught('await tx.$executeRaw`UPDATE "CourseModuleRequirement" SET x = 1`')).toHaveLength(1);
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #934 skive 5a-2 (doc/DESIGN_934.md, «5a-2 — bygget», «Veier inn»): nummeret, kravet og beståtten skrives ett sted.
+//
+// Låsen alene sier ikke at en ny vei husker dem. Disse sjekkene spør derfor HVOR skrivingen skjer, ikke bare på hvilken klient:
+//   - en modulversjon settes live bare i `publishModuleVersion`, for der får den nummer;
+//   - versjonsnummeret skrives bare der og i `numberModuleHistory`;
+//   - `CourseModuleRequirement` skrives bare i moduleVersioning.ts;
+//   - `ModulePass` skrives bare i modulePass.ts og tilbakefyllingen;
+//   - den som skriver kursets elementer, kaller `syncModuleRequirements`;
+//   - den som lager et vedtak, kaller `upsertCertificationStatusFromDecision`.
+// ─────────────────────────────────────────────────────────────────────────────
+function namedFunctionOf(node) {
+  for (let current = node.parent; current; current = current.parent) {
+    if ((ts.isFunctionDeclaration(current) || ts.isMethodDeclaration(current)) && current.name) return current;
+  }
+  return null;
+}
+
+/** Skrivinger av `model` i disse filene, med fil, funksjon og argumentene som tekst. */
+function writesOf(activeProgram, activeFiles, model) {
+  const checker = activeProgram.getTypeChecker();
+  const out = [];
+  for (const fileName of activeFiles) {
+    const sourceFile = activeProgram.getSourceFile(fileName);
+    if (!sourceFile) continue;
+    const file = rel(fileName);
+    const visit = (node) => {
+      if (
+        ts.isCallExpression(node)
+        && ts.isPropertyAccessExpression(node.expression)
+        && WRITE_OPS.has(node.expression.name.text)
+        && ts.isPropertyAccessExpression(node.expression.expression)
+        && node.expression.expression.name.text === model
+        && isPrismaDelegate(checker, node.expression.expression)
+      ) {
+        const fn = namedFunctionOf(node);
+        out.push({
+          file,
+          line: sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+          fn: fn?.name.getText() ?? "?",
+          fnText: fn?.getText() ?? "",
+          op: node.expression.name.text,
+          // Det som skrives. `select` og `where` nevner også feltene, men det er ikke å skrive dem.
+          args: node.arguments
+            .flatMap((a) => (ts.isObjectLiteralExpression(a) ? a.properties.filter((p) => !["select", "where", "include"].includes(p.name?.getText())) : [a]))
+            .map((a) => a.getText())
+            .join(","),
+        });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+  return out;
+}
+
+const ACTIVATION = /\bactiveVersionId\s*:(?!\s*null\b)|\bactiveVersion\s*:/;
+const NUMBER_FIELDS = /\b(versionMajor|versionMinor)\b/;
+const NUMBERED_PUBLISH = new Set(["modules/adminContent/adminContentRepository.ts:publishModuleVersion", "modules/adminContent/moduleVersioning.ts:numberModuleHistory"]);
+
+/** Alle brudd på reglene over, så de kan prøves både på koden og på kontrollcasene. */
+function placementViolations(activeProgram, activeFiles) {
+  const where = (w) => `${w.file}:${w.line} (${w.fn})`;
+  const out = [];
+  for (const w of writesOf(activeProgram, activeFiles, "module")) {
+    if (ACTIVATION.test(w.args) && `${w.file}:${w.fn}` !== "modules/adminContent/adminContentRepository.ts:publishModuleVersion") {
+      out.push(`${where(w)} setter en modulversjon live utenom publishModuleVersion, og den får ikke nummer`);
+    }
+  }
+  for (const w of writesOf(activeProgram, activeFiles, "moduleVersion")) {
+    if (NUMBER_FIELDS.test(w.args) && !NUMBERED_PUBLISH.has(`${w.file}:${w.fn}`)) out.push(`${where(w)} skriver versjonsnummeret utenom de to stedene`);
+    if (/\bpublishedAt\s*:/.test(w.args) && !NUMBERED_PUBLISH.has(`${w.file}:${w.fn}`)) out.push(`${where(w)} setter publishedAt utenom publishModuleVersion`);
+  }
+  for (const w of writesOf(activeProgram, activeFiles, "courseModuleRequirement")) {
+    if (w.file !== "modules/adminContent/moduleVersioning.ts") out.push(`${where(w)} skriver kravet utenom moduleVersioning.ts`);
+  }
+  for (const w of writesOf(activeProgram, activeFiles, "modulePass")) {
+    if (w.file !== "modules/certification/modulePass.ts" && w.file !== "modules/course/moduleCreditBackfill.ts") out.push(`${where(w)} skriver ModulePass utenom de to stedene`);
+  }
+  for (const w of writesOf(activeProgram, activeFiles, "courseItem")) {
+    // Slettingen av hele kurset tar kravene med seg: fremmednøkkelen står med CASCADE.
+    if (w.file === "modules/course/courseCascadeDeleteService.ts" && w.op === "deleteMany") continue;
+    if (!/\bsyncModuleRequirements\(/.test(w.fnText)) out.push(`${where(w)} skriver kursets elementer uten syncModuleRequirements`);
+  }
+  for (const w of writesOf(activeProgram, activeFiles, "assessmentDecision")) {
+    if (w.file === "repositories/decisionRepository.ts") continue;
+    out.push(`${where(w)} lager et vedtak utenom decisionRepository`);
+  }
+  // Vedtakene går gjennom repositoriet; den som kaller det, må også skrive status og ModulePass.
+  const checker = activeProgram.getTypeChecker();
+  for (const fileName of activeFiles) {
+    const sourceFile = activeProgram.getSourceFile(fileName);
+    if (!sourceFile) continue;
+    const visit = (node) => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "createAssessmentDecision") {
+        const params = checker.getResolvedSignature(node)?.getParameters() ?? [];
+        const first = params[0] ? checker.getNonNullableType(checker.getTypeOfSymbolAtLocation(params[0], node)) : null;
+        if (first && checker.getPropertyOfType(first, "__learnerLock")) {
+          const fn = namedFunctionOf(node);
+          if (!/\bupsertCertificationStatusFromDecision\(/.test(fn?.getText() ?? "")) {
+            out.push(`${rel(fileName)}:${sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1} (${fn?.name.getText() ?? "?"}) lager et vedtak uten upsertCertificationStatusFromDecision`);
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+  return out;
+}
+
+const PLACEMENT_VIRTUAL = join(SRC, "__placement_guard_probe__.ts");
+const PLACEMENT_VIRTUAL_TEXT = `
+import { runContentWrite, runLearnerWrite, type LearnerTx } from "./db/contentLock.js";
+import { createDecisionRepository } from "./repositories/decisionRepository.js";
+const data = {} as never;
+export async function probeActivate() { await runContentWrite(async (tx) => tx.module.update({ where: { id: "m" }, data: { activeVersionId: "v" } })); }
+export async function probeNullOk() { await runContentWrite(async (tx) => tx.module.update({ where: { id: "m" }, data: { activeVersionId: null } })); }
+export async function probeNumber() { await runContentWrite(async (tx) => tx.moduleVersion.update({ where: { id: "v" }, data: { versionMajor: 9 } })); }
+export async function probePublishedAt() { await runContentWrite(async (tx) => tx.moduleVersion.updateMany({ where: { id: "v" }, data: { publishedAt: new Date() } })); }
+export async function probeRequirement() { await runContentWrite(async (tx) => tx.courseModuleRequirement.deleteMany({ where: { moduleId: "m" } })); }
+export async function probePass() { await runLearnerWrite("u", async (tx) => tx.modulePass.deleteMany({ where: { userId: "u" } })); }
+export async function probeItems() { await runContentWrite(async (tx) => tx.courseItem.deleteMany({ where: { courseId: "c" } })); }
+export async function probeDecision(tx: LearnerTx) { await createDecisionRepository(tx).createAssessmentDecision(tx, data); }
+`;
+
+describe("#934 skive 5a-2: nummeret, kravet og beståtten skrives ett sted", () => {
+  it("koden holder seg til de stedene", () => {
+    expect(placementViolations(program, files)).toEqual([]);
+  });
+
+  it("KONTROLLCASE: vakta ser de ekte skrivingene", () => {
+    const seen = (model) => writesOf(program, files, model).map((w) => `${w.file}:${w.fn}`);
+    expect(seen("moduleVersion")).toContain("modules/adminContent/adminContentRepository.ts:publishModuleVersion");
+    expect(seen("moduleVersion")).toContain("modules/adminContent/moduleVersioning.ts:numberModuleHistory");
+    expect(seen("module")).toContain("modules/adminContent/adminContentRepository.ts:publishModuleVersion");
+    expect(seen("courseModuleRequirement")).toContain("modules/adminContent/moduleVersioning.ts:syncModuleRequirements");
+    expect(seen("courseModuleRequirement")).toContain("modules/adminContent/moduleVersioning.ts:raiseModuleRequirements");
+    expect(seen("modulePass")).toContain("modules/certification/modulePass.ts:recordModulePassFromDecision");
+    expect(seen("courseItem")).toContain("modules/course/courseCommands.ts:writeCourseItems");
+    expect(seen("courseItem")).toContain("modules/course/courseCommands.ts:setCourseModules");
+  });
+
+  it("KONTROLLCASE: hvert brudd er rødt, og `activeVersionId: null` er lov", () => {
+    const host = ts.createCompilerHost(compilerOptions());
+    const getSourceFile = host.getSourceFile.bind(host);
+    const same = (a, b) => a.split("\\").join("/") === b.split("\\").join("/");
+    host.getSourceFile = (fileName, languageVersion, ...rest) =>
+      same(fileName, PLACEMENT_VIRTUAL) ? ts.createSourceFile(fileName, PLACEMENT_VIRTUAL_TEXT, languageVersion, true) : getSourceFile(fileName, languageVersion, ...rest);
+    const fileExists = host.fileExists.bind(host);
+    host.fileExists = (fileName) => same(fileName, PLACEMENT_VIRTUAL) || fileExists(fileName);
+    const probe = ts.createProgram([PLACEMENT_VIRTUAL], compilerOptions(), host, program);
+    const out = placementViolations(probe, [PLACEMENT_VIRTUAL]);
+    for (const expected of [
+      /\(probeActivate\) setter en modulversjon live/,
+      /\(probeNumber\) skriver versjonsnummeret/,
+      /\(probePublishedAt\) setter publishedAt/,
+      /\(probeRequirement\) skriver kravet/,
+      /\(probePass\) skriver ModulePass/,
+      /\(probeItems\) skriver kursets elementer/,
+      /\(probeDecision\) lager et vedtak uten/,
+    ]) {
+      expect(out.some((v) => expected.test(v)), `${expected}\n${out.join("\n")}`).toBe(true);
+    }
+    expect(out).toHaveLength(7);
+  }, 120_000);
 });

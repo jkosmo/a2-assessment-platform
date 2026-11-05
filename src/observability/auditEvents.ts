@@ -237,6 +237,9 @@ export type AuditMetadataByAction = {
   [auditActions.adminContent.moduleVersionPublished]: EventMetadata<{
     moduleId: string;
     moduleVersionId: string;
+    // #934 skive 5a-2: versjonsnummeret. Eldre rader har det ikke.
+    versionMajor?: number | null;
+    versionMinor?: number | null;
   }>;
   [auditActions.adminContent.modulePassesSuperseded]: EventMetadata<{
     moduleId: string;

@@ -3,6 +3,7 @@ import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
 import { createCertificationRepository } from "./certificationRepository.js";
+import { recordModulePassFromDecision } from "./modulePass.js";
 import { createDecisionRepository } from "../../repositories/decisionRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import type { LearnerTx } from "../../db/contentLock.js";
@@ -40,6 +41,10 @@ export async function upsertCertificationStatusFromDecision(input: UpsertFromDec
 
   const userId = decision.submission.userId;
   const moduleId = decision.submission.moduleId;
+
+  // #934 skive 5a-2: raden per innlevering, ved siden av statusen. Her, før vakta under: den returnerer tidlig, og et stryk på
+  // samme innlevering skal likevel ta bort beståtten i den nye regelen. `CertificationStatus` skrives som før.
+  await recordModulePassFromDecision(tx, decision);
 
   let status: CertificationStatusOutcome;
   let passedAt: Date | null = null;

@@ -1021,6 +1021,8 @@ export async function publishModuleVersion(
       moduleVersionId,
       actorId,
       now,
+      // #934 skive 5a-2: speiler dagens regel. Avkrysningen gir ny hovedversjon; alt annet er mindre, også modulimporten.
+      options?.supersedesEarlierPasses ? "major" : "minor",
     );
     // Et nytt forsøk på en versjon som alt er aktiv, setter ingenting live — ingen ny kursversjon (QA-porten).
     if (module.activeVersionId !== moduleVersionId && !options?.courseVersionHandledByCaller) {
@@ -1087,6 +1089,8 @@ export async function publishModuleVersion(
           moduleId,
           moduleVersionId,
           versionNo: result.versionNo,
+          versionMajor: result.versionMajor,
+          versionMinor: result.versionMinor,
           previousActiveVersionId: module.activeVersionId,
           publishedAt: result.publishedAt?.toISOString() ?? null,
         },
@@ -1329,7 +1333,8 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
       submissionSchemaJson: sourceVersion.submissionSchemaJson ?? undefined,
       assessmentPolicyJson: assessmentPolicyCodec.serialize(newPolicy),
     });
-    const published = await repo.publishModuleVersion(input.moduleId, newVersion.id, input.actorId, now);
+    // #934 skive 5a-2: kalibrering endrer bare tersklene. Mindre versjon, som for kursene under.
+    const published = await repo.publishModuleVersion(input.moduleId, newVersion.id, input.actorId, now, "minor");
     // #934 skive 3: nye terskler er levende i kursene modulen ligger i — mindre versjon for dem.
     await applyMinorVersionToCoursesContaining(tx, { moduleId: input.moduleId }, input.actorId);
 

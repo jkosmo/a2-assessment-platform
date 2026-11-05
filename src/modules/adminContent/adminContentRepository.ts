@@ -1,6 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import type { AssessmentMode } from "@prisma/client";
 import type { ContentWriteTx } from "../../db/contentLock.js";
+import { raiseModuleRequirements, resolvePublishNumber, type ModuleVersionKind } from "./moduleVersioning.js";
 
 type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseItem" | "contentOwner">;
 
@@ -680,7 +681,9 @@ export function createAdminContentWriter(client: ContentWriteTx) {
       return { moduleId, previousActiveVersionId };
     },
 
-    async publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string, now: Date) {
+    // #934 skive 5a-2: det ene stedet en modulversjon settes live, og det ene stedet den får versjonsnummer. `versionKind` er
+    // påkrevd, så en ny vei må si hva den er. Nummeret regnes ut før noe skrives; en avvist publisering endrer ingenting.
+    async publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string, now: Date, versionKind: ModuleVersionKind) {
       const moduleVersion = await client.moduleVersion.findUnique({
         where: { id: moduleVersionId },
         select: {
@@ -696,18 +699,21 @@ export function createAdminContentWriter(client: ContentWriteTx) {
         throw new Error("Module version not found for module.");
       }
 
+      const number = await resolvePublishNumber(client, moduleId, moduleVersionId, versionKind);
+
       const publishedVersion = await client.moduleVersion.update({
         where: { id: moduleVersionId },
-        data: moduleVersion.publishedAt
-          ? {}
-          : {
-              publishedAt: now,
-              publishedBy: actorId,
-            },
+        data: {
+          ...(moduleVersion.publishedAt ? {} : { publishedAt: now, publishedBy: actorId }),
+          versionMajor: number.major,
+          versionMinor: number.minor,
+        },
         select: {
           id: true,
           moduleId: true,
           versionNo: true,
+          versionMajor: true,
+          versionMinor: true,
           publishedAt: true,
           publishedBy: true,
         },
@@ -717,6 +723,12 @@ export function createAdminContentWriter(client: ContentWriteTx) {
         where: { id: moduleId },
         data: { activeVersionId: moduleVersionId },
       });
+
+      // Hevet i samme transaksjon som versjonen settes live: det er ingen glipe (sannhetstabellen). En versjon som alt har
+      // nummer, kommer aldri hit som hoved; `resolvePublishNumber` har avvist den.
+      if (versionKind === "major") {
+        await raiseModuleRequirements(client, moduleId, number.major);
+      }
 
       return publishedVersion;
     },

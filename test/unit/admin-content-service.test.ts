@@ -501,6 +501,8 @@ describe("admin content service", () => {
       id: "module-version-3",
       moduleId: "module-1",
       versionNo: 3,
+      versionMajor: 1,
+      versionMinor: 2,
       publishedAt: new Date("2026-03-11T12:30:00.000Z"),
       publishedBy: "admin-1",
     });
@@ -514,6 +516,7 @@ describe("admin content service", () => {
       "module-version-3",
       "admin-1",
       expect.any(Date),
+      "minor",
     );
     expect(recordAuditEvent).toHaveBeenCalledWith({
       entityType: "module_version",
@@ -524,6 +527,8 @@ describe("admin content service", () => {
         moduleId: "module-1",
         moduleVersionId: "module-version-3",
         versionNo: 3,
+        versionMajor: 1,
+        versionMinor: 2,
         previousActiveVersionId: "module-version-2",
         publishedAt: "2026-03-11T12:30:00.000Z",
       },
@@ -532,6 +537,8 @@ describe("admin content service", () => {
       id: "module-version-3",
       moduleId: "module-1",
       versionNo: 3,
+      versionMajor: 1,
+      versionMinor: 2,
       publishedAt: new Date("2026-03-11T12:30:00.000Z"),
       publishedBy: "admin-1",
     });
