@@ -170,8 +170,13 @@ for (const [navn, aiInfluence, policy] of [
   });
 }
 
-test("2.134.1, modulen er i skyggemodus: dialogen lover ikke sensor heller", async ({ page }) => {
+test("2.134.1, modulen er i skyggemodus: ingen dialog, og ingen rutes", async ({ page }) => {
   await mockBase(page, { enabled: true, shadowMode: false });
+  let posted: Record<string, unknown> | null = null;
+  await page.route("**/api/submissions", (route: Route) => {
+    posted = route.request().postDataJSON();
+    return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) });
+  });
   await page.route("**/api/modules**", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ modules: [{ ...ESSAY_MODULE, assessmentPolicy: { aiInfluence: { shadowMode: true } } }] }) }),
   );
@@ -184,9 +189,36 @@ test("2.134.1, modulen er i skyggemodus: dialogen lover ikke sensor heller", asy
   }
   await page.locator('.ai-declaration-opt[data-v="autonomous"]').click();
   await page.locator("#createSubmission").click();
+  await expect.poll(() => posted !== null).toBe(true);
+  await expect(page.locator(".ai-nudge-overlay")).toHaveCount(0);
+  expect(posted).toMatchObject({ processSignals: { declaration: "autonomous", insistedAfterPrompt: false } });
+});
+
+test("2.134.1, skyggemodus globalt, men modulen har regelen aktiv: valget og dialogen sier det, og rutingen følger", async ({ page }) => {
+  await mockBase(page, { enabled: true, shadowMode: true });
+  let posted: Record<string, unknown> | null = null;
+  await page.route("**/api/submissions", (route: Route) => {
+    posted = route.request().postDataJSON();
+    return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) });
+  });
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ modules: [{ ...ESSAY_MODULE, assessmentPolicy: { aiInfluence: { shadowMode: false } } }] }) }),
+  );
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+  await selectEssayModule(page);
+  await expect(page.locator("#aiDeclarationReviewNotice")).toBeVisible();
+  for (const ta of await page.locator("#submissionFields textarea").all()) {
+    await ta.fill("Et tilstrekkelig langt fritekstsvar for vurdering.");
+  }
+  await page.locator('.ai-declaration-opt[data-v="autonomous"]').click();
+  await page.locator("#createSubmission").click();
   const nudge = page.locator(".ai-nudge-overlay");
-  await expect(nudge).toBeVisible();
-  await expect(nudge).not.toContainText("sensor");
+  await expect(nudge).toContainText("leser en sensor besvarelsen før du får resultatet");
+  await nudge.locator('[data-nudge="insist"]').click();
+  await expect.poll(() => posted !== null).toBe(true);
+  expect(posted).toMatchObject({ processSignals: { declaration: "autonomous", insistedAfterPrompt: true } });
 });
 
 test("participant: a non-autonomous declaration submits directly with no nudge", async ({ page }) => {

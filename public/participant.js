@@ -910,7 +910,8 @@ function aiDeclarationEnabled() {
 // Live routing/nudge only when enabled AND not in shadow mode. In shadow mode we still collect the
 // declaration (the pilot dataset) but show no nudge and route no one.
 function aiDeclarationNudgeLive() {
-  return aiDeclarationEnabled() && participantRuntimeConfig?.aiInfluence?.shadowMode !== true;
+  // 2.134.1: samme regel som serveren, med modulens egen innstilling. Dialogen, teksten og rutingen kan ikke si hver sin ting.
+  return aiReviewRoutingLive(participantRuntimeConfig?.aiInfluence, resolveSelectedModule(loadedModules, selectedModuleId));
 }
 
 // The declaration applies to free-text submissions only (MCQ-only modules have no deliverable).
@@ -954,7 +955,7 @@ function applyAiDeclarationVisibility() {
   setHidden(aiDeclarationBlock, !applies);
   if (!applies) clearAiDeclarationSelection();
   const reviewNotice = document.getElementById("aiDeclarationReviewNotice");
-  if (reviewNotice) setHidden(reviewNotice, !aiReviewRoutingLive(participantRuntimeConfig?.aiInfluence, resolveSelectedModule(loadedModules, selectedModuleId)));
+  if (reviewNotice) setHidden(reviewNotice, !aiDeclarationNudgeLive());
 }
 
 async function confirmAiNudge() {
@@ -970,7 +971,7 @@ async function confirmAiNudge() {
         </div>
         <div class="ai-nudge-body">
           <p>${escapeHtmlP(t("ai.nudge.body"))}</p>
-          ${aiReviewRoutingLive(participantRuntimeConfig?.aiInfluence, resolveSelectedModule(loadedModules, selectedModuleId)) ? `<p>${escapeHtmlP(t("ai.nudge.review"))}</p>` : ""}
+          <p>${escapeHtmlP(t("ai.nudge.review"))}</p>
           <div class="why">${escapeHtmlP(t("ai.nudge.why"))}</div>
         </div>
         <div class="ai-nudge-foot">
