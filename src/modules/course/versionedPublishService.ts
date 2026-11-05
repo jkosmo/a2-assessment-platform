@@ -10,7 +10,7 @@ import type { ContentWriteTx } from "../../db/contentLock.js";
 import { runContentWrite } from "../../db/contentLock.js";
 import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { publishModuleVersion } from "../adminContent/adminContentCommands.js";
-import type { ModuleVersionKind } from "../adminContent/moduleVersioning.js";
+import { findModulePlacements, type ModuleVersionKind } from "../adminContent/moduleVersioning.js";
 import { createCourseRepository } from "./courseRepository.js";
 import {
   getCoursePendingVersions,
@@ -174,14 +174,10 @@ export async function publishCoursePendingVersioned(
     // holder den eksklusive låsen: utstedelsen tar den delt.
     const courseKind = new Map(affected.map((course) => [course.courseId, resolveCourseVersionKind(answers[course.courseId], course.certificateHolders)]));
     const moduleItems = fresh.items.filter((item) => item.type === "MODULE");
-    const placements = await tx.courseItem.findMany({
-      where: { courseId: { in: affected.map((course) => course.courseId) }, moduleId: { in: moduleItems.map((item) => item.id) } },
-      select: { courseId: true, moduleId: true },
-    });
+    const placements = await findModulePlacements(tx, affected.map((course) => course.courseId), moduleItems.map((item) => item.id));
     const modulesInCourse = new Map<string, Set<string>>();
     const majorModules = new Set<string>();
     for (const placement of placements) {
-      if (!placement.moduleId) continue;
       const set = modulesInCourse.get(placement.courseId);
       if (set) set.add(placement.moduleId);
       else modulesInCourse.set(placement.courseId, new Set([placement.moduleId]));

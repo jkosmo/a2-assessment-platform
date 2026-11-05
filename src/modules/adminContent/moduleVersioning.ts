@@ -280,6 +280,15 @@ export async function raiseModuleRequirementInCourse(locked: ContentWriteTx, cou
   return raised.count > 0;
 }
 
+/** #934 skive 5a-3: hvilke av modulene som ligger i hvilke av kursene. Også arkiverte og avpubliserte teller. */
+export async function findModulePlacements(locked: ContentWriteTx, courseIds: string[], moduleIds: string[]): Promise<Array<{ courseId: string; moduleId: string }>> {
+  const rows = await locked.courseItem.findMany({
+    where: { courseId: { in: courseIds }, moduleId: { in: moduleIds } },
+    select: { courseId: true, moduleId: true },
+  });
+  return rows.flatMap((row) => (row.moduleId ? [{ courseId: row.courseId, moduleId: row.moduleId }] : []));
+}
+
 /** #934 skive 5a-3: modulene som har vært ute før: publisert, med nummer, eller noen har levert på dem. */
 export async function findModulesPublishedBefore(client: Pick<DbTransactionClient, "moduleVersion">, moduleIds: string[]): Promise<Set<string>> {
   if (moduleIds.length === 0) return new Set();

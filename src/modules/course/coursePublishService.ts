@@ -772,9 +772,11 @@ export async function publishCoursePendingVersions(
       const perCourse = await isModulePassPerCourseOn(tx);
       if (perCourse) {
         // #934 skive 5a-3: avkrysningen sier ingenting om kursene. Berører publiseringen andre kurs med kursbevis, er det et
-        // spørsmål denne kontrakten ikke kan stille. Ellers publiseres det med `courseVersion` for dette kurset, og modulene blir
-        // mindre: en klient som sa nei til revisjon, eller ikke ble spurt, skal ikke ta beståtten fra noen.
+        // spørsmål denne kontrakten ikke kan stille. Det samme gjelder hovedversjon av kurset med en ny modul: den skulle bety «må
+        // bestå på nytt», men denne kontrakten kan ikke heve kravet per kurs, og valget skal ikke forsvinne uten at noen sier fra.
+        // Ellers publiseres det med `courseVersion` for dette kurset, og modulene blir mindre.
         if (input.supersedesEarlierPasses === true) throw clientOutdatedForVersionChoice({ courseId });
+        if (input.courseVersion === "major" && fresh.items.some((item) => item.type === "MODULE")) throw clientOutdatedForVersionChoice({ courseId });
         const others = (await findAffectedCourses(tx, itemRefs(fresh.items))).filter((course) => course.courseId !== courseId && course.certificateHolders > 0);
         if (others.length > 0) throw clientOutdatedForVersionChoice({ courseId, courseIds: others.map((course) => course.courseId) });
       } else if (fresh.passedTotal > 0 && input.supersedesEarlierPasses === undefined) {

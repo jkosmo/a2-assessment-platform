@@ -1049,7 +1049,8 @@ kontrollcase), `test/stage/release-2-134-modulversjon.spec.ts`.
     sier ingenting om kursene og kan ikke oversettes trygt. `false` eller utelatt → mindre i alle kurs, som i dag;
   - «Publiser nye versjoner» med det gamle endepunktet: `courseVersion` gjelder dette kurset. Sender klienten
     `supersedesEarlierPasses: true`, eller berører publiseringen andre kurs med kursbevis, → `409 client_outdated`.
-    Ellers publiseres det med `courseVersion` for dette kurset.
+    `courseVersion: "major"` med en modul i settet → også 409 (se «5a-3 — bygget»). Ellers publiseres det med `courseVersion` for
+    dette kurset.
 - **Deltakerens vei:** kursdetaljen gir `moduleStatus: REVISED_RETAKE_REQUIRED` fra den nye regelen. Modulsiden
   åpnet fra kurset bruker kursets status, ikke bare siste vedtak (`participant.js:1203`, `moduleService.ts:154`), så
   «må tas på nytt» vises og et nytt forsøk kan startes.
@@ -1134,8 +1135,9 @@ først (`:1022`): med den på er svaret `409 client_outdated` før noe skrives. 
   skal modulsiden være som i 2.134.0. Uten feltet ville en deltaker med en slik rad fått ny oppførsel ved utrullingen.
 - **Et nytt forsøk starter bare når siste vedtak er en avgjort bestått.** Har deltakeren strøket på nytt, eller saken vurderes, går siden som vanlig: resultatet, med anke og «Prøv igjen».
   Ellers ville anke-knappen forsvunnet. Beskjeden står til deltakeren har bestått.
-- **Det gamle `publish-pending` med bryteren på gir modulene MINDRE,** også når `courseVersion` er hoved. En klient som sa nei til revisjon, eller aldri ble spurt, skal ikke ta beståtten
-  fra noen. Kurset får hovedversjon, og seksjonene som er endret, leses på nytt. Det gjelder en utdatert fane; dialogen fra 5b bruker det nye endepunktet.
+- **Det gamle `publish-pending` med bryteren på gir modulene MINDRE.** Velger en utdatert fane hovedversjon av kurset, og settet har en modul, svarer serveren `409 client_outdated`:
+  hovedversjon skal bety «må bestå på nytt», men denne kontrakten kan ikke heve kravet per kurs, og valget skal ikke forsvinne uten at noen sier fra. Bare seksjoner går som før. Dialogen
+  fra 5b bruker det nye endepunktet.
 - **`expectedCourseIds` kreves bare når modulen er hoved.** Mindre spør ikke om kursene, så settet avgjør ingenting. Det er også derfor `moduleVersion: "minor"` med
   `courseVersions: { x: "major" }` gir `400 validation_error`: det valget ville ellers forsvunnet.
 - **`409 affected_courses_changed`** er koden når settet er endret, eller et svar gjelder et kurs som ikke er berørt. Teksten står på alle tre språkene.

@@ -1034,22 +1034,50 @@ describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
     const other = await learner();
     await prisma.courseCompletion.create({ data: { userId: other.userId, courseId: b, versionMajor: 1, versionMinor: 0, moduleSnapshotJson: "[]" } });
     await switchOn();
-    const response = await pendingOld(a, { versionIds: [v2], courseVersion: "major" });
+    const response = await pendingOld(a, { versionIds: [v2], courseVersion: "minor" });
     expect(response.status).toBe(409);
     expect(response.body.error).toBe("client_outdated");
     expect(await activeVersionOf(moduleId)).not.toBe(v2);
     expect(await versionOf(a)).toMatch(/^1\./);
   });
 
+  it("det gamle endepunktet, hovedversjon av kurset med en ny modul: 409 client_outdated, for valget kan ikke heve kravet per kurs", async () => {
+    const { moduleId, a, u, v2 } = await pendingOldContract();
+    await switchOn();
+    const response = await pendingOld(a, { versionIds: [v2], courseVersion: "major" });
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe("client_outdated");
+    expect(await activeVersionOf(moduleId)).not.toBe(v2);
+    expect(await versionOf(a)).toMatch(/^1\./);
+    expect(await statusOf(u.userId, moduleId)).toBe("ACTIVE");
+  });
+
+  it("det gamle endepunktet, hovedversjon med bare en seksjon i settet: går som før", async () => {
+    const section = await prisma.courseSection.create({ data: { title: L(tag("seksjon")) }, select: { id: true } });
+    const active = await prisma.courseSectionVersion.create({ data: { sectionId: section.id, versionNo: 1, bodyMarkdown: L("Tekst."), publishedAt: new Date() }, select: { id: true } });
+    await prisma.courseSection.update({ where: { id: section.id }, data: { activeVersionId: active.id } });
+    const next = await prisma.courseSectionVersion.create({ data: { sectionId: section.id, versionNo: 2, bodyMarkdown: L("Ny tekst.") }, select: { id: true } });
+    const course = await prisma.course.create({
+      data: { title: L(tag("kurs")), certificationLevel: "basic", publishedAt: new Date(), slug: `a3-${RUN}-${seq++}`, items: { create: [{ itemType: "SECTION", sectionId: section.id, sortOrder: 0 }] } },
+      select: { id: true },
+    });
+    const holder = await learner();
+    await prisma.courseCompletion.create({ data: { userId: holder.userId, courseId: course.id, versionMajor: 1, versionMinor: 0, moduleSnapshotJson: "[]" } });
+    await switchOn();
+    const response = await pendingOld(course.id, { versionIds: [next.id], courseVersion: "major", confirmEmailRecipients: 1 });
+    expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
+    expect(await versionOf(course.id)).toBe("2.0");
+  });
+
   it("det gamle endepunktet ellers: publisert med `courseVersion` for dette kurset, modulen blir mindre, og ingen mister en bestått", async () => {
     const { moduleId, a, b, u, v2 } = await pendingOldContract();
     await switchOn();
     const before = await versionOf(b);
-    const response = await pendingOld(a, { versionIds: [v2], courseVersion: "major" });
+    const response = await pendingOld(a, { versionIds: [v2], courseVersion: "minor" });
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
     expect(await activeVersionOf(moduleId)).toBe(v2);
     expect(await numberOf(v2)).toBe("1.1");
-    expect(await versionOf(a)).toBe("2.0");
+    expect(await versionOf(a)).toMatch(/^1\./);
     expect(await versionOf(b)).not.toBe(before);
     expect(await versionOf(b)).toMatch(/^1\./);
     expect(await requirementOf(a, moduleId)).toBe(1);
