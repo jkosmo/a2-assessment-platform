@@ -130,6 +130,27 @@ describe("e-post gjennom rutene", () => {
     expect(mails[0].content.subject).not.toMatch(/ikke bestått/i);
   });
 
+  it("sensor ble ferdig før raden gikk: deltakeren får resultatet, ikke e-posten om sensor etterpå", async () => {
+    const participant = seededParticipant;
+    const reviewer = headers("sensor-person", "REVIEWER");
+    const { submissionId } = await submitAndAssess(
+      participant,
+      "Submission contains sensitive client data references.",
+      "Manual review should be triggered due to sensitive handling concerns.",
+    );
+    const [row] = await rowsFor(OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification, submissionId);
+    const review = await prisma.manualReview.findFirstOrThrow({ where: { submissionId }, select: { id: true } });
+    expect((await request(app).post(`/api/reviews/${review.id}/claim`).set(reviewer)).status).toBe(200);
+    const override = await request(app)
+      .post(`/api/reviews/${review.id}/override`)
+      .set(reviewer)
+      .send({ passFailTotal: false, decisionReason: "Manual reviewer overrode the decision.", overrideReason: "Insufficient practical depth." });
+    expect(override.status).toBe(200);
+
+    await deliverOutboxEvent({ type: row.type, payloadJson: row.payloadJson });
+    expect(mailsTo(participant["x-user-email"])).toHaveLength(0);
+  });
+
   it("anke: opprettet, tatt og avgjort har alle lenke til modulen", async () => {
     const participant = seededParticipant;
     const { moduleId, submissionId } = await submitAndAssess(
@@ -171,6 +192,34 @@ describe("e-post gjennom rutene", () => {
 
     await vi.waitFor(() => expect(mailsTo(email)).toHaveLength(1), { timeout: 5000 });
     expectOwnLink(mailsTo(email)[0], `${BASE}/participant?courseId=${course.id}`, "kurs-tildelt.jpg");
+
+    // Samme tildeling på nytt med ny frist: fristen oppdateres, og ingen får e-posten om nytt kurs igjen.
+    const dueAt = "2030-01-01T00:00:00.000Z";
+    expect((await request(app).post(`/api/admin/content/classes/${classId}/courses`).set(admin).send({ courseId: course.id, dueAt })).status).toBe(201);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(mailsTo(email)).toHaveLength(1);
+    const assignment = await prisma.courseGroupAssignment.findUniqueOrThrow({ where: { courseId_classId: { courseId: course.id, classId } } });
+    expect(assignment.dueAt?.toISOString()).toBe(dueAt);
+  });
+
+  it("dobbeltklikk på «Tildel kurs»: én e-post", async () => {
+    const course = await prisma.course.create({
+      data: { title: JSON.stringify({ "en-GB": `Kurs2 ${tag}`, nb: `Kurs2 ${tag}`, nn: `Kurs2 ${tag}` }), enrollmentPolicy: "RESTRICTED", publishedAt: new Date() },
+      select: { id: true },
+    });
+    courseIds.push(course.id);
+    const email = `${tag}-medlem2@company.com`;
+    const member = await prisma.user.create({ data: { externalId: `${tag}-medlem2`, name: "Medlem", email }, select: { id: true } });
+    const klass = await request(app).post("/api/admin/content/classes").set(admin).send({ name: `Klasse2 ${tag}` });
+    const classId = klass.body.class.id as string;
+    expect((await request(app).post(`/api/admin/content/classes/${classId}/members`).set(admin).send({ userId: member.id })).status).toBe(201);
+
+    const assign = () => request(app).post(`/api/admin/content/classes/${classId}/courses`).set(admin).send({ courseId: course.id });
+    const [first, second] = await Promise.all([assign(), assign()]);
+    expect([first.status, second.status]).toEqual([201, 201]);
+    await vi.waitFor(() => expect(mailsTo(email)).toHaveLength(1), { timeout: 5000 });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(mailsTo(email)).toHaveLength(1);
   });
 
   it("diskusjon: eieren får lenke til det nye spørsmålet, og den som spurte, til svaret", async () => {

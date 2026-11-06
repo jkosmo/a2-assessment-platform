@@ -1514,3 +1514,4 @@ Kjente mangler, godtatt fordi plattformen er intern:
 - En eier av et begrenset kurs som ikke har kurset i «Mine kurs», får en beskjed i stedet for tråden når lenken i en diskusjons-e-post åpnes.
 - Ligger en modul i flere kurs, velger lenken det som krever nytt forsøk, ellers det første. E-posten vet ikke hvilket kurs svaret kom fra.
 - De siste «modulen er revidert»-radene i køen går som ren tekst, uten bilde og lenke.
+- Lenken til en modul henter kursene etter tur for å finne modulen. En deltaker med svært mange kurs kan nå grensen på 120 kall i minuttet og få beskjeden om at modulen ikke finnes, selv om den gjør det.

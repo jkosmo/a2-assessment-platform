@@ -16,7 +16,7 @@ const checkAndIssueCourseCompletions = vi.fn();
 const deliverCourseMajorVersionNotice = vi.fn();
 
 vi.mock("../../src/db/prisma.js", () => ({
-  prisma: { outboxEvent: { findFirst, updateMany } },
+  prisma: { outboxEvent: { findFirst, updateMany }, submission: { findUnique: vi.fn().mockResolvedValue({ submissionStatus: "UNDER_REVIEW" }) } },
 }));
 vi.mock("../../src/modules/certification/index.js", () => ({ notifyAssessmentResult, notifyAssessmentUnderReview, notifyAppealStatusTransition, sendModuleRevisedNotification }));
 vi.mock("../../src/modules/course/index.js", () => ({ checkAndIssueCourseCompletions }));

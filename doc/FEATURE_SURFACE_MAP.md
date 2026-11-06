@@ -183,7 +183,9 @@ major_email_confirm_required` without it. Sending: `CourseMajorEmailMonitor` →
 outbox `course_major_version_notification` → `deliverCourseMajorVersionNotice` (`courseMajorVersionEmail.ts`), only
 with `COURSE_MAJOR_EMAIL_ENABLED=true` on the worker. The e-mail uses the shared illustrated template
 (`renderIllustratedEmail` / `deliverIllustratedEmail`, `src/modules/certification/illustratedEmail.ts`, image
-`src/assets/email/kurs-ny-versjon.jpg` as a CID attachment, no links) that #1139 and #1141 reuse.
+`src/assets/email/kurs-ny-versjon.jpg` as a CID attachment) that all e-mails to people using the platform go through
+(#1141, 2.138.0). The template inserts our own link (`emailLinks.ts`, on when `PUBLIC_APP_BASE_URL` is set on both app
+and worker) and neutralizes addresses in other text (`github[.]com`).
 
 **Section rule:** a major version writes `CourseVersion` rows (N−1: the section versions just before
 the change; N: just after). Every reader of «which sections has the participant read» goes through

@@ -207,6 +207,9 @@ export async function deliverOutboxEvent(event: { type: string; payloadJson: str
   }
   if (event.type === OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification) {
     const p = JSON.parse(event.payloadJson) as AssessmentUnderReviewNotificationPayload;
+    // Raden venter fem minutter. Har sensor rukket å bli ferdig, har deltakeren alt fått resultatet, og denne ville kommet etterpå.
+    const submission = await prisma.submission.findUnique({ where: { id: p.submissionId }, select: { submissionStatus: true } });
+    if (submission?.submissionStatus !== "UNDER_REVIEW") return;
     const result = await notifyAssessmentUnderReview({
       submissionId: p.submissionId,
       submittedAt: new Date(p.submittedAt),

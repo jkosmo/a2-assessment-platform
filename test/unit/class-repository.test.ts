@@ -31,18 +31,30 @@ describe("class repository", () => {
     });
   });
 
-  it("assigns a course to a class idempotently and updates the due date", async () => {
-    const upsert = vi.fn().mockResolvedValue({});
-    const repo = createClassRepository({ courseGroupAssignment: { upsert } } as never);
+  it("assigns a course to a class and says it is new", async () => {
+    const createMany = vi.fn().mockResolvedValue({ count: 1 });
+    const updateMany = vi.fn();
+    const repo = createClassRepository({ courseGroupAssignment: { createMany, updateMany } } as never);
     const dueAt = new Date("2026-09-01T00:00:00.000Z");
 
-    await repo.assignCourseToClass("course-1", "class-1", dueAt, "admin-1");
+    await expect(repo.assignCourseToClass("course-1", "class-1", dueAt, "admin-1")).resolves.toEqual({ created: true });
 
-    expect(upsert).toHaveBeenCalledWith({
-      where: { courseId_classId: { courseId: "course-1", classId: "class-1" } },
-      create: { courseId: "course-1", classId: "class-1", dueAt, assignedById: "admin-1" },
-      update: { dueAt },
+    expect(createMany).toHaveBeenCalledWith({
+      data: [{ courseId: "course-1", classId: "class-1", dueAt, assignedById: "admin-1" }],
+      skipDuplicates: true,
     });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("an existing assignment only gets the new due date, and is not new", async () => {
+    const createMany = vi.fn().mockResolvedValue({ count: 0 });
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const repo = createClassRepository({ courseGroupAssignment: { createMany, updateMany } } as never);
+    const dueAt = new Date("2026-09-01T00:00:00.000Z");
+
+    await expect(repo.assignCourseToClass("course-1", "class-1", dueAt, "admin-1")).resolves.toEqual({ created: false });
+
+    expect(updateMany).toHaveBeenCalledWith({ where: { courseId: "course-1", classId: "class-1" }, data: { dueAt } });
   });
 
   it("archives a class with a timestamp (soft delete)", async () => {

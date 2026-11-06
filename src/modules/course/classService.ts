@@ -281,9 +281,9 @@ export async function assignCourseToClass(courseId: string, classId: string, due
   if (course.archivedAt) {
     throw new DomainRuleError("course_archived", "Cannot assign an archived course.");
   }
-  await runInTransaction(async (tx) => {
+  const { created } = await runInTransaction(async (tx) => {
     const repo = createClassRepository(tx);
-    await repo.assignCourseToClass(courseId, classId, dueAt, actorId);
+    const assignment = await repo.assignCourseToClass(courseId, classId, dueAt, actorId);
     await recordAuditEvent(
       {
         entityType: auditEntityTypes.class,
@@ -294,7 +294,11 @@ export async function assignCourseToClass(courseId: string, classId: string, due
       },
       tx,
     );
+    return assignment;
   });
+
+  // Et dobbeltklikk eller en endret frist er ikke et nytt kurs. Før fikk hele klassen e-posten på nytt (QA-porten, 2.138.0).
+  if (!created) return;
 
   // #684: email the members that their class was assigned a course. Skipped for the "Alle deltakere"
   // system class (would email the whole org) and for ENTRA classes (no stored member rows). Fire-and-
