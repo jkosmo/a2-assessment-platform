@@ -1370,6 +1370,7 @@ to siste er regelen så lenge bryteren er av, og faller bort når den slås på 
 56. **Avviste svar må gis på nytt** (5b). Det er valgt, se «5b — bygget», men med mange kurs er det noen klikk til.
 57. **Kalibreringssiden viser `versionNo`** (5b): versjonsvelgeren og tabellen. Det er et støtteverktøy, og nummeret der er det som står i rådataene. Seksjoner har ikke hoved og mindre, så `v3` i seksjonslista står.
 58. **Over 200 per kurs: «ja» nullstilles når valget byttes** (5b, som i 4b). Bytter forfatteren til mindre og tilbake, må det krysses av på nytt. Det er den trygge retningen.
+59. **Andre kurs med samme modul oppdateres ikke med en gang** (2.134.1, Codex 2026-11-06). Etter en innlevering viser siden «Påbegynt» bare for kurs den alt har åpnet. Andre kurs med samme modul, og kurs når modulen er åpnet fra modullista, får riktig status når lista hentes på nytt, og det skjer når deltakeren går tilbake til den. Ingenting går tapt.
 
 ### Gjennomgang av planen
 

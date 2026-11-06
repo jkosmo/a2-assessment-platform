@@ -272,7 +272,7 @@ token is unchanged (`/api/reports/export?type=recertification`).
 
 Behind the switch: `409 module_versioning_not_active` until `module_pass_per_course = on`, and nothing is written. An old server answers 404. Not reachable with an agent token. See `doc/DESIGN_934.md`, «5a-3».
 
-`GET …/publish-preview-versioned` → **200** `{ moduleId, moduleVersion: { id, versionNo, versionMajor, versionMinor }, currentMajor, courses: [{ courseId, title, published, archived, versionMajor, versionMinor, certificateHolders, majorEmailRecipients }] }`. `courses` are the courses that hold the module and have been out, also unpublished and archived ones. The numbers come from the functions the publish uses. `404 module_version_not_found`.
+`GET …/publish-preview-versioned` → **200** `{ moduleId, moduleVersion: { id, versionNo, versionMajor, versionMinor }, currentMajor, anyonePassed, courses: [{ courseId, title, published, archived, versionMajor, versionMinor, certificateHolders, majorEmailRecipients }] }`. `anyonePassed` says whether anyone holds a valid pass on the module; the dialog does not ask when no one does. `courses` are the courses that hold the module and have been out, also unpublished and archived ones. The numbers come from the functions the publish uses. `404 module_version_not_found`.
 
 `POST …/publish-versioned` body (strict; an unknown field is `400 validation_error`):
 

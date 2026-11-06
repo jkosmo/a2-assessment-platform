@@ -153,7 +153,6 @@ test("participant: declaring autonomous shows the nudge; 'go back' cancels, 'sub
 for (const [navn, aiInfluence, policy] of [
   ["skyggemodus globalt", { enabled: true, shadowMode: true }, null],
   ["modulen er i skyggemodus, selv om regelen er aktiv globalt", { enabled: true, shadowMode: false }, { aiInfluence: { shadowMode: true } }],
-  ["modulen har slått regelen av", { enabled: true, shadowMode: false }, { aiInfluence: { enabled: false } }],
 ] as const) {
   test(`2.134.1, ${navn}: ingen rutes til sensor, så valget lover det ikke`, async ({ page }) => {
     await mockBase(page, aiInfluence);
@@ -167,6 +166,28 @@ for (const [navn, aiInfluence, policy] of [
     await expect(page.locator("#aiDeclaration")).toBeVisible();
     await expect(page.locator("#aiDeclaration")).toContainText("Påvirker ikke poengene dine");
     await expect(page.locator("#aiDeclarationReviewNotice")).toBeHidden();
+  });
+}
+
+for (const [navn, aiInfluence, policy, synlig] of [
+  ["modulen har slått regelen av", { enabled: true, shadowMode: false }, { aiInfluence: { enabled: false } }, false],
+  ["regelen er av globalt, men modulen har slått den på", { enabled: false, shadowMode: false }, { aiInfluence: { enabled: true } }, true],
+] as const) {
+  test(`2.136.0, ${navn}: spørsmålet følger modulens innstilling, som på serveren`, async ({ page }) => {
+    await mockBase(page, aiInfluence);
+    await page.route("**/api/modules**", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ modules: [{ ...ESSAY_MODULE, assessmentPolicy: policy }] }) }),
+    );
+    await page.addInitScript(() => {
+      try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+    });
+    await selectEssayModule(page);
+    if (synlig) {
+      await expect(page.locator("#aiDeclaration")).toBeVisible();
+      await expect(page.locator("#aiDeclarationReviewNotice")).toBeVisible();
+    } else {
+      await expect(page.locator("#aiDeclaration")).toBeHidden();
+    }
   });
 }
 

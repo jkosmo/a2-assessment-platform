@@ -47,6 +47,7 @@ import {
   deriveParticipantFlowGateState,
   aiReviewRoutingLive,
   markCourseModuleStarted,
+  passCoversCurrentVersion,
   earlierResultToShow,
   isAssessmentResultReady,
   findMatchingPreset,
@@ -916,7 +917,9 @@ function updateCreateSubmissionAvailability() {
 
 // #475: AI-use declaration helpers ------------------------------------------------------------
 function aiDeclarationEnabled() {
-  return participantRuntimeConfig?.aiInfluence?.enabled === true;
+  // Samme regel som serveren: modulens egen innstilling først, så den globale.
+  const own = resolveSelectedModule(loadedModules, selectedModuleId)?.assessmentPolicy?.aiInfluence;
+  return (own?.enabled ?? participantRuntimeConfig?.aiInfluence?.enabled) === true;
 }
 
 // Live routing/nudge only when enabled AND not in shadow mode. In shadow mode we still collect the
@@ -1322,16 +1325,23 @@ function showCourseModuleStarted(moduleId) {
 }
 
 /** 2.126.0: hold modulens siste innlevering oppdatert i denne økta (statusen hentes bare ved sidelasting). */
+const submittedVersionBySubmission = new Map();
+
 function noteLatestSubmission(moduleId, patch) {
   const module = loadedModules.find((m) => m?.id === moduleId);
   if (!module) return;
   module.participantStatus = { ...(module.participantStatus ?? {}), ...patch };
   showCourseModuleStarted(moduleId);
-  if (isSettledPass({ passFailTotal: patch.latestDecision?.passFailTotal, submissionStatus: patch.latestStatus })) {
+  // #934 skive 5a-3: en bestått fjerner «ta den på nytt» bare hvis den gjelder versjonen som er ute nå. Et vedtak på en eldre versjon kan
+  // komme etter en ny hovedversjon, og da gjelder kravet fortsatt. Innleveringer fra før siden ble åpnet kjenner vi ikke, og da står det til
+  // kurset er hentet på nytt.
+  const passOnCurrentVersion = isSettledPass({ passFailTotal: patch.latestDecision?.passFailTotal, submissionStatus: patch.latestStatus })
+    && passCoversCurrentVersion(submittedVersionBySubmission.get(patch.latestSubmissionId), module);
+  if (passOnCurrentVersion) {
     clearCourseRetakeFlag(courseDetailCache, moduleId);
   }
   // #934 skive 5a-3: beskjeden står til deltakeren har bestått. Et nytt stryk endrer ikke at modulen må tas på nytt.
-  if (courseRetakeModuleId === moduleId && isSettledPass({ passFailTotal: patch.latestDecision?.passFailTotal, submissionStatus: patch.latestStatus })) {
+  if (courseRetakeModuleId === moduleId && passOnCurrentVersion) {
     courseRetakeModuleId = null;
     if (selectedModuleId === moduleId) renderSelectedModuleStatus(module);
   }
@@ -3306,6 +3316,7 @@ createSubmissionButton.addEventListener("click", async () => {
         }),
       });
       submissionIdLabel.textContent = body.submission.id;
+      submittedVersionBySubmission.set(body.submission.id, seenVersionId);
       noteLatestSubmission(moduleId, { latestSubmissionId: body.submission.id, latestStatus: body.submission.submissionStatus ?? "SUBMITTED", latestDecision: null });
       stopAutoAssessmentLoop(true);
       latestAppeal = null;

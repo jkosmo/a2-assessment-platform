@@ -16,7 +16,19 @@ import {
   clearCourseRetakeFlag,
   markCourseModuleStarted,
   aiReviewRoutingLive,
+  passCoversCurrentVersion,
 } from "../public/participant-console-state.js";
+
+describe("#934 5a-3: gjelder beståtten versjonen som er ute nå?", () => {
+  const module = { activeVersion: { id: "v2" } };
+  it("ja bare når innleveringen er på den aktive versjonen", () => {
+    expect(passCoversCurrentVersion("v2", module)).toBe(true);
+    expect(passCoversCurrentVersion("v1", module)).toBe(false);
+    expect(passCoversCurrentVersion(undefined, module)).toBe(false);
+    expect(passCoversCurrentVersion(undefined, { activeVersion: {} })).toBe(false);
+    expect(passCoversCurrentVersion("v2", null)).toBe(false);
+  });
+});
 
 describe("2.134.1: går «KI skrev det meste» til sensor?", () => {
   const live = { enabled: true, shadowMode: false };

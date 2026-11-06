@@ -336,6 +336,11 @@ export function courseRetakeApplies(retakeRequired, participantStatus) {
   });
 }
 
+/** #934 skive 5a-3: gjelder innleveringen versjonen som er ute nå? En ukjent innlevering gjør ikke det. */
+export function passCoversCurrentVersion(submittedVersionId, module) {
+  return Boolean(submittedVersionId) && submittedVersionId === module?.activeVersion?.id;
+}
+
 /**
  * #934 skive 5a-3: en ny bestått er det kurset ventet på. Kursdetaljene i minnet sier «ta den på nytt» til neste oppdatering, og den
  * kan feile. Da ville et nytt klikk startet enda et forsøk.

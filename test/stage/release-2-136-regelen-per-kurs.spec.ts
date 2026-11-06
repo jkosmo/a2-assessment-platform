@@ -33,6 +33,7 @@ async function api(metode: string, sti: string, body?: unknown): Promise<{ statu
 const L = (nb: string) => ({ "en-GB": nb, nb, nn: nb });
 const stempel = Date.now();
 const t: { moduleId?: string; a?: string; b?: string; v1?: string; v2?: string } = {};
+let bryterenPå = false;
 
 async function nyVersjon(navn: string) {
   const sett = await api("POST", `/api/admin/content/modules/${t.moduleId}/mcq-set-versions`, {
@@ -134,22 +135,25 @@ test("bestått i to kurs, så hovedversjon i A og mindre i B: B beholder, A må 
   });
   expect(publisert.status, publisert.tekst.slice(0, 400)).toBe(200);
   expect(publisert.json.moduleVersion).toMatchObject({ versionMajor: 2, versionMinor: 0 });
+  bryterenPå = true;
 
   expect(await modulen(t.b)).toMatchObject({ moduleStatus: "PASSED" });
   expect(await modulen(t.a)).toMatchObject({ moduleStatus: "REVISED_RETAKE_REQUIRED", retakeRequired: true });
 });
 
 test("den gamle avkrysningen gir 409, og ingenting endres", async () => {
+  test.skip(!bryterenPå, "bryteren er av");
   test.setTimeout(60_000);
   const v3 = await nyVersjon("tredje");
   const gammel = await api("POST", `/api/admin/content/modules/${t.moduleId}/module-versions/${v3}/publish`, { supersedesEarlierPasses: true });
   expect(gammel.status, gammel.tekst.slice(0, 300)).toBe(409);
   expect(gammel.json.error).toBe("client_outdated");
   expect((await api("GET", `/api/modules/${t.moduleId}`)).json.module.activeVersion.id).toBe(t.v2);
-  expect(await modulen(t.b)).toMatchObject({ moduleStatus: "PASSED" });
+  expect(await modulen(t.b!)).toMatchObject({ moduleStatus: "PASSED" });
 });
 
 test("består på nytt: A er ferdig, med kursbevis for versjon 2, og B står urørt", async () => {
+  test.skip(!bryterenPå, "bryteren er av");
   test.setTimeout(240_000);
   // Den tredje versjonen fra forrige test er ikke publisert, så deltakeren får v2.
   await taModulen();
