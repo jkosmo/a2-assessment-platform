@@ -952,6 +952,24 @@ function syncAiTileSelection() {
   }
 }
 
+// 2.136.1: svaret hører til modulen og står i kladden, sammen med resten av besvarelsen.
+function currentAiDeclarationDraft() {
+  const value = getSelectedAiDeclaration();
+  return value ? { value, text: aiDeclarationText?.value ?? "" } : null;
+}
+
+// Et svar fra en innlevering som er levert, gjelder ikke neste forsøk. Der spørsmålet er slått av, tømmer applyAiDeclarationVisibility det igjen.
+function restoreAiDeclarationFromDraft(draft) {
+  const saved = draft?.submittedAs ? null : draft?.aiDeclaration;
+  if (!saved?.value) return;
+  const input = [...(aiDeclarationBlock?.querySelectorAll('input[name="aiDeclaration"]') ?? [])].find((one) => one.value === saved.value);
+  if (!input) return;
+  input.checked = true;
+  if (aiDeclarationText) aiDeclarationText.value = typeof saved.text === "string" ? saved.text : "";
+  syncAiTileSelection();
+  setAiHowtoVisible(saved.value !== "none");
+}
+
 function clearAiDeclarationSelection() {
   for (const input of aiDeclarationBlock?.querySelectorAll('input[name="aiDeclaration"]') ?? []) {
     input.checked = false;
@@ -1214,12 +1232,13 @@ function activateParticipantModule(moduleId, options = {}) {
   selectedModuleId = moduleId;
   courseRetakeModuleId = retakeRequired ? moduleId : null;
   courseRetakeCourseId = retakeRequired ? retakeCourseId : null;
-  // 2.136.1: svaret om KI gjaldt forrige modul. Blir det stående, kan det sendes med i denne, og «KI skrev det meste» går til sensor.
+  // 2.136.1: svaret om KI gjaldt forrige modul, og står i kladden der. Blir det stående, kan det sendes med i denne, og «KI skrev det meste» går til sensor.
   if (previousModuleId !== moduleId) clearAiDeclarationSelection();
   resetFlowStateForModuleContext();
   renderModules();
   renderSelectedModuleSummary();
   restoreDraftForSelectedModule(true);
+  if (previousModuleId !== moduleId) restoreAiDeclarationFromDraft(readModuleDraftMap()[moduleId]);
   updateCreateSubmissionAvailability();
 
   // #546 feedback: MCQ-only modules have no free-text step — go straight to the questions by
@@ -1790,6 +1809,8 @@ function persistCurrentModuleDraft(showStatus = false) {
     data[field.id] = element?.value ?? "";
   }
   data.mcq = collectCurrentMcqDraft();
+  const aiDeclaration = currentAiDeclarationDraft();
+  if (aiDeclaration) data.aiDeclaration = aiDeclaration;
   // 2.126.0: en kladd lagret mens et svar er levert, er restene av det svaret — ikke et nytt forsøk.
   // Merket lar modulen vise resultatet igjen neste gang den åpnes (earlierResultToShow).
   const submittedAs = submissionIdLabel.textContent;
@@ -3112,6 +3133,8 @@ function clearCurrentModuleDraft() {
   renderOrphanedDraftTexts(null);
 
   resetModuleDraftInputsToDefaultLocaleValues();
+  // 2.136.1: svaret om KI er en del av kladden. Blir det stående, følger det forrige forsøks svar med inn i det neste.
+  clearAiDeclarationSelection();
   currentQuestions = [];
   attemptIdLabel.textContent = "-";
   renderQuestions();
@@ -3631,7 +3654,9 @@ aiDeclarationBlock?.addEventListener("change", (event) => {
   setAiHowtoVisible(Boolean(declaration) && declaration !== "none");
   aiDeclarationHint?.classList.add("hidden");
   updateCreateSubmissionAvailability();
+  scheduleDraftAutosave();
 });
+aiDeclarationText?.addEventListener("input", () => scheduleDraftAutosave());
 
 window.addEventListener("beforeunload", () => {
   stopAutoAssessmentLoop(false);

@@ -2,13 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.136.2 - 2026-11-06
+
+- **Svaret om KI og forklaringen står i kladden til modulen.** Rettingen i 2.136.1 slettet dem når deltakeren gikk til en annen modul og tilbake (QA-porten). Se punktet under for regelen.
+
 ## 2.136.1 - 2026-11-06
 
-Rettinger i siden til deltakeren, etter QA-porten. 2.136.0 kom aldri i prod, så begge går ut samlet.
+Rettinger i siden til deltakeren, etter QA-porten. 2.136.0 og 2.136.1 kom aldri i prod, så alle tre går ut samlet.
 
 - **«Må tas på nytt» bestemmes av serveren.** Siden henter kurset på nytt etter en bestått, som før, og beskjeden forsvinner bare når serveren sier at kravet er dekket i kurset modulen ble åpnet fra. Regelen er hovedversjon per kurs, og en ny versjon kan ha kommet under vurderingen. `clearCourseRetakeFlag` er fjernet.
 - **Spørsmålet om KI følger modulens innstilling**, som serveren. Det leste bare den globale regelen.
-- **Svaret om KI følger ikke med til neste modul.** «KI skrev det meste» fra modul A kunne stå valgt i modul B og sende besvarelsen der til sensor.
+- **Svaret om KI hører til modulen.** «KI skrev det meste» fra modul A kunne stå valgt i modul B og sende besvarelsen der til sensor. Nå står svaret og forklaringen i kladden til modulen, og de er tilbake når deltakeren kommer tilbake, også etter omlasting. Et svar fra en levert innlevering kommer ikke tilbake, og heller ikke der spørsmålet er slått av. «Start på nytt» tømmer det sammen med resten av kladden.
 - **`release-2-136-regelen-per-kurs.spec.ts`** hopper over alle tre testene når bryteren er av.
 
 ## 2.136.0 - 2026-11-05

@@ -75,6 +75,11 @@ describe("participant console state helpers", () => {
     expect(orphanedDraftTexts(draft, ["nyttFelt", "gammeltFelt"])).toEqual([]);
   });
 
+  it("2.136.1: svaret om KI i kladden regnes ikke som tekst uten felt", () => {
+    expect(orphanedDraftTexts({ aiDeclaration: { value: "autonomous", text: "Forklaring" } }, [])).toEqual([]);
+    expect(orphanedDraftTexts({ aiDeclaration: "gammel form" }, [])).toEqual([]);
+  });
+
   it("#934 5a-1: et svar som er levert, trenger ikke reddes, og uten kladd er det ingenting", () => {
     expect(orphanedDraftTexts({ gammeltFelt: "Svaret mitt", submittedAs: "s1" }, [])).toEqual([]);
     expect(orphanedDraftTexts(undefined, [])).toEqual([]);

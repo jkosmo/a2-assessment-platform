@@ -214,6 +214,113 @@ test("2.136.1: svaret om KI følger ikke med til neste modul, og leveringen er s
   await expect(page.locator("#createSubmission")).toBeDisabled();
 });
 
+async function byttModul(page: Page, tittel: string) {
+  await page.locator("#loadModules").click();
+  await page.locator(".module-card", { hasText: tittel }).click();
+  await expect(page.locator("#submissionFields textarea").first()).toBeVisible();
+}
+
+const ANNEN_MODUL = { ...ESSAY_MODULE, id: "m-annen", title: "Annen Modul" };
+
+async function toModuler(page: Page) {
+  await mockBase(page, { enabled: true, shadowMode: false });
+  const moduler = { første: ESSAY_MODULE as typeof ESSAY_MODULE | Record<string, unknown> };
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ modules: [moduler.første, ANNEN_MODUL] }) }),
+  );
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+  await selectEssayModule(page);
+  await page.locator('.ai-declaration-opt[data-v="autonomous"]').click();
+  await page.locator("#aiDeclarationText").fill("Jeg brukte KI til utkastet.");
+  return moduler;
+}
+
+test("2.136.1: svaret og forklaringen står der når deltakeren kommer tilbake, også etter omlasting", async ({ page }) => {
+  await toModuler(page);
+  await byttModul(page, "Annen Modul");
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveCount(0);
+  await expect(page.locator("#aiDeclarationText")).toHaveValue("");
+
+  await byttModul(page, "Essay Modul");
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveValue("autonomous");
+  await expect(page.locator('.ai-declaration-opt[data-v="autonomous"]')).toHaveClass(/sel/);
+  await expect(page.locator("#aiDeclarationText")).toHaveValue("Jeg brukte KI til utkastet.");
+  await expect(page.locator("#aiDeclarationText")).toBeVisible();
+
+  // Valg og tekst lagres mens deltakeren svarer, ikke bare ved bytte og `beforeunload`, som ikke kjører når en mobilfane blir drept.
+  const lagret = () => page.evaluate(() => Object.values({ ...localStorage }).join(" "));
+  await page.locator('.ai-declaration-opt[data-v="ideas"]').click();
+  await expect.poll(lagret).toContain('"value":"ideas"');
+  await page.locator("#aiDeclarationText").fill("Bare ideer.");
+  await expect.poll(lagret).toContain("Bare ideer.");
+  await selectEssayModule(page);
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveValue("ideas");
+  await expect(page.locator("#aiDeclarationText")).toHaveValue("Bare ideer.");
+});
+
+test("2.136.1: er spørsmålet slått av i modulen siden, kommer ikke svaret tilbake", async ({ page }) => {
+  const moduler = await toModuler(page);
+  await byttModul(page, "Annen Modul");
+  moduler.første = { ...ESSAY_MODULE, assessmentPolicy: { aiInfluence: { enabled: false } } };
+  await byttModul(page, "Essay Modul");
+  await expect(page.locator("#aiDeclaration")).toBeHidden();
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveCount(0);
+});
+
+test("2.136.1: et levert svar kommer ikke tilbake som svar på neste forsøk", async ({ page }) => {
+  await toModuler(page);
+  await page.route("**/api/submissions", (route: Route) =>
+    route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) }),
+  );
+  for (const ta of await page.locator("#submissionFields textarea").all()) {
+    await ta.fill("Et tilstrekkelig langt fritekstsvar for vurdering.");
+  }
+  await page.locator("#createSubmission").click();
+  await page.locator('.ai-nudge-overlay [data-nudge="insist"]').click();
+  await expect(page.locator("#submissionId")).toHaveText("s1");
+  await byttModul(page, "Annen Modul");
+  await page.locator("#loadModules").click();
+  await page.locator(".module-card", { hasText: "Essay Modul" }).click();
+  await page.waitForTimeout(300);
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveCount(0);
+});
+
+test("2.136.1: «start på nytt» tømmer svaret om KI sammen med resten av kladden", async ({ page }) => {
+  await toModuler(page);
+  await page.route("**/api/submissions", (route: Route) =>
+    route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) }),
+  );
+  await page.route("**/api/submissions/*/result", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        submissionId: "s1",
+        status: "COMPLETED",
+        decision: { passFailTotal: false, decisionType: "AUTOMATIC" },
+        scoreComponents: { totalScore: 20, practicalScaledScore: 20 },
+        participantGuidance: {},
+      }),
+    }),
+  );
+  for (const ta of await page.locator("#submissionFields textarea").all()) {
+    await ta.fill("Et tilstrekkelig langt fritekstsvar for vurdering.");
+  }
+  await page.locator("#createSubmission").click();
+  await page.locator('.ai-nudge-overlay [data-nudge="insist"]').click();
+  await expect(async () => {
+    for (const knapp of [page.locator("#queueAssessment"), page.locator("#checkResult")]) {
+      if ((await knapp.isVisible()) && (await knapp.isEnabled())) await knapp.click();
+    }
+    await expect(page.locator("#resetSubmissionFlow")).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 15_000 });
+  await page.locator("#resetSubmissionFlow").click();
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveCount(0);
+  await expect(page.locator("#aiDeclarationText")).toHaveValue("");
+});
+
 test("2.134.1, modulen er i skyggemodus: ingen dialog, og ingen rutes", async ({ page }) => {
   await mockBase(page, { enabled: true, shadowMode: false });
   let posted: Record<string, unknown> | null = null;

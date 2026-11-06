@@ -271,7 +271,7 @@ export function upsertModuleDraft(moduleDrafts, moduleId, draftData, nowMs = Dat
 }
 
 // #934 skive 5a-1: nøkler i en kladd som ikke er svarfelt.
-const DRAFT_META_KEYS = new Set(["mcq", "submittedAs", "updatedAt"]);
+const DRAFT_META_KEYS = new Set(["mcq", "submittedAs", "updatedAt", "aiDeclaration"]);
 
 /**
  * Tekst i kladden til felt siden ikke lenger har. Kladden lagres per felt-id. Har oppgaven fått en ny versjon med andre

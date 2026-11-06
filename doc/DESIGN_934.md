@@ -1,6 +1,6 @@
 # #934 — hovedversjon og mindre versjon for kurs og moduler
 
-Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0, skive 2 i 2.128.0, skive 3 i 2.129.0, 4a i 2.131.0, 4b i 2.132.0, 5a-1 i 2.133.0, 5a-2 i 2.134.0 og 5a-3 i 2.135.0 (bryteren er av); 5b gjenstår.
+Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0, skive 2 i 2.128.0, skive 3 i 2.129.0, 4a i 2.131.0, 4b i 2.132.0, 5a-1 i 2.133.0, 5a-2 i 2.134.0, 5a-3 i 2.135.0 og 5b i 2.136.0. Bryteren er på i stage og av i prod, og den slås på etter 2.136.2 i prod.
 Skisse: https://claude.ai/artifact/AyQpYXMQSDHW8WL8YPe34n
 
 ## Hva produkteier har bestemt (2026-11-01)
