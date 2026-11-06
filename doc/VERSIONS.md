@@ -2,6 +2,10 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.136.5 - 2026-11-06
+
+- **Svaret om KI har en egen nøkkel i kladden,** `__aiDeclaration`. En modul med et svarfelt som het `aiDeclaration`, fikk teksten overskrevet (QA-porten). Bare stage har hatt den gamle nøkkelen, og den leses ikke lenger.
+
 ## 2.136.4 - 2026-11-06
 
 Rettinger etter en lokal gjennomgang, siden QA-porten nådde taket for forbruk. Alle gjelder siden til deltakeren.

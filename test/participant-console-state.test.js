@@ -76,8 +76,10 @@ describe("participant console state helpers", () => {
   });
 
   it("2.136.1: svaret om KI i kladden regnes ikke som tekst uten felt", () => {
-    expect(orphanedDraftTexts({ aiDeclaration: { value: "autonomous", text: "Forklaring" } }, [])).toEqual([]);
-    expect(orphanedDraftTexts({ aiDeclaration: "gammel form" }, [])).toEqual([]);
+    expect(orphanedDraftTexts({ __aiDeclaration: { value: "autonomous", text: "Forklaring" } }, [])).toEqual([]);
+    expect(orphanedDraftTexts({ __aiDeclaration: "gammel form" }, [])).toEqual([]);
+    // 2.136.5: et felt som tilfeldigvis heter det samme som det gamle navnet, er vanlig tekst.
+    expect(orphanedDraftTexts({ aiDeclaration: "Svaret mitt" }, [])).toEqual([{ id: "aiDeclaration", text: "Svaret mitt" }]);
   });
 
   it("#934 5a-1: et svar som er levert, trenger ikke reddes, og uten kladd er det ingenting", () => {

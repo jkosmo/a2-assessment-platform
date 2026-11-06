@@ -319,7 +319,7 @@ test("2.136.4: et modulbytte bak dialogen sender ikke forklaringen fra den andre
   await byttModul(page, "Annen Modul");
   await page.locator('.ai-declaration-opt[data-v="ideas"]').click();
   await page.locator("#aiDeclarationText").fill("Forklaringen til den andre modulen.");
-  await expect.poll(async () => (await kladden(page, "m-annen"))?.aiDeclaration?.text).toBe("Forklaringen til den andre modulen.");
+  await expect.poll(async () => (await kladden(page, "m-annen"))?.__aiDeclaration?.text).toBe("Forklaringen til den andre modulen.");
   await byttModul(page, "Essay Modul");
   await fyllSvar(page);
 
@@ -344,7 +344,7 @@ test("2.136.4: kladden er merket som levert med en gang, så en drept fane ikke 
   await fangInnlevering(page);
   await fyllSvar(page);
   // Autolagringen må ha gått av, ellers er det den som setter merket.
-  await expect.poll(async () => (await kladden(page, "m-fto"))?.aiDeclaration?.value).toBe("autonomous");
+  await expect.poll(async () => (await kladden(page, "m-fto"))?.__aiDeclaration?.value).toBe("autonomous");
   await page.waitForTimeout(350);
   await page.locator("#createSubmission").click();
   await page.locator('.ai-nudge-overlay [data-nudge="insist"]').click();
@@ -357,7 +357,7 @@ test("2.136.4: ved «Nei» er forklaringen skjult, og den verken lagres eller se
   await fyllSvar(page);
   await page.locator('.ai-declaration-opt[data-v="none"]').click();
   await expect(page.locator("#aiDeclarationText")).toBeHidden();
-  await expect.poll(async () => (await kladden(page, "m-fto"))?.aiDeclaration).toEqual({ value: "none", text: "" });
+  await expect.poll(async () => (await kladden(page, "m-fto"))?.__aiDeclaration).toEqual({ value: "none", text: "" });
   await page.locator("#createSubmission").click();
   await expect.poll(() => sendt.length).toBe(1);
   expect(sendt[0].processSignals).toEqual({ declaration: "none", insistedAfterPrompt: false });
@@ -390,7 +390,7 @@ for (const [navn, forklaring, resultatetVises] of [
     await page.locator("#resetSubmissionFlow").click();
     await page.locator('.ai-declaration-opt[data-v="improve"]').click();
     if (forklaring) await page.locator("#aiDeclarationText").fill(forklaring);
-    await expect.poll(async () => (await kladden(page, "m-fto"))?.aiDeclaration).toEqual({ value: "improve", text: forklaring });
+    await expect.poll(async () => (await kladden(page, "m-fto"))?.__aiDeclaration).toEqual({ value: "improve", text: forklaring });
 
     await åpne();
     if (resultatetVises) {
@@ -402,6 +402,34 @@ for (const [navn, forklaring, resultatetVises] of [
     }
   });
 }
+
+test("2.136.5: et svarfelt som heter aiDeclaration, beholder teksten sin ved bytte og omlasting, ved siden av svaret om KI", async ({ page }) => {
+  await mockBase(page, { enabled: true, shadowMode: false });
+  const felt = { fields: [{ id: "aiDeclaration", label: { nb: "Svaret ditt", "en-GB": "Your answer", nn: "Svaret ditt" }, type: "textarea", required: true }] };
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ modules: [{ ...ESSAY_MODULE, submissionSchema: felt }, ANNEN_MODUL] }) }),
+  );
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+  await selectEssayModule(page);
+  const svaret = page.locator('[data-field-id="aiDeclaration"]');
+  await svaret.fill("Teksten deltakeren skrev.");
+  await page.locator('.ai-declaration-opt[data-v="ideas"]').click();
+  await page.locator("#aiDeclarationText").fill("Bare ideer.");
+  // Autolagringen først: «Last moduler» henter kladden inn i feltene, og går det på under et kvart sekund, er den eldre enn det som står der.
+  await expect.poll(() => kladden(page, "m-fto")).toMatchObject({ aiDeclaration: "Teksten deltakeren skrev.", __aiDeclaration: { value: "ideas", text: "Bare ideer." } });
+
+  await byttModul(page, "Annen Modul");
+  await byttModul(page, "Essay Modul");
+  await expect(svaret).toHaveValue("Teksten deltakeren skrev.");
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveValue("ideas");
+  await expect(page.locator("#aiDeclarationText")).toHaveValue("Bare ideer.");
+
+  await selectEssayModule(page);
+  await expect(svaret).toHaveValue("Teksten deltakeren skrev.");
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveValue("ideas");
+});
 
 test("2.136.1: «start på nytt» tømmer svaret om KI sammen med resten av kladden", async ({ page }) => {
   await toModuler(page);

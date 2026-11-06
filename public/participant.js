@@ -45,6 +45,7 @@ import {
   courseRetakeApplies,
   deriveParticipantFlowGateState,
   aiReviewRoutingLive,
+  AI_DECLARATION_DRAFT_KEY,
   markCourseModuleStarted,
   courseStillRequiresRetake,
   earlierResultToShow,
@@ -960,7 +961,7 @@ function currentAiDeclarationDraft() {
 
 // Et svar fra en innlevering som er levert, gjelder ikke neste forsøk. Der spørsmålet er slått av, tømmer applyAiDeclarationVisibility det igjen.
 function restoreAiDeclarationFromDraft(draft) {
-  const saved = draft?.submittedAs ? null : draft?.aiDeclaration;
+  const saved = draft?.submittedAs ? null : draft?.[AI_DECLARATION_DRAFT_KEY];
   if (!saved?.value) return;
   const input = [...(aiDeclarationBlock?.querySelectorAll('input[name="aiDeclaration"]') ?? [])].find((one) => one.value === saved.value);
   if (!input) return;
@@ -1038,7 +1039,7 @@ function hasMeaningfulStoredDraft(draft) {
   }
 
   // 2.136.4: en forklaring er tekst deltakeren har skrevet, så forrige resultat skal ikke legge seg over den.
-  if (draft.aiDeclaration?.text?.trim()) {
+  if (draft[AI_DECLARATION_DRAFT_KEY]?.text?.trim()) {
     return true;
   }
 
@@ -1815,7 +1816,7 @@ function persistCurrentModuleDraft(showStatus = false) {
   }
   data.mcq = collectCurrentMcqDraft();
   const aiDeclaration = currentAiDeclarationDraft();
-  if (aiDeclaration) data.aiDeclaration = aiDeclaration;
+  if (aiDeclaration) data[AI_DECLARATION_DRAFT_KEY] = aiDeclaration;
   // 2.126.0: en kladd lagret mens et svar er levert, er restene av det svaret — ikke et nytt forsøk.
   // Merket lar modulen vise resultatet igjen neste gang den åpnes (earlierResultToShow).
   const submittedAs = submissionIdLabel.textContent;

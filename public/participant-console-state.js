@@ -271,7 +271,10 @@ export function upsertModuleDraft(moduleDrafts, moduleId, draftData, nowMs = Dat
 }
 
 // #934 skive 5a-1: nøkler i en kladd som ikke er svarfelt.
-const DRAFT_META_KEYS = new Set(["mcq", "submittedAs", "updatedAt", "aiDeclaration"]);
+/** 2.136.5: kladden lagres per felt-id, og en modul kan ha et felt som heter hva som helst. Svaret om KI må ikke overskrive deltakerens tekst. */
+export const AI_DECLARATION_DRAFT_KEY = "__aiDeclaration";
+
+const DRAFT_META_KEYS = new Set(["mcq", "submittedAs", "updatedAt", AI_DECLARATION_DRAFT_KEY]);
 
 /**
  * Tekst i kladden til felt siden ikke lenger har. Kladden lagres per felt-id. Har oppgaven fått en ny versjon med andre
