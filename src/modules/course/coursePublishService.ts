@@ -15,6 +15,7 @@ import {
   countCertificateHolders,
   countMajorVersionRecipients,
   findAffectedCourses,
+  withVersionChoiceRights,
   type AffectedCourse,
   type CourseVersionBump,
   type CourseVersionChoice,
@@ -709,7 +710,9 @@ export async function getCoursePendingVersions(courseId: string, actor: PendingV
     passedTotal: items.reduce((sum, item) => sum + item.passedCount, 0),
     modulesWithPasses: items.filter((item) => item.passedCount > 0).length,
     course: await courseVersionFacts(reader, course),
-    ...((await isModulePassPerCourseOn(reader)) ? { affectedCourses: await findAffectedCourses(reader, itemRefs(items)) } : {}),
+    ...((await isModulePassPerCourseOn(reader))
+      ? { affectedCourses: await withVersionChoiceRights(reader, await findAffectedCourses(reader, itemRefs(items)), actor) }
+      : {}),
   };
 }
 

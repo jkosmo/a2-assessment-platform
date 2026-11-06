@@ -1,6 +1,6 @@
 # #934 — hovedversjon og mindre versjon for kurs og moduler
 
-Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0, skive 2 i 2.128.0, skive 3 i 2.129.0, 4a i 2.131.0, 4b i 2.132.0, 5a-1 i 2.133.0, 5a-2 i 2.134.0, 5a-3 i 2.135.0 og 5b i 2.136.0. Bryteren er på i stage og av i prod, og den slås på etter 2.136.5 i prod.
+Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0, skive 2 i 2.128.0, skive 3 i 2.129.0, 4a i 2.131.0, 4b i 2.132.0, 5a-1 i 2.133.0, 5a-2 i 2.134.0, 5a-3 i 2.135.0 og 5b i 2.136.0. Bryteren er på i stage og av i prod, og den slås på etter 2.137.0 i prod.
 Skisse: https://claude.ai/artifact/AyQpYXMQSDHW8WL8YPe34n
 
 ## Hva produkteier har bestemt (2026-11-01)
@@ -1358,8 +1358,7 @@ to siste er regelen så lenge bryteren er av, og faller bort når den slås på 
     eldre hovedversjon, står der som bestått. Modulen har ikke noe kurs å måle kravet mot, så svaret er ikke feil, men kategorien blir stående tom for nye revisjoner. Kursrapporten viser «må ta ny versjon».
 49. **Tallene til den gamle dialogen leser modulstatus** (5a-3): `GET /modules/:id/passed-count` og `passedCount` i `pending-versions`. En som besto og strøk på nytt, telles ikke, selv om beståtten teller i et kurs. Dialogen
     spør da ikke, og svaret er mindre, så ingen mister noe. Dialogen fra 5b bruker `affectedCourses` og `publish-preview-versioned`, så tallene brukes bare mens bryteren er av (2.136.0).
-50. **En forfatter som eier en modul, svarer også for kurs hen ikke eier** (5a-3). `publish-versioned` og `publish-pending-versioned` lister alle berørte kurs med tittel og antall kursbevis, og et svar «hoved» gir hovedversjon og e-post
-    der. Planen sier «hvert kurs modulen ligger i», og deling mellom fagansvarlige er ønsket. Produkteier avgjør om det skal begrenses når dialogen fra 5b er sett.
+50. ~~**En forfatter som eier en modul, svarer også for kurs hen ikke eier**~~ (5a-3). **Rettet i 2.137.0** (produkteier 2026-11-06): bare kursets eier, eller en administrator, velger hovedversjon for kurset. Se `doc/DECISIONS.md`. Andres kurs står fortsatt i lista, med tittel, siden deling mellom fagansvarlige er ønsket.
 51. **En bestått uten krav eller uten versjonsnummer vises som «revidert»** (5a-3, med bryteren på). Den skal ikke telle, men forklaringen stemmer ikke. Det kan bare skje hvis tilbakefyllingen ikke er kjørt: `syncModuleRequirements` og
     publiseringen holder radene ved like, og rapporten lister hull og er rød. Derfor står tilbakefylling og rapport rett før bryteren i rekkefølgen.
 52. **Sammenligningsrapporten har ingen mening etter bryteren** (5a-3). Den sammenligner med den gamle regelen, og da er forskjeller forventet, også krav som ikke er modulens nåværende hovedversjon. Den er ikke sperret, for den leser bare.
@@ -1374,6 +1373,7 @@ to siste er regelen så lenge bryteren er av, og faller bort når den slås på 
 60. **«Må tas på nytt» følger siste svar fra serveren** (2.136.1). Beskjeden forsvinner når kurset er hentet på nytt etter en bestått, og det hentes bare når det står åpent. Med `courseOnly` av og kurslista åpen kan beskjeden stå ved siden av «Bestått» til kurset åpnes igjen. Feiler hentingen, står den til neste gang kurset hentes, og et klikk på modulen før det starter et nytt forsøk. Hever noen kravet mens siden står åpen, ser deltakeren det først når kurset hentes på nytt. Serveren avgjør likevel hva som teller, så kursbeviset blir riktig.
 61. **Modulbytte mens et svar er på vei** (fra før 2.136, lokal gjennomgang 2026-11-06). Bytter deltakeren modul mens et resultat hentes, kan resultatet fra A vises under B. Bytter hen mens innleveringen sendes, kan id-en til A havne under B, og B blir skrivebeskyttet. Vinduet er én rundtur til serveren, det første er kjørt og det andre bare lest. Neste åpning av modulen gir riktig side.
 62. **Kladdene er ikke per bruker** (fra før 2.136, lokal gjennomgang 2026-11-06). De ligger under én nøkkel i `localStorage`, og ingen kode i `public/` sletter fra `localStorage` ved utlogging. På en delt maskin kan neste bruker se dem. Svartekst ligger der fra før, og forklaringen om KI ligger der fra 2.136.2. Ikke testet med ekte utlogging. Produkteier har godtatt dette 2026-11-06: plattformen er intern og for kompetanseutvikling.
+63. **En kurseier kan ikke kreve nytt forsøk etterpå** (2.137.0). Publiserer en annen en ny hovedversjon av modulen, får kurset mindre versjon, og det finnes ingen knapp for å heve kravet senere. Kravet heves bare i samme publisering som lager hovedversjonen, så det holder ikke at en administrator går inn etterpå: da må en administrator velge for kurset ved neste hovedversjon av modulen, eller publiseringen må gjøres av en som eier begge. Deltakere som begynner på modulen, får likevel den nye versjonen, og beståtte på den gamle teller. Venter på produkteiers svar om egen knapp.
 
 ### Gjennomgang av planen
 

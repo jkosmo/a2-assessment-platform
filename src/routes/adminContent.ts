@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { mcqQuestionTypeFields, publishModuleVersionedBodySchema } from "../modules/adminContent/adminContentSchemas.js";
 import { prisma } from "../db/prisma.js";
 import { localizeContentText } from "../i18n/content.js";
-import { findAffectedCourses } from "../modules/course/courseVersioning.js";
+import { findAffectedCourses, withVersionChoiceRights } from "../modules/course/courseVersioning.js";
 import { hasValidModulePass } from "../modules/course/moduleCredit.js";
 import { assertModuleVersioningActive } from "../modules/course/modulePassSwitch.js";
 import { publishModuleVersioned } from "../modules/course/versionedPublishService.js";
@@ -1104,7 +1104,10 @@ adminContentRouter.get("/modules/:moduleId/module-versions/:moduleVersionId/publ
     }
     const highest = await prisma.moduleVersion.aggregate({ where: { moduleId: request.params.moduleId }, _max: { versionMajor: true } });
     const locale = requestLocale(request);
-    const courses = await findAffectedCourses(prisma, [{ moduleId: request.params.moduleId }]);
+    const courses = await withVersionChoiceRights(prisma, await findAffectedCourses(prisma, [{ moduleId: request.params.moduleId }]), {
+      userId: actorId,
+      roles: request.context?.roles ?? [],
+    });
     response.json({
       moduleId: request.params.moduleId,
       moduleVersion: version,
@@ -1141,7 +1144,12 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
     await assertModuleVersioningActive(prisma);
     const validation = await evaluateModuleVersionGate(request.params.moduleId, request.params.moduleVersionId);
     if (!respondUnlessPublishable(response, validation)) return;
-    const result = await publishModuleVersioned(request.params.moduleId, request.params.moduleVersionId, actorId, parsedBody.data);
+    const result = await publishModuleVersioned(
+      request.params.moduleId,
+      request.params.moduleVersionId,
+      { userId: actorId, roles: request.context?.roles ?? [] },
+      parsedBody.data,
+    );
     response.json({ ...result, validationWarnings: validation.issues });
   } catch (error) {
     if (error instanceof AppError) {

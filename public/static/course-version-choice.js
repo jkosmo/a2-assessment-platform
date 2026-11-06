@@ -143,21 +143,25 @@ export function createCourseVersionChoice({ t, tf }) {
 
   function affectedCourseHtml(course, id, currentCourseId) {
     const holders = Number(course.certificateHolders) > 0;
+    // 2.137.0: bare kursets eier velger hovedversjon. Et felt som mangler (gammel server), betyr som før.
+    const mayChoose = course.canChooseVersion !== false;
     const chip = courseVersionLabel(course) ? ` <span class="status-chip course-version-chip">${escapeHtml(courseVersionLabel(course))}</span>` : "";
     const current = course.courseId === currentCourseId ? ` <span class="course-version-course-this">${escapeHtml(t("courses.version.thisCourse"))}</span>` : "";
-    const facts = holders
-      ? `${courseVersionHoldersText(course)} ${emailIfMajorText(course)}`
-      : t("courses.version.noHolders");
+    const facts = !mayChoose
+      ? t("courses.version.otherOwners")
+      : holders
+        ? `${courseVersionHoldersText(course)} ${emailIfMajorText(course)}`
+        : t("courses.version.noHolders");
     return `<section class="course-version-course" role="group" aria-labelledby="${id}" data-course-id="${escapeHtml(course.courseId)}">
       <h3 class="course-version-course-title" id="${id}"><span class="course-version-course-name">${escapeHtml(course.title || course.courseId)}</span>${current}${chip}${courseStateChipHtml(course)}</h3>
       <p class="course-version-course-facts">${escapeHtml(facts)}</p>
-      ${holders ? "<div data-course-version-host></div>" : ""}
+      ${holders && mayChoose ? "<div data-course-version-host></div>" : ""}
     </section>`;
   }
 
   /**
    * #934 skive 5b: ett valg per berørt kurs. Et kurs uten kursbevis får mindre versjon uansett (`resolveCourseVersionKind` på serveren),
-   * så det får ingen knapper å trykke på, bare beskjeden. Det kurset dialogen står i, kommer først.
+   * og det samme gjør et kurs forfatteren ikke eier (2.137.0). De får ingen knapper å trykke på, bare beskjeden. Det kurset dialogen står i, kommer først.
    *
    * `read()` gir feltene til kallet, eller `null` når et kurs over 200 mottakere mangler det ekstra «ja». Da sendes ingenting. Det sendes
    * bare svar for kurs det ble spurt om: får et kurs kursbevis etter at dialogen ble vist, avviser serveren (`course_version_required`),

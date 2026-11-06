@@ -96,6 +96,23 @@ test.describe("#934 skive 5b — «Publiser nye versjoner» med bryteren på", (
     await expect(page.locator("#pendingPublishDialog")).toBeHidden();
   });
 
+  test("2.137.0: et annet kurs med andre eiere har ingen knapper, og det sendes ikke noe svar for det", async ({ page }) => {
+    const calls = await setup(page, { pendings: [ON([kurs("annet", { title: "Annet kurs", canChooseVersion: false }), kurs("course-1", { title: "Rapportskriving", canChooseVersion: true })])] });
+    await page.goto(`${COURSE}?publishPending=1`);
+    await expect(page.locator("#pendingPublishDialog")).toBeVisible();
+    await expect(seksjon(page, "annet").locator("input")).toHaveCount(0);
+    await expect(seksjon(page, "annet")).toContainText("Kurset har andre eiere, og bare de kan velge hovedversjon");
+    await seksjon(page, "course-1").locator('input[value="major"]').check();
+    await page.locator("#pendingPublishConfirmBtn").click();
+    await expect.poll(() => calls.versioned.length).toBe(1);
+    expect(calls.versioned[0]).toEqual({
+      versionIds: ["mod-1-v2"],
+      courseVersions: { "course-1": "major" },
+      expectedCourseIds: ["course-1", "annet"],
+      confirmEmailRecipients: { "course-1": 12 },
+    });
+  });
+
   test("ingen berørte kurs: ingen valg, og et tomt sett", async ({ page }) => {
     const calls = await setup(page, { pendings: [ON([])] });
     await page.goto(`${COURSE}?publishPending=1`);
@@ -137,6 +154,7 @@ test.describe("#934 skive 5b — «Publiser nye versjoner» med bryteren på", (
     ["409 affected_courses_changed", { status: 409, body: { error: "affected_courses_changed", message: "x" } }],
     ["409 major_email_confirm_required", { status: 409, body: { error: "major_email_confirm_required", message: "x", details: { majorEmailRecipients: 251 } } }],
     ["409 pending_versions_changed", { status: 409, body: { error: "pending_versions_changed", message: "x" } }],
+    ["403 course_version_not_owner", { status: 403, body: { error: "course_version_not_owner", message: "x" } }],
   ] as const) {
     test(`${navn}: dialogen tegnes på nytt med ferske tall og sier fra`, async ({ page }) => {
       const calls = await setup(page, {

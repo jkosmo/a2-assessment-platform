@@ -18,6 +18,8 @@
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
+import type { prisma } from "../../db/prisma.js";
+import { listManageableContentIds } from "../content/contentOwnershipService.js";
 import type { ContentWriteTx } from "../../db/contentLock.js";
 import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { raiseModuleRequirementInCourse } from "../adminContent/moduleVersioning.js";
@@ -252,6 +254,34 @@ export async function findAffectedCourses(
     });
   }
   return affected;
+}
+
+/**
+ * 2.137.0 (produkteier 2026-11-06): bare kursets eier, eller en administrator, velger hovedversjon for et kurs. En hovedversjon krever
+ * nytt forsøk og sender e-post til kursets deltakere, så den skal ikke kunne utløses av den som eier en modul i kurset.
+ */
+export function coursesActorMayChoose(
+  reader: DbTransactionClient | typeof prisma,
+  courses: Array<{ courseId: string }>,
+  actor: { userId: string; roles: string[] },
+): Promise<Set<string>> {
+  return listManageableContentIds({
+    contentType: "COURSE",
+    contentIds: courses.map((course) => course.courseId),
+    actorUserId: actor.userId,
+    roles: actor.roles,
+    reader,
+  });
+}
+
+/** Kursene slik dialogen skal vise dem: `canChooseVersion: false` gir beskjeden, uten valg. */
+export async function withVersionChoiceRights(
+  reader: DbTransactionClient | typeof prisma,
+  courses: AffectedCourse[],
+  actor: { userId: string; roles: string[] },
+): Promise<Array<AffectedCourse & { canChooseVersion: boolean }>> {
+  const mayChoose = await coursesActorMayChoose(reader, courses, actor);
+  return courses.map((course) => ({ ...course, canChooseVersion: mayChoose.has(course.courseId) }));
 }
 
 /**

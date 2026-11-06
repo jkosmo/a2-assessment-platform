@@ -749,6 +749,7 @@ const PENDING_ANSWERS_STALE = new Set([
   "pending_versions_changed",
   "affected_courses_changed",
   "course_version_required",
+  "course_version_not_owner",
   "major_email_confirm_required",
   "module_versioning_not_active",
 ]);

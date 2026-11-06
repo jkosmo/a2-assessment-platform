@@ -900,6 +900,111 @@ describe("#934 5a-3: modulens egen dialog", () => {
   });
 });
 
+describe("2.137.0: bare kursets eier, eller en administrator, velger hovedversjon for kurset", () => {
+  /** En fagansvarlig som eier modulen og kurs A, men ikke kurs B. Begge kursene har kursbevis. */
+  async function smoOwningModuleAndA(options: { ownsA?: boolean } = {}) {
+    const setup = await twoCoursesWithCertificates();
+    const suffix = `${RUN}-${seq++}`;
+    const smo = { "x-user-id": `a3-eier-${suffix}`, "x-user-email": `a3.eier.${suffix}@x.test`, "x-user-name": "Fagansvarlig", "x-user-roles": "SUBJECT_MATTER_OWNER", "x-locale": "nb" };
+    const user = await prisma.user.create({ data: { externalId: smo["x-user-id"], email: smo["x-user-email"], name: "Fagansvarlig" }, select: { id: true } });
+    await prisma.contentOwner.create({ data: { contentType: "MODULE", contentId: setup.moduleId, userId: user.id } });
+    if (options.ownsA !== false) await prisma.contentOwner.create({ data: { contentType: "COURSE", contentId: setup.a, userId: user.id } });
+    await switchOn();
+    const v2 = await newVersion(setup.moduleId);
+    return { ...setup, smo, v2 };
+  }
+
+  const preview = (moduleId: string, versionId: string, headers: Headers) =>
+    request(app).get(`/api/admin/content/modules/${moduleId}/module-versions/${versionId}/publish-preview-versioned`).set(headers);
+  const rights = (courses: Array<{ courseId: string; canChooseVersion: boolean }>) =>
+    Object.fromEntries(courses.map((course) => [course.courseId, course.canChooseVersion]));
+
+  it("forhåndsvisningen sier hvilke kurs avsenderen kan velge for. Et kurs med andre eiere står i lista, og en administrator kan velge for alle", async () => {
+    const { moduleId, v2, a, b, smo } = await smoOwningModuleAndA();
+    const som = await preview(moduleId, v2, smo);
+    expect(som.status, JSON.stringify(som.body).slice(0, 300)).toBe(200);
+    expect(rights(som.body.courses)).toEqual({ [a]: true, [b]: false });
+    expect(rights((await preview(moduleId, v2, admin())).body.courses)).toEqual({ [a]: true, [b]: true });
+  });
+
+  it("hovedversjon for et kurs med andre eiere: 403, og ingenting er skrevet, heller ikke i kurset avsenderen eier", async () => {
+    const { moduleId, v2, a, b, u, smo } = await smoOwningModuleAndA();
+    const [fromA, fromB] = [await versionOf(a), await versionOf(b)];
+    const response = await publishVersioned(moduleId, v2, { moduleVersion: "major", courseVersions: { [a]: "major", [b]: "major" }, expectedCourseIds: [a, b] }, smo);
+    expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(403);
+    expect(response.body.error).toBe("course_version_not_owner");
+    expect(await activeVersionOf(moduleId)).not.toBe(v2);
+    expect(await numberOf(v2)).toBeNull();
+    expect([await versionOf(a), await versionOf(b)]).toEqual([fromA, fromB]);
+    expect([await requirementOf(a, moduleId), await requirementOf(b, moduleId)]).toEqual([1, 1]);
+    expect(await prisma.courseVersionNotice.count({ where: { userId: u.userId, courseId: { in: [a, b] } } })).toBe(0);
+  });
+
+  it("hovedversjon for modulen, hoved i eget kurs: kurset med andre eiere får mindre uten svar. Der står kravet og beståtten, og ingen får e-post", async () => {
+    const { moduleId, v2, a, b, u, smo } = await smoOwningModuleAndA();
+    const fromB = await versionOf(b);
+    const response = await publishVersioned(moduleId, v2, { moduleVersion: "major", courseVersions: { [a]: "major" }, expectedCourseIds: [a, b] }, smo);
+    expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
+    expect(await numberOf(v2)).toBe("2.0");
+    expect(await versionOf(a)).toBe("2.0");
+    expect(await requirementOf(a, moduleId)).toBe(2);
+    expect(await versionOf(b)).not.toBe(fromB);
+    expect(await versionOf(b)).toMatch(/^1\./);
+    expect(await requirementOf(b, moduleId)).toBe(1);
+    expect(await prisma.courseVersionNotice.count({ where: { courseId: a, userId: u.userId } })).toBe(1);
+    expect(await prisma.courseVersionNotice.count({ where: { courseId: b, userId: u.userId } })).toBe(0);
+    expect(moduleItem(await courseDetail(u.headers, b), moduleId)).toMatchObject({ moduleStatus: "PASSED" });
+    expect(moduleItem(await courseDetail(u.headers, a), moduleId)).toMatchObject({ moduleStatus: "REVISED_RETAKE_REQUIRED", retakeRequired: true });
+  });
+
+  it("et svar «mindre» for et kurs med andre eiere godtas, og eier hen ingen av kursene, får modulen hovedversjon uten at noe krav heves", async () => {
+    const { moduleId, v2, a, b, smo } = await smoOwningModuleAndA({ ownsA: false });
+    const response = await publishVersioned(moduleId, v2, { moduleVersion: "major", courseVersions: { [a]: "minor" }, expectedCourseIds: [a, b] }, smo);
+    expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
+    expect(await numberOf(v2)).toBe("2.0");
+    expect([await requirementOf(a, moduleId), await requirementOf(b, moduleId)]).toEqual([1, 1]);
+    expect(await versionOf(a)).toMatch(/^1\./);
+    expect(await versionOf(b)).toMatch(/^1\./);
+  });
+
+  it("eget kurs med kursbevis må fortsatt ha svar", async () => {
+    const { moduleId, v2, a, b, smo } = await smoOwningModuleAndA();
+    const response = await publishVersioned(moduleId, v2, { moduleVersion: "major", courseVersions: {}, expectedCourseIds: [a, b] }, smo);
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("course_version_required");
+    expect(response.body.details.courses.map((course: { courseId: string }) => course.courseId)).toEqual([a]);
+    expect(await activeVersionOf(moduleId)).not.toBe(v2);
+  });
+
+  it("«Publiser nye versjoner»: samme regel. Lista sier det, hoved for andres kurs gir 403, og kurset med andre eiere får mindre", async () => {
+    const { moduleId, v2, a, b, u, smo } = await smoOwningModuleAndA();
+    const pending = await request(app).get(`/api/admin/content/courses/${a}/pending-versions`).set(smo);
+    expect(pending.status, JSON.stringify(pending.body).slice(0, 300)).toBe(200);
+    expect(rights(pending.body.affectedCourses)).toEqual({ [a]: true, [b]: false });
+
+    const refused = await pendingVersioned(a, { versionIds: [v2], courseVersions: { [a]: "minor", [b]: "major" }, expectedCourseIds: [a, b] }, smo);
+    expect(refused.status, JSON.stringify(refused.body).slice(0, 300)).toBe(403);
+    expect(refused.body.error).toBe("course_version_not_owner");
+    expect(await activeVersionOf(moduleId)).not.toBe(v2);
+
+    const response = await pendingVersioned(a, { versionIds: [v2], courseVersions: { [a]: "major" }, expectedCourseIds: [a, b] }, smo);
+    expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
+    expect(await numberOf(v2)).toBe("2.0");
+    expect(await requirementOf(a, moduleId)).toBe(2);
+    expect(await requirementOf(b, moduleId)).toBe(1);
+    expect(await versionOf(b)).toMatch(/^1\./);
+    expect(await prisma.courseVersionNotice.count({ where: { courseId: b, userId: u.userId } })).toBe(0);
+    expect(moduleItem(await courseDetail(u.headers, b), moduleId)).toMatchObject({ moduleStatus: "PASSED" });
+  });
+
+  it("en administrator kan velge hovedversjon for begge kursene", async () => {
+    const { moduleId, v2, a, b } = await smoOwningModuleAndA();
+    const response = await publishVersioned(moduleId, v2, { moduleVersion: "major", courseVersions: { [a]: "major", [b]: "major" }, expectedCourseIds: [a, b] });
+    expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
+    expect([await requirementOf(a, moduleId), await requirementOf(b, moduleId)]).toEqual([2, 2]);
+  });
+});
+
 describe("#934 5a-3 bevis: de nye endepunktene før bryteren", () => {
   it("alle fire svarer 409 module_versioning_not_active, og ingenting er skrevet", async () => {
     const { moduleId, a, b } = await twoCoursesWithCertificates();
@@ -924,7 +1029,7 @@ describe("#934 5a-3 bevis: de nye endepunktene før bryteren", () => {
   it("sjekken etter låsen avgjør: tjenestene nekter selv, uten ruta foran", async () => {
     const { moduleId, a, b } = await twoCoursesWithCertificates();
     const v2 = await newVersion(moduleId);
-    await expect(publishModuleVersioned(moduleId, v2, "actor", { moduleVersion: "minor" })).rejects.toMatchObject({ code: "module_versioning_not_active" });
+    await expect(publishModuleVersioned(moduleId, v2, { userId: "actor", roles: ["ADMINISTRATOR"] }, { moduleVersion: "minor" })).rejects.toMatchObject({ code: "module_versioning_not_active" });
     await expect(
       publishCoursePendingVersioned(a, { userId: "actor", roles: ["ADMINISTRATOR"] }, { versionIds: [v2], expectedCourseIds: [a, b] }),
     ).rejects.toMatchObject({ code: "module_versioning_not_active" });

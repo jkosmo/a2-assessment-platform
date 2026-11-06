@@ -159,6 +159,41 @@ test.describe("#934 skive 5b — bryteren på", () => {
     await expect(dialog(page)).toBeHidden();
   });
 
+  test("2.137.0: et kurs med andre eiere har ingen knapper, og det sendes ikke noe svar for det", async ({ page }) => {
+    const calls = await setup(page, { previews: [on([kurs("a", { canChooseVersion: true }), kurs("b", { canChooseVersion: false })])] });
+    await clickPublish(page);
+    await page.locator('input[name="moduleVersionKind"][value="major"]').check();
+    await expect(seksjon(page, "b").locator("input")).toHaveCount(0);
+    await expect(seksjon(page, "b")).toContainText("Kurset har andre eiere, og bare de kan velge hovedversjon");
+    await expect(seksjon(page, "b")).not.toContainText("får e-post");
+    await seksjon(page, "a").locator('input[value="major"]').check();
+    await send(page).click();
+    await expect.poll(() => calls.versioned.length).toBe(1);
+    expect(calls.versioned[0]).toEqual({
+      moduleVersion: "major",
+      courseVersions: { a: "major" },
+      expectedCourseIds: ["a", "b"],
+      confirmEmailRecipients: { a: 12 },
+    });
+  });
+
+  test("2.137.0: eierskapet er endret mens dialogen sto (403): dialogen vises på nytt med ferske rettigheter, og ingen rå feilkode", async ({ page }) => {
+    const calls = await setup(page, {
+      previews: [on([kurs("a")]), on([kurs("a", { canChooseVersion: false })])],
+      publishes: [{ status: 403, body: { error: "course_version_not_owner", message: "x" } }, ok],
+    });
+    await clickPublish(page);
+    await page.locator('input[name="moduleVersionKind"][value="major"]').check();
+    await seksjon(page, "a").locator('input[value="major"]').check();
+    await send(page).click();
+    await expect.poll(() => calls.versioned.length).toBe(1);
+    await expect(dialog(page)).toBeVisible();
+    await page.locator('input[name="moduleVersionKind"][value="major"]').check();
+    await expect(seksjon(page, "a").locator("input")).toHaveCount(0);
+    await expect(seksjon(page, "a")).toContainText("Kurset har andre eiere");
+    await expect(dialog(page)).not.toContainText("course_version_not_owner");
+  });
+
   test("to kurs, hoved på det ene, ett uten kursbevis: riktig kall", async ({ page }) => {
     const calls = await setup(page, {
       previews: [on([

@@ -124,8 +124,10 @@ test("bestått i to kurs, så hovedversjon i A og mindre i B: B beholder, A må 
   const forhånd = await api("GET", `/api/admin/content/modules/${t.moduleId}/module-versions/${t.v2}/publish-preview-versioned`);
   expect(forhånd.status, forhånd.tekst.slice(0, 300)).toBe(200);
   expect(forhånd.json.anyonePassed).toBe(true);
-  const rader = forhånd.json.courses as Array<{ courseId: string; certificateHolders: number; majorEmailRecipients: number }>;
+  const rader = forhånd.json.courses as Array<{ courseId: string; certificateHolders: number; majorEmailRecipients: number; canChooseVersion: boolean }>;
   expect(rader.map((r) => r.courseId).sort()).toEqual([t.a, t.b].sort());
+  // 2.137.0: tjenestekontoen laget begge kursene, så den eier dem.
+  expect(rader.every((r) => r.canChooseVersion === true)).toBe(true);
   expect(rader.find((r) => r.courseId === t.a)?.certificateHolders).toBe(1);
 
   const publisert = await api("POST", `/api/admin/content/modules/${t.moduleId}/module-versions/${t.v2}/publish-versioned`, {

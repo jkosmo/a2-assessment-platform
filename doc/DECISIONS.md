@@ -1496,3 +1496,10 @@ skjer.
 En deltaker meldte: «Jeg føler meg lurt». Merkelappen sa «Påvirker ikke karakteren», men «KI skrev det meste» og «Lever likevel» sender
 besvarelsen til sensor (#475), og det sto først etter innlevering. Produkteier valgte å beholde regelen og si den på forhånd: «Påvirker ikke
 poengene dine», «En sensor leser da besvarelsen» på valget, og en setning i dialogen, begge der regelen er aktiv for modulen. Alternativet var å fjerne regelen. Status: gjort i 2.134.1.
+
+## Bare kursets eier velger hovedversjon for kurset (2026-11-06)
+
+Produkteier: «Kun kursets eier skal kunne velge hovedversjon av et kurs.» En hovedversjon krever nytt forsøk og sender e-post til kursets deltakere. Planen
+for #934 lot den som eier en modul svare for hvert kurs modulen ligger i. Administrator kan fortsatt velge for alle kurs, som ellers. Moduleieren kan gi
+modulen hovedversjon, og kurs med andre eiere får da mindre versjon. Kursene står fortsatt i lista, siden deling mellom fagansvarlige er ønsket (2026-09-07).
+Status: gjort i 2.137.0. Hvordan en kurseier skal kunne kreve nytt forsøk etterpå, er ikke avgjort: `doc/DESIGN_934.md`, mangel 63.

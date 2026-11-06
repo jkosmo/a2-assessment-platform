@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.137.0 - 2026-11-06
+
+#934: bare kursets eier, eller en administrator, velger hovedversjon for et kurs (produkteier, mangel 50 i `doc/DESIGN_934.md`). Gjelder bare med bryteren på.
+
+- **Moduldialogen og «Publiser nye versjoner»:** et kurs med andre eiere står i lista, uten valg, med beskjeden om at det får mindre versjon og at beståtte og kursbevis står. Modulen kan fortsatt få hovedversjon av den som eier den.
+- **Serveren:** `publish-versioned` og `publish-pending-versioned` svarer `403 course_version_not_owner` på «major» for et kurs avsenderen ikke eier, og ingenting er skrevet. Uten svar får et slikt kurs mindre versjon. Nytt felt: `canChooseVersion` per kurs i `publish-preview-versioned` og i `affectedCourses` i `pending-versions`.
+- **Ikke bygget:** en kurseier kan ikke kreve nytt forsøk etterpå. Se mangel 63.
+
 ## 2.136.5 - 2026-11-06
 
 - **Svaret om KI har en egen nøkkel i kladden,** `__aiDeclaration`. En modul med et svarfelt som het `aiDeclaration`, fikk teksten overskrevet (QA-porten). Bare stage har hatt den gamle nøkkelen, og den leses ikke lenger.

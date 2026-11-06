@@ -21,6 +21,7 @@ import {
 } from "./coursePublishService.js";
 import {
   applyCourseVersionChange,
+  coursesActorMayChoose,
   findAffectedCourses,
   NO_SECTION_SNAPSHOT,
   resolveCourseVersionKind,
@@ -54,7 +55,7 @@ function assertExpectedCourses(affected: AffectedCourse[], expectedCourseIds: st
  * Hvert kurs med kursbevis må ha et svar. Et svar for et kurs som ikke er berørt, avvises: ellers ville forfatterens valg
  * forsvunnet uten at noen sa fra.
  */
-function assertAnswers(affected: AffectedCourse[], answers: CourseVersionAnswers) {
+function assertAnswers(affected: AffectedCourse[], answers: CourseVersionAnswers, mayChoose: Set<string>) {
   const known = new Set(affected.map((course) => course.courseId));
   const unknown = Object.keys(answers).filter((courseId) => !known.has(courseId));
   if (unknown.length > 0) {
@@ -64,7 +65,16 @@ function assertAnswers(affected: AffectedCourse[], answers: CourseVersionAnswers
       { unknownCourseIds: unknown, currentCourseIds: [...known] },
     );
   }
-  const missing = affected.filter((course) => course.certificateHolders > 0 && !answers[course.courseId]);
+  const notOwner = affected.filter((course) => !mayChoose.has(course.courseId) && answers[course.courseId] === "major");
+  if (notOwner.length > 0) {
+    throw new AppError(
+      "course_version_not_owner",
+      403,
+      "Only a course's owners or an administrator can choose a major version for it. Nothing was published.",
+      { courses: notOwner.map((course) => ({ courseId: course.courseId })) },
+    );
+  }
+  const missing = affected.filter((course) => mayChoose.has(course.courseId) && course.certificateHolders > 0 && !answers[course.courseId]);
   if (missing.length > 0) {
     throw new AppError(
       "course_version_required",
@@ -73,6 +83,16 @@ function assertAnswers(affected: AffectedCourse[], answers: CourseVersionAnswers
       { courses: missing.map((course) => ({ courseId: course.courseId, certificateHolders: course.certificateHolders })) },
     );
   }
+}
+
+/** 2.137.0: et kurs avsenderen ikke kan velge for, får mindre versjon, som uttrykkelig svar. Kravet heves ikke, og ingen får e-post. */
+function answersWithOwnership(affected: AffectedCourse[], answers: CourseVersionAnswers, mayChoose: Set<string>): CourseVersionAnswers {
+  const result: CourseVersionAnswers = {};
+  for (const { courseId } of affected) {
+    const answer = mayChoose.has(courseId) ? answers[courseId] : "minor";
+    if (answer) result[courseId] = answer;
+  }
+  return result;
 }
 
 async function snapshotsOf(tx: ContentWriteTx, affected: AffectedCourse[]) {
@@ -84,12 +104,12 @@ async function snapshotsOf(tx: ContentWriteTx, affected: AffectedCourse[]) {
 
 /**
  * `POST …/module-versions/:id/publish-versioned`. Mindre for modulen: mindre i alle kurs, uten spørsmål. Hoved for modulen: svar
- * kreves for hvert kurs med kursbevis. Kravet heves bare i kursene som faktisk fikk hovedversjon.
+ * kreves for hvert kurs med kursbevis som avsenderen eier. Kravet heves bare i kursene som faktisk fikk hovedversjon.
  */
 export async function publishModuleVersioned(
   moduleId: string,
   moduleVersionId: string,
-  actorId: string,
+  actor: PendingVersionsActor,
   input: {
     moduleVersion: ModuleVersionKind;
     courseVersions?: CourseVersionAnswers;
@@ -103,14 +123,17 @@ export async function publishModuleVersioned(
     if (!module) throw new NotFoundError("Module", "module_not_found", "Module not found.");
     const affected = await findAffectedCourses(tx, [{ moduleId }]);
     const major = input.moduleVersion === "major";
-    const answers = input.courseVersions ?? {};
+    const given = input.courseVersions ?? {};
+    let answers = given;
     if (major) {
+      const mayChoose = await coursesActorMayChoose(tx, affected, actor);
       assertExpectedCourses(affected, input.expectedCourseIds ?? []);
-      assertAnswers(affected, answers);
+      assertAnswers(affected, given, mayChoose);
+      answers = answersWithOwnership(affected, given, mayChoose);
     }
     const snapshots = major ? await snapshotsOf(tx, affected) : new Map<string, SectionSnapshot>();
 
-    const published = await publishModuleVersion(moduleId, moduleVersionId, actorId, tx, { moduleVersionKind: input.moduleVersion });
+    const published = await publishModuleVersion(moduleId, moduleVersionId, actor.userId, tx, { moduleVersionKind: input.moduleVersion });
 
     // Et nytt forsøk på en versjon som alt er aktiv, setter ingenting live, så ingen kursversjon endres. Som hovedversjon når den
     // aldri hit: nummeret er gitt, og `publishModuleVersion` har avvist den.
@@ -128,9 +151,9 @@ export async function publishModuleVersioned(
               raiseModules: [{ moduleId, major: published.versionMajor as number }],
             },
             snapshots.get(course.courseId) as SectionSnapshot,
-            actorId,
+            actor.userId,
           )
-        : await applyCourseVersionChange(tx, course.courseId, { kind: "minor" }, NO_SECTION_SNAPSHOT, actorId);
+        : await applyCourseVersionChange(tx, course.courseId, { kind: "minor" }, NO_SECTION_SNAPSHOT, actor.userId);
       courses.push({ courseId: course.courseId, version });
     }
     return { moduleVersion: published, courses };
@@ -138,9 +161,9 @@ export async function publishModuleVersioned(
 }
 
 /**
- * `POST /courses/:courseId/publish-pending-versioned`. Svar for alle berørte kurs: dette og alle andre som har et av elementene og
- * har vært ute. En modul får ny hovedversjon når minst ett kurs får hovedversjon på grunn av den. Bare elementer forfatteren eier,
- * som i «Publiser nye versjoner».
+ * `POST /courses/:courseId/publish-pending-versioned`. Svar for alle berørte kurs avsenderen eier: dette og andre som har et av
+ * elementene og har vært ute. Andres kurs får mindre versjon. En modul får ny hovedversjon når minst ett kurs får hovedversjon på grunn
+ * av den. Bare elementer forfatteren eier, som i «Publiser nye versjoner».
  */
 export async function publishCoursePendingVersioned(
   courseId: string,
@@ -166,9 +189,11 @@ export async function publishCoursePendingVersioned(
     }
 
     const affected = fresh.affectedCourses ?? (await findAffectedCourses(tx, itemRefs(fresh.items)));
-    const answers = input.courseVersions ?? {};
+    const given = input.courseVersions ?? {};
+    const mayChoose = await coursesActorMayChoose(tx, affected, actor);
     assertExpectedCourses(affected, input.expectedCourseIds);
-    assertAnswers(affected, answers);
+    assertAnswers(affected, given, mayChoose);
+    const answers = answersWithOwnership(affected, given, mayChoose);
 
     // Resultatet for hvert kurs, med samme regel som `applyCourseVersionChange` bruker under. Ingen endrer kursbevis mens vi
     // holder den eksklusive låsen: utstedelsen tar den delt.

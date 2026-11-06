@@ -462,7 +462,7 @@ export function createPublishFlow(ctx) {
   }
 
   // #934 skive 5b: svarene gjelder ikke lenger det som står på serveren. Ingenting er skrevet. Dialogen vises på nytt med ferske tall.
-  const ANSWERS_ARE_STALE = new Set(["affected_courses_changed", "course_version_required", "major_email_confirm_required"]);
+  const ANSWERS_ARE_STALE = new Set(["affected_courses_changed", "course_version_required", "course_version_not_owner", "major_email_confirm_required"]);
 
   const versionUrl = (moduleId, moduleVersionId, tail) =>
     `/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions/${encodeURIComponent(moduleVersionId)}/${tail}`;
