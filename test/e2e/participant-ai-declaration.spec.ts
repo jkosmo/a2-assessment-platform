@@ -239,6 +239,10 @@ async function toModuler(page: Page) {
 
 test("2.136.1: svaret og forklaringen står der når deltakeren kommer tilbake, også etter omlasting", async ({ page }) => {
   await toModuler(page);
+  // Samme modul åpnet på nytt før levering: ingenting forsvinner.
+  await byttModul(page, "Essay Modul");
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveValue("autonomous");
+  await expect(page.locator("#aiDeclarationText")).toHaveValue("Jeg brukte KI til utkastet.");
   await byttModul(page, "Annen Modul");
   await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveCount(0);
   await expect(page.locator("#aiDeclarationText")).toHaveValue("");
@@ -280,6 +284,10 @@ test("2.136.1: et levert svar kommer ikke tilbake som svar på neste forsøk", a
   await page.locator("#createSubmission").click();
   await page.locator('.ai-nudge-overlay [data-nudge="insist"]').click();
   await expect(page.locator("#submissionId")).toHaveText("s1");
+  // Samme modul åpnet på nytt, slik et nytt forsøk fra kurset gjør.
+  await byttModul(page, "Essay Modul");
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveCount(0);
+  await expect(page.locator("#aiDeclarationText")).toHaveValue("");
   await byttModul(page, "Annen Modul");
   await page.locator("#loadModules").click();
   await page.locator(".module-card", { hasText: "Essay Modul" }).click();

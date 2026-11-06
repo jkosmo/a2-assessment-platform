@@ -1232,13 +1232,13 @@ function activateParticipantModule(moduleId, options = {}) {
   selectedModuleId = moduleId;
   courseRetakeModuleId = retakeRequired ? moduleId : null;
   courseRetakeCourseId = retakeRequired ? retakeCourseId : null;
-  // 2.136.1: svaret om KI gjaldt forrige modul, og står i kladden der. Blir det stående, kan det sendes med i denne, og «KI skrev det meste» går til sensor.
-  if (previousModuleId !== moduleId) clearAiDeclarationSelection();
+  // 2.136.1: svaret om KI gjaldt forrige modul eller et levert forsøk. Blir det stående, kan det sendes med, og «KI skrev det meste» går til sensor.
+  // Et svar som ikke er levert, står i kladden og hentes tilbake under.
+  clearAiDeclarationSelection();
   resetFlowStateForModuleContext();
   renderModules();
   renderSelectedModuleSummary();
   restoreDraftForSelectedModule(true);
-  if (previousModuleId !== moduleId) restoreAiDeclarationFromDraft(readModuleDraftMap()[moduleId]);
   updateCreateSubmissionAvailability();
 
   // #546 feedback: MCQ-only modules have no free-text step — go straight to the questions by
@@ -1915,6 +1915,8 @@ function restoreDraftForSelectedModule(showStatus = true) {
     attemptIdLabel.textContent = "-";
     renderQuestions();
   }
+
+  restoreAiDeclarationFromDraft(draft);
 
   if (showStatus) {
     setDraftStatus("restored", selectedModule.title);

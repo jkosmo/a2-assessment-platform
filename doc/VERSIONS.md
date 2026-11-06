@@ -2,6 +2,11 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.136.3 - 2026-11-06
+
+- **Svaret om KI nullstilles hver gang en modul åpnes,** også samme modul. Et levert svar kunne bli stående til neste forsøk og sende det til sensor (QA-porten). Et svar som ikke er levert, kommer tilbake fra kladden.
+- **Forhåndsvisningen** henter også svaret tilbake, siden det nå skjer der resten av kladden hentes.
+
 ## 2.136.2 - 2026-11-06
 
 - **Svaret om KI og forklaringen står i kladden til modulen.** Rettingen i 2.136.1 slettet dem når deltakeren gikk til en annen modul og tilbake (QA-porten). Se punktet under for regelen.
