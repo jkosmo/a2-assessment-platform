@@ -336,21 +336,9 @@ export function courseRetakeApplies(retakeRequired, participantStatus) {
   });
 }
 
-/** #934 skive 5a-3: gjelder innleveringen versjonen som er ute nå? En ukjent innlevering gjør ikke det. */
-export function passCoversCurrentVersion(submittedVersionId, module) {
-  return Boolean(submittedVersionId) && submittedVersionId === module?.activeVersion?.id;
-}
-
-/**
- * #934 skive 5a-3: en ny bestått er det kurset ventet på. Kursdetaljene i minnet sier «ta den på nytt» til neste oppdatering, og den
- * kan feile. Da ville et nytt klikk startet enda et forsøk.
- */
-export function clearCourseRetakeFlag(courseDetails, moduleId) {
-  for (const course of Object.values(courseDetails ?? {})) {
-    for (const item of course?.items ?? []) {
-      if (item?.type === "MODULE" && item.moduleId === moduleId && item.retakeRequired) item.retakeRequired = false;
-    }
-  }
+/** #934 skive 5a-3: krever dette kurset, slik serveren svarte, et nytt forsøk i modulen? */
+export function courseStillRequiresRetake(course, moduleId) {
+  return (course?.items ?? []).some((item) => item?.type === "MODULE" && item.moduleId === moduleId && item.retakeRequired === true);
 }
 
 /**

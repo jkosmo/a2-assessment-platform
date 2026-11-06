@@ -108,7 +108,9 @@ test("bestått i to kurs, så hovedversjon i A og mindre i B: B beholder, A må 
   expect(modul.status, modul.tekst.slice(0, 300)).toBe(201);
   t.moduleId = modul.json.module.id;
   t.v1 = await nyVersjon("første");
-  expect((await api("POST", `/api/admin/content/modules/${t.moduleId}/module-versions/${t.v1}/publish-versioned`, { moduleVersion: "minor" })).status).toBe(200);
+  const første = await api("POST", `/api/admin/content/modules/${t.moduleId}/module-versions/${t.v1}/publish-versioned`, { moduleVersion: "minor" });
+  test.skip(første.status === 409 && første.json.error === "module_versioning_not_active", "bryteren er av");
+  expect(første.status, første.tekst.slice(0, 300)).toBe(200);
   t.a = await nyttKurs("A");
   t.b = await nyttKurs("B");
 
@@ -120,7 +122,6 @@ test("bestått i to kurs, så hovedversjon i A og mindre i B: B beholder, A må 
 
   t.v2 = await nyVersjon("andre");
   const forhånd = await api("GET", `/api/admin/content/modules/${t.moduleId}/module-versions/${t.v2}/publish-preview-versioned`);
-  test.skip(forhånd.status === 409, "bryteren er av");
   expect(forhånd.status, forhånd.tekst.slice(0, 300)).toBe(200);
   expect(forhånd.json.anyonePassed).toBe(true);
   const rader = forhånd.json.courses as Array<{ courseId: string; certificateHolders: number; majorEmailRecipients: number }>;

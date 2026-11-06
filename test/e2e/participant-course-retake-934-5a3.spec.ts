@@ -22,14 +22,48 @@ function result(passed: boolean) {
   };
 }
 
-async function mock(page: Page, options: { retakeRequired?: boolean; status?: Status; moduleStatus?: string } = {}) {
+async function mock(page: Page, options: { retakeRequired?: boolean; status?: Status; moduleStatus?: string; newAttemptPasses?: boolean; serverStillRequires?: boolean; detailFailsAfterPass?: boolean; secondCourse?: boolean } = {}) {
   const state = {
+    decided: false,
     moduleStatus: options.moduleStatus ?? "REVISED_RETAKE_REQUIRED",
     retakeRequired: options.retakeRequired ?? true,
     status: options.status ?? PASSED_ON_OLD_VERSION,
     completions: [{ courseId: "c1", certificateId: "bevis-1", completedAt: "2026-01-01T10:00:00.000Z", courseTitle: "Kurset", versionMajor: 1, versionMinor: 0, current: false }] as Array<Record<string, unknown>>,
   };
-  const calls = { created: [] as Array<Record<string, unknown>>, earlierResults: 0, mcqStarts: 0 };
+  const calls = { created: [] as Array<Record<string, unknown>>, earlierResults: 0, mcqStarts: 0, details: { c1: 0, c2: 0 } };
+  const courseRow = (id: string, title: string) => ({
+    id,
+    title,
+    description: null,
+    moduleCount: 1,
+    progress: {
+      completed: state.moduleStatus === "PASSED" ? 1 : 0,
+      total: 1,
+      moduleCompleted: state.moduleStatus === "PASSED" ? 1 : 0,
+      moduleTotal: 1,
+      sectionCompleted: 0,
+      sectionTotal: 0,
+      courseStatus: state.moduleStatus === "PASSED" ? "COMPLETED" : "IN_PROGRESS",
+    },
+  });
+  const courseDetail = (id: string, title: string, retakeRequired: boolean) => ({
+    course: {
+      id,
+      title,
+      items: [{
+        type: "MODULE",
+        moduleId: "m-1",
+        courseItemId: `i-${id}`,
+        sortOrder: 0,
+        title: "Modulen",
+        moduleStatus: state.moduleStatus,
+        ...(retakeRequired ? { retakeRequired: true } : {}),
+        available: true,
+        required: true,
+        discussionsEnabled: false,
+      }],
+    },
+  });
 
   await page.addInitScript(() => {
     try { localStorage.setItem("participant.locale", "nb"); } catch { /* standardspråk */ }
@@ -48,46 +82,20 @@ async function mock(page: Page, options: { retakeRequired?: boolean; status?: St
   await page.route("**/api/me", (route: Route) => route.fulfill(json({ user: { roles: ["PARTICIPANT"] }, consent: { accepted: true, currentVersion: "1.0" } })));
   await page.route("**/api/queue-counts", (route: Route) => route.fulfill(json({ counts: {} })));
   await page.route("**/api/courses", (route: Route) =>
-    route.fulfill(json({
-      courses: [{
-        id: "c1",
-        title: "Kurset",
-        description: null,
-        moduleCount: 1,
-        progress: {
-          completed: state.moduleStatus === "PASSED" ? 1 : 0,
-          total: 1,
-          moduleCompleted: state.moduleStatus === "PASSED" ? 1 : 0,
-          moduleTotal: 1,
-          sectionCompleted: 0,
-          sectionTotal: 0,
-          courseStatus: state.moduleStatus === "PASSED" ? "COMPLETED" : "IN_PROGRESS",
-        },
-      }],
-    })),
+    route.fulfill(json({ courses: [courseRow("c1", "Kurset"), ...(options.secondCourse ? [courseRow("c2", "Det andre kurset")] : [])] })),
   );
   await page.route("**/api/courses/completions", (route: Route) => route.fulfill(json({ completions: state.completions })));
   await page.route("**/api/courses/enrollments", (route: Route) => route.fulfill(json({ enrollments: [] })));
-  await page.route("**/api/courses/c1", (route: Route) =>
-    route.fulfill(json({
-      course: {
-        id: "c1",
-        title: "Kurset",
-        items: [{
-          type: "MODULE",
-          moduleId: "m-1",
-          courseItemId: "i-1",
-          sortOrder: 0,
-          title: "Modulen",
-          moduleStatus: state.moduleStatus,
-          ...(state.retakeRequired ? { retakeRequired: true } : {}),
-          available: true,
-          required: true,
-          discussionsEnabled: false,
-        }],
-      },
-    })),
-  );
+  await page.route("**/api/courses/c1", (route: Route) => {
+    calls.details.c1 += 1;
+    if (options.detailFailsAfterPass && state.decided) return route.fulfill(json({ error: "internal_error" }, 500));
+    return route.fulfill(json(courseDetail("c1", "Kurset", state.retakeRequired)));
+  });
+  // Det andre kurset valgte mindre: kravet der er dekket av beståtten, selv om det står i det første.
+  await page.route("**/api/courses/c2", (route: Route) => {
+    calls.details.c2 += 1;
+    return route.fulfill(json(courseDetail("c2", "Det andre kurset", !state.decided)));
+  });
   await page.route("**/api/modules**", (route: Route) =>
     route.fulfill(json({
       modules: [{
@@ -113,15 +121,19 @@ async function mock(page: Page, options: { retakeRequired?: boolean; status?: St
   });
   await page.route("**/api/modules/*/mcq/submit", (route: Route) => route.fulfill(json({ assessmentComplete: true })));
   await page.route("**/api/submissions/s-new/result", (route: Route) => {
-    // Serveren: beståtten på den nye versjonen teller, og beviset for hovedversjon 2 er utstedt.
-    state.moduleStatus = "PASSED";
-    state.retakeRequired = false;
-    state.status = { latestSubmissionId: "s-new", latestStatus: "COMPLETED", latestDecision: { passFailTotal: true, totalScore: 100 } };
-    state.completions = [
-      ...state.completions,
-      { courseId: "c1", certificateId: "bevis-2", completedAt: "2026-11-05T10:00:00.000Z", courseTitle: "Kurset", versionMajor: 2, versionMinor: 0, current: true },
-    ];
-    return route.fulfill(json({ ...result(true), submissionId: "s-new" }));
+    state.decided = true;
+    const passed = options.newAttemptPasses ?? true;
+    state.status = { latestSubmissionId: "s-new", latestStatus: "COMPLETED", latestDecision: { passFailTotal: passed, totalScore: passed ? 100 : 20 } };
+    if (passed && !options.serverStillRequires) {
+      // Serveren: beståtten på den nye versjonen teller, og beviset for hovedversjon 2 er utstedt.
+      state.moduleStatus = "PASSED";
+      state.retakeRequired = false;
+      state.completions = [
+        ...state.completions,
+        { courseId: "c1", certificateId: "bevis-2", completedAt: "2026-11-05T10:00:00.000Z", courseTitle: "Kurset", versionMajor: 2, versionMinor: 0, current: true },
+      ];
+    }
+    return route.fulfill(json({ ...result(passed), submissionId: "s-new" }));
   });
   await page.route("**/api/submissions/s-old/result", (route: Route) => {
     calls.earlierResults += 1;
@@ -165,6 +177,62 @@ test.describe("#934 5a-3: modulen åpnet fra kurset", () => {
     await page.goto("/participant");
     await page.locator(".course-accordion-header").first().click();
     await expect(page.locator(".course-module-row").first()).toContainText("Bestått");
+  });
+
+  test("2.136.1: bestått, men serveren sier kravet står (en ny hovedversjon kom under vurderingen): beskjeden står, og neste klikk starter et nytt forsøk", async ({ page }) => {
+    const { calls } = await mock(page, { serverStillRequires: true });
+    await openModuleFromCourse(page);
+    await expect.poll(() => calls.created.length).toBe(1);
+    await page.locator("input[name='q_q1']").first().check();
+    await page.locator("#submitMcq").click();
+    await expect(page.locator("#resultSummary .result-headline")).toContainText("Bestått");
+    await expect.poll(() => calls.details.c1).toBe(2);
+    await page.waitForTimeout(300);
+    await expect(page.locator("#selectedModuleStatus")).toContainText(HINT);
+    expect(calls.details.c1).toBe(2);
+  });
+
+  test("2.136.1: et nytt stryk spør ikke serveren, og beskjeden står", async ({ page }) => {
+    const { calls } = await mock(page, { newAttemptPasses: false });
+    await openModuleFromCourse(page);
+    await expect.poll(() => calls.created.length).toBe(1);
+    await page.locator("input[name='q_q1']").first().check();
+    await page.locator("#submitMcq").click();
+    await expect(page.locator("#resultSummary")).toHaveAttribute("data-has-result", "true");
+    await page.waitForTimeout(300);
+    await expect(page.locator("#selectedModuleStatus")).toContainText(HINT);
+    expect(calls.details.c1).toBe(1);
+  });
+
+  test("2.136.1: svarer ikke serveren på kurset, står beskjeden, og resultatet vises", async ({ page }) => {
+    const { calls } = await mock(page, { detailFailsAfterPass: true });
+    await openModuleFromCourse(page);
+    await expect.poll(() => calls.created.length).toBe(1);
+    await page.locator("input[name='q_q1']").first().check();
+    await page.locator("#submitMcq").click();
+    await expect(page.locator("#resultSummary .result-headline")).toContainText("Bestått");
+    await expect.poll(() => calls.details.c1).toBe(2);
+    await page.waitForTimeout(300);
+    await expect(page.locator("#selectedModuleStatus")).toContainText(HINT);
+  });
+
+  test("2.136.1: et annet kurs uten kravet tar ikke bort beskjeden fra kurset modulen ble åpnet fra", async ({ page }) => {
+    const { calls } = await mock(page, { secondCourse: true, serverStillRequires: true });
+    await page.goto("/participant");
+    await page.locator('.course-accordion-item[data-course-id="c1"] .course-accordion-header').click();
+    await page.locator("#courseDetail_c1 .course-module-row").first().click();
+    await expect.poll(() => calls.created.length).toBe(1);
+    await page.locator("input[name='q_q1']").first().check();
+    await page.locator("#submitMcq").click();
+    await expect(page.locator("#resultSummary .result-headline")).toContainText("Bestått");
+    await expect.poll(() => calls.details.c1).toBe(2);
+
+    // Tilbake til lista og inn i det andre kurset. Modulen står valgt, og der er kravet dekket.
+    await page.locator("#courseBackBar button, #courseBackBar a").first().click();
+    await page.locator('.course-accordion-item[data-course-id="c2"] .course-accordion-header').click();
+    await expect.poll(() => calls.details.c2).toBe(1);
+    await expect(page.locator("#courseDetail_c2 .course-module-row").first()).toBeVisible();
+    await expect(page.locator("#selectedModuleStatus")).toContainText(HINT);
   });
 
   test("KONTROLL: med bryteren av (uten feltet) er siden som i 2.134.0. Forrige resultat vises, og ingenting starter av seg selv", async ({ page }) => {

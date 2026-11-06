@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.136.1 - 2026-11-06
+
+Rettinger i siden til deltakeren, etter QA-porten. 2.136.0 kom aldri i prod, så begge går ut samlet.
+
+- **«Må tas på nytt» bestemmes av serveren.** Siden henter kurset på nytt etter en bestått, som før, og beskjeden forsvinner bare når serveren sier at kravet er dekket i kurset modulen ble åpnet fra. Regelen er hovedversjon per kurs, og en ny versjon kan ha kommet under vurderingen. `clearCourseRetakeFlag` er fjernet.
+- **Spørsmålet om KI følger modulens innstilling**, som serveren. Det leste bare den globale regelen.
+- **Svaret om KI følger ikke med til neste modul.** «KI skrev det meste» fra modul A kunne stå valgt i modul B og sende besvarelsen der til sensor.
+- **`release-2-136-regelen-per-kurs.spec.ts`** hopper over alle tre testene når bryteren er av.
+
 ## 2.136.0 - 2026-11-05
 
 #934 skive 5b: dialogene og versjonsnummeret (`doc/DESIGN_934.md`, «5b — bygget»). **Bryteren er av i alle miljøer, og med den av er publiseringen den samme som før.** Bare versjonsnummeret og eksporten er nye da.

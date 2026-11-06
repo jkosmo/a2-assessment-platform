@@ -42,12 +42,11 @@ import { buildCriteriaPanel, buildCriterionScoreList } from "/static/assessment-
 import { groupCoursesByTheme, hasAnyTheme } from "/static/course-theme-groups.js";
 import {
   buildModuleCardViewModels,
-  clearCourseRetakeFlag,
   courseRetakeApplies,
   deriveParticipantFlowGateState,
   aiReviewRoutingLive,
   markCourseModuleStarted,
-  passCoversCurrentVersion,
+  courseStillRequiresRetake,
   earlierResultToShow,
   isAssessmentResultReady,
   findMatchingPreset,
@@ -199,6 +198,7 @@ let hasLoadedModules = false;
 let selectedModuleId = "";
 // #934 skive 5a-3: modulen er åpnet fra et kurs som sier at den må tas på nytt (`retakeRequired`). Står til et nytt vedtak kommer.
 let courseRetakeModuleId = null;
+let courseRetakeCourseId = null;
 let autosaveTimer = null;
 let flowState = {
   hasSubmission: false,
@@ -1201,7 +1201,7 @@ function syncParticipantModuleWorkspace(options = {}) {
 }
 
 function activateParticipantModule(moduleId, options = {}) {
-  const { scrollIntoView = false, logSelection = true, retakeRequired = false } = options;
+  const { scrollIntoView = false, logSelection = true, retakeRequired = false, retakeCourseId = null } = options;
   const nextModule = loadedModules.find((module) => module?.id === moduleId) ?? null;
   if (!nextModule) {
     return false;
@@ -1213,6 +1213,9 @@ function activateParticipantModule(moduleId, options = {}) {
   releaseEarlierResultLock();
   selectedModuleId = moduleId;
   courseRetakeModuleId = retakeRequired ? moduleId : null;
+  courseRetakeCourseId = retakeRequired ? retakeCourseId : null;
+  // 2.136.1: svaret om KI gjaldt forrige modul. Blir det stående, kan det sendes med i denne, og «KI skrev det meste» går til sensor.
+  if (previousModuleId !== moduleId) clearAiDeclarationSelection();
   resetFlowStateForModuleContext();
   renderModules();
   renderSelectedModuleSummary();
@@ -1288,7 +1291,7 @@ async function openCourseModule(courseId, moduleId) {
 
   // #934 skive 5a-3: kursets status, ikke bare siste vedtak. Samme modul kan telle i ett kurs og ikke i et annet.
   const entry = courseDetailCache[courseId]?.items?.find((item) => item?.type === "MODULE" && item.moduleId === moduleId);
-  activateParticipantModule(moduleId, { scrollIntoView: true, retakeRequired: entry?.retakeRequired === true });
+  activateParticipantModule(moduleId, { scrollIntoView: true, retakeRequired: entry?.retakeRequired === true, retakeCourseId: courseId });
 
   if (courseDetailCache[courseId]) {
     renderCourseDetailModules(courseId, courseDetailCache[courseId]);
@@ -1325,26 +1328,25 @@ function showCourseModuleStarted(moduleId) {
 }
 
 /** 2.126.0: hold modulens siste innlevering oppdatert i denne økta (statusen hentes bare ved sidelasting). */
-const submittedVersionBySubmission = new Map();
-
 function noteLatestSubmission(moduleId, patch) {
   const module = loadedModules.find((m) => m?.id === moduleId);
   if (!module) return;
   module.participantStatus = { ...(module.participantStatus ?? {}), ...patch };
   showCourseModuleStarted(moduleId);
-  // #934 skive 5a-3: en bestått fjerner «ta den på nytt» bare hvis den gjelder versjonen som er ute nå. Et vedtak på en eldre versjon kan
-  // komme etter en ny hovedversjon, og da gjelder kravet fortsatt. Innleveringer fra før siden ble åpnet kjenner vi ikke, og da står det til
-  // kurset er hentet på nytt.
-  const passOnCurrentVersion = isSettledPass({ passFailTotal: patch.latestDecision?.passFailTotal, submissionStatus: patch.latestStatus })
-    && passCoversCurrentVersion(submittedVersionBySubmission.get(patch.latestSubmissionId), module);
-  if (passOnCurrentVersion) {
-    clearCourseRetakeFlag(courseDetailCache, moduleId);
-  }
-  // #934 skive 5a-3: beskjeden står til deltakeren har bestått. Et nytt stryk endrer ikke at modulen må tas på nytt.
-  if (courseRetakeModuleId === moduleId && passOnCurrentVersion) {
-    courseRetakeModuleId = null;
-    if (selectedModuleId === moduleId) renderSelectedModuleStatus(module);
-  }
+}
+
+/**
+ * 2.136.1: bare serveren vet om en bestått dekker kravet i et kurs. Kravet er per kurs og gjelder hovedversjonen, og en ny versjon kan ha kommet
+ * mens vurderingen pågikk. Siden henter kurset på nytt etter en bestått, og vedtaket er skrevet før klienten ser det, så svaret er oppdatert.
+ * Beskjeden gjelder kurset modulen ble åpnet fra, så et annet kurs uten kravet tar den ikke bort.
+ */
+function syncCourseRetakeHint(courseId, course) {
+  if (!courseRetakeModuleId || courseRetakeCourseId !== courseId) return;
+  if (courseStillRequiresRetake(course, courseRetakeModuleId)) return;
+  const moduleId = courseRetakeModuleId;
+  courseRetakeModuleId = null;
+  courseRetakeCourseId = null;
+  if (selectedModuleId === moduleId) renderSelectedModuleStatus(loadedModules.find((m) => m?.id === moduleId));
 }
 
 // 2.126.0: modulen slik den sto rett etter vurderingen — det leverte svaret (skrivebeskyttet), resultatet,
@@ -3316,7 +3318,6 @@ createSubmissionButton.addEventListener("click", async () => {
         }),
       });
       submissionIdLabel.textContent = body.submission.id;
-      submittedVersionBySubmission.set(body.submission.id, seenVersionId);
       noteLatestSubmission(moduleId, { latestSubmissionId: body.submission.id, latestStatus: body.submission.submissionStatus ?? "SUBMITTED", latestDecision: null });
       stopAutoAssessmentLoop(true);
       latestAppeal = null;
@@ -4428,6 +4429,7 @@ async function loadCourseDetail(courseId) {
   try {
     const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}`, headers);
     courseDetailCache[courseId] = body.course;
+    syncCourseRetakeHint(courseId, body.course);
     renderCourseDetailModules(courseId, body.course);
   } catch (error) {
     if (container) {

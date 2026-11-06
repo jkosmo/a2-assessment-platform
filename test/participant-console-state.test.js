@@ -13,20 +13,19 @@ import {
   sanitizeAppealStatuses,
   sanitizeMockRolePresets,
   upsertModuleDraft,
-  clearCourseRetakeFlag,
   markCourseModuleStarted,
   aiReviewRoutingLive,
-  passCoversCurrentVersion,
+  courseStillRequiresRetake,
 } from "../public/participant-console-state.js";
 
-describe("#934 5a-3: gjelder beståtten versjonen som er ute nå?", () => {
-  const module = { activeVersion: { id: "v2" } };
-  it("ja bare når innleveringen er på den aktive versjonen", () => {
-    expect(passCoversCurrentVersion("v2", module)).toBe(true);
-    expect(passCoversCurrentVersion("v1", module)).toBe(false);
-    expect(passCoversCurrentVersion(undefined, module)).toBe(false);
-    expect(passCoversCurrentVersion(undefined, { activeVersion: {} })).toBe(false);
-    expect(passCoversCurrentVersion("v2", null)).toBe(false);
+describe("#934 5a-3: krever kurset et nytt forsøk i modulen?", () => {
+  const course = { items: [{ type: "MODULE", moduleId: "m1", retakeRequired: true }, { type: "MODULE", moduleId: "m2" }, { type: "SECTION", moduleId: "m3", retakeRequired: true }] };
+  it("et svar fra serveren uten feltet betyr at kravet er dekket", () => {
+    expect(courseStillRequiresRetake(course, "m1")).toBe(true);
+    expect(courseStillRequiresRetake(course, "m2")).toBe(false);
+    expect(courseStillRequiresRetake(course, "m3")).toBe(false);
+    expect(courseStillRequiresRetake({ items: [{ type: "MODULE", moduleId: "m1", retakeRequired: false }] }, "m1")).toBe(false);
+    expect(courseStillRequiresRetake(undefined, "m1")).toBe(false);
   });
 });
 
@@ -66,21 +65,6 @@ describe("2.134.1: kursdetaljene i minnet etter en innlevering", () => {
     expect(details.b.items[0].moduleStatus).toBe("PASSED");
     expect(details.c.items[0].moduleStatus).toBe("REVISED_RETAKE_REQUIRED");
     expect(markCourseModuleStarted(details, "m1")).toEqual([]);
-  });
-});
-
-describe("#934 5a-3: kursdetaljene i minnet etter en ny bestått", () => {
-  it("tar bort «ta den på nytt» for modulen, i alle kurs, og rører ikke andre moduler", () => {
-    const details = {
-      a: { items: [{ type: "MODULE", moduleId: "m1", retakeRequired: true }, { type: "MODULE", moduleId: "m2", retakeRequired: true }, { type: "SECTION", sectionId: "s1" }] },
-      b: { items: [{ type: "MODULE", moduleId: "m1", retakeRequired: true }] },
-      c: null,
-    };
-    clearCourseRetakeFlag(details, "m1");
-    expect(details.a.items[0].retakeRequired).toBe(false);
-    expect(details.b.items[0].retakeRequired).toBe(false);
-    expect(details.a.items[1].retakeRequired).toBe(true);
-    expect(details.a.items[2]).toEqual({ type: "SECTION", sectionId: "s1" });
   });
 });
 

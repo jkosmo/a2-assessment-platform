@@ -191,6 +191,29 @@ for (const [navn, aiInfluence, policy, synlig] of [
   });
 }
 
+test("2.136.1: svaret om KI følger ikke med til neste modul, og leveringen er sperret til deltakeren har svart der", async ({ page }) => {
+  await mockBase(page, { enabled: true, shadowMode: false });
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ modules: [ESSAY_MODULE, { ...ESSAY_MODULE, id: "m-annen", title: "Annen Modul" }] }) }),
+  );
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+  await selectEssayModule(page);
+  await page.locator('.ai-declaration-opt[data-v="autonomous"]').click();
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveCount(1);
+
+  await page.locator("#loadModules").click();
+  await page.locator(".module-card", { hasText: "Annen Modul" }).click();
+  await expect(page.locator("#aiDeclaration")).toBeVisible();
+  await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveCount(0);
+  await expect(page.locator(".ai-declaration-opt.sel")).toHaveCount(0);
+  for (const ta of await page.locator("#submissionFields textarea").all()) {
+    await ta.fill("Et tilstrekkelig langt fritekstsvar for vurdering.");
+  }
+  await expect(page.locator("#createSubmission")).toBeDisabled();
+});
+
 test("2.134.1, modulen er i skyggemodus: ingen dialog, og ingen rutes", async ({ page }) => {
   await mockBase(page, { enabled: true, shadowMode: false });
   let posted: Record<string, unknown> | null = null;
