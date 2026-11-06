@@ -955,7 +955,7 @@ function syncAiTileSelection() {
 // 2.136.1: svaret hører til modulen og står i kladden, sammen med resten av besvarelsen.
 function currentAiDeclarationDraft() {
   const value = getSelectedAiDeclaration();
-  return value ? { value, text: aiDeclarationText?.value ?? "" } : null;
+  return value ? { value, text: value === "none" ? "" : aiDeclarationText?.value ?? "" } : null;
 }
 
 // Et svar fra en innlevering som er levert, gjelder ikke neste forsøk. Der spørsmålet er slått av, tømmer applyAiDeclarationVisibility det igjen.
@@ -1035,6 +1035,11 @@ async function confirmAiNudge() {
 function hasMeaningfulStoredDraft(draft) {
   if (!draft || typeof draft !== "object") {
     return false;
+  }
+
+  // 2.136.4: en forklaring er tekst deltakeren har skrevet, så forrige resultat skal ikke legge seg over den.
+  if (draft.aiDeclaration?.text?.trim()) {
+    return true;
   }
 
   for (const field of currentSubmissionFields) {
@@ -1302,15 +1307,15 @@ async function ensureParticipantModuleAvailable(moduleId) {
   return loadedModules.some((module) => module?.id === moduleId);
 }
 
-async function openCourseModule(courseId, moduleId) {
+async function openCourseModule(courseId, moduleId, retakeRequired) {
   const available = await ensureParticipantModuleAvailable(moduleId);
   if (!available) {
     throw new Error(t("courses.module.unavailable"));
   }
 
   // #934 skive 5a-3: kursets status, ikke bare siste vedtak. Samme modul kan telle i ett kurs og ikke i et annet.
-  const entry = courseDetailCache[courseId]?.items?.find((item) => item?.type === "MODULE" && item.moduleId === moduleId);
-  activateParticipantModule(moduleId, { scrollIntoView: true, retakeRequired: entry?.retakeRequired === true, retakeCourseId: courseId });
+  // 2.136.4: fra raden deltakeren klikket. En oppfrisket kursliste kan ha tømt `courseDetailCache` mens modulene ble hentet, og da ville siden sagt «Fullført».
+  activateParticipantModule(moduleId, { scrollIntoView: true, retakeRequired, retakeCourseId: courseId });
 
   if (courseDetailCache[courseId]) {
     renderCourseDetailModules(courseId, courseDetailCache[courseId]);
@@ -3313,6 +3318,8 @@ createSubmissionButton.addEventListener("click", async () => {
       let processSignals;
       if (aiDeclarationApplies()) {
         const declaration = getSelectedAiDeclaration();
+        // 2.136.4: lest før dialogen, som svaret. Et modulbytte bak dialogen bytter innholdet i feltet. Ved «Nei» er feltet skjult, og teksten skal ikke sendes.
+        const declarationText = declaration === "none" ? "" : aiDeclarationText?.value.trim();
         let insistedAfterPrompt = false;
         if (declaration === "autonomous" && aiDeclarationNudgeLive()) {
           const proceed = await confirmAiNudge();
@@ -3321,7 +3328,6 @@ createSubmissionButton.addEventListener("click", async () => {
           }
           insistedAfterPrompt = true;
         }
-        const declarationText = aiDeclarationText?.value.trim();
         processSignals = {
           declaration,
           ...(declarationText ? { declarationText } : {}),
@@ -3358,6 +3364,8 @@ createSubmissionButton.addEventListener("click", async () => {
       renderAssessmentProgress();
       renderAppealState();
       renderFlowGating();
+      // 2.136.4: kladden er nå restene av et levert svar. Dreper mobilen fanen under vurderingen, går ikke `beforeunload`, og svaret om KI ville fulgt med til neste forsøk.
+      if (selectedModuleId === moduleId) persistCurrentModuleDraft(false);
       // #578: FREETEXT_ONLY has no MCQ — don't start an MCQ attempt (the server would 400). The
       // assessment runs directly on the free-text submission (auto if enabled, otherwise via the
       // now-unlocked "Start assessment" button).
@@ -4836,7 +4844,7 @@ async function openInlineItemByEntry(courseId, entry) {
   try {
     // openCourseModule activates the module AND re-renders the course detail; the re-render's
     // reopenInlineAfterRender mounts the workspace into this row's panel.
-    await openCourseModule(courseId, entry.moduleId);
+    await openCourseModule(courseId, entry.moduleId, entry.retakeRequired === true);
   } catch (error) {
     inlineOpen = null;
     if (row) row.disabled = false;

@@ -366,7 +366,7 @@ describe("participant console runtime config", () => {
     expect(participantJsResponse.text).toContain('wrapper.className = "mcq-question-card"');
     expect(participantJsResponse.text).toContain('adminContent.participantPreview.v1');
     expect(participantJsResponse.text).toContain('draft.savedSwitchToast');
-    expect(participantJsResponse.text).toContain('async function openCourseModule(courseId, moduleId)');
+    expect(participantJsResponse.text).toContain('async function openCourseModule(courseId, moduleId, retakeRequired)');
     // The serial course spine replaced the flat list of identical `course-module-button` rows;
     // `course-module-row` is still the stable hook the inline-open machinery (#865) and the e2e
     // guards select on. Behaviour is covered by test/e2e/participant-course-sequence.spec.ts.

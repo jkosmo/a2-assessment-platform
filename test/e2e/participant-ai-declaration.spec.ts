@@ -295,6 +295,114 @@ test("2.136.1: et levert svar kommer ikke tilbake som svar på neste forsøk", a
   await expect(page.locator('input[name="aiDeclaration"]:checked')).toHaveCount(0);
 });
 
+const kladden = (page: Page, moduleId: string) =>
+  page.evaluate((id) => JSON.parse(localStorage.getItem("participant.moduleDrafts.v1") ?? "{}").modules?.[id] ?? null, moduleId);
+
+async function fyllSvar(page: Page) {
+  for (const ta of await page.locator("#submissionFields textarea").all()) {
+    await ta.fill("Et tilstrekkelig langt fritekstsvar for vurdering.");
+  }
+}
+
+async function fangInnlevering(page: Page) {
+  const sendt: Array<Record<string, any>> = [];
+  await page.route("**/api/submissions", (route: Route) => {
+    sendt.push(route.request().postDataJSON());
+    return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) });
+  });
+  return sendt;
+}
+
+test("2.136.4: et modulbytte bak dialogen sender ikke forklaringen fra den andre modulen", async ({ page }) => {
+  await toModuler(page);
+  const sendt = await fangInnlevering(page);
+  await byttModul(page, "Annen Modul");
+  await page.locator('.ai-declaration-opt[data-v="ideas"]').click();
+  await page.locator("#aiDeclarationText").fill("Forklaringen til den andre modulen.");
+  await expect.poll(async () => (await kladden(page, "m-annen"))?.aiDeclaration?.text).toBe("Forklaringen til den andre modulen.");
+  await byttModul(page, "Essay Modul");
+  await fyllSvar(page);
+
+  await page.locator("#createSubmission").click();
+  await expect(page.locator(".ai-nudge-overlay")).toBeVisible();
+  await page.locator("#loadModules").focus();
+  await page.keyboard.press("Enter");
+  await page.locator(".module-card", { hasText: "Annen Modul" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#aiDeclarationText")).toHaveValue("Forklaringen til den andre modulen.");
+  await page.locator('.ai-nudge-overlay [data-nudge="insist"]').click();
+
+  await expect.poll(() => sendt.length).toBe(1);
+  expect(sendt[0]).toMatchObject({
+    moduleId: "m-fto",
+    processSignals: { declaration: "autonomous", declarationText: "Jeg brukte KI til utkastet.", insistedAfterPrompt: true },
+  });
+});
+
+test("2.136.4: kladden er merket som levert med en gang, så en drept fane ikke gir svaret om KI til neste forsøk", async ({ page }) => {
+  await toModuler(page);
+  await fangInnlevering(page);
+  await fyllSvar(page);
+  // Autolagringen må ha gått av, ellers er det den som setter merket.
+  await expect.poll(async () => (await kladden(page, "m-fto"))?.aiDeclaration?.value).toBe("autonomous");
+  await page.waitForTimeout(350);
+  await page.locator("#createSubmission").click();
+  await page.locator('.ai-nudge-overlay [data-nudge="insist"]').click();
+  await expect.poll(async () => (await kladden(page, "m-fto"))?.submittedAs).toBe("s1");
+});
+
+test("2.136.4: ved «Nei» er forklaringen skjult, og den verken lagres eller sendes", async ({ page }) => {
+  await toModuler(page);
+  const sendt = await fangInnlevering(page);
+  await fyllSvar(page);
+  await page.locator('.ai-declaration-opt[data-v="none"]').click();
+  await expect(page.locator("#aiDeclarationText")).toBeHidden();
+  await expect.poll(async () => (await kladden(page, "m-fto"))?.aiDeclaration).toEqual({ value: "none", text: "" });
+  await page.locator("#createSubmission").click();
+  await expect.poll(() => sendt.length).toBe(1);
+  expect(sendt[0].processSignals).toEqual({ declaration: "none", insistedAfterPrompt: false });
+});
+
+for (const [navn, forklaring, resultatetVises] of [
+  ["en forklaring uten svartekst er innhold: forrige resultat legger seg ikke over den", "Min forklaring, skrevet først.", false],
+  ["bare et valg uten tekst er ikke innhold: forrige resultat vises", "", true],
+] as const) {
+  test(`2.136.4, ${navn}`, async ({ page }) => {
+    await mockBase(page, { enabled: true, shadowMode: false });
+    const svar = { status: 200, contentType: "application/json" };
+    await page.route("**/api/modules**", (route: Route) =>
+      route.fulfill({ ...svar, body: JSON.stringify({ modules: [{ ...ESSAY_MODULE, participantStatus: { latestSubmissionId: "s-old", latestStatus: "COMPLETED", latestDecision: { passFailTotal: false, totalScore: 20 } } }] }) }),
+    );
+    await page.route("**/api/submissions/s-old/result", (route: Route) =>
+      route.fulfill({ ...svar, body: JSON.stringify({ submissionId: "s-old", status: "COMPLETED", decision: { passFailTotal: false, decisionType: "AUTOMATIC" }, scoreComponents: { totalScore: 20, practicalScaledScore: 20 }, participantGuidance: {} }) }),
+    );
+    await page.route(/\/api\/submissions\/s-old$/, (route: Route) => route.fulfill({ ...svar, body: JSON.stringify({ submission: { id: "s-old", response: { response: "gammelt svar" } } }) }));
+    await page.addInitScript(() => {
+      try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+    });
+    const åpne = async () => {
+      await page.goto("/participant");
+      await page.locator("#loadModules").click();
+      await page.locator(".module-card", { hasText: "Essay Modul" }).click();
+    };
+    await åpne();
+    await expect(page.locator("#resetSubmissionFlow")).toBeVisible();
+    await page.locator("#resetSubmissionFlow").click();
+    await page.locator('.ai-declaration-opt[data-v="improve"]').click();
+    if (forklaring) await page.locator("#aiDeclarationText").fill(forklaring);
+    await expect.poll(async () => (await kladden(page, "m-fto"))?.aiDeclaration).toEqual({ value: "improve", text: forklaring });
+
+    await åpne();
+    if (resultatetVises) {
+      await expect(page.locator("#resultSummary")).toHaveAttribute("data-has-result", "true");
+    } else {
+      await expect(page.locator("#aiDeclarationText")).toHaveValue(forklaring);
+      await page.waitForTimeout(300);
+      await expect(page.locator("#resultSummary")).not.toHaveAttribute("data-has-result", "true");
+    }
+  });
+}
+
 test("2.136.1: «start på nytt» tømmer svaret om KI sammen med resten av kladden", async ({ page }) => {
   await toModuler(page);
   await page.route("**/api/submissions", (route: Route) =>

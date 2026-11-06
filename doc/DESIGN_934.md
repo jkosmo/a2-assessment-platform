@@ -1,6 +1,6 @@
 # #934 — hovedversjon og mindre versjon for kurs og moduler
 
-Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0, skive 2 i 2.128.0, skive 3 i 2.129.0, 4a i 2.131.0, 4b i 2.132.0, 5a-1 i 2.133.0, 5a-2 i 2.134.0, 5a-3 i 2.135.0 og 5b i 2.136.0. Bryteren er på i stage og av i prod, og den slås på etter 2.136.3 i prod.
+Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0, skive 2 i 2.128.0, skive 3 i 2.129.0, 4a i 2.131.0, 4b i 2.132.0, 5a-1 i 2.133.0, 5a-2 i 2.134.0, 5a-3 i 2.135.0 og 5b i 2.136.0. Bryteren er på i stage og av i prod, og den slås på etter 2.136.4 i prod.
 Skisse: https://claude.ai/artifact/AyQpYXMQSDHW8WL8YPe34n
 
 ## Hva produkteier har bestemt (2026-11-01)
@@ -1371,7 +1371,9 @@ to siste er regelen så lenge bryteren er av, og faller bort når den slås på 
 57. **Kalibreringssiden viser `versionNo`** (5b): versjonsvelgeren og tabellen. Det er et støtteverktøy, og nummeret der er det som står i rådataene. Seksjoner har ikke hoved og mindre, så `v3` i seksjonslista står.
 58. **Over 200 per kurs: «ja» nullstilles når valget byttes** (5b, som i 4b). Bytter forfatteren til mindre og tilbake, må det krysses av på nytt. Det er den trygge retningen.
 59. **Andre kurs med samme modul oppdateres ikke med en gang** (2.134.1, Codex 2026-11-06). Etter en innlevering viser siden «Påbegynt» bare for kurs den alt har åpnet. Andre kurs med samme modul, og kurs når modulen er åpnet fra modullista, får riktig status når lista hentes på nytt, og det skjer når deltakeren går tilbake til den. Ingenting går tapt.
-60. **«Må tas på nytt» følger siste svar fra serveren** (2.136.1). Beskjeden forsvinner når kurset er hentet på nytt etter en bestått. Feiler hentingen, står den til neste gang lista hentes, og et klikk på modulen før det starter et nytt forsøk. Hever noen kravet mens siden står åpen, ser deltakeren det først når lista hentes på nytt. Serveren avgjør likevel hva som teller, så kursbeviset blir riktig.
+60. **«Må tas på nytt» følger siste svar fra serveren** (2.136.1). Beskjeden forsvinner når kurset er hentet på nytt etter en bestått, og det hentes bare når det står åpent. Med `courseOnly` av og kurslista åpen kan beskjeden stå ved siden av «Bestått» til kurset åpnes igjen. Feiler hentingen, står den til neste gang kurset hentes, og et klikk på modulen før det starter et nytt forsøk. Hever noen kravet mens siden står åpen, ser deltakeren det først når kurset hentes på nytt. Serveren avgjør likevel hva som teller, så kursbeviset blir riktig.
+61. **Modulbytte mens et svar er på vei** (fra før 2.136, lokal gjennomgang 2026-11-06). Bytter deltakeren modul mens et resultat hentes, kan resultatet fra A vises under B. Bytter hen mens innleveringen sendes, kan id-en til A havne under B, og B blir skrivebeskyttet. Vinduet er én rundtur til serveren, det første er kjørt og det andre bare lest. Neste åpning av modulen gir riktig side.
+62. **Kladdene er ikke per bruker** (fra før 2.136, lokal gjennomgang 2026-11-06). De ligger under én nøkkel i `localStorage`, og ingen kode i `public/` sletter fra `localStorage` ved utlogging. På en delt maskin kan neste bruker se dem. Svartekst ligger der fra før, og forklaringen om KI ligger der fra 2.136.2. Ikke testet med ekte utlogging. Produkteier har godtatt dette 2026-11-06: plattformen er intern og for kompetanseutvikling.
 
 ### Gjennomgang av planen
 

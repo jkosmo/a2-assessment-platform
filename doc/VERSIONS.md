@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.136.4 - 2026-11-06
+
+Rettinger etter en lokal gjennomgang, siden QA-porten nådde taket for forbruk. Alle gjelder siden til deltakeren.
+
+- **«Må tas på nytt» leses fra raden deltakeren klikket.** Oppslaget i minnet kunne treffe mens en oppfrisket kursliste hadde tømt det. Da sa siden «Fullført», og et nytt forsøk startet ikke. Feilen viser seg bare med bryteren på.
+- **Kladden merkes som levert med en gang innleveringen er opprettet.** Ble fanen drept under vurderingen, sto svaret om KI klart til neste forsøk.
+- **Forklaringen leses før dialogen om KI.** Et modulbytte bak dialogen sendte forklaringen fra den andre modulen.
+- **Ved «Nei» lagres og sendes ikke forklaringen.** Feltet er skjult, og teksten fulgte med til sensor.
+- **En forklaring uten svartekst teller som innhold i kladden,** så forrige resultat ikke legger seg over den. Et valg uten tekst teller ikke.
+
 ## 2.136.3 - 2026-11-06
 
 - **Svaret om KI nullstilles hver gang en modul åpnes,** også samme modul. Et levert svar kunne bli stående til neste forsøk og sende det til sensor (QA-porten). Et svar som ikke er levert, kommer tilbake fra kladden.

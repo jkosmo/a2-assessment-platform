@@ -235,6 +235,63 @@ test.describe("#934 5a-3: modulen åpnet fra kurset", () => {
     await expect(page.locator("#selectedModuleStatus")).toContainText(HINT);
   });
 
+  test("2.136.4: «marker lest og gå videre» til modulen, mens kurslista tømmer minnet: siden bruker raden, og sier ikke «Fullført»", async ({ page }) => {
+    const { calls } = await mock(page);
+    const vent = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    let treg = false;
+    let detaljer = 0;
+    const rad = { id: "c1", title: "Kurset", description: null, moduleCount: 1, progress: { completed: 0, total: 2, moduleCompleted: 0, moduleTotal: 1, sectionCompleted: 0, sectionTotal: 1, courseStatus: "IN_PROGRESS" } };
+    await page.route("**/api/courses", async (route: Route) => {
+      if (treg) await vent(400);
+      return route.fulfill(json({ courses: [rad] }));
+    });
+    await page.route("**/api/courses/completions", async (route: Route) => {
+      if (treg) await vent(400);
+      return route.fulfill(json({ completions: [] }));
+    });
+    await page.route("**/api/courses/c1", async (route: Route) => {
+      detaljer += 1;
+      if (treg && detaljer >= 3) await vent(1500);
+      return route.fulfill(json({
+        course: {
+          id: "c1",
+          title: "Kurset",
+          items: [
+            { type: "SECTION", sectionId: "sec1", courseItemId: "i-s", sortOrder: 0, title: "Lesestoff", read: false, available: true, required: true, discussionsEnabled: false },
+            { type: "MODULE", moduleId: "m-1", courseItemId: "i-m", sortOrder: 1, title: "Modulen", moduleStatus: "REVISED_RETAKE_REQUIRED", retakeRequired: true, available: true, required: true, discussionsEnabled: false },
+          ],
+        },
+      }));
+    });
+    await page.route("**/api/courses/c1/sections/sec1", (route: Route) => route.fulfill(json({ title: "Lesestoff", html: "<p>Tekst</p>", sectionVersionId: "sv1" })));
+    await page.route("**/api/courses/c1/sections/sec1/read", (route: Route) => route.fulfill(json({ ok: true })));
+    // Første åpning av en modul i økta: modullista hentes, og den er tregere enn kurslista.
+    await page.route("**/api/modules**", async (route: Route) => {
+      if (route.request().url().includes("/mcq/")) return route.fallback();
+      await vent(800);
+      return route.fulfill(json({
+        modules: [{
+          id: "m-1", title: "Modulen", description: null, assessmentMode: "MCQ_ONLY", submissionSchema: null, assessmentPolicy: null, taskText: null,
+          activeVersion: { id: "mv-2", versionNo: 2 },
+          participantStatus: PASSED_ON_OLD_VERSION,
+        }],
+      }));
+    });
+
+    await page.goto("/participant");
+    await page.locator(".course-accordion-header").click();
+    await page.locator(".course-module-row").first().click();
+    await expect(page.locator("#sectionReaderMarkRead")).toBeEnabled();
+    treg = true;
+    await page.locator("#sectionReaderMarkRead").click();
+
+    await expect(page.locator("#selectedModuleTitle")).toHaveText("Modulen");
+    await expect(page.locator("#selectedModuleStatus")).toContainText(HINT);
+    await expect(page.locator("#selectedModuleStatus")).not.toContainText("Fullført");
+    await expect.poll(() => calls.created.length).toBe(1);
+    expect(calls.earlierResults).toBe(0);
+  });
+
   test("KONTROLL: med bryteren av (uten feltet) er siden som i 2.134.0. Forrige resultat vises, og ingenting starter av seg selv", async ({ page }) => {
     const { calls } = await mock(page, { retakeRequired: false });
     await openModuleFromCourse(page);
