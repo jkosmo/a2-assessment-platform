@@ -109,14 +109,22 @@ function Invoke-Suites {
 # Dommen over et ferdig svar. Delt av codex-stien og -Judge, slik at en lokal runde måles mot
 # NØYAKTIG samme krav — ellers ville «lokal GO» og «codex GO» betydd to forskjellige ting.
 # Returnerer navnene på det som mangler; tom liste = fullstendig.
+#
+# Overskriftstegn er lov foran og etter (`### VERDIKT: NO-GO`, `**VERDIKT:** GO`). Modellen skriver det av og til, og
+# en korrekt NO-GO ble da meldt som ufullstendig gjennomgang (2026-11-06). Ett mønster for alle tre stedene som leser dommen.
+$script:VerdictPrefix = '(?m)^[ \t]*[#*_ \t]*VERDIKT:[*_ \t]*'
+function Test-NoGo {
+    param([string]$Answer)
+    return $Answer -match ($script:VerdictPrefix + 'NO-GO')
+}
 function Get-MissingSections {
     param([string]$Answer)
     $missing = @()
-    if ($Answer -notmatch '(?m)^\s*VERDIKT:\s*(GO|NO-GO)') { $missing += 'VERDIKT' }
+    if ($Answer -notmatch ($script:VerdictPrefix + '(GO|NO-GO)')) { $missing += 'VERDIKT' }
     # Kolonet er påkrevd, ikke valgfritt: med ':?' matchet det avsluttende '\S' selve kolonet, så
     # en bar overskrift slapp gjennom. (\r?\n[ \t]*)+ fordi modellen som regel legger en BLANK
     # linje mellom overskriften og første kulepunkt.
-    if ($Answer -notmatch '(?im)^[ \t]*IKKE VERIFISERBART STATISK[ \t]*:[ \t]*(\S|(\r?\n[ \t]*)+\S)') {
+    if ($Answer -notmatch '(?im)^[ \t]*[#*_ \t]*IKKE VERIFISERBART STATISK[ \t]*:[*_ \t]*(\S|(\r?\n[ \t]*)+\S)') {
         $missing += 'IKKE VERIFISERBART STATISK'
     }
     return $missing
@@ -165,7 +173,7 @@ if ($Judge) {
         Write-Host "Doem funnene og planlegg stage-runden selv; ikke behandle dette som en bestaatt port." -ForegroundColor Red
         exit 2
     }
-    if ($answer -match '(?m)^\s*VERDIKT:\s*NO-GO') {
+    if (Test-NoGo -Answer $answer) {
         Write-Host "VERDIKT: NO-GO - fiks foer deploy." -ForegroundColor Red
         exit 3
     }
@@ -253,6 +261,62 @@ usikre. Ikke gjenfortell diffen. Ikke stilkommentarer.
 Svar paa norsk.
 "@
 
+    # Hva som stopper en utrulling. ETT hjem, delt av codex-stien og -Local, slik at de ikke kan
+    # drive fra hverandre. Innført 2026-11-06: regelen sa at alt nytt eller ufullstendig var grunn
+    # til NO-GO, uansett hvor sannsynlig det var og hva som gikk tapt. Da stoppet et svarfelt med et
+    # navn ingen modul har grunn til å bruke, en utrulling. Jakten er ikke svekket: alt rapporteres
+    # fortsatt, bare stoppregelen er endret.
+    # Teksten er translitterert fordi den går til codex over en pipe, som resten av prompten.
+    $verdictRules = @"
+KLASSIFISER HVERT FUNN. Start hvert funn med EN av disse merkelappene, i klammer, etter hvor funnet
+kommer fra. Er du i tvil, skriv [UKLART] og si hvorfor:
+
+  [REGRESJON]  diffen INNFOERER dette. Virket foer, virker ikke naa.
+  [UFULLSTENDIG] diffen retter noe, men lar en soesterflate staa igjen med den gamle feilen.
+  [EKSISTERENDE] feilen fantes foer denne diffen og er uroert av den.
+  [DOKUMENTASJON] koden er riktig, men et dokument eller en spesifikasjon lover noe annet.
+
+Skriv ogsaa disse tre linjene per funn:
+
+  REKKEVIDDE: hvem rammes (deltaker / forfatter / rapportleser / drift), og om det er stille (ingen
+  feilmelding) eller synlig.
+  SANNSYNLIGHET: VANLIG (skjer naar funksjonen brukes slik den er ment), SJELDEN (krever en uvanlig,
+  men naturlig rekkefoelge eller tilstand) eller KONSTRUERT (krever et bestemt navn, et smalt
+  tidsvindu eller en tilstand ingen har grunn til aa lage). Si kort hva vurderingen bygger paa. En
+  bevisst manipulert foresporsel fra en innlogget bruker er SJELDEN, ikke KONSTRUERT.
+  KONSEKVENS: hva som faktisk gaar tapt, for hvor mange, og om det kan rettes opp.
+
+Let like grundig uansett, og rapporter alt du finner. Reglene under avgjoer bare hva som stopper en
+utrulling. Systemet er en intern plattform for kompetanseutvikling for konsulenter. Maal konsekvensen
+etter det.
+
+Svaret MAA vaere paa norsk og slutte med noeyaktig disse to seksjonene. Foer dem listes funn som ikke
+stopper utrullingen, med en linje per funn, under overskriften KJENTE MANGLER.
+
+VERDIKT: GO
+eller
+VERDIKT: NO-GO
+Foelg linjen med en setnings begrunnelse, og si hvilke funn som driver verdiktet.
+
+NO-GO krever minst ett funn som fyller ett av disse to kravene:
+  a) SANNSYNLIGHET VANLIG, og funnet gjoer reell skade: en hovedflyt virker ikke, noen faar feil
+     resultat, eller de mister arbeid.
+  b) SANNSYNLIGHET VANLIG eller SJELDEN, og konsekvensen er alvorlig og vanskelig aa rette opp: feil
+     kursbevis eller bestaattstatus, datalekkasje, brutt eierskaps- eller rollesjekk, tap av innsendte
+     svar eller publisert innhold, innhold live uten versjonsregelen, feil eller dobbel e-post, eller
+     en migrasjon eller utrulling som kan skade data.
+Alt annet er KJENT MANGEL og gir GO. KONSTRUERT gir aldri NO-GO. Hvor funnet kommer fra avgjoer ikke
+verdiktet: en [REGRESJON] som ikke fyller kravene, er ogsaa en kjent mangel. Det gjelder ogsaa
+funnene fra en foerste gjennomgang. Oppfyller ingen funn kravene, er svaret GO, selv om du har funn
+aa melde.
+
+IKKE VERIFISERBART STATISK:
+- punktliste over det en person faktisk maa klikke gjennom paa stage for aa avdekke resten.
+Dette blir den reelle testplanen for den manuelle runden, saa vaer konkret (hvilken side, hvilken
+handling, hva som skal skje) og utelat alt som allerede er dekket av automatiske tester. Skriv
+"- ingenting" hvis testene faktisk dekker alt.
+"@
+
     # -----------------------------------------------------------------------
     # 3 - Build the invocation
     # -----------------------------------------------------------------------
@@ -285,35 +349,7 @@ ARBEIDSMAATE: se paa $scope selv - start med "$scopeCmd" - og les de beroerte fi
 soeskenfiler. Du har full lesetilgang til repoet; bruk den. Ingen foerste gjennomgang er kjoert,
 saa du er alene om aa finne det som er galt.
 
-KLASSIFISER HVERT FUNN. Start hvert funn med EN av disse merkelappene, i klammer, etter
-alvorlighetsgraden:
-
-  [REGRESJON]  diffen INNFOERER dette. Virket foer, virker ikke naa.
-  [UFULLSTENDIG] diffen retter noe, men lar en soesterflate staa igjen med den gamle feilen.
-  [EKSISTERENDE] feilen fantes foer denne diffen og er uroert av den.
-  [DOKUMENTASJON] koden er riktig, men et dokument eller en spesifikasjon lover noe annet.
-
-Skriv ogsaa REKKEVIDDE paa en egen linje per funn: hvem rammes (deltaker / forfatter / rapportleser
-/ drift), og om det er stille (ingen feilmelding) eller synlig.
-
-Dette er IKKE en oppfordring til aa vaere mildere - er du i tvil, skriv [UKLART] og si hvorfor.
-
-Svaret MAA vaere paa norsk og slutte med noeyaktig disse to seksjonene:
-
-VERDIKT: GO
-eller
-VERDIKT: NO-GO
-Foelg linjen med en setnings begrunnelse. NO-GO betyr at minst ett funn boer fikses foer deploy.
-
-⚠️ Vekt verdiktet etter klassifiseringen: [REGRESJON] og [UFULLSTENDIG] er grunn til NO-GO.
-[EKSISTERENDE] og [DOKUMENTASJON] er det normalt IKKE alene. Si eksplisitt hvilke funn som driver
-verdiktet.
-
-IKKE VERIFISERBART STATISK:
-- punktliste over det en person faktisk maa klikke gjennom paa stage for aa avdekke resten.
-Dette blir den reelle testplanen for den manuelle runden, saa vaer konkret (hvilken side, hvilken
-handling, hva som skal skje) og utelat alt som allerede er dekket av automatiske tester. Skriv
-"- ingenting" hvis testene faktisk dekker alt.
+$verdictRules
 "@
 
         $promptFile = "$OutFile.prompt.md"
@@ -352,6 +388,8 @@ handling, hva som skal skje) og utelat alt som allerede er dekket av automatiske
         Write-Host ""
         Write-Host "PASS 2 prompt (checklist + verdict, on stdin):" -ForegroundColor Yellow
         Write-Host $checklist
+        Write-Host ""
+        Write-Host $verdictRules
         exit 0
     }
 
@@ -446,40 +484,12 @@ $checklist
 
 ARBEIDSMAATE: se paa $scope selv - start med "$scopeCmd" - og les de beroerte filene og deres
 soesterfiler. En foerste, prosjektblind gjennomgang er allerede kjoert, og funnene staar nederst.
-Ikke gjenta dem; let etter det den ikke kunne vite, altsaa punktene i sjekklista over.
+Ikke gjenta dem; let etter det den ikke kunne vite, altsaa punktene i sjekklista over. Gi likevel
+hvert av dem merkelapp, SANNSYNLIGHET og KONSEKVENS paa en linje, og doem dem etter reglene under,
+som dine egne. Den foerste gjennomgangen kjenner ikke reglene, saa alvorlighetsgraden den selv
+oppgir (P1, P2), teller ikke.
 
-KLASSIFISER HVERT FUNN. Start hvert funn med EN av disse merkelappene, i klammer, etter
-alvorlighetsgraden:
-
-  [REGRESJON]  diffen INNFOERER dette. Virket foer, virker ikke naa.
-  [UFULLSTENDIG] diffen retter noe, men lar en soesterflate staa igjen med den gamle feilen.
-  [EKSISTERENDE] feilen fantes foer denne diffen og er uroert av den.
-  [DOKUMENTASJON] koden er riktig, men et dokument eller en spesifikasjon lover noe annet.
-
-Skriv ogsaa REKKEVIDDE paa en egen linje per funn: hvem rammes (deltaker / forfatter / rapportleser
-/ drift), og om det er stille (ingen feilmelding) eller synlig.
-
-Dette er IKKE en oppfordring til aa vaere mildere. Det er for at mottakeren skal kunne triagere:
-en [REGRESJON] stopper en deploy, en [EKSISTERENDE] blir en sak. Feilklassifisering er verre enn
-ingen klassifisering - er du i tvil, skriv [UKLART] og si hvorfor.
-
-Svaret MAA vaere paa norsk og slutte med noeyaktig disse to seksjonene:
-
-VERDIKT: GO
-eller
-VERDIKT: NO-GO
-Foelg linjen med en setnings begrunnelse. NO-GO betyr at minst ett funn boer fikses foer deploy -
-vurder bade dine egne funn og de fra foerste gjennomgang.
-
-⚠️ Vekt verdiktet etter klassifiseringen: [REGRESJON] og [UFULLSTENDIG] er grunn til NO-GO.
-[EKSISTERENDE] og [DOKUMENTASJON] er det normalt IKKE alene - de hoerer i en sak. Si eksplisitt
-hvilke funn som driver verdiktet, saa mottakeren ikke maa gjette.
-
-IKKE VERIFISERBART STATISK:
-- punktliste over det en person faktisk maa klikke gjennom paa stage for aa avdekke resten.
-Dette blir den reelle testplanen for den manuelle runden, saa vaer konkret (hvilken side, hvilken
-handling, hva som skal skje) og utelat alt som allerede er dekket av automatiske tester. Skriv
-"- ingenting" hvis testene faktisk dekker alt.
+$verdictRules
 
 FUNN FRA FOERSTE, PROSJEKTBLINDE GJENNOMGANG:
 $findings
@@ -529,7 +539,7 @@ $findings
     Write-Host "Reminder: a GO here is a review verdict, not a test result. The e2e for the" -ForegroundColor DarkGray
     Write-Host "primary flow still has to pass locally before the stage deploy." -ForegroundColor DarkGray
 
-    if ($verdict -match '(?m)^\s*VERDIKT:\s*NO-GO') {
+    if (Test-NoGo -Answer $verdict) {
         exit 3
     }
     # Explicit: falling off the end would leave codex's own $LASTEXITCODE - which this

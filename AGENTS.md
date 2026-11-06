@@ -163,7 +163,9 @@ fiksturen seks. En stående ordre man LESER er ikke det samme som en sjekk man K
   orders as the checklist, adds a second pass for the verdict + manual-test list, and writes both
   to `.ai-qa/qa-<timestamp>.md` (gitignored). Exit codes: `0` GO, `1` could not review, `2` review
   incomplete (not a pass), `3` NO-GO. NO-GO
-  means fix before deploying; a GO is a review verdict, **not** a substitute for the e2e. The
+  means fix before deploying, and is reserved for what is likely in normal use and does real harm,
+  or rare but serious and hard to repair; the rest is listed as known gaps (2026-11-06). A GO is a
+  review verdict, **not** a substitute for the e2e. The
   review's closing "Ikke verifiserbart statisk" list is the manual test plan for that stage round.
 - **Map the full UI surface before building/fixing (standing order):** most of our deploy→bug→deploy
   churn is *"correct fix, incomplete surface"* — fixing the one path in the screenshot while sibling
@@ -311,9 +313,9 @@ der den er» vil fortsette å feile.
 Kuren som har holdt i dette repoet er #958-formen: flytt avgjørelsen til skriveren, slik at leserne
 ikke *kan* avvike. Kuren som har feilet tre ganger er å rette utregningen på stedet som feilet.
 
-Porten klassifiserer nå hvert funn — `[REGRESJON]`, `[UFULLSTENDIG]`, `[EKSISTERENDE]`,
-`[DOKUMENTASJON]` — nettopp for at man skal kunne stoppe løkka rasjonelt: en regresjon stopper en
-deploy, en eksisterende feil blir en sak.
+Porten merker hvert funn etter hvor det kommer fra (`[REGRESJON]`, `[UFULLSTENDIG]`, `[EKSISTERENDE]`,
+`[DOKUMENTASJON]`) og vurderer sannsynlighet og konsekvens. Bare de to siste avgjør om en utrulling
+stopper. Regelen står i `scripts/ai-qa.ps1`. Alt annet føres som kjent mangel eller blir en sak.
 
 ## Kompleksitetsskanning — MÅNEDLIG (standing order, 2026-08-21)
 

@@ -99,10 +99,11 @@ Og motsatt vei: fjerner du en bivirkning, sjekk hva som lente seg på den uten �
 
 ## 7. Én port per sak, ikke én per runde
 
-QA-porten kjøres når saken er ferdig etter egen vurdering. Rester som **ikke** er regresjon eller
-sikkerhet, blir oppfølgingssaker i stedet for en ny runde.
+QA-porten kjøres når saken er ferdig etter egen vurdering. Rester som ikke gir NO-GO, blir kjente
+mangler eller oppfølgingssaker i stedet for en ny runde.
 
-Unntaket er regresjon: fant porten noe vi selv innførte, rettes det og porten kjøres på nytt.
+Unntaket er NO-GO: da rettes funnet, og porten kjøres på nytt. Regelen for NO-GO står i
+`scripts/ai-qa.ps1`. At vi selv innførte noe, er ikke grunn nok alene.
 
 > ⚠️ #1027 brukte seks runder. Rundene 1–2 fant ekte hull i saken. Rundene 3–5 fant nesten
 > utelukkende feil jeg innførte i runden før. Porten er ikke problemet — den er speilet.

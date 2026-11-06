@@ -296,9 +296,9 @@ der den er» vil fortsette å feile.
 Kuren som har holdt i dette repoet er #958-formen: flytt avgjørelsen til skriveren, slik at leserne
 ikke *kan* avvike. Kuren som har feilet tre ganger er å rette utregningen på stedet som feilet.
 
-Porten klassifiserer nå hvert funn — `[REGRESJON]`, `[UFULLSTENDIG]`, `[EKSISTERENDE]`,
-`[DOKUMENTASJON]` — nettopp for at man skal kunne stoppe løkka rasjonelt: en regresjon stopper en
-deploy, en eksisterende feil blir en sak.
+Porten merker hvert funn etter hvor det kommer fra (`[REGRESJON]`, `[UFULLSTENDIG]`, `[EKSISTERENDE]`,
+`[DOKUMENTASJON]`) og vurderer sannsynlighet og konsekvens. Bare de to siste avgjør om en utrulling
+stopper. Regelen står i `scripts/ai-qa.ps1`. Alt annet føres som kjent mangel eller blir en sak.
 
 ### Cross-model QA gate before every stage deploy (standing order, 2026-08-13)
 
@@ -321,7 +321,8 @@ pass for the verdict and the manual-test list, and writes both to `.ai-qa/qa-<ti
 incomplete (missing verdict or manual-test list — not a pass) · `3` NO-GO.
 
 1. **NO-GO means fix before deploying.** The whole point is to spend the round here rather than on
-   stage.
+   stage. NO-GO is reserved for what is likely in normal use and does real harm, or rare but serious
+   and hard to repair. The rest is listed as known gaps and does not stop a deploy (2026-11-06).
 2. **A GO is a review verdict, not a test result.** The e2e for the primary flow must still pass
    locally — the standing order above is unchanged, not replaced.
 3. **The "Ikke verifiserbart statisk" list at the end of the review is the manual test plan** for
