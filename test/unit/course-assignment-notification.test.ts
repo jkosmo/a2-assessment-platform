@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { sendCourseAssignmentNotification } from "../../src/modules/certification/participantNotificationService.js";
 
 // #684/#688: class course-assignment email. In the default "log" channel (dev/test) it does not send
-// a real email — it returns a delivered result with the built subject/body. The email contains NO
-// link (company policy: no links in email); it asks the participant to log in themselves.
+// a real email — it returns a delivered result with the built subject/body. The text holds no address;
+// the link comes from the template (test/unit/email-template-links-1141.test.ts).
 
 describe("sendCourseAssignmentNotification (#684/#688)", () => {
   it("builds a subject + body with the course title, class name and due date", async () => {
     const result = await sendCourseAssignmentNotification({
+      courseId: "c1",
       recipientEmail: "kari@example.test",
       recipientName: "Kari",
       courseTitle: "Arbeidsmiljø",
@@ -24,8 +25,9 @@ describe("sendCourseAssignmentNotification (#684/#688)", () => {
     expect(result.nextStepGuidance).toContain("1. september 2026"); // #970: datoen på mottakerens språk
   });
 
-  it("contains NO link — asks the participant to log in (company policy, #688)", async () => {
+  it("the text works without the link: asks the participant to log in, holds no address", async () => {
     const result = await sendCourseAssignmentNotification({
+      courseId: "c1",
       recipientEmail: "ola@example.test",
       courseTitle: "Brannvern",
       className: "Kull B",
@@ -41,6 +43,7 @@ describe("sendCourseAssignmentNotification (#684/#688)", () => {
   // #970: var den eneste e-posten uten språkparameter — hardkodet bokmål til alle.
   it("⚠️ #970: skrives på mottakerens språk — engelsk og nynorsk, ikke bare bokmål", async () => {
     const en = await sendCourseAssignmentNotification({
+      courseId: "c1",
       recipientEmail: "ann@example.test", courseTitle: "Fire safety", className: "Cohort B",
       dueAt: new Date("2026-09-01T00:00:00.000Z"), locale: "en-GB",
     });
@@ -50,6 +53,7 @@ describe("sendCourseAssignmentNotification (#684/#688)", () => {
     expect(en.nextStepGuidance).not.toContain("Logg inn");
 
     const nn = await sendCourseAssignmentNotification({
+      courseId: "c1",
       recipientEmail: "ola@example.test", courseTitle: "Brannvern", className: "Kull B", dueAt: null, locale: "nn",
     });
     expect(nn.nextStepGuidance).toContain("plattforma");

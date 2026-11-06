@@ -16,6 +16,7 @@ vi.mock("../../src/modules/outbox/outboxService.js", () => ({
   enqueueOutboxEvents,
   OUTBOX_EVENT_TYPES: {
     assessmentNotification: "assessment_notification",
+    assessmentUnderReviewNotification: "assessment_under_review_notification",
     courseCompletionCheck: "course_completion_check",
   },
 }));
@@ -138,7 +139,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
     );
   });
 
-  it("skips notification when manual review is needed", async () => {
+  it("manuell gjennomgang: bare e-posten om sensor, av egen type og forsinket, så en gammel worker ikke bruker opp forsøkene", async () => {
     createAssessmentDecision.mockResolvedValue({
       decision: { id: "decision-2", passFailTotal: false },
       needsManualReview: true,
@@ -151,7 +152,13 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
       forceManualReviewReason: decisionReason(decisionReasonCodes.manualReviewRedFlagOrConfidence, "Escalated for review."),
     });
 
-    expect(enqueueOutboxEvents).not.toHaveBeenCalled();
+    expect(enqueueOutboxEvents).toHaveBeenCalledTimes(1);
+    const enqueued = enqueueOutboxEvents.mock.calls[0][0] as Array<{ type: string; availableAt?: Date; payload: Record<string, unknown> }>;
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0].type).toBe("assessment_under_review_notification");
+    expect(enqueued[0].payload).not.toHaveProperty("passFailTotal");
+    expect(enqueued[0].payload.moduleId).toBe(BASE_INPUT.moduleId);
+    expect(enqueued[0].availableAt!.getTime()).toBeGreaterThan(Date.now() + 4 * 60 * 1000);
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({ action: "assessment_job_completed" }),
     );

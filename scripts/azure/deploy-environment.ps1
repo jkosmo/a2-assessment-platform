@@ -53,6 +53,7 @@
   [int]$AppealSlaMonitorIntervalMs = 600000,
   [string]$ParticipantNotificationChannel = "log",
   [string]$CourseMajorEmailEnabled = "false",
+  [string]$PublicAppBaseUrl = "",
   [string]$ParticipantNotificationWebhookUrl = "",
   [int]$ParticipantNotificationWebhookTimeoutMs = 5000,
   [string]$AcsEmailSenderDisplayName = "A-2 læringsplattform",
@@ -704,6 +705,7 @@ az deployment group create `
               appealSlaMonitorIntervalMs=$AppealSlaMonitorIntervalMs `
               participantNotificationChannel=$ParticipantNotificationChannel `
               courseMajorEmailEnabled=$CourseMajorEmailEnabled `
+              publicAppBaseUrl=$PublicAppBaseUrl `
               participantNotificationWebhookUrl=$ParticipantNotificationWebhookUrl `
               participantNotificationWebhookTimeoutMs=$ParticipantNotificationWebhookTimeoutMs `
               acsEmailSenderDisplayName=$AcsEmailSenderDisplayName `

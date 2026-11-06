@@ -1503,3 +1503,14 @@ Produkteier: «Kun kursets eier skal kunne velge hovedversjon av et kurs.» En h
 for #934 lot den som eier en modul svare for hvert kurs modulen ligger i. Administrator kan fortsatt velge for alle kurs, som ellers. Moduleieren kan gi
 modulen hovedversjon, og kurs med andre eiere får da mindre versjon. Kursene står fortsatt i lista, siden deling mellom fagansvarlige er ønsket (2026-09-07).
 Status: gjort i 2.137.0. Hvordan en kurseier skal kunne kreve nytt forsøk etterpå, er ikke avgjort: `doc/DESIGN_934.md`, mangel 63.
+
+## Lenker i e-post, og adresser i tekst fra andre (2026-11-06)
+
+Compliance godkjente lenker i e-post 2026-11-06. Lenken er en knapp med adressen synlig under, og inneholder bare en id, aldri innlogging. Innstillingen `PUBLIC_APP_BASE_URL` slår dem på, og #1143 kan bytte adresse uten kodeendring.
+
+Adresser i tekst fra forfattere og deltakere blir ufarlige (`github[.]com`) i stedet for å stoppe e-posten. Den eneste lenken i en e-post skal være vår egen, så en mottaker kan stole på den. En e-post som ikke kom fram fordi en kurstittel nevnte en adresse, var verre enn en adresse med klammer.
+
+Kjente mangler, godtatt fordi plattformen er intern:
+- En eier av et begrenset kurs som ikke har kurset i «Mine kurs», får en beskjed i stedet for tråden når lenken i en diskusjons-e-post åpnes.
+- Ligger en modul i flere kurs, velger lenken det som krever nytt forsøk, ellers det første. E-posten vet ikke hvilket kurs svaret kom fra.
+- De siste «modulen er revidert»-radene i køen går som ren tekst, uten bilde og lenke.

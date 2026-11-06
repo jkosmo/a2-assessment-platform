@@ -74,7 +74,9 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
     aiInfluenceJson: input.aiInfluenceJson,
   });
 
-  if (!decisionResult.needsManualReview) {
+  if (decisionResult.needsManualReview) {
+    await enqueueUnderReviewNotification(input);
+  } else {
     await enqueuePostDecisionSideEffects(input, decisionResult.decision.passFailTotal);
   }
 
@@ -178,6 +180,28 @@ async function enqueuePostDecisionSideEffects(
   });
 
   await enqueueOutboxEvents(events);
+}
+
+// Under utrullingen kan en gammel worker plukke raden. Den kjenner ikke typen, og hvert forsøk teller. Fem minutter holder raden
+// unna til den nye workeren har tatt over, og betyr lite for en e-post om at en sensor skal se på svaret.
+const UNDER_REVIEW_NOTIFICATION_DELAY_MS = 5 * 60 * 1000;
+
+async function enqueueUnderReviewNotification(input: NotifyInput): Promise<void> {
+  await enqueueOutboxEvents([
+    {
+      type: OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification,
+      availableAt: new Date(Date.now() + UNDER_REVIEW_NOTIFICATION_DELAY_MS),
+      payload: {
+        submissionId: input.submissionId,
+        submittedAt: input.submittedAt.toISOString(),
+        recipientEmail: input.recipientEmail,
+        recipientName: input.recipientName,
+        moduleTitle: localizeContentText(input.submissionLocale, input.moduleTitle) ?? input.moduleId,
+        moduleId: input.moduleId,
+        locale: input.submissionLocale,
+      },
+    },
+  ]);
 }
 
 async function recordJobCompletedAudit(jobId: string, submissionId: string, userId: string): Promise<void> {

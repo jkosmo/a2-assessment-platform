@@ -9,13 +9,16 @@ import {
   getAssessmentResultNotificationMessage,
   getCourseAssignmentNotificationMessage,
   getCourseMajorVersionNotificationMessage,
+  getEmailReason,
   getModuleRevisedNotificationMessage,
+  type EmailReason,
 } from "../../i18n/notificationMessages.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import { EMAIL_ILLUSTRATIONS, renderIllustratedEmail, type IllustratedEmail, type InlineImageAttachment } from "./illustratedEmail.js";
+import { EMAIL_ILLUSTRATIONS, renderIllustratedEmail, type EmailIllustration, type EmailLink, type IllustratedEmail, type InlineImageAttachment } from "./illustratedEmail.js";
+import { buildEmailLink } from "./emailLinks.js";
 
 type NotificationChannel = "disabled" | "log" | "webhook" | "acs_email";
 
@@ -28,6 +31,8 @@ export type AppealNotificationInput = {
   recipientEmail: string;
   recipientName: string | null;
   moduleTitle: string;
+  /** Lenken i e-posten. Mangler i rader lagt i køen før lenkene: da går e-posten uten. */
+  moduleId?: string;
   locale: SupportedLocale;
   passFailTotal?: boolean;
   resolutionNote?: string;
@@ -50,146 +55,56 @@ export type NotificationResult = {
 /** A request we stopped waiting for: it may have reached the receiver. */
 export const isCutOff = (error: unknown) => error instanceof ExternalCallTimeoutError || (error instanceof Error && error.name === "AbortError");
 
+/** En e-post av teksten fra notificationMessages.ts: `nextStepGuidance` er avsnitt skilt med en tom linje. */
+export function buildNotificationEmail(input: {
+  locale: SupportedLocale;
+  message: { subject: string; nextStepGuidance: string };
+  reason: EmailReason;
+  illustration: EmailIllustration;
+  link: EmailLink | null;
+}): IllustratedEmail {
+  return renderIllustratedEmail({
+    locale: input.locale,
+    subject: input.message.subject,
+    paragraphs: input.message.nextStepGuidance.split("\n\n"),
+    reason: getEmailReason(input.locale, input.reason),
+    illustration: input.illustration,
+    link: input.link,
+  });
+}
+
 export async function sendAppealStatusNotification(input: AppealNotificationInput): Promise<NotificationResult> {
   const resolution =
     input.currentStatus === "RESOLVED" && input.passFailTotal !== undefined && input.resolutionNote !== undefined
       ? { passFailTotal: input.passFailTotal, resolutionNote: input.resolutionNote }
       : undefined;
   const message = getAppealNotificationMessage(input.locale, input.currentStatus, { moduleTitle: input.moduleTitle, resolution });
-  const payload = {
-    notificationType: "appeal_status_transition",
-    appealId: input.appealId,
-    submissionId: input.submissionId,
-    previousStatus: input.previousStatus,
-    currentStatus: input.currentStatus,
-    moduleTitle: input.moduleTitle,
-    recipient: {
-      userId: input.recipientUserId,
-      email: input.recipientEmail,
-      name: input.recipientName,
+  return deliverIllustratedEmail({
+    recipientEmail: input.recipientEmail,
+    recipientName: input.recipientName,
+    email: buildNotificationEmail({
       locale: input.locale,
+      message,
+      reason: "appeal",
+      illustration: EMAIL_ILLUSTRATIONS.appeal,
+      link: buildEmailLink(input.locale, "module", input.moduleId ? { moduleId: input.moduleId } : null),
+    }),
+    logPayload: {
+      notificationType: "appeal_status_transition",
+      appealId: input.appealId,
+      submissionId: input.submissionId,
+      previousStatus: input.previousStatus,
+      currentStatus: input.currentStatus,
+      moduleTitle: input.moduleTitle,
+      recipient: {
+        userId: input.recipientUserId,
+        email: input.recipientEmail,
+        name: input.recipientName,
+        locale: input.locale,
+      },
+      nextStepGuidance: message.nextStepGuidance,
     },
-    subject: message.subject,
-    nextStepGuidance: message.nextStepGuidance,
-    emittedAt: new Date().toISOString(),
-  };
-
-  const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
-  if (channel === "disabled") {
-    return {
-      delivered: false,
-      channel,
-      subject: message.subject,
-      nextStepGuidance: message.nextStepGuidance,
-      failureReason: "channel_disabled",
-    };
-  }
-
-  if (channel === "log") {
-    logOperationalEvent(operationalEvents.certification.participantNotificationSent, {
-      channel,
-      ...payload,
-    });
-    return {
-      delivered: true,
-      channel,
-      subject: message.subject,
-      nextStepGuidance: message.nextStepGuidance,
-    };
-  }
-
-  if (channel === "acs_email") {
-    return sendViaAcs({
-      recipientEmail: input.recipientEmail,
-      recipientName: input.recipientName ?? undefined,
-      subject: message.subject,
-      body: message.nextStepGuidance,
-      logPayload: payload,
-    });
-  }
-
-  const webhookUrl = env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL;
-  if (!webhookUrl) {
-    logOperationalEvent(
-      operationalEvents.certification.participantNotificationFailed,
-      {
-        channel,
-        ...payload,
-        failureReason: "missing_webhook_url",
-      },
-      "error",
-    );
-    return {
-      delivered: false,
-      channel,
-      subject: message.subject,
-      nextStepGuidance: message.nextStepGuidance,
-      failureReason: "missing_webhook_url",
-    };
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), env.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS);
-  try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const failureReason = `webhook_non_2xx_${response.status}`;
-      logOperationalEvent(
-        operationalEvents.certification.participantNotificationFailed,
-        {
-          channel,
-          ...payload,
-          failureReason,
-        },
-        "error",
-      );
-      return {
-        delivered: false,
-        channel,
-        subject: message.subject,
-        nextStepGuidance: message.nextStepGuidance,
-        failureReason,
-      };
-    }
-
-    logOperationalEvent(operationalEvents.certification.participantNotificationSent, {
-      channel,
-      ...payload,
-    });
-    return {
-      delivered: true,
-      channel,
-      subject: message.subject,
-      nextStepGuidance: message.nextStepGuidance,
-    };
-  } catch (error) {
-    const failureReason = error instanceof Error ? error.message : "webhook_send_failed";
-    logOperationalEvent(
-      operationalEvents.certification.participantNotificationFailed,
-      {
-        channel,
-        ...payload,
-        failureReason,
-      },
-      "error",
-    );
-    return {
-      delivered: false,
-      channel,
-      subject: message.subject,
-      nextStepGuidance: message.nextStepGuidance,
-      failureReason,
-      ambiguous: isCutOff(error),
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
+  });
 }
 
 export async function sendViaAcs(input: {
@@ -302,91 +217,43 @@ export type AssessmentResultNotificationInput = {
   locale: SupportedLocale;
 };
 
+type AssessmentOutcome = "pass" | "fail" | "under_review";
+
+const ASSESSMENT_ILLUSTRATION: Record<AssessmentOutcome, EmailIllustration> = {
+  pass: EMAIL_ILLUSTRATIONS.passed,
+  fail: EMAIL_ILLUSTRATIONS.notPassed,
+  under_review: EMAIL_ILLUSTRATIONS.underReview,
+};
+
 /**
- * Sends the result notification and records it. #1115: returns what happened — null when the channel
- * sends nothing (disabled, log) — so the outbox can tell a failed send from a delivered one. Before,
- * it returned nothing, and the outbox marked every attempt delivered.
+ * Sender e-posten om en vurdering og fører den i revisjonsloggen. #1115: gir tilbake hva som skjedde — null når kanalen ikke
+ * sender noe (av, logg) — så outboxen skiller en feilet sending fra en levert.
  */
-export async function notifyAssessmentResult(input: AssessmentResultNotificationInput): Promise<NotificationResult | null> {
-  const outcome = input.passFailTotal ? "pass" : "fail";
+async function sendAssessmentEmail(input: Omit<AssessmentResultNotificationInput, "passFailTotal">, outcome: AssessmentOutcome, notificationType: string): Promise<NotificationResult | null> {
   const message = getAssessmentResultNotificationMessage(input.locale, outcome, {
     moduleTitle: input.moduleTitle,
     submittedAt: input.submittedAt,
   });
-  const logPayload = {
-    notificationType: "assessment_result",
-    submissionId: input.submissionId,
-    moduleId: input.moduleId,
-    moduleTitle: input.moduleTitle,
-    outcome,
-    recipient: { email: input.recipientEmail, locale: input.locale },
-    subject: message.subject,
-    emittedAt: new Date().toISOString(),
-  };
-
-  const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
-
-  if (channel === "disabled") return null;
-
-  if (channel === "log") {
-    logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...logPayload });
-    return null;
-  }
-
-  let result: NotificationResult;
-
-  if (channel === "acs_email") {
-    result = await sendViaAcs({
-      recipientEmail: input.recipientEmail,
-      recipientName: input.recipientName ?? undefined,
-      subject: message.subject,
-      body: message.nextStepGuidance,
-      logPayload,
-    });
-  } else {
-    const webhookUrl = env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL;
-    if (!webhookUrl) {
-      logOperationalEvent(
-        operationalEvents.certification.participantNotificationFailed,
-        { channel, ...logPayload, failureReason: "missing_webhook_url" },
-        "error",
-      );
-      result = { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason: "missing_webhook_url" };
-    } else {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), env.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS);
-      try {
-        const response = await fetch(webhookUrl, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...logPayload }),
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          const failureReason = `webhook_non_2xx_${response.status}`;
-          logOperationalEvent(
-            operationalEvents.certification.participantNotificationFailed,
-            { channel, ...logPayload, failureReason },
-            "error",
-          );
-          result = { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason };
-        } else {
-          logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...logPayload });
-          result = { delivered: true, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance };
-        }
-      } catch (error) {
-        const failureReason = error instanceof Error ? error.message : "webhook_send_failed";
-        logOperationalEvent(
-          operationalEvents.certification.participantNotificationFailed,
-          { channel, ...logPayload, failureReason },
-          "error",
-        );
-        result = { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason, ambiguous: isCutOff(error) };
-      } finally {
-        clearTimeout(timeout);
-      }
-    }
-  }
+  const result = await deliverIllustratedEmail({
+    recipientEmail: input.recipientEmail,
+    recipientName: input.recipientName,
+    email: buildNotificationEmail({
+      locale: input.locale,
+      message,
+      reason: "submission",
+      illustration: ASSESSMENT_ILLUSTRATION[outcome],
+      link: buildEmailLink(input.locale, "module", { moduleId: input.moduleId }),
+    }),
+    logPayload: {
+      notificationType,
+      submissionId: input.submissionId,
+      moduleId: input.moduleId,
+      moduleTitle: input.moduleTitle,
+      outcome,
+      recipient: { email: input.recipientEmail, locale: input.locale },
+    },
+  });
+  if (result.channel === "disabled" || result.channel === "log") return null;
 
   await recordAuditEvent({
     entityType: auditEntityTypes.submission,
@@ -395,7 +262,7 @@ export async function notifyAssessmentResult(input: AssessmentResultNotification
       ? auditActions.certification.participantNotificationSent
       : auditActions.certification.participantNotificationFailed,
     metadata: {
-      notificationType: "assessment_result",
+      notificationType,
       moduleId: input.moduleId,
       outcome,
       channel: result.channel,
@@ -405,6 +272,15 @@ export async function notifyAssessmentResult(input: AssessmentResultNotification
     },
   });
   return result;
+}
+
+export function notifyAssessmentResult(input: AssessmentResultNotificationInput): Promise<NotificationResult | null> {
+  return sendAssessmentEmail(input, input.passFailTotal ? "pass" : "fail", "assessment_result");
+}
+
+/** Svaret har gått til en sensor. Resultatet kommer i egen e-post når gjennomgangen er ferdig. */
+export function notifyAssessmentUnderReview(input: Omit<AssessmentResultNotificationInput, "passFailTotal">): Promise<NotificationResult | null> {
+  return sendAssessmentEmail(input, "under_review", "assessment_under_review");
 }
 
 /** Sends the appeal notification and records it; returns what happened (#1115). */
@@ -431,12 +307,7 @@ export async function notifyAppealStatusTransition(input: AppealNotificationInpu
   return result;
 }
 
-// #684: notify a participant that their class was assigned a course. Reuses the same channel
-// dispatch (disabled/log/acs_email) as other participant notifications. Webhook is treated as a
-// log for this notification type. Norwegian copy (primary locale).
-//
-// #688: the email contains NO link. Company policy forbids emails with links (phishing / spoofing
-// risk) — the participant is told to log in to the platform themselves.
+// #684: e-post til deltakeren når klassen får tildelt et kurs. Sendes bare for publiserte kurs (classService).
 export interface CourseAssignmentNotificationInput {
   recipientEmail: string;
   recipientName?: string | null;
@@ -445,50 +316,40 @@ export interface CourseAssignmentNotificationInput {
   className: string;
   dueAt?: Date | null;
   locale: SupportedLocale;
+  courseId: string;
 }
 
 export async function sendCourseAssignmentNotification(
   input: CourseAssignmentNotificationInput,
 ): Promise<NotificationResult> {
-  // #970: var hardkodet bokmål — den eneste e-posten uten språk. Nå fra samme tabell som resten.
+  // #970: var hardkodet bokmål — den eneste e-posten uten språkparameter. Nå fra samme tabell som resten.
   const message = getCourseAssignmentNotificationMessage(input.locale, {
     courseTitle: input.courseTitle,
     className: input.className,
     dueAt: input.dueAt ?? null,
   });
-  const subject = message.subject;
-  const body = message.nextStepGuidance;
-
-  const payload = {
-    notificationType: "class_course_assignment",
-    courseTitle: input.courseTitle,
-    className: input.className,
-    recipient: { email: input.recipientEmail, name: input.recipientName ?? null },
-    subject,
-    emittedAt: new Date().toISOString(),
-  };
-
-  const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
-  if (channel === "disabled") {
-    return { delivered: false, channel, subject, nextStepGuidance: body, failureReason: "channel_disabled" };
-  }
-  if (channel === "acs_email") {
-    return sendViaAcs({
-      recipientEmail: input.recipientEmail,
-      recipientName: input.recipientName ?? undefined,
-      subject,
-      body,
-      logPayload: payload,
-    });
-  }
-  // log channel (and webhook → log for this notification type).
-  logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...payload });
-  return { delivered: true, channel, subject, nextStepGuidance: body };
+  return deliverIllustratedEmail({
+    recipientEmail: input.recipientEmail,
+    recipientName: input.recipientName,
+    email: buildNotificationEmail({
+      locale: input.locale,
+      message,
+      reason: "assignment",
+      illustration: EMAIL_ILLUSTRATIONS.courseAssigned,
+      link: buildEmailLink(input.locale, "course", { courseId: input.courseId }),
+    }),
+    logPayload: {
+      notificationType: "class_course_assignment",
+      courseId: input.courseId,
+      courseTitle: input.courseTitle,
+      className: input.className,
+      recipient: { email: input.recipientEmail, name: input.recipientName ?? null },
+    },
+  });
 }
 
-// #997: modulen deltakeren besto er revidert, og den tidligere beståtten teller ikke lenger.
-// Samme kanaldispatch som de andre deltakervarslene; ingen lenker (#688); teksten på MOTTAKERENS
-// språk (#970), ikke forfatterens.
+// #997: modulen deltakeren besto er revidert, og den tidligere beståtten teller ikke lenger. Ren tekst, utenfor malen med vilje
+// (#1141): bryteren for beståtte per kurs stopper alle nye. Denne sender bare det som alt ligger i køen.
 export interface ModuleRevisedNotificationInput {
   recipientEmail: string;
   recipientName?: string | null;
@@ -601,7 +462,7 @@ export async function deliverIllustratedEmail(input: {
 }
 
 // #934 skive 4b: kurset har fått en ny hovedversjon. Teksten på MOTTAKERENS språk (#970), med båten på verftet.
-// Ingen lenker. Sendes av behandleren i outboxen (courseMajorVersionEmail.ts), som eier reglene for hvem og når.
+// Sendes av behandleren i outboxen (courseMajorVersionEmail.ts), som eier reglene for hvem og når.
 export interface CourseMajorVersionNotificationInput {
   noticeId: string;
   courseId: string;
@@ -615,7 +476,7 @@ export interface CourseMajorVersionNotificationInput {
 }
 
 /** Selve e-posten, uten å sende den. Eksportert for enhetstesten av teksten. */
-export function buildCourseMajorVersionEmail(input: Pick<CourseMajorVersionNotificationInput, "courseTitle" | "versionMajor" | "changedItemCount" | "locale">): IllustratedEmail {
+export function buildCourseMajorVersionEmail(input: Pick<CourseMajorVersionNotificationInput, "courseTitle" | "versionMajor" | "changedItemCount" | "locale"> & { courseId?: string }): IllustratedEmail {
   const message = getCourseMajorVersionNotificationMessage(input.locale, input);
   return renderIllustratedEmail({
     locale: input.locale,
@@ -623,6 +484,7 @@ export function buildCourseMajorVersionEmail(input: Pick<CourseMajorVersionNotif
     paragraphs: message.paragraphs,
     reason: message.reason,
     illustration: EMAIL_ILLUSTRATIONS.courseNewVersion,
+    link: buildEmailLink(input.locale, "course", input.courseId ? { courseId: input.courseId } : null),
   });
 }
 
@@ -641,42 +503,35 @@ export async function sendCourseMajorVersionNotification(input: CourseMajorVersi
   });
 }
 
-// #495/T-QA-5: generisk sender for diskusjons-varsler (nytt spørsmål → kursets SMO; nytt svar →
-// trådabonnenter). Subject/body bygges av kalleren (locale-templates i notificationMessages.ts);
-// her gjenbrukes samme kanal-dispatch (disabled/log/acs_email; webhook → log) som øvrige varsler.
-// Ingen lenker i e-post (#688-policy) — mottakeren bes logge inn selv.
+// #495/T-QA-5: e-post om diskusjoner (nytt spørsmål → kursets eiere; nytt svar → dem som følger tråden). Emne og tekst bygges av
+// kalleren (notificationMessages.ts). Lenken åpner tråden på deltakersiden.
 export interface DiscussionNotificationInput {
   recipientEmail: string;
   recipientName?: string | null;
   subject: string;
   body: string;
   notificationType: "discussion_question_created" | "discussion_reply_created";
+  locale: SupportedLocale;
+  courseId: string;
+  threadId: string;
 }
 
-export async function sendDiscussionNotification(
-  input: DiscussionNotificationInput,
-): Promise<NotificationResult> {
-  const { subject, body } = input;
-  const payload = {
-    notificationType: input.notificationType,
-    recipient: { email: input.recipientEmail, name: input.recipientName ?? null },
-    subject,
-    emittedAt: new Date().toISOString(),
-  };
-
-  const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
-  if (channel === "disabled") {
-    return { delivered: false, channel, subject, nextStepGuidance: body, failureReason: "channel_disabled" };
-  }
-  if (channel === "acs_email") {
-    return sendViaAcs({
-      recipientEmail: input.recipientEmail,
-      recipientName: input.recipientName ?? undefined,
-      subject,
-      body,
-      logPayload: payload,
-    });
-  }
-  logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...payload });
-  return { delivered: true, channel, subject, nextStepGuidance: body };
+export function sendDiscussionNotification(input: DiscussionNotificationInput): Promise<NotificationResult> {
+  return deliverIllustratedEmail({
+    recipientEmail: input.recipientEmail,
+    recipientName: input.recipientName,
+    email: buildNotificationEmail({
+      locale: input.locale,
+      message: { subject: input.subject, nextStepGuidance: input.body },
+      reason: input.notificationType === "discussion_question_created" ? "discussionQuestion" : "discussionReply",
+      illustration: EMAIL_ILLUSTRATIONS.discussion,
+      link: buildEmailLink(input.locale, "discussion", { courseId: input.courseId, threadId: input.threadId }),
+    }),
+    logPayload: {
+      notificationType: input.notificationType,
+      courseId: input.courseId,
+      threadId: input.threadId,
+      recipient: { email: input.recipientEmail, name: input.recipientName ?? null },
+    },
+  });
 }

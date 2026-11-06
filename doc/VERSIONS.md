@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.138.0 - 2026-11-06
+
+E-poster til dem som bruker plattformen: bilde, lenke, og en ny e-post når et svar går til sensor (#1141, compliance godkjente lenker 2026-11-06).
+
+- **Alle e-poster går gjennom den felles malen,** med bilde av båten, språket til mottakeren og en linje om hvorfor de får den. Nye bilder for tildelt kurs, frister, resultat, sensor, anke og diskusjon. E-post til administratorer om feilede vurderinger og de siste «modulen er revidert» er som før.
+- **Lenker.** Kurs, frister og ny hovedversjon lenker til kurset, resultat, sensor og anke til modulen, og diskusjon til tråden. Lenken er en knapp med adressen synlig under, og inneholder bare en id.
+- **Innstillingen `PUBLIC_APP_BASE_URL` slår lenkene på.** Den må stå på både appen og workeren. Uten den går e-postene som før, uten lenke. En ugyldig verdi gir et varsel ved oppstart.
+- **Adresser i tekst fra andre blir ufarlige.** `github.com` i en kurstittel blir `github[.]com`, så den eneste lenken i en e-post er vår egen. Tidligere ville en slik tittel stoppet e-posten.
+- **Ny e-post: «til sensor».** Går til deltakeren når et svar sendes til manuell vurdering. Køraden venter fem minutter, så en worker som ikke er rullet ut ennå, ikke bruker opp forsøkene.
+- **Deltakersiden.** `/participant?moduleId=` finner kurset modulen ligger i, helst det som krever nytt forsøk, og åpner modulen. `?courseId=&threadId=` åpner kurset, diskusjonen og tråden. Finnes ikke modulen i kursene, vises en beskjed.
+
 ## 2.137.0 - 2026-11-06
 
 #934: bare kursets eier, eller en administrator, velger hovedversjon for et kurs (produkteier, mangel 50 i `doc/DESIGN_934.md`). Gjelder bare med bryteren på.

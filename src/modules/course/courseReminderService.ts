@@ -5,12 +5,12 @@ import {
   getCourseReminderNotificationMessage,
   type CourseReminderKind,
 } from "../../i18n/notificationMessages.js";
-import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
-import { operationalEvents } from "../../observability/operationalEvents.js";
 import { auditRepository } from "../../repositories/auditRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import { sendViaAcs } from "../certification/participantNotificationService.js";
+import { buildNotificationEmail, deliverIllustratedEmail } from "../certification/participantNotificationService.js";
+import { buildEmailLink } from "../certification/emailLinks.js";
+import { EMAIL_ILLUSTRATIONS } from "../certification/illustratedEmail.js";
 import { deriveStatus } from "./enrollmentService.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
 import { classRepository } from "./classRepository.js";
@@ -87,89 +87,33 @@ type ReminderCandidate = {
   source: "individual" | "class";
 };
 
-async function defaultSendCourseReminder(input: CourseReminderSendInput): Promise<CourseReminderSendResult> {
-  const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
+export async function defaultSendCourseReminder(input: CourseReminderSendInput): Promise<CourseReminderSendResult> {
   const message = getCourseReminderNotificationMessage(input.locale, input.kind, {
     courseTitle: input.courseTitle,
     dueAt: input.dueAt,
     daysBefore: input.daysBefore,
   });
-  const logPayload = {
-    notificationType: NOTIFICATION_TYPE,
-    courseId: input.courseId,
-    userId: input.userId,
+  const result = await deliverIllustratedEmail({
     recipientEmail: input.recipientEmail,
-    kind: input.kind,
-    dueAt: input.dueAt.toISOString(),
-    daysBefore: input.daysBefore ?? null,
-    emittedAt: new Date().toISOString(),
-  };
-
-  if (channel === "disabled") {
-    return { delivered: false, channel, failureReason: "channel_disabled" };
-  }
-
-  if (channel === "log") {
-    logOperationalEvent(operationalEvents.certification.participantNotificationSent, {
-      channel,
-      ...logPayload,
-    });
-    return { delivered: true, channel };
-  }
-
-  if (channel === "acs_email") {
-    const result = await sendViaAcs({
+    recipientName: input.recipientName,
+    email: buildNotificationEmail({
+      locale: input.locale,
+      message,
+      reason: "reminder",
+      illustration: input.kind === "overdue" ? EMAIL_ILLUSTRATIONS.overdue : EMAIL_ILLUSTRATIONS.dueSoon,
+      link: buildEmailLink(input.locale, "course", { courseId: input.courseId }),
+    }),
+    logPayload: {
+      notificationType: NOTIFICATION_TYPE,
+      courseId: input.courseId,
+      userId: input.userId,
       recipientEmail: input.recipientEmail,
-      recipientName: input.recipientName ?? undefined,
-      subject: message.subject,
-      body: message.nextStepGuidance,
-      logPayload: { channel, ...logPayload },
-    });
-    return { delivered: result.delivered, channel, failureReason: result.failureReason };
-  }
-
-  // webhook
-  const webhookUrl = env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL;
-  if (!webhookUrl) {
-    logOperationalEvent(
-      operationalEvents.certification.participantNotificationFailed,
-      { channel, ...logPayload, failureReason: "missing_webhook_url" },
-      "error",
-    );
-    return { delivered: false, channel, failureReason: "missing_webhook_url" };
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), env.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS);
-  try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...logPayload, subject: message.subject, body: message.nextStepGuidance }),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      const failureReason = `webhook_non_2xx_${response.status}`;
-      logOperationalEvent(
-        operationalEvents.certification.participantNotificationFailed,
-        { channel, ...logPayload, failureReason },
-        "error",
-      );
-      return { delivered: false, channel, failureReason };
-    }
-    logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...logPayload });
-    return { delivered: true, channel };
-  } catch (error) {
-    const failureReason = error instanceof Error ? error.message : "webhook_send_failed";
-    logOperationalEvent(
-      operationalEvents.certification.participantNotificationFailed,
-      { channel, ...logPayload, failureReason },
-      "error",
-    );
-    return { delivered: false, channel, failureReason };
-  } finally {
-    clearTimeout(timeout);
-  }
+      kind: input.kind,
+      dueAt: input.dueAt.toISOString(),
+      daysBefore: input.daysBefore ?? null,
+    },
+  });
+  return { delivered: result.delivered, channel: result.channel, failureReason: result.failureReason };
 }
 
 // Audit-basert dedup: en påminnelse er allerede sendt hvis det finnes en `course_reminder_sent`-rad

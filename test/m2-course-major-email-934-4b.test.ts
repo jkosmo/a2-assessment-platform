@@ -546,11 +546,11 @@ describe("#934 skive 4b — behandleren i outboxen", () => {
     expect((await notices(f.courseId))[0].status).toBe("sent");
   });
 
-  it("en kurstittel med en adresse: e-posten sendes aldri, raden blir `failed`", async () => {
+  it("en kurstittel med en adresse stopper ikke e-posten: adressen gjøres ufarlig (2.138.0), og raden blir `sent`", async () => {
     const f = await queuedNotices("lenke", 1);
     await prisma.course.update({ where: { id: f.courseId }, data: { title: JSON.stringify(L("Se www.a-2.no")) } });
     await deliverCourseMajorVersionNotice(f.rader[0].id);
-    expect((await notices(f.courseId)).map((r) => [r.status, r.reason])).toEqual([["failed", "contains_link"]]);
+    expect((await notices(f.courseId)).map((r) => r.status)).toEqual(["sent"]);
   });
 
   it("to forsøk samtidig på samme rad: e-posten sendes én gang", async () => {

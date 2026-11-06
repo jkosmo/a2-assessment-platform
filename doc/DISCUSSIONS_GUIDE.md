@@ -58,7 +58,7 @@ Som SMO/admin ser du modererings­knapper inne i hver tråd:
 - Nytt **svar** varsler trådens abonnenter (de som har postet i tråden).
 
 Varsling er bevisst minimal i denne versjonen; finkornet preferanse-/sammendrags­styring kommer
-senere (#497). E-poster inneholder ingen lenker — du blir bedt om å logge inn selv.
+senere (#497). E-posten har en lenke som åpner kurset og tråden. Du må være logget inn for å se dem.
 
 ## Personvern og sikkerhet
 - Brukergenerert innhold rendres med en streng sanitering (ingen `iframe`/rå-HTML/bilder) — strengere

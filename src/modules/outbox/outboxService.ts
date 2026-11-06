@@ -1,7 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
-import { notifyAppealStatusTransition, notifyAssessmentResult, sendModuleRevisedNotification } from "../certification/index.js";
+import { notifyAppealStatusTransition, notifyAssessmentResult, notifyAssessmentUnderReview, sendModuleRevisedNotification } from "../certification/index.js";
 import type { AppealNotificationInput, NotificationResult } from "../certification/participantNotificationService.js";
 import { checkAndIssueCourseCompletions } from "../course/index.js";
 import { deliverCourseMajorVersionNotice } from "../course/courseMajorVersionEmail.js";
@@ -41,6 +41,9 @@ export const OUTBOX_EVENT_TYPES = {
   // workeren legger dem inn (courseMajorVersionEmail.ts), og bare når COURSE_MAJOR_EMAIL_ENABLED er på — så en
   // gammel worker uten behandleren møter aldri typen.
   courseMajorVersionNotification: "course_major_version_notification",
+  // «Svaret ditt har gått til en sensor». Egen type med vilje: en gammel worker under utrulling ville lest
+  // `assessment_notification` uten `passFailTotal` og sendt «ikke bestått». Den kjenner ikke denne, og lar raden stå.
+  assessmentUnderReviewNotification: "assessment_under_review_notification",
 } as const;
 
 type AssessmentNotificationPayload = {
@@ -53,6 +56,8 @@ type AssessmentNotificationPayload = {
   passFailTotal: boolean;
   locale: SupportedLocale;
 };
+
+export type AssessmentUnderReviewNotificationPayload = Omit<AssessmentNotificationPayload, "passFailTotal">;
 
 type CourseCompletionCheckPayload = {
   userId: string;
@@ -79,6 +84,7 @@ export type CourseMajorVersionNotificationPayload = { noticeId: string };
 
 export type OutboxEnqueueInput = (
   | { type: typeof OUTBOX_EVENT_TYPES.assessmentNotification; payload: AssessmentNotificationPayload }
+  | { type: typeof OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification; payload: AssessmentUnderReviewNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.courseCompletionCheck; payload: CourseCompletionCheckPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.appealNotification; payload: AppealNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.moduleRevisedNotification; payload: ModuleRevisedNotificationPayload }
@@ -173,6 +179,7 @@ function settleNotification(result: NotificationResult | null, what: string): vo
 /** The event types that send something to a person: a re-run after a cut-off could send it twice. */
 const SENDS_TO_A_PERSON = new Set<string>([
   OUTBOX_EVENT_TYPES.assessmentNotification,
+  OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification,
   OUTBOX_EVENT_TYPES.appealNotification,
   OUTBOX_EVENT_TYPES.moduleRevisedNotification,
   OUTBOX_EVENT_TYPES.courseMajorVersionNotification,
@@ -196,6 +203,20 @@ export async function deliverOutboxEvent(event: { type: string; payloadJson: str
       locale: p.locale,
     });
     settleNotification(result, "assessment result notification");
+    return;
+  }
+  if (event.type === OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification) {
+    const p = JSON.parse(event.payloadJson) as AssessmentUnderReviewNotificationPayload;
+    const result = await notifyAssessmentUnderReview({
+      submissionId: p.submissionId,
+      submittedAt: new Date(p.submittedAt),
+      recipientEmail: p.recipientEmail,
+      recipientName: p.recipientName,
+      moduleTitle: p.moduleTitle,
+      moduleId: p.moduleId,
+      locale: p.locale,
+    });
+    settleNotification(result, "assessment under review notification");
     return;
   }
   if (event.type === OUTBOX_EVENT_TYPES.courseCompletionCheck) {

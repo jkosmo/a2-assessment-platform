@@ -1,11 +1,12 @@
-// #934 skive 4b (og #1139, #1141): ÉN felles mal for e-post til deltakerne med seilbåten øverst.
+// #934 skive 4b, #1141 og lenkene: ÉN felles mal for e-post med seilbåten øverst.
 //
-// Produkteier 2026-11-01/03 (doc/design/GAMIFISERING_DESIGN.md, #1139, #1141):
-//   - bildet øverst, så teksten, og en siste linje om hvorfor du får e-posten;
+// Produkteier 2026-11-01/03 (doc/design/GAMIFISERING_DESIGN.md, #1139, #1141), og compliance 2026-11-06 (lenker godkjent):
+//   - bildet øverst, så teksten, lenken og en siste linje om hvorfor du får e-posten;
 //   - HTML og ren tekst side om side; bildet er et innebygd vedlegg (CID), aldri hentet fra en adresse — det ville
 //     vært en sporingspiksel, og noe Outlook blokkerer;
-//   - INGEN lenker (firmapolicy, #688): verken `http`, `www` eller `href`, i HTML eller tekst. Heller ingen sporing
-//     av hvem som åpner e-posten (`disableUserEngagementTracking` i `sendViaAcs`);
+//   - den ENESTE adressen i en e-post er vår egen lenke. Malen lager den selv av `link`. Adresser i titler og annen
+//     tekst fra forfattere og deltakere gjøres ufarlige (`neutralizeAddresses`), og e-posten går. Ingen sporing av hvem
+//     som åpner e-posten (`disableUserEngagementTracking` i `sendViaAcs`);
 //   - tabellbasert HTML (testet i Outlook 2026-11-02: bildet vises uten å laste ned bilder).
 //
 // Denne fila vet ingenting om kurs eller versjoner. Hver e-posttype lager teksten sin (notificationMessages.ts),
@@ -24,7 +25,7 @@ export type EmailIllustration = {
   alt: Record<SupportedLocale, string>;
 };
 
-/** Scenene. #1141 legger til én per e-posttype. */
+/** Scenene, valgt av produkteier i #1141. Et bilde byttes ved å erstatte fila. */
 export const EMAIL_ILLUSTRATIONS = {
   // #934: seilbåten står på bukker i båtverftet og får et nytt strøk maling (utkast A, valgt 2026-11-03).
   courseNewVersion: {
@@ -34,6 +35,78 @@ export const EMAIL_ILLUSTRATIONS = {
       nb: "Båten står på bukker i båtverftet og får et nytt strøk maling",
       nn: "Båten står på bukkar i båtverftet og får eit nytt strøk måling",
       "en-GB": "The boat stands on trestles in the boatyard, getting a fresh coat of paint",
+    },
+  },
+  courseAssigned: {
+    file: "kurs-tildelt.jpg",
+    contentId: "kurs-tildelt",
+    alt: {
+      nb: "Båten kaster loss: fortøyningen slippes og seilet går opp",
+      nn: "Båten kastar laus: fortøyinga vert sleppt og seglet går opp",
+      "en-GB": "The boat casts off: the mooring line is released and the sail goes up",
+    },
+  },
+  dueSoon: {
+    file: "frist-snart.jpg",
+    contentId: "frist-snart",
+    alt: {
+      nb: "Båten holder god fart mot et fyr i horisonten",
+      nn: "Båten held god fart mot eit fyr i horisonten",
+      "en-GB": "The boat makes good speed towards a lighthouse on the horizon",
+    },
+  },
+  overdue: {
+    file: "frist-forfalt.jpg",
+    contentId: "frist-forfalt",
+    alt: {
+      nb: "Båten ligger i havna og venter på vind, med slakt seil",
+      nn: "Båten ligg i hamna og ventar på vind, med slakt segl",
+      "en-GB": "The boat lies in the harbour waiting for wind, its sail slack",
+    },
+  },
+  passed: {
+    file: "vurdering-bestatt.jpg",
+    contentId: "vurdering-bestatt",
+    alt: {
+      nb: "Båten seiler for fullt seil, med vimpelen til topps",
+      nn: "Båten seglar for fullt segl, med vimpelen til topps",
+      "en-GB": "The boat sails under full sail, with its pennant flying",
+    },
+  },
+  notPassed: {
+    file: "vurdering-ikke-bestatt.jpg",
+    contentId: "vurdering-ikke-bestatt",
+    alt: {
+      nb: "Båten krysser mot vinden: kursen holdes, det tar ett slag til",
+      nn: "Båten kryssar mot vinden: kursen vert halden, det tek eitt slag til",
+      "en-GB": "The boat tacks into the wind: it holds its course, and it takes one more tack",
+    },
+  },
+  underReview: {
+    file: "vurdering-sensor.jpg",
+    contentId: "vurdering-sensor",
+    alt: {
+      nb: "Båten venter ved fyret til losen har sett på saken",
+      nn: "Båten ventar ved fyret til losen har sett på saka",
+      "en-GB": "The boat waits by the lighthouse until the pilot has looked at the matter",
+    },
+  },
+  appeal: {
+    file: "anke.jpg",
+    contentId: "anke",
+    alt: {
+      nb: "Båten ligger ved havnekontoret",
+      nn: "Båten ligg ved hamnekontoret",
+      "en-GB": "The boat lies by the harbour office",
+    },
+  },
+  discussion: {
+    file: "diskusjon.jpg",
+    contentId: "diskusjon",
+    alt: {
+      nb: "To båter signaliserer til hverandre med flagg",
+      nn: "To båtar signaliserer til kvarandre med flagg",
+      "en-GB": "Two boats signal to each other with flags",
     },
   },
 } as const satisfies Record<string, EmailIllustration>;
@@ -48,11 +121,14 @@ export type InlineImageAttachment = {
 
 export type IllustratedEmail = {
   subject: string;
-  /** Ren tekst: avsnittene og siste linje. Ingen henvisning til bildet. */
+  /** Ren tekst: avsnittene, lenken og siste linje. Ingen henvisning til bildet. */
   plainText: string;
   html: string;
   attachments: InlineImageAttachment[];
 };
+
+/** Vår egen lenke, ferdig bygget av `emailLinks.ts`. Bare malen setter den inn. */
+export type EmailLink = { url: string; label: string };
 
 export type IllustratedEmailInput = {
   locale: SupportedLocale;
@@ -62,25 +138,46 @@ export type IllustratedEmailInput = {
   /** Siste linje: hvorfor mottakeren får e-posten (#1141). Liten, grå i HTML. */
   reason?: string;
   illustration: EmailIllustration;
+  /** Null: lenker er ikke slått på, eller raden i køen er eldre enn lenkene. E-posten går da uten. */
+  link?: EmailLink | null;
 };
 
-/** Det lenkesperra ser etter. Samme mønster som enhetstestene for hver e-posttype. */
-const LINK_LIKE = /https?:|www\.|href/i;
+/** Det som ikke kan være igjen etter `neutralizeAddresses`. Sjekkes før vår egen lenke settes inn. */
+const LINK_LIKE = /https?:|www\./i;
+const ANCHOR_ELEMENT = /<a\s/i;
+
+// Uten ordgrense, så de fanger alt LINK_LIKE fanger: «xhttp://…» skal gjøres ufarlig, ikke stoppe e-posten.
+const URL_SCHEME = /https?:\/*/gi;
+const WWW_PREFIX = /www\./gi;
 /**
  * Det e-postklienter gjør til lenker av seg selv, uten `http` eller `www`: e-postadresser og domenenavn (QA-porten
  * 2.132.0). Hvilke endelser en klient kjenner, varierer, så alt med små bokstaver rundt punktumet regnes som et domene
- * (ingen liste over toppdomener). Små bokstaver med vilje: «ASP.NET» og «Node.js» er kursnavn, og da skal e-posten gå.
+ * (ingen liste over toppdomener). Små bokstaver med vilje: «ASP.NET» og «Node.js» er kursnavn. «f.eks» står i ankebegrunnelser.
  */
-const AUTOLINKED_EMAIL = /[^\s@]+@[^\s@]+\.[a-z]{2,}/i;
-const AUTOLINKED_DOMAIN = /\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b/;
+const EMAIL_ADDRESS = /[^\s@]+@[^\s@]+\.[a-z]{2,}/gi;
+const DOMAIN_NAME = /(?<!\[)\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b/g;
+const NOT_A_DOMAIN = new Set(["f.eks"]);
 
 /**
- * Ble avsenderen bedt om å sende noe som ligner en lenke (typisk en tittel som inneholder en adresse)? Da sendes
- * e-posten ikke: firmapolicy er ingen lenker, og en nettadresse i ren tekst blir en lenke i Outlook.
+ * Gjør adresser i tekst ufarlige: `github[.]com`, `kari@firma[.]no`. Titler og begrunnelser skrives av forfattere og
+ * deltakere, og en adresse der ville blitt en lenke i Outlook. E-posten skal fortsatt gå: et spørsmål om «github.com»
+ * er ikke en grunn til at eieren ikke får vite om det.
  */
+export function neutralizeAddresses(text: string): string {
+  return text
+    .replace(URL_SCHEME, "")
+    .replace(EMAIL_ADDRESS, (address) => {
+      const at = address.lastIndexOf("@");
+      return `${address.slice(0, at + 1)}${address.slice(at + 1).split(".").join("[.]")}`;
+    })
+    .replace(WWW_PREFIX, (prefix) => `${prefix.slice(0, -1)}[.]`)
+    .replace(DOMAIN_NAME, (name) => (NOT_A_DOMAIN.has(name) ? name : name.split(".").join("[.]")));
+}
+
+/** Skal ikke kunne skje: teksten er allerede gjort ufarlig. Finnes så en feil i malen stopper e-posten i stedet for å sende en fremmed adresse. */
 export class EmailContainsLinkError extends Error {
   constructor(where: string) {
-    super(`The e-mail would contain something that looks like a link (${where}); not sent (no-links policy).`);
+    super(`The e-mail would contain an address that is not ours (${where}); not sent.`);
     this.name = "EmailContainsLinkError";
   }
 }
@@ -110,54 +207,66 @@ function paragraphHtml(text: string): string {
   return escapeHtml(text).split("\n").join("<br>");
 }
 
-/**
- * Bygger e-posten: bildet øverst (CID), avsnittene, og siste linje. Kaster `EmailContainsLinkError` hvis noe i den
- * ligner en lenke — da er det teksten som er feil, ikke sendingen, og ingenting skal sendes.
- */
-export function renderIllustratedEmail(input: IllustratedEmailInput): IllustratedEmail {
-  const { illustration } = input;
-  const alt = illustration.alt[input.locale];
-  const texts = [input.subject, ...input.paragraphs, ...(input.reason ? [input.reason] : [])];
-  for (const text of texts) {
-    if (LINK_LIKE.test(text) || AUTOLINKED_EMAIL.test(text) || AUTOLINKED_DOMAIN.test(text)) throw new EmailContainsLinkError("text");
-  }
+const FONT = "font-family:Arial,Helvetica,sans-serif;";
 
-  const plainText = [...input.paragraphs, ...(input.reason ? [input.reason] : [])].join("\n\n");
-
-  const body = input.paragraphs
-    .map((text) => `<p style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;">${paragraphHtml(text)}</p>`)
-    .join("\n");
-  const reason = input.reason
-    ? `<p style="margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;">${paragraphHtml(input.reason)}</p>`
-    : "";
-  const html = [
-    "<!DOCTYPE html>",
-    `<html lang="${input.locale}">`,
-    "<head>",
-    '<meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    `<title>${escapeHtml(input.subject)}</title>`,
-    "</head>",
-    '<body style="margin:0;padding:0;background-color:#f4f1ea;">',
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f1ea;">',
-    '<tr><td align="center" style="padding:24px 12px;">',
-    '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#ffffff;">',
-    `<tr><td style="padding:0;"><img src="cid:${illustration.contentId}" width="600" height="200" alt="${escapeHtml(alt)}" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>`,
-    `<tr><td style="padding:24px 24px 28px 24px;">\n${body}\n${reason}\n</td></tr>`,
+/** Knapp som tabell, så Outlook tegner den. Adressen står også synlig, så mottakeren kan se hvor den går. */
+function linkHtml(link: EmailLink): string {
+  const url = escapeHtml(link.url);
+  return [
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 8px 0;">',
+    `<tr><td bgcolor="#1f4e79" style="background-color:#1f4e79;border-radius:4px;"><a href="${url}" style="display:inline-block;padding:12px 20px;${FONT}font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;">${escapeHtml(link.label)}</a></td></tr>`,
     "</table>",
-    "</td></tr>",
-    "</table>",
-    "</body>",
-    "</html>",
+    `<p style="margin:0 0 8px 0;${FONT}font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;">${url}</p>`,
   ].join("\n");
+}
 
-  if (LINK_LIKE.test(html)) throw new EmailContainsLinkError("html");
-  if (LINK_LIKE.test(plainText)) throw new EmailContainsLinkError("plain text");
+/** Bygger e-posten: bildet øverst (CID), avsnittene, lenken og siste linje. */
+export function renderIllustratedEmail(input: IllustratedEmailInput): IllustratedEmail {
+  const { illustration, link } = input;
+  const alt = illustration.alt[input.locale];
+  const subject = neutralizeAddresses(input.subject);
+  const paragraphs = input.paragraphs.map(neutralizeAddresses);
+  const reasonText = input.reason ? neutralizeAddresses(input.reason) : undefined;
+
+  const body = paragraphs
+    .map((text) => `<p style="margin:0 0 16px 0;${FONT}font-size:16px;line-height:24px;color:#1f2933;">${paragraphHtml(text)}</p>`)
+    .join("\n");
+  const reason = reasonText
+    ? `<p style="margin:24px 0 0 0;${FONT}font-size:13px;line-height:20px;color:#5f6b7a;">${paragraphHtml(reasonText)}</p>`
+    : "";
+  const page = (cta: string) =>
+    [
+      "<!DOCTYPE html>",
+      `<html lang="${input.locale}">`,
+      "<head>",
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      `<title>${escapeHtml(subject)}</title>`,
+      "</head>",
+      '<body style="margin:0;padding:0;background-color:#f4f1ea;">',
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f1ea;">',
+      '<tr><td align="center" style="padding:24px 12px;">',
+      '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#ffffff;">',
+      `<tr><td style="padding:0;"><img src="cid:${illustration.contentId}" width="600" height="200" alt="${escapeHtml(alt)}" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>`,
+      `<tr><td style="padding:24px 24px 28px 24px;">\n${body}\n${cta}\n${reason}\n</td></tr>`,
+      "</table>",
+      "</td></tr>",
+      "</table>",
+      "</body>",
+      "</html>",
+    ].join("\n");
+
+  // Kontrollen står FØR lenken settes inn: alt annet i e-posten skal være fritt for adresser.
+  // Den rene teksten er de samme avsnittene, så den trenger ingen egen kontroll.
+  const withoutLink = page("");
+  if (LINK_LIKE.test(withoutLink) || ANCHOR_ELEMENT.test(withoutLink)) throw new EmailContainsLinkError("html");
+
+  const plainText = [...paragraphs, ...(link ? [`${link.label}: ${link.url}`] : []), ...(reasonText ? [reasonText] : [])].join("\n\n");
 
   return {
-    subject: input.subject,
+    subject,
     plainText,
-    html,
+    html: link ? page(linkHtml(link)) : withoutLink,
     attachments: [
       {
         name: illustration.file,

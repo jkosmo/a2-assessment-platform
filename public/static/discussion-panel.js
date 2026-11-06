@@ -285,5 +285,7 @@ export function mountDiscussionPanel(opts) {
   }
 
   newBtn.addEventListener("click", showNewThreadForm);
-  showList();
+  // Lenka i e-post om en diskusjon. Finnes ikke tråden, viser `showThread` lista.
+  if (opts.initialThreadId) showThread(opts.initialThreadId);
+  else showList();
 }

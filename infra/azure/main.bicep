@@ -220,6 +220,9 @@ param participantNotificationChannel string = 'log'
 @description('#934 skive 4b: e-post ved ny hovedversjon av et kurs. Leses bare av workeren. Av som standard.')
 param courseMajorEmailEnabled bool = false
 
+@description('Lenkene i e-post: adressen til plattformen. Tom: e-postene går uten lenke. Leses av både appen og workeren.')
+param publicAppBaseUrl string = ''
+
 @description('Optional webhook endpoint for participant notifications.')
 @secure()
 param participantNotificationWebhookUrl string = ''
@@ -888,6 +891,10 @@ resource webAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
           value: acsEmailSenderDisplayName
         }
         {
+          name: 'PUBLIC_APP_BASE_URL'
+          value: publicAppBaseUrl
+        }
+        {
           name: 'BOOTSTRAP_SEED'
           value: environmentName == 'production' ? 'false' : 'true'
         }
@@ -1129,6 +1136,10 @@ resource workerAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         {
           name: 'ACS_EMAIL_SENDER_DISPLAY_NAME'
           value: acsEmailSenderDisplayName
+        }
+        {
+          name: 'PUBLIC_APP_BASE_URL'
+          value: publicAppBaseUrl
         }
         {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'

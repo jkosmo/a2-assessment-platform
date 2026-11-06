@@ -499,6 +499,7 @@ export async function createReply(params: {
   // #495/T-QA-5: nytt svar varsler trådens abonnenter (ekskl. svarets forfatter). Best-effort.
   try {
     await notifyNewReply({
+      courseId: course.id,
       threadId: thread.id,
       threadTitle: thread.title,
       replyAuthorId: params.access.userId,

@@ -4250,7 +4250,11 @@ function resolveCourseLink() {
   const params = new URLSearchParams(window.location.search);
   const slug = params.get("kurs");
   const linkedCourseId = params.get("courseId");
-  if (!slug && !linkedCourseId) return;
+  const linkedModuleId = params.get("moduleId");
+  if (!slug && !linkedCourseId) {
+    if (linkedModuleId) resolveModuleLink(linkedModuleId).catch((error) => logApiError(error));
+    return;
+  }
   const course = slug
     ? participantCourses.find((c) => c.slug === slug)
     : participantCourses.find((c) => c.id === linkedCourseId);
@@ -4268,10 +4272,68 @@ function resolveCourseLink() {
       window.history.replaceState({ participantCourseId: course.id }, "", `${url.pathname}${url.search}${url.hash}`);
     } catch {/* historikk er en bekvemmelighet */}
   }
+  // Lenka i e-post om en diskusjon: tråden åpnes når kurset er tegnet (`renderCourseDetailModules`).
+  const linkedThreadId = params.get("threadId");
+  if (linkedThreadId) pendingDiscussionThread = { courseId: course.id, threadId: linkedThreadId };
   // Dyplenka ER allerede «kurset alene»-tilstanden, så den skal ikke legge en ekstra
   // historikkoppføring: nettleserens tilbakeknapp skal føre ut av siden, ikke til en liste
   // deltakeren aldri sto i.
   focusCourse(course.id, { pushHistory: false });
+}
+
+let pendingDiscussionThread = null;
+
+/** Tråden fra lenka, én gang. Fjernes fra adressen, så en oppfriskning eller et annet kurs ikke åpner den igjen. */
+function takePendingDiscussionThread(courseId) {
+  if (pendingDiscussionThread?.courseId !== courseId) return null;
+  const { threadId } = pendingDiscussionThread;
+  pendingDiscussionThread = null;
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("threadId");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {/* historikk er en bekvemmelighet */}
+  return threadId;
+}
+
+// Lenka i e-post om resultat og anke: ?moduleId=<id>. En modul kan bare åpnes inne i et kurs, og e-posten vet ikke hvilket, så vi
+// finner kurset blant dem deltakeren har. Ligger modulen i flere, velges et som krever nytt forsøk, så deltakeren ser kravet.
+// Ingen treff gir samme type melding som kurslenka, som ikke røper om modulen finnes.
+async function resolveModuleLink(moduleId) {
+  const candidates = [];
+  for (const course of participantCourses) {
+    let detail = courseDetailCache[course.id];
+    if (!detail) {
+      try {
+        detail = (await apiFetch(`/api/courses/${encodeURIComponent(course.id)}`, headers)).course;
+        courseDetailCache[course.id] = detail;
+      } catch {
+        continue;
+      }
+    }
+    const entry = detail?.items?.find((item) => item?.type === "MODULE" && item.moduleId === moduleId);
+    if (entry) candidates.push({ courseId: course.id, retakeRequired: entry.retakeRequired === true });
+  }
+  const target = candidates.find((candidate) => candidate.retakeRequired) ?? candidates[0];
+  if (!target) {
+    const notice = document.getElementById("courseLinkNotice");
+    if (notice) {
+      notice.setAttribute("data-i18n", "courses.link.moduleUnavailable");
+      notice.textContent = t("courses.link.moduleUnavailable");
+      setHidden(notice, false);
+    }
+    return;
+  }
+  // Adressen skrives om til den vanlige, som for ?kurs=. En oppfriskning lander i kurset.
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("moduleId");
+    url.searchParams.set("courseId", target.courseId);
+    window.history.replaceState({ participantCourseId: target.courseId }, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {/* historikk er en bekvemmelighet */}
+  focusCourse(target.courseId, { pushHistory: false });
+  const entry = courseSequences[target.courseId]?.find((item) => item?.type === "MODULE" && item.moduleId === moduleId);
+  if (entry && isEntryAvailable(entry)) openCourseItemEntry(target.courseId, entry);
 }
 
 async function copyCourseLink() {
@@ -4671,6 +4733,7 @@ function renderCourseDetailModules(courseId, course) {
       <span class="course-discussion-hint">${escapeHtmlP(t("discussion.courseHint"))}</span>
     `;
 
+    const linkedThreadId = takePendingDiscussionThread(courseId);
     let mounted = false;
     toggle.addEventListener("click", () => {
       // setHidden holder attributtet i takt med inline display, så `body.hidden` er fremdeles en
@@ -4690,6 +4753,7 @@ function renderCourseDetailModules(courseId, course) {
           t,
           escapeHtml: escapeHtmlP,
           showToast,
+          initialThreadId: linkedThreadId,
         });
       }
     });
@@ -4697,6 +4761,10 @@ function renderCourseDetailModules(courseId, course) {
     disc.appendChild(toggle);
     disc.appendChild(body);
     container.appendChild(disc);
+    if (linkedThreadId) {
+      toggle.click();
+      disc.scrollIntoView({ block: "start" });
+    }
   }
 
   // #865: re-open the inline item that was expanded before this re-render (esp. the live module

@@ -8,6 +8,53 @@ type NotificationMessage = {
   nextStepGuidance: string;
 };
 
+// Compliance godkjente lenker i e-post 2026-11-06. Teksten «Logg inn på …» står: den gjelder også uten lenke.
+export type EmailLinkKind = "course" | "module" | "discussion";
+
+const emailLinkLabels: Record<SupportedLocale, Record<EmailLinkKind, string>> = {
+  "en-GB": { course: "Open the course", module: "Open the module", discussion: "Open the discussion" },
+  nb: { course: "Åpne kurset", module: "Åpne modulen", discussion: "Åpne diskusjonen" },
+  nn: { course: "Opne kurset", module: "Opne modulen", discussion: "Opne diskusjonen" },
+};
+
+export function getEmailLinkLabel(locale: SupportedLocale, kind: EmailLinkKind): string {
+  return emailLinkLabels[locale][kind];
+}
+
+// #1141: siste linje i e-posten sier hvorfor mottakeren får den.
+export type EmailReason = "submission" | "appeal" | "assignment" | "reminder" | "discussionQuestion" | "discussionReply";
+
+const emailReasons: Record<SupportedLocale, Record<EmailReason, string>> = {
+  "en-GB": {
+    submission: "You are getting this e-mail because you handed in an answer on A-2 læringsplattform.",
+    appeal: "You are getting this e-mail because you appealed an assessment on A-2 læringsplattform.",
+    assignment: "You are getting this e-mail because your class has been assigned a course.",
+    reminder: "You are getting this e-mail because you have a course with a due date.",
+    discussionQuestion: "You are getting this e-mail because you own the course or are an administrator of the platform.",
+    discussionReply: "You are getting this e-mail because you follow this discussion.",
+  },
+  nb: {
+    submission: "Du får denne e-posten fordi du har levert en besvarelse på A-2 læringsplattform.",
+    appeal: "Du får denne e-posten fordi du har anket en vurdering på A-2 læringsplattform.",
+    assignment: "Du får denne e-posten fordi klassen din er tildelt et kurs.",
+    reminder: "Du får denne e-posten fordi du har et kurs med frist.",
+    discussionQuestion: "Du får denne e-posten fordi du eier kurset eller er administrator på plattformen.",
+    discussionReply: "Du får denne e-posten fordi du følger denne diskusjonen.",
+  },
+  nn: {
+    submission: "Du får denne e-posten fordi du har levert eit svar på A-2 læringsplattform.",
+    appeal: "Du får denne e-posten fordi du har anka ei vurdering på A-2 læringsplattform.",
+    assignment: "Du får denne e-posten fordi klassen din er tildelt eit kurs.",
+    reminder: "Du får denne e-posten fordi du har eit kurs med frist.",
+    discussionQuestion: "Du får denne e-posten fordi du eig kurset eller er administrator på plattforma.",
+    discussionReply: "Du får denne e-posten fordi du følgjer denne diskusjonen.",
+  },
+};
+
+export function getEmailReason(locale: SupportedLocale, reason: EmailReason): string {
+  return emailReasons[locale][reason];
+}
+
 type StatusTemplates = Record<AppealStatus, NotificationMessage>;
 
 type ContextLabels = { module: string; submitted: string };
@@ -192,7 +239,7 @@ export function getAssessmentResultNotificationMessage(
   };
 }
 
-// #495/T-QA-5: diskusjons-varsler. Ingen lenker i e-post (#688) — mottakeren bes logge inn selv.
+// #495/T-QA-5: diskusjons-varsler. Lenken legges til av malen (emailLinks.ts), teksten skal virke uten den.
 type DiscussionMessageLabels = {
   questionSubject: string; // {course}
   questionGuidance: string; // {title}
@@ -244,7 +291,7 @@ export function getDiscussionReplyNotificationMessage(
 }
 
 // #497: kurs-frist-påminnelser. To typer: due_soon (frist nærmer seg, N dager før) og overdue
-// (frist passert). Ingen lenker i e-post (#688) — mottakeren bes logge inn selv.
+// (frist passert). Lenken legges til av malen (emailLinks.ts), teksten skal virke uten den.
 export type CourseReminderKind = "due_soon" | "overdue";
 
 type CourseReminderLabels = {
@@ -321,7 +368,7 @@ export function getCourseReminderNotificationMessage(
 }
 
 // #970: klassetildeling av kurs. Var hardkodet bokmål i participantNotificationService — den eneste
-// e-posten uten språkparameter. Samme form som påminnelsene; ingen lenker (#688).
+// e-posten uten språkparameter. Samme form som påminnelsene.
 type CourseAssignmentLabels = {
   subject: string; // {course}
   body: string; // {class} {course}
@@ -351,7 +398,7 @@ const courseAssignmentMessages: Record<SupportedLocale, CourseAssignmentLabels> 
 };
 
 // #997: modulen du besto er revidert. Ett varsel per deltaker per revisjon — ikke en kalender
-// (det var maset #989 fjernet). Ingen lenker (#688).
+// (det var maset #989 fjernet). Går som ren tekst uten bilde og lenke (sendModuleRevisedNotification).
 //
 // 2.101.0: produkteier, 2026-10-25 — «dette er ikke bra formulert». Ordlyden er produkteiers, og
 // kurset beståtten gjaldt, står i teksten. En modul uten publisert kurs gir setningen uten kurs.
@@ -414,7 +461,7 @@ export function getModuleRevisedNotificationMessage(
 }
 
 // #934 skive 4b: kurset har fått en ny hovedversjon. Til dem som har kursbevis for en eldre versjon (doc/DESIGN_934.md).
-// Ingen lenker (firmapolicy, #688/#1139): siste avsnitt sier hvor kurset ligger. Tonen som i #1139: voksen, litt
+// Siste avsnitt sier hvor kurset ligger, så teksten virker også uten lenken fra malen. Tonen som i #1139: voksen, litt
 // humor (båten er på verftet, som på bildet), aldri skam — det gamle beviset står, og ingen har gjort noe galt.
 // Teksten er avsnitt, ikke én streng: den felles malen (illustratedEmail.ts) lager både HTML og ren tekst av dem.
 export type CourseMajorVersionMessage = { subject: string; paragraphs: string[]; reason: string };

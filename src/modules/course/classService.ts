@@ -312,7 +312,7 @@ export async function assignCourseToClass(courseId: string, classId: string, due
     if (course.publishedAt === null) {
       void suppressAssignmentMail(courseId, classId);
     } else {
-      void notifyClassMembersOfCourseAssignment(classId, klass.name, course.title, dueAt);
+      void notifyClassMembersOfCourseAssignment(classId, courseId, klass.name, course.title, dueAt);
     }
   }
 }
@@ -340,6 +340,7 @@ const ASSIGNMENT_EMAIL_SPACING_MS = process.env.NODE_ENV === "test" ? 0 : 300;
 
 async function notifyClassMembersOfCourseAssignment(
   classId: string,
+  courseId: string,
   className: string,
   courseTitleJson: string,
   dueAt: Date | null,
@@ -366,6 +367,7 @@ async function notifyClassMembersOfCourseAssignment(
           className,
           dueAt,
           locale,
+          courseId,
         });
       } catch {
         /* én feilet mottaker skal ikke stoppe de neste */

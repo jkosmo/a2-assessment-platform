@@ -82,6 +82,7 @@ export async function createSubmissionAppeal(input: {
       recipientEmail: appealedBy.email,
       recipientName: appealedBy.name,
       moduleTitle,
+      moduleId: submission.moduleId,
       locale,
     });
   }
@@ -230,6 +231,7 @@ export async function claimAppeal(appealId: string, handlerId: string, isAdmin =
     recipientEmail: appeal.appealedBy.email,
     recipientName: appeal.appealedBy.name,
     moduleTitle: claimModuleTitle,
+    moduleId: appeal.submission.moduleId,
     locale: claimLocale,
   });
 
@@ -298,6 +300,7 @@ export async function resolveAppeal(input: {
     recipientEmail: appeal.appealedBy.email,
     recipientName: appeal.appealedBy.name,
     moduleTitle: resolveModuleTitle,
+    moduleId: appeal.submission.moduleId,
     locale: resolveLocale,
     passFailTotal: input.passFailTotal,
     resolutionNote: input.resolutionNote,

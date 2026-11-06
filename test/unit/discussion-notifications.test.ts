@@ -16,7 +16,7 @@ describe("discussion notification templates", () => {
       });
       expect(msg.subject).toContain("Arbeidsmiljø");
       expect(msg.nextStepGuidance).toContain("Hvordan tolke oppgave 3?");
-      // Ingen lenker i e-post (#688).
+      // Lenken kommer fra malen, ikke fra teksten (test/unit/email-template-links-1141.test.ts).
       expect(msg.nextStepGuidance.toLowerCase()).not.toContain("http");
     }
   });

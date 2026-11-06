@@ -9,6 +9,7 @@ import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 const findFirst = vi.fn();
 const updateMany = vi.fn();
 const notifyAssessmentResult = vi.fn();
+const notifyAssessmentUnderReview = vi.fn();
 const notifyAppealStatusTransition = vi.fn();
 const sendModuleRevisedNotification = vi.fn();
 const checkAndIssueCourseCompletions = vi.fn();
@@ -17,7 +18,7 @@ const deliverCourseMajorVersionNotice = vi.fn();
 vi.mock("../../src/db/prisma.js", () => ({
   prisma: { outboxEvent: { findFirst, updateMany } },
 }));
-vi.mock("../../src/modules/certification/index.js", () => ({ notifyAssessmentResult, notifyAppealStatusTransition, sendModuleRevisedNotification }));
+vi.mock("../../src/modules/certification/index.js", () => ({ notifyAssessmentResult, notifyAssessmentUnderReview, notifyAppealStatusTransition, sendModuleRevisedNotification }));
 vi.mock("../../src/modules/course/index.js", () => ({ checkAndIssueCourseCompletions }));
 vi.mock("../../src/modules/course/courseMajorVersionEmail.js", () => ({ deliverCourseMajorVersionNotice }));
 
@@ -42,6 +43,7 @@ beforeEach(() => {
   findFirst.mockReset();
   updateMany.mockReset().mockResolvedValue({ count: 1 });
   notifyAssessmentResult.mockReset();
+  notifyAssessmentUnderReview.mockReset();
   notifyAppealStatusTransition.mockReset();
   sendModuleRevisedNotification.mockReset();
   checkAndIssueCourseCompletions.mockReset();
@@ -71,6 +73,14 @@ describe("outbox delivery timeout (#795-followup, #1115)", () => {
     const data = await behandle();
     expect(data.status).toBe("failed");
     expect(data.attempts).toBe(5);
+    expect(data.lastError).toMatch(/exceeded/);
+  });
+
+  it("e-posten om sensor som henger, sendes heller ikke på nytt", async () => {
+    findFirst.mockResolvedValue(resultatRad("assessment_under_review_notification"));
+    notifyAssessmentUnderReview.mockReturnValue(new Promise(() => {}));
+    const data = await behandle();
+    expect(data.status).toBe("failed");
     expect(data.lastError).toMatch(/exceeded/);
   });
 });

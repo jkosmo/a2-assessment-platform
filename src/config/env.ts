@@ -138,6 +138,12 @@ const envSchema = z.object({
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().optional(),
   ),
+  // Lenkene i e-post (compliance 2026-11-06): adressen til plattformen, for eksempel `https://…azurewebsites.net`. Må stå på
+  // både appen og workeren, for begge sender e-post. Uten: e-postene går uten lenke. Se emailLinks.ts og #1143.
+  PUBLIC_APP_BASE_URL: z.preprocess(
+    (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
+    z.string().optional(),
+  ),
   // ⚠️ Leses ikke av appen. Navnet mottakeren ser, står på DoNotReply-avsenderen på ACS-domenet
   // (Bicep: acsEmailSenderUsername). Innstillingen speiler bare det samme navnet.
   ACS_EMAIL_SENDER_DISPLAY_NAME: z.string().default("A-2 læringsplattform"),
@@ -259,6 +265,24 @@ if (
   console.warn(
     "WARNING: PARTICIPANT_NOTIFICATION_CHANNEL=acs_email but AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING or ACS_EMAIL_SENDER is missing. Email sending will fail until secrets are resolved.",
   );
+}
+
+/** Adressen i PUBLIC_APP_BASE_URL, uten sti. `https://`, eller `http://` bare lokalt. Alt annet: null. */
+export function parsePublicAppOrigin(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+// En skrivefeil i adressen skal ikke stoppe e-posten, men den skal heller ikke bare gjøre at lenkene forsvinner uten at noen ser hvorfor.
+if (env.PUBLIC_APP_BASE_URL && !parsePublicAppOrigin(env.PUBLIC_APP_BASE_URL)) {
+  console.warn("WARNING: PUBLIC_APP_BASE_URL is not a valid https address. E-mails will be sent without links.");
 }
 
 if (env.PARSER_WORKER_URL && !env.PARSER_WORKER_AUTH_KEY) {

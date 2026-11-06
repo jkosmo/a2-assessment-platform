@@ -115,18 +115,14 @@ describe("#934 skive 4b: e-posten om ny hovedversjon", () => {
     expect(size).toEqual({ width: 600, height: 200 });
   });
 
-  it("lenkesperra: en tittel med en adresse sender ingenting", () => {
-    for (const courseTitle of ["Se www.a-2.no", "https://evil.example", "<a href=x>"]) {
-      expect(() => buildCourseMajorVersionEmail({ locale: "nb", courseTitle, versionMajor: 2, changedItemCount: 1 })).toThrow(EmailContainsLinkError);
-    }
-  });
-
-  it("lenkesperra: e-postadresser og domenenavn blir lenker av seg selv; kursnavn med punktum går", () => {
-    for (const courseTitle of ["Kontakt kurs@a-2.no", "KURS@A-2.NO", "Les mer på portal.a-2.no", "a-2.no/kurs", "portal.example.de", "training.example.co.uk", "docs.example.dev"]) {
-      expect(() => buildCourseMajorVersionEmail({ locale: "nb", courseTitle, versionMajor: 2, changedItemCount: 1 }), courseTitle).toThrow(EmailContainsLinkError);
+  it("en tittel med en adresse hindrer ikke e-posten, og adressen blir ikke en lenke", () => {
+    for (const courseTitle of ["Se www.a-2.no", "https://evil.example", "<a href=x>", "Kontakt kurs@a-2.no", "KURS@A-2.NO", "Les mer på portal.a-2.no", "a-2.no/kurs", "portal.example.de", "training.example.co.uk", "docs.example.dev"]) {
+      const e = buildCourseMajorVersionEmail({ locale: "nb", courseTitle, versionMajor: 2, changedItemCount: 1 });
+      expect(e.html, courseTitle).not.toMatch(/https?:|www\.|<a\s/i);
+      expect(e.plainText, courseTitle).not.toMatch(/https?:|www\.|[a-z0-9-]\.(no|example|de|uk|dev)\b/i);
     }
     for (const courseTitle of ["ASP.NET grunnkurs", "Node.js for prosjektledere", "Versjon 2.0 av KI-kurset", "Kurs i HMS. Del 2"]) {
-      expect(() => buildCourseMajorVersionEmail({ locale: "nb", courseTitle, versionMajor: 2, changedItemCount: 1 }), courseTitle).not.toThrow();
+      expect(buildCourseMajorVersionEmail({ locale: "nb", courseTitle, versionMajor: 2, changedItemCount: 1 }).subject, courseTitle).toContain(courseTitle);
     }
   });
 

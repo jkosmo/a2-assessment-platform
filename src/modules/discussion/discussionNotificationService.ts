@@ -82,6 +82,9 @@ export async function notifyNewQuestion(input: {
       subject: message.subject,
       body: message.nextStepGuidance,
       notificationType: "discussion_question_created",
+      locale,
+      courseId: input.courseId,
+      threadId: input.threadId,
     });
     channel = result.channel;
     if (result.delivered) delivered += 1;
@@ -105,6 +108,7 @@ export async function notifyNewQuestion(input: {
 }
 
 export async function notifyNewReply(input: {
+  courseId: string;
   threadId: string;
   threadTitle: string;
   replyAuthorId: string;
@@ -121,13 +125,17 @@ export async function notifyNewReply(input: {
   let delivered = 0;
   let channel = "unknown";
   for (const user of recipients) {
-    const message = getDiscussionReplyNotificationMessage(recipientLocale(user), { threadTitle: input.threadTitle });
+    const locale = recipientLocale(user);
+    const message = getDiscussionReplyNotificationMessage(locale, { threadTitle: input.threadTitle });
     const result = await sendDiscussionNotification({
       recipientEmail: user.email,
       recipientName: user.name,
       subject: message.subject,
       body: message.nextStepGuidance,
       notificationType: "discussion_reply_created",
+      locale,
+      courseId: input.courseId,
+      threadId: input.threadId,
     });
     channel = result.channel;
     if (result.delivered) delivered += 1;
