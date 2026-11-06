@@ -1399,7 +1399,7 @@ vises, ingen lenker, riktig tittel, versjon og språk. Produkteier har sett den.
 - Forfatteren laster siden på nytt etter `409 course_changed`. Ingen sammenslåing.
 - «Kjente mangler» nr. 23 står.
 - Nr. 47: meldingen om at oppgaven er endret, kommer etter 5a-3.
-- Et begrenset kurs skal kreve at personen er tildelt kurset, også for kursbevis. Egen sak etter #934, se `doc/DECISIONS.md`.
+- Et begrenset kurs skal kreve at personen er tildelt kurset, også for kursbevis. Ikke bygget, og ingen egen sak (produkteier 2026-11-06), se `doc/DECISIONS.md`.
 
 **Besvart 2026-11-03: ja til alle anbefalingene (a–e), og ja til grensen i b): over 200 mottakere krever et ekstra
 «ja» i dialogen. Svar f: ja.**

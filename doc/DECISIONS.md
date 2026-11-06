@@ -1458,8 +1458,8 @@ lista, og at lista står alfabetisk. Valgene som kunne vært tatt annerledes:
 - **Tema er ikke med i eksportfila.** Temaene hører til plattformen, ikke til kurset; et kurs importert
   i et annet miljø ville pekt på tema som ikke finnes der. En oppdatering fra fil lar kursets tema stå.
 - **Automatisk oversettelse fyller bare tomme felt** og bruker title-oversetteren fra #894. Et språk som
-  feiler, står tomt (#892), aldri med bokmålsteksten.
-
+  feiler, står tomt (#892), aldri med bokmålsteksten.
+
 ## Identitet kobles aldri på e-post (#1114, 2026-10-25)
 
 Produkteier: «e-postadresser skal ikke kobles. Det er grunnleggende, og med et firma av vår størrelse er
@@ -1471,8 +1471,8 @@ aldri en kobling. Det finnes ingen innstilling for det.
   bruker med en endret adresse ville skjult at det fantes to. Administrator rydder i Entra eller ber om
   en kobling.
 - **En pseudonymisert bruker røres ikke av synkroniseringen,** også når personen fortsatt finnes i
-  katalogen. Den telles uten navn eller e-post.
-
+  katalogen. Den telles uten navn eller e-post.
+
 ### «Sett i riktig rekkefølge»: 3–6 elementer, KI bare der kilden har en rekkefølge (#1077, 2026-10-25)
 
 Produkteier valgte anbefalingen på alle tre: KI lager høyst én per test, og bare der kilden beskriver steg
@@ -1486,8 +1486,10 @@ aldri i riktig rekkefølge. Status: avklart. Se `doc/DESIGN_1077.md`.
 
 Produkteier: en deltaker skal ikke få kursbevis for et RESTRICTED kurs hen ikke er tildelt, heller ikke når modulen er bestått
 gjennom et åpent kurs. Kravet til kursbevis sjekker ikke synlighet i dag, og den kan altså gi bevis for et kurs personen aldri
-kunne åpne. Status: besluttet, ikke bygget. Egen sak etter #934. På en kopi av prod 2026-11-05 hadde ingen fått et slikt bevis:
-ett begrenset kurs, to kursbevis, begge tildelt.
+kunne åpne. På en kopi av prod 2026-11-05 hadde ingen fått et slikt bevis: ett begrenset kurs, to kursbevis, begge tildelt.
+
+Status (produkteier 2026-11-06): ikke bygget, og det lages ingen sak. Problemet er for lite til å prioriteres. Tas opp igjen hvis det faktisk
+skjer.
 
 ## KI-erklæringen sier hva den gjør, før deltakeren leverer (2026-11-05)
 
