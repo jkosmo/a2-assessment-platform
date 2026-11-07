@@ -295,7 +295,48 @@ export function distinctReads<T extends { userId: string; courseId: string; read
   });
 }
 
-const LATEST_DECISION = { orderBy: { finalisedAt: "desc" as const }, take: 1, select: { passFailTotal: true, finalisedAt: true } };
+const LATEST_DECISION = { orderBy: { finalisedAt: "desc" as const }, take: 1, select: { passFailTotal: true, finalisedAt: true, totalScore: true } };
+
+/**
+ * Radene hendelsene regnes ut av, for et sett med brukere. Lesingene er allerede `distinctReads`.
+ *
+ * #1138: «Aktivitet» (alle deltakere) og «Min statistikk» på profilen (én bruker) leser HER, og
+ * gjør radene om til hendelser med `activityEventsFrom`. Hentingen og hendelsesreglene finnes ett
+ * sted, så de to aldri teller ulikt. Statistikken trenger også seksjonen, modulen og poengene, og
+ * derfor står de med i utvalget.
+ */
+export async function loadActivitySources(userIds: string[], now: Date) {
+  const [reads, submissions, completions] = await Promise.all([
+    prisma.courseSectionRead.findMany({
+      where: { userId: { in: userIds }, readAt: { lte: now } },
+      select: { userId: true, courseId: true, sectionId: true, readAt: true },
+    }),
+    prisma.submission.findMany({
+      where: { userId: { in: userIds }, submittedAt: { lte: now } },
+      select: { userId: true, moduleId: true, submittedAt: true, submissionStatus: true, decisions: LATEST_DECISION },
+    }),
+    prisma.courseCompletion.findMany({
+      where: { userId: { in: userIds }, completedAt: { lte: now } },
+      select: { userId: true, courseId: true, completedAt: true },
+    }),
+  ]);
+  return { reads: distinctReads(reads), submissions, completions };
+}
+
+export type ActivitySources = Awaited<ReturnType<typeof loadActivitySources>>;
+
+/** Hendelsene: én per lesing, innlevering, bestått forsøk og fullført kurs. */
+export function activityEventsFrom(sources: ActivitySources, now: Date): ActivityEvent[] {
+  return [
+    ...sources.reads.map((r) => ({ userId: r.userId, at: r.readAt, type: "read" as const })),
+    ...sources.submissions.map((s) => ({ userId: s.userId, at: s.submittedAt, type: "submitted" as const })),
+    ...sources.submissions.flatMap((s) => {
+      const at = passedAt(s);
+      return at && at <= now ? [{ userId: s.userId, at, type: "passed" as const }] : [];
+    }),
+    ...sources.completions.map((c) => ({ userId: c.userId, at: c.completedAt, type: "completed" as const })),
+  ];
+}
 
 export async function getActivityReport(options: {
   period: ActivityPeriod;
@@ -316,24 +357,7 @@ export async function getActivityReport(options: {
   // 100 000 hendelser tok 0,2 s og 32 MB (uten databasehentingen).
   // Blir det mye mer, er neste steg å la databasen gruppere første/siste per person og bare hente
   // hendelsene i perioden.
-  const [reads, submissions, completions] = await Promise.all([
-    prisma.courseSectionRead.findMany({ where: { userId: { in: ids }, readAt: { lte: now } }, select: { userId: true, courseId: true, readAt: true } }),
-    prisma.submission.findMany({
-      where: { userId: { in: ids }, submittedAt: { lte: now } },
-      select: { userId: true, submittedAt: true, submissionStatus: true, decisions: LATEST_DECISION },
-    }),
-    prisma.courseCompletion.findMany({ where: { userId: { in: ids }, completedAt: { lte: now } }, select: { userId: true, completedAt: true } }),
-  ]);
-
-  const events: ActivityEvent[] = [
-    ...distinctReads(reads).map((r) => ({ userId: r.userId, at: r.readAt, type: "read" as const })),
-    ...submissions.map((s) => ({ userId: s.userId, at: s.submittedAt, type: "submitted" as const })),
-    ...submissions.flatMap((s) => {
-      const at = passedAt(s);
-      return at && at <= now ? [{ userId: s.userId, at, type: "passed" as const }] : [];
-    }),
-    ...completions.map((c) => ({ userId: c.userId, at: c.completedAt, type: "completed" as const })),
-  ];
+  const events = activityEventsFrom(await loadActivitySources(ids, now), now);
 
   return buildActivityReport({ now, period: options.period, grain: options.grain, department: options.department ?? null, people, events });
 }

@@ -106,7 +106,7 @@ change to issuance, fetch-wiring, or rendering must be verified on all three:
 | Surface | File | How completions load |
 |---------|------|----------------------|
 | Result banner and certificate link on the course card in «Mine kurs» | `public/participant.js` (`participantCompletions`, `course-certificate-link`) | `/api/courses` + `/api/courses/completions` together on render (`Promise.all`) |
-| `/profile` → "Fullførte kurs" | `public/profile.js` | on profile render |
+| `/profile` → fanen «Beståtte kurs» (2.141.0; link only, no certificate id) | `public/profile.js` | on profile render, together with `/api/me/stats` |
 | Printable `/certificate?id=…` | `public/certificate.js` | fetches `/api/courses/completions/:id` |
 
 **Issuance gates (server):** a completion is issued when **all modules passed AND all sections
@@ -1266,7 +1266,7 @@ sted, i `decisionService`, fordi tolv lesere ellers ville tolket den hver for se
 | Fil | Inngang | Merknad |
 |---|---|---|
 | `participant.js` | `deriveOutcome`, `isSettledPass`, `isAppealableFail`, `hasPassingDecision` | resultatbanner, kortstyling, feiring, anke, autostart |
-| `profile.js` | `deriveOutcome` | ⚠️ se konfigurasjonsmerknaden |
+| ~~`profile.js`~~ | — | 2.141.0 (#1138): profilen viser bare beståtte moduler, og serveren avgjør det (`passedModules` i `/api/me/stats`, via `passedAt()`). Flaten utleder ingenting og importerer ikke `outcome.js`. `test/e2e/outcome-under-review-978.spec.ts` er fjernet, siden profilen ikke lenger viser stryk eller saker hos sensor |
 | `review.js` | `rawPassFailState`, `decisionHistoryOutcome` | to formattere, én regel — unntatt historikkraden for et AUTOMATISK vedtak i en åpen sak, som leser status og sier «til vurdering» (#1034, `static/decision-history.js`) |
 | `static/admin-content-calibration.js` | `rawPassFailState` | status i egen kolonne |
 
@@ -1284,7 +1284,9 @@ utfallet er en åpen produktbeslutning — se #948.
 
 ⚠️ **Rapportene på serveren** spør `isSettledSubmission(status)` og leser det SISTE vedtaket
 (`completionReport.ts`, `mcqSemanticReport.ts`, og «Moduler bestått» i aktivitetsrapporten #1099 via
-`passedAt()` i `src/modules/reporting/activityReport.ts`). Første utgave av aktivitetsrapporten talte
+`passedAt()` i `src/modules/reporting/activityReport.ts`; fra 2.141.0 også «Min statistikk» og «Beståtte
+moduler» på profilen, `src/modules/reporting/myStats.ts`, som leser hendelsene gjennom samme
+`loadActivitySources`). Første utgave av aktivitetsrapporten talte
 «ett bestått vedtak finnes» — et forsøk som ble strøket etter anke sto som bestått, og et erstattet
 forsøk med et gammelt automatisk vedtak like så. QA-porten fant det. En ny rapport som teller
 bestått, skal bruke samme to spørsmål.

@@ -39,25 +39,24 @@ async function mockProfile(page: Page) {
   await page.route("**/api/queue-counts", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ counts: {} }) }),
   );
-  await page.route("**/api/modules/completed**", (route: Route) =>
-    route.fulfill({
+  // #1138: beståtte moduler og statistikken kommer fra /api/me/stats. Serveren baker inn språket i
+  // modultittelen, så svaret varierer med x-locale — som det ekte endepunktet.
+  await page.route("**/api/me/stats", (route: Route) => {
+    const locale = route.request().headers()["x-locale"] ?? "en-GB";
+    return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        modules: [
-          {
-            moduleTitle: "Module A",
-            latestCompletedAt: "2026-06-20T10:00:00.000Z",
-            // ⚠️ #978: `latestStatus` manglet, og fiksturen festet dermed stilltiende at et vedtak
-            // ALENE er nok til å vise «Pass». Det ekte endepunktet returnerer alltid statusen, og
-            // regelen krever den: bare COMPLETED og REJECTED bærer et endelig utfall.
-            latestStatus: "COMPLETED",
-            latestDecision: { totalScore: 100, passFailTotal: true },
-          },
+        mood: "sur",
+        weeks: [],
+        recent: { weeks: 4, sectionsRead: 0, modulesPassed: 0, coursesCompleted: 0, readingMinutes: 0 },
+        totals: { coursesCompleted: 1, modulesPassed: 1, sectionsRead: 0 },
+        passedModules: [
+          { moduleId: "m-a", moduleTitle: locale === "nb" ? "Modul A" : "Module A", passedAt: "2026-06-20T10:00:00.000Z", totalScore: 100 },
         ],
       }),
-    }),
-  );
+    });
+  });
   await page.route("**/api/courses/completions", (route: Route) =>
     route.fulfill({
       status: 200,
@@ -82,17 +81,22 @@ test("profile: switching locale re-renders the completed tables, not just the he
   await mockProfile(page);
   await page.goto("/profile");
 
-  // Loaded in English: pass value + certificate link are the en-GB strings.
-  await expect(page.locator("#modulesBody")).toContainText("Pass");
+  // Loaded in English: the boat's line, the module title from the server and the certificate link.
+  await expect(page.locator("#statsMoodLine")).toHaveText("Two weeks of flat calm. I'm not saying anything. I'm just mentioning it.");
+  await expect(page.locator("#modulesBody")).toContainText("Module A");
+  await expect(page.locator("#modulesBody")).toContainText("Jun 2026");
   await expect(page.locator("#coursesBody")).toContainText("View certificate");
 
   // Switch to Norwegian bokmål.
   await page.selectOption("#localeSelect", "nb");
 
-  // The dynamically built value cells must follow the new locale (no mixed-locale leftovers).
-  await expect(page.locator("#modulesBody")).toContainText("Bestått");
-  await expect(page.locator("#coursesBody")).toContainText("Vis bevis");
-  await expect(page.locator("#modulesBody")).not.toContainText("Pass");
+  // The dynamically built content must follow the new locale (no mixed-locale leftovers): what the
+  // client formats (line, date, link) and what the server localises (module title, refetched).
+  await expect(page.locator("#statsMoodLine")).toHaveText("To uker med havblikk. Jeg sier ikke noe. Jeg bare nevner det.");
+  await expect(page.locator("#modulesBody")).toContainText("Modul A");
+  await expect(page.locator("#modulesBody")).toContainText("juni 2026");
+  await expect(page.locator("#coursesBody")).toContainText("Vis kursbevis");
+  await expect(page.locator("#modulesBody")).not.toContainText("Module A");
   await expect(page.locator("#coursesBody")).not.toContainText("View certificate");
 });
 

@@ -96,7 +96,23 @@ const FLATER: Flate[] = [
         }],
       }),
     }],
-    ekstra: [{ mønster: "**/api/modules/completed**", svar: { modules: [] } }],
+    ekstra: [{ mønster: "**/api/me/stats", svar: { mood: "ny", weeks: [], recent: {}, totals: {}, passedModules: [] } }],
+  },
+  {
+    // #1138: «Beståtte moduler» kommer fra statistikken, med modultittelen ferdig lokalisert av serveren.
+    navn: "profilen, beståtte moduler",
+    rute: "/profile",
+    roller: [],
+    beholder: "#modulesBody",
+    tekst: TITTEL,
+    data: [{
+      mønster: "**/api/me/stats",
+      svar: (locale) => ({
+        mood: "mett", weeks: [], recent: {}, totals: {},
+        passedModules: [{ moduleId: "m-1", moduleTitle: TITTEL[locale] ?? TITTEL["en-GB"], passedAt: "2026-08-01T10:00:00.000Z", totalScore: 90 }],
+      }),
+    }],
+    ekstra: [{ mønster: "**/api/courses/completions**", svar: { completions: [] } }],
   },
   {
     navn: "resultatsiden",

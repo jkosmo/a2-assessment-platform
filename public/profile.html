@@ -32,6 +32,66 @@
       th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta); white-space: nowrap; background: var(--color-bg); }
       tr:last-child td { border-bottom: none; }
       tr:hover td { background: var(--color-row-hover); }
+      /* #1138: innsatsen i tre faner. Fanene er de samme som i skjemasidene (.form-page-tabs i shared.css). */
+      .profile-tabs { margin: 0 0 var(--space-2); flex-wrap: wrap; }
+      /* Ingen overgang på understreken: knapper i shared.css toner border-color over 0,15 s, og da sto den
+         forrige fanen understreket et øyeblikk etter et klikk, som om to faner var valgt. */
+      .profile-tabs .form-page-tab { min-height: 44px; transition: color 0.15s ease; }
+      .profile-panel:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 4px; }
+      .profile-list-table { min-width: 0; }
+      /* Under 600 px er hver rad et kort med ramme og luft (shared.css). Uten border-box ble raden bredere
+         enn rammen rundt tabellen, og fikk en vannrett rullefelt (målt på 390 og 360 px). */
+      .profile-list-table tr, .profile-list-table td { box-sizing: border-box; }
+      /* Under 600 px er hver rad sitt eget kort. Rammen rundt tabellen ble da en tom, avrundet ramme under
+         det siste kortet (radens marg nederst), og en ramme rundt kortene. Kortene står alene. */
+      @media (max-width: 600px) {
+        .profile-panel .table-wrap { border: 0; border-radius: 0; margin-top: 0; }
+      }
+      .profile-list-table td { overflow-wrap: anywhere; font-size: 13px; }
+      .profile-list-table td.profile-nowrap { white-space: nowrap; }
+      .stats-hero { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; background: var(--color-module-summary-bg); border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-2); }
+      .stats-boat { display: block; flex: 0 1 300px; width: 300px; max-width: 100%; height: auto; margin: 0 auto; border-radius: 8px; }
+      .stats-hero-text { flex: 999 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+      .stats-line { margin: 0; font-size: 18px; line-height: 1.35; font-weight: 600; color: var(--color-text); }
+      .stats-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-link-active); }
+      .stats-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+      .stats-figure { display: flex; flex-direction: column; min-width: 0; }
+      .stats-figure-value { font-size: 22px; font-weight: 700; color: var(--color-text); overflow-wrap: anywhere; }
+      .stats-figure-label { font-size: 13px; color: var(--color-meta); }
+      .stats-figures-totals .stats-figure { border: 1px solid var(--color-module-summary-border); border-radius: 10px; padding: 10px 14px; }
+      .stats-weeks, .stats-totals { margin-top: var(--space-3); display: flex; flex-direction: column; gap: 10px; }
+      .stats-weeks-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; }
+      .stats-heading { margin: 0; font-size: 16px; color: var(--color-text); }
+      .stats-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--color-meta); }
+      .stats-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+      .stats-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+      /* Søylene bærer seriefargene; tall og etiketter står i tekstfargene. */
+      .stats-swatch-sections, .stats-bar-sections { background: #c9a866; }
+      .stats-swatch-modules, .stats-bar-modules { background: var(--color-link-active); }
+      .stats-swatch-courses, .stats-dot { background: var(--color-success); }
+      .stats-swatch-courses { width: 10px; height: 10px; border-radius: 50%; }
+      .stats-chart { display: flex; align-items: stretch; gap: 6px; height: 150px; border-bottom: 1px solid var(--color-border-soft); }
+      .stats-col { flex: 1 1 0; min-width: 0; height: 100%; box-sizing: border-box; padding-top: 16px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; }
+      .stats-bar { display: block; flex: 0 0 auto; width: 70%; max-width: 44px; }
+      .stats-bar.is-top { border-radius: 4px 4px 0 0; }
+      .stats-dot { display: block; flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; margin-bottom: 2px; }
+      .stats-axis { display: flex; gap: 6px; margin-top: -4px; }
+      .stats-axis-label { flex: 1 1 0; min-width: 0; text-align: center; font-size: 11px; color: var(--color-meta); overflow: hidden; }
+      .stats-axis-label.is-current { font-weight: 700; color: var(--color-text); }
+      .stats-private { margin: var(--space-2) 0 0; color: var(--color-meta); }
+      .stats-error { color: var(--color-error); }
+      @media (max-width: 420px) {
+        .stats-chart, .stats-axis { gap: 3px; }
+        .stats-axis-label { font-size: 10px; }
+        .stats-line { font-size: 16px; }
+      }
+      /* Under 600 px stabler shared.css alle tabeller som kort. Tabellen for skjermlesere skal være en tabell.
+         Den står i en .sr-only-boks, ikke selv .sr-only: en tabell krymper ikke til 1 px, og ga vannrett rulling. */
+      table.stats-table { display: table; }
+      table.stats-table thead { display: table-header-group; }
+      table.stats-table tbody { display: table-row-group; }
+      table.stats-table tr { display: table-row; }
+      table.stats-table th, table.stats-table td { display: table-cell; }
       .deletion-dialog-overlay { display: none; position: fixed; inset: 0; z-index: 999; background: rgba(0,0,0,0.45); align-items: center; justify-content: center; padding: 16px; }
       .deletion-dialog-overlay.open { display: flex; }
     </style>
@@ -96,40 +156,45 @@
           </div>
         </section>
 
-        <!-- Completed modules -->
-        <section class="card profile-section">
-          <h2 class="profile-section-title" data-i18n="profile.section.modules">Completed modules</h2>
-          <div id="modulesWrap">
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th data-i18n="profile.modules.table.module">Module</th>
-                    <th data-i18n="profile.modules.table.completedAt">Completed</th>
-                    <th data-i18n="profile.modules.table.score">Score</th>
-                    <th data-i18n="profile.modules.table.passFail">Pass / fail</th>
-                  </tr>
-                </thead>
-                <tbody id="modulesBody"></tbody>
-              </table>
-            </div>
+        <!-- #1138: innsatsen i tre faner. Konto først, så fanene, så rettighetene (produkteier 2026-11-07). -->
+        <section class="card profile-section profile-effort">
+          <div class="form-page-tabs profile-tabs" role="tablist" id="profileTabs" aria-label="My overview">
+            <button type="button" role="tab" class="form-page-tab active" id="profileTab-stats" data-profile-tab="stats" aria-controls="profilePanel-stats" aria-selected="true" tabindex="0" data-i18n="profile.tabs.stats">Statistics</button>
+            <button type="button" role="tab" class="form-page-tab" id="profileTab-courses" data-profile-tab="courses" aria-controls="profilePanel-courses" aria-selected="false" tabindex="-1" data-i18n="profile.tabs.courses">Passed courses</button>
+            <button type="button" role="tab" class="form-page-tab" id="profileTab-modules" data-profile-tab="modules" aria-controls="profilePanel-modules" aria-selected="false" tabindex="-1" data-i18n="profile.tabs.modules">Passed modules</button>
           </div>
-        </section>
 
-        <section class="card profile-section">
-          <h2 class="profile-section-title" data-i18n="profile.section.courses">Completed courses</h2>
-          <div id="coursesWrap">
+          <div role="tabpanel" id="profilePanel-stats" class="profile-panel" data-profile-panel="stats" aria-labelledby="profileTab-stats" tabindex="0">
+            <div id="statsBody"></div>
+          </div>
+
+          <div role="tabpanel" id="profilePanel-courses" class="profile-panel" data-profile-panel="courses" aria-labelledby="profileTab-courses" tabindex="0" hidden style="display:none">
             <div class="table-wrap">
-              <table>
+              <table class="profile-list-table">
                 <thead>
                   <tr>
                     <th data-i18n="profile.courses.table.course">Course</th>
                     <th data-i18n="profile.courses.table.completedAt">Completed</th>
                     <th data-i18n="profile.courses.table.level">Level</th>
-                    <th data-i18n="profile.courses.table.certificateId">Certificate ID</th>
+                    <th data-i18n="profile.courses.table.certificate">Certificate</th>
                   </tr>
                 </thead>
                 <tbody id="coursesBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div role="tabpanel" id="profilePanel-modules" class="profile-panel" data-profile-panel="modules" aria-labelledby="profileTab-modules" tabindex="0" hidden style="display:none">
+            <div class="table-wrap">
+              <table class="profile-list-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="profile.modules.table.module">Module</th>
+                    <th data-i18n="profile.modules.table.passedAt">Passed</th>
+                    <th data-i18n="profile.modules.table.score">Score</th>
+                  </tr>
+                </thead>
+                <tbody id="modulesBody"></tbody>
               </table>
             </div>
           </div>

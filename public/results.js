@@ -542,7 +542,6 @@ exportPassRatesButton.addEventListener("click", () => exportCsv("pass-rates"));
 document.getElementById("exportModuleSummary")?.addEventListener("click", () => exportCsv("module-summary"));
 document.getElementById("exportModuleLearners")?.addEventListener("click", () => exportCsv("module-learners"));
 document.getElementById("exportCourseSummary")?.addEventListener("click", () => exportCsv("course-summary"));
-document.getElementById("exportCourseLearners")?.addEventListener("click", () => exportCsv("course-learners"));
 
 loadMeButton?.addEventListener("click", async () => {
   try {
