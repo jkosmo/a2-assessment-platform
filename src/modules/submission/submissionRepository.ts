@@ -157,35 +157,6 @@ export async function queryLatestSubmissionsForModules(userId: string, moduleIds
   });
 }
 
-export async function queryCompletedSubmissionsForUser(
-  userId: string,
-  statuses: SubmissionStatusType[],
-  limit: number,
-) {
-  return prisma.submission.findMany({
-    where: { userId, submissionStatus: { in: statuses } },
-    orderBy: { submittedAt: "desc" },
-    take: limit,
-    select: {
-      id: true,
-      moduleId: true,
-      submittedAt: true,
-      submissionStatus: true,
-      module: { select: { id: true, title: true } },
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-        select: {
-          totalScore: true,
-          passFailTotal: true,
-          decisionType: true,
-          finalisedAt: true,
-        },
-      },
-    },
-  });
-}
-
 export async function getModuleWithActiveVersion(moduleId: string, client: Pick<typeof prisma, "module"> = prisma) {
   return client.module.findUnique({
     where: { id: moduleId },

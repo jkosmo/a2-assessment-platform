@@ -4,13 +4,9 @@ import {
   listModules,
   getModuleById,
   getActiveModuleVersion,
-  listCompletedModulesForUser,
 } from "../modules/module/index.js";
 import { startMcqAttempt, submitMcqAttempt } from "../modules/assessment/index.js";
-import {
-  getCompletedSubmissionStatuses,
-  resolveCompletedHistoryLimit,
-} from "../modules/module/index.js";
+import { getCompletedSubmissionStatuses } from "../modules/module/index.js";
 import { t } from "../i18n/messages.js";
 import { hasAnyRole, CONTENT_AUTHORS } from "../auth/roleSets.js";
 import { mcqSubmitLimiter } from "../middleware/rateLimiting.js";
@@ -21,9 +17,6 @@ const modulesRouter = Router();
 // deltakerkonsollet, og den flaten er borte — deltakeren når moduler gjennom «Mine kurs».
 const modulesListQuerySchema = z.object({
   adminFacing: z.string().trim().optional(),
-});
-const completedModulesQuerySchema = z.object({
-  limit: z.coerce.number().int().positive().optional(),
 });
 const mcqStartQuerySchema = z.object({
   submissionId: z.string().min(1),
@@ -79,30 +72,8 @@ modulesRouter.get("/", async (request, response) => {
   });
 });
 
-modulesRouter.get("/completed", async (request, response) => {
-  const userId = request.context?.userId;
-  if (!userId) {
-    response.status(401).json({ error: "unauthorized" });
-    return;
-  }
-
-  const parsed = completedModulesQuerySchema.safeParse(request.query);
-  if (!parsed.success) {
-    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
-    return;
-  }
-
-  const locale = requestLocale(request);
-  const limit = resolveCompletedHistoryLimit(parsed.data.limit);
-  const modules = await listCompletedModulesForUser(userId, locale, limit);
-  response.json({
-    modules,
-    filters: {
-      limit,
-      completedSubmissionStatuses: getCompletedSubmissionStatuses(),
-    },
-  });
-});
+// 2.141.0 (produkteier 2026-11-07): `GET /completed` er fjernet. Profilen var eneste leser, og «Beståtte moduler»
+// kommer nå med `GET /api/me/stats`. `/completed` treffer derfor `/:moduleId` og gir 404.
 
 modulesRouter.get("/:moduleId", async (request, response) => {
   const roles = request.context?.roles ?? [];

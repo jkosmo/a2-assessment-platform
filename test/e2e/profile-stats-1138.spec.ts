@@ -236,7 +236,7 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
   for (const [mood, line, image] of [
     ["mett", "Full fart! God bør i seilene.", "vurdering-bestatt.jpg"],
     ["sulten", "Flau vind her ute. En seksjon til, så fyller vi seilene.", "frist-snart.jpg"],
-    ["sur", "To uker med havblikk. Jeg sier ikke noe. Jeg bare nevner det.", "vurdering-ikke-bestatt.jpg"],
+    ["sur", "To uker med havblikk. Jeg sier ikke noe. Jeg bare nevner det.", "frist-forfalt.jpg"],
     ["dramatisk", "Seilene henger slakt. Jeg har begynt å snakke med måkene.", "frist-forfalt.jpg"],
     ["ny", "Klar til å legge ut. Les din første seksjon, så setter vi seil.", "kurs-tildelt.jpg"],
   ] as const) {

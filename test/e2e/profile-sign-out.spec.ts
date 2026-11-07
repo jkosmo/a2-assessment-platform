@@ -24,7 +24,6 @@ async function mockProfile(page: Page) {
   await page.route("**/api/me", (route: Route) =>
     route.fulfill(json({ user: { id: "p-1", name: "P", email: "p@x.no", roles: ["PARTICIPANT"] }, consent: { accepted: true, currentVersion: "1.0" } })));
   await page.route("**/api/queue-counts", (route: Route) => route.fulfill(json({ counts: {} })));
-  await page.route("**/api/modules/completed**", (route: Route) => route.fulfill(json({ modules: [] })));
   await page.route("**/api/courses/completions**", (route: Route) => route.fulfill(json({ completions: [] })));
   await page.addInitScript(() => { try { if (!sessionStorage.getItem("satt")) { localStorage.setItem("participant.locale", "nb"); sessionStorage.setItem("satt", "1"); } } catch { /* ignore */ } });
 }

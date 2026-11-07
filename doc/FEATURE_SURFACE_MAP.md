@@ -1270,11 +1270,9 @@ sted, i `decisionService`, fordi tolv lesere ellers ville tolket den hver for se
 | `review.js` | `rawPassFailState`, `decisionHistoryOutcome` | to formattere, én regel — unntatt historikkraden for et AUTOMATISK vedtak i en åpen sak, som leser status og sier «til vurdering» (#1034, `static/decision-history.js`) |
 | `static/admin-content-calibration.js` | `rawPassFailState` | status i egen kolonne |
 
-⚠️ **Konfigurasjonsmerknad.** `/api/modules/completed` filtrerer på `completedSubmissionStatuses`
-(`config/module-completion.json`), i dag `["COMPLETED"]` alene. `profile.js`
-(og før 2.126.0 `participant-completed.js`) kan derfor ikke motta en uavklart rad med dagens oppsett — konverteringen
-er riktig, men uvirksom til nøkkelen utvides. Den ekte feilen på de flatene er at raden **forsvinner**
-når en anke setter innleveringen tilbake til `UNDER_REVIEW`: #1002.
+⚠️ **Konfigurasjonsmerknad (historisk).** `/api/modules/completed` filtrerte på `completedSubmissionStatuses`
+(`config/module-completion.json`). Endepunktet er fjernet i 2.141.0; profilen leser beståtte moduler fra
+`/api/me/stats`. Nøkkelen brukes fortsatt av `filters` i `GET /api/modules`.
 
 ⚠️ **Serversiden er IKKE konvertert.** En kanonisk `submissionOutcome.ts` ble laget og deretter
 fjernet igjen: dens eneste kaller — modulfilteret — forsvant da den frittstående flyten ble kuttet i

@@ -113,7 +113,6 @@ test.describe("#934 — kursbevis per hovedversjon", () => {
 
   test("profilen skiller to bevis for samme kurs med versjonen", async ({ page }) => {
     await mockBase(page);
-    await page.route("**/api/modules/completed**", (r: Route) => r.fulfill(json({ modules: [] })));
     await page.route("**/api/courses/completions", (r: Route) => r.fulfill(json({
       completions: [
         { courseId: "c1", certificateId: "cert-v1", completedAt: "2025-03-01T10:00:00.000Z", courseTitle: "Arbeidsrett", versionMajor: 1, versionMinor: 0, current: false },

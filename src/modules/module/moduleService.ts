@@ -12,13 +12,7 @@ import {
   queryModuleById,
   queryModuleVersion,
 } from "../../repositories/moduleRepository.js";
-import {
-  queryLatestSubmissionsForModules,
-  queryCompletedSubmissionsForUser,
-} from "../submission/submissionRepository.js";
-import {
-  getCompletedSubmissionStatuses,
-} from "./moduleCompletionPolicyService.js";
+import { queryLatestSubmissionsForModules } from "../submission/submissionRepository.js";
 
 // #962: settet bor nå i `src/auth/roleSets.ts`, sammen med de nitten andre rollesjekkene. Det er
 // UENDRET — poenget med flyttingen er at man skal kunne lese hele policyen ett sted og se hvor
@@ -167,48 +161,6 @@ export async function listModules(
   // «Mine kurs». Konfigurerbarheten kostet oppmerksomhet uten å gi noen noe: hver leser måtte
   // sjekke kallstedet for å vite om filteret var på.
   return mapped;
-}
-
-export async function listCompletedModulesForUser(
-  userId: string,
-  locale: SupportedLocale = "en-GB",
-  limit = 50,
-) {
-  const completedStatuses = getCompletedSubmissionStatuses();
-  const submissions = await queryCompletedSubmissionsForUser(userId, completedStatuses, limit * 10);
-
-  const modules = new Map<
-    string,
-    {
-      moduleId: string;
-      moduleTitle: string;
-      latestSubmissionId: string;
-      latestCompletedAt: Date;
-      latestStatus: string;
-      latestDecision: (typeof submissions)[number]["decisions"][number] | null;
-    }
-  >();
-
-  for (const submission of submissions) {
-    if (modules.has(submission.moduleId)) {
-      continue;
-    }
-
-    modules.set(submission.moduleId, {
-      moduleId: submission.module.id,
-      moduleTitle: localizeContentText(locale, submission.module.title) ?? submission.module.title,
-      latestSubmissionId: submission.id,
-      latestCompletedAt: submission.submittedAt,
-      latestStatus: submission.submissionStatus,
-      latestDecision: submission.decisions[0] ?? null,
-    });
-
-    if (modules.size >= limit) {
-      break;
-    }
-  }
-
-  return Array.from(modules.values());
 }
 
 export async function getModuleById(

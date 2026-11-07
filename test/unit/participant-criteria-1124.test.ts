@@ -20,7 +20,6 @@ vi.mock("../../src/repositories/moduleRepository.js", () => ({
 }));
 vi.mock("../../src/modules/submission/submissionRepository.js", () => ({
   queryLatestSubmissionsForModules: vi.fn(async () => []),
-  queryCompletedSubmissionsForUser: vi.fn(async () => []),
   submissionRepository: { findOwnedSubmission },
   createSubmissionRepository: () => ({ findOwnedSubmission }),
   getModuleWithActiveVersion: vi.fn(),

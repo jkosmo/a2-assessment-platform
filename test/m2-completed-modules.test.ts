@@ -137,23 +137,12 @@ describe("Participant completed modules and available list filtering", () => {
       });
     expect(retakeSubmissionResponse.status).toBe(201);
 
+    // 2.141.0 (produkteier 2026-11-07): `GET /api/modules/completed` er fjernet; profilen leser beståtte moduler fra
+    // `GET /api/me/stats`. Stien treffer nå `/:moduleId` og finner ingen modul som heter «completed».
     const completedResponse = await request(app)
       .get("/api/modules/completed?limit=20")
       .set(participantHeaders);
-    expect(completedResponse.status).toBe(200);
-    const completedEntry = (completedResponse.body.modules as Array<Record<string, unknown>>).find(
-      (entry) => entry.moduleId === module.id,
-    );
-    expect(completedEntry).toBeTruthy();
-    expect(completedEntry?.latestStatus).toBe("COMPLETED");
-    expect(completedEntry?.latestDecision).toMatchObject({
-      totalScore: 94,
-      passFailTotal: true,
-      decisionType: "AUTOMATIC",
-    });
-    expect(completedResponse.body.filters).toMatchObject({
-      limit: 20,
-      completedSubmissionStatuses: ["COMPLETED"],
-    });
+    expect(completedResponse.status).toBe(404);
+    expect(completedResponse.body.modules).toBeUndefined();
   });
 });

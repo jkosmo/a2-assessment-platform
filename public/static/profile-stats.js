@@ -13,7 +13,9 @@ import { escapeHtml } from "/static/html-escape.js";
 export const MOOD_VIEW = {
   mett: { image: "vurdering-bestatt.jpg", lineKey: "profile.stats.mood.mett" },
   sulten: { image: "frist-snart.jpg", lineKey: "profile.stats.mood.sulten" },
-  sur: { image: "vurdering-ikke-bestatt.jpg", lineKey: "profile.stats.mood.sur" },
+  // Havblikk er stillstand: båten ved kaia med slakke seil. Ikke «ikke bestått», som viser motvind (produkteier
+  // 2026-11-07). Deler bilde med «dramatisk» til egne bilder kommer i runden om båtsymbolikken.
+  sur: { image: "frist-forfalt.jpg", lineKey: "profile.stats.mood.sur" },
   dramatisk: { image: "frist-forfalt.jpg", lineKey: "profile.stats.mood.dramatisk" },
   ny: { image: "kurs-tildelt.jpg", lineKey: "profile.stats.mood.ny" },
 };
