@@ -136,6 +136,7 @@ For each environment, define variables/secrets used by workflow:
 - `PARTICIPANT_NOTIFICATION_CHANNEL` (optional, `disabled` | `log` | `webhook` | `acs_email`, default `log`)
 - `PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS` (optional, default `5000`)
 - `ACS_EMAIL_SENDER_DISPLAY_NAME` (optional, default `A-2 læringsplattform`; used when `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email`)
+- `PUBLIC_APP_BASE_URL` (optional, default empty; the platform's own https address. Turns on the link in e-mails, and empty means e-mails go without one. Set it as a GitHub Actions variable for the environment: an infra deploy writes it to both the app and the worker, and overwrites a value set by hand)
 - `PARTICIPANT_CONSOLE_CONFIG_FILE` (optional, default `config/participant-console.json`)
 - `PARTICIPANT_CONSOLE_DEBUG_MODE` (optional, `auto` | `true` | `false`, default `auto`)
 - `PARTICIPANT_COURSE_ONLY` (optional, `true` | `false`, default `true`) — når `true` når deltakere moduler KUN gjennom kurs; den frittstående modul-lista og -innleveringen er gated av (SMO/ADMIN unntatt). Sett `false` for å gjenåpne frittstående modul-tilgang for deltakere.
@@ -363,7 +364,8 @@ When `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email` is set, the Bicep template aut
 No manual resource creation is required. To activate:
 1. Set GitHub Actions variable `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email` for the target environment.
 2. Optionally set `ACS_EMAIL_SENDER_DISPLAY_NAME` (default: `A-2 læringsplattform`).
-3. Trigger a deploy. ACS resources will be provisioned on the first run.
+3. Set `PUBLIC_APP_BASE_URL` to the environment's https address, or the e-mails go without a link.
+4. Trigger a deploy. ACS resources will be provisioned on the first run.
 
 Note: AzureManagedDomain uses an auto-generated `azurecomm.net` sender address. To use a custom verified domain, replace the domain resource in `infra/azure/main.bicep`.
 

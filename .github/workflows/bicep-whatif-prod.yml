@@ -80,6 +80,7 @@ jobs:
               deployPrincipalId="${{ vars.DEPLOY_PRINCIPAL_ID }}" \
               skipRoleAssignments="${{ vars.SKIP_ROLE_ASSIGNMENTS || 'false' }}" \
               observabilityAlertEmail="${{ vars.OBSERVABILITY_ALERT_EMAIL }}" \
+              publicAppBaseUrl="${{ vars.PUBLIC_APP_BASE_URL || '' }}" \
             2>&1 || true)
           # #472: large diffs (hundreds of KB) blow the E2BIG limit when passed via env to
           # github-script. Write to a file; the comment/log steps read it instead.
