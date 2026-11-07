@@ -84,6 +84,53 @@ describe("deployen verifiseres av en maskin, uansett utfall", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// VAKT: workeren skal kjøre den nye pakken, ikke bare være frisk.
+//
+// ⚠️ MÅLT 2026-11-07. Stage-utrullingen av 2.140.0 la pakken på workeren, helsesjekken svarte 200 og
+// kjøringen ble grønn — men `startedAt` var uendret, og den gamle koden kjørte videre. Rettelsen i
+// KI-vurderingen (som kjører i workeren) så ut til å være ute uten å være det. Helsesjekken kan ikke se
+// det: den gamle prosessen er frisk.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("workeren kjører den nye pakken etter utrulling", () => {
+  const ps = les("../../scripts/azure/deploy-environment.ps1");
+  const linjer = ps.split("\n");
+  const linjeMed = (tekst: string) => linjer.findIndex((l) => l.includes(tekst) && !l.trimStart().startsWith("#"));
+
+  it("⚠️ oppstartstiden leses FØR pakken legges ut, og sammenlignes ETTER helsesjekken", () => {
+    const før = linjeMed("$workerStartedAtBefore = Get-ProcessStartedAt");
+    const utrulling = linjeMed("Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName");
+    const helse = linjeMed('Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz"');
+    const sammenligning = linjeMed("Assert-WorkerRestarted -Url");
+
+    // Kontrollcase: finnes ikke stegene, måler vakta ingenting.
+    expect([før, utrulling, helse, sammenligning].every((i) => i >= 0), "fant ikke stegene i skriptet").toBe(true);
+    expect(før, "oppstartstiden må leses før workeren får ny pakke").toBeLessThan(utrulling);
+    expect(sammenligning, "sammenligningen må komme etter helsesjekken av workeren").toBeGreaterThan(helse);
+    expect(linjer[sammenligning], "sammenligningen må få verdien fra før utrullingen").toContain("-Before $workerStartedAtBefore");
+  });
+
+  it("⚠️ uendret oppstartstid gir omstart, og feiler utrullingen om den fortsatt er uendret", () => {
+    const start = ps.indexOf("function Assert-WorkerRestarted");
+    const slutt = ps.indexOf("\nfunction ", start + 1);
+    expect(start, "fant ikke Assert-WorkerRestarted").toBeGreaterThanOrEqual(0);
+    const kropp = ps.slice(start, slutt);
+    expect(kropp).toContain("az webapp restart");
+    expect(kropp, "en worker som fortsatt kjører gammel kode, skal feile utrullingen, ikke melde grønt").toMatch(/\bthrow\b/);
+  });
+
+  it("⚠️ oppstartstiden leses som tekst, ikke gjennom ConvertFrom-Json", () => {
+    // PowerShell 7 gjør ISO-tider om til DateTime; to like tider kunne da sammenlignes ulikt, eller omvendt.
+    const start = ps.indexOf("function Get-ProcessStartedAt");
+    const kropp = ps.slice(start, ps.indexOf("\n}", start));
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(kropp).not.toContain("ConvertFrom-Json");
+    expect(kropp).not.toContain("Invoke-RestMethod");
+    expect(kropp).toContain('"startedAt"');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // VAKT: porten skal stå der arbeidet er.
 //
 // ⚠️ MÅLT KONSEKVENS. CI kjørte bare på pull request og på push til `main`. Alt arbeid skjer på

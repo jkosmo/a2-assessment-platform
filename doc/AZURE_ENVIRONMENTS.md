@@ -367,6 +367,8 @@ No manual resource creation is required. To activate:
 3. Set `PUBLIC_APP_BASE_URL` to the environment's https address, or the e-mails go without a link.
 4. Trigger a deploy. ACS resources will be provisioned on the first run.
 
+**Changing an app setting by hand does not reliably restart the worker** (measured 2026-11-07 on staging and production). Compare `startedAt` on `https://<worker>/version` before and after; if it is unchanged, run `az webapp restart` on the worker, and on the web app if the setting is read there. `deploy-environment.ps1` does this comparison for the worker on every deploy (`Assert-WorkerRestarted`) and fails the run if a restart does not take.
+
 Note: AzureManagedDomain uses an auto-generated `azurecomm.net` sender address. To use a custom verified domain, replace the domain resource in `infra/azure/main.bicep`.
 
 ## Production onboarding checklist for Azure OpenAI

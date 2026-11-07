@@ -309,6 +309,52 @@ function Invoke-WebAppDeploy([string]$ResourceGroup, [string]$AppName, [string]$
   throw "az webapp deploy to $AppName failed after $maxAttempts attempts."
 }
 
+# Oppstartstiden prosessen selv rapporterer (`startedAt` i workerens svar), som tekst. Leses med regex, ikke
+# ConvertFrom-Json: PowerShell 7 gjør ISO-tider om til DateTime. Tom streng når den ikke kan leses.
+function Get-ProcessStartedAt([string]$Url) {
+  try {
+    $response = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec 10 -UseBasicParsing
+    $match = [regex]::Match([string]$response.Content, '"startedAt"\s*:\s*"([^"]+)"')
+    if ($match.Success) { return $match.Groups[1].Value }
+  } catch {
+    # Best-effort: en worker som ikke svarer, fanges av Wait-Healthy.
+  }
+  return ""
+}
+
+# ⚠️ MÅLT 2026-11-07 (stage, og prod etter en innstilling): pakken ble lagt på workeren med `--restart true`,
+# helsesjekken svarte 200 og kjøringen ble grønn — men `startedAt` var uendret, og den GAMLE koden kjørte videre.
+# KI-vurderingen kjører i workeren, så en rettelse der så ut til å være ute uten å være det. Helsesjekken kan ikke
+# se dette: den gamle prosessen er frisk. Derfor sammenlignes oppstartstiden før og etter. Uendret → start workeren
+# på nytt; fortsatt uendret → feil utrullingen i stedet for å melde grønt med gammel kode.
+function Assert-WorkerRestarted {
+  param([string]$Url, [string]$Before, [string]$AppName, [string]$ResourceGroup, [string]$HealthUrl)
+  if (-not $Before) {
+    Write-Host "Worker startedAt was unavailable before deploy; cannot compare (first deploy or worker down)."
+    return
+  }
+  $after = Get-ProcessStartedAt -Url $Url
+  if ($after -and $after -ne $Before) {
+    Write-Host "Worker restarted with the new package: startedAt $Before -> $after."
+    return
+  }
+  Write-Warning "Worker startedAt is unchanged ($Before) after deploy: the old process is still running. Restarting $AppName."
+  Refresh-AzureCliOidcLogin "restarting $AppName (startedAt unchanged)"
+  az webapp restart --resource-group $ResourceGroup --name $AppName | Out-Null
+  Assert-LastExitCode "restart $AppName"
+  $deadline = (Get-Date).AddMinutes(10)
+  while ((Get-Date) -lt $deadline) {
+    Start-Sleep -Seconds 15
+    $after = Get-ProcessStartedAt -Url $Url
+    if ($after -and $after -ne $Before) {
+      Write-Host "Worker restarted after explicit restart: startedAt $Before -> $after."
+      Wait-Healthy -Url $HealthUrl -Label "Worker App" -AppName $AppName -ResourceGroup $ResourceGroup
+      return
+    }
+  }
+  throw "Worker $AppName still reports startedAt $Before after an explicit restart: the new package is not running."
+}
+
 function Restart-WebAppForKeyVaultReferences([string]$ResourceGroup, [string]$AppName) {
   Refresh-AzureCliOidcLogin "restarting $AppName"
   Write-Host "Restarting $AppName to refresh Key Vault references..."
@@ -816,6 +862,9 @@ if ($PackagePath) {
   }
 }
 
+# 2026-11-07: workerens oppstartstid FØR pakken legges ut. Se Assert-WorkerRestarted.
+$workerStartedAtBefore = Get-ProcessStartedAt -Url "https://$workerAppName.azurewebsites.net/version"
+Write-Host "Worker startedAt before deploy: $(if ($workerStartedAtBefore) { $workerStartedAtBefore } else { '(unavailable)' })"
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -ZipPath $zipPath
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $parserAppName -ZipPath $zipPath
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
@@ -1012,6 +1061,7 @@ $packageVersion = (Get-Content (Join-Path $PSScriptRoot '..\..\package.json') | 
 
 Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App" -AppName $webAppName -ResourceGroup $ResourceGroupName
 Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App" -AppName $workerAppName -ResourceGroup $ResourceGroupName
+Assert-WorkerRestarted -Url "https://$workerAppName.azurewebsites.net/version" -Before $workerStartedAtBefore -AppName $workerAppName -ResourceGroup $ResourceGroupName -HealthUrl "https://$workerAppName.azurewebsites.net/healthz"
 Wait-Healthy -Url "https://$parserAppName.azurewebsites.net/health" -Label "Parser App" -AppName $parserAppName -ResourceGroup $ResourceGroupName
 
 # Version-aware stability check: confirms the NEW code is consistently being served.
