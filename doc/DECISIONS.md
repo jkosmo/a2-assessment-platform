@@ -606,6 +606,21 @@ sirkulasjon?»*
 
 **Sak:** — (2.126.0) · **Status:** avklart 2026-11-01
 
+### Kjente mangler etter 2.140.0 (trinnvalg og delpoeng)
+
+2.140.0 retter at et trinnvalg modellen la inne i begrunnelsene, felte vurderingen, og at det lagrede
+praktiske delpoenget ikke fulgte de rettede kriteriepoengene. Dette står igjen, ført av QA-porten:
+
+- **Et kriterium med ID-en `criterion_steps`** og et objekt der begrunnelsen skulle stå, blir lest som et
+  feilplassert trinnvalg, og begrunnelsen for kriteriet forsvinner uten feilmelding. Krever at en forfatter
+  gir et kriterium akkurat det navnet. Poenget står.
+- **`pass_fail_practical` er modellens eget flagg**, også når kriteriepoengene er rettet. Vedtaket bruker
+  det ikke (det har egne grenser), men flagget lagres med KI-vurderingen og kan vises på vurderingsflaten.
+- **Benchmarken** (`runModelComparisonBenchmark`) kan ikke beskrive kriterier med trinn, så den ber aldri om
+  trinnvalg og måler modellens rå tall, ikke det plattformen ville gitt.
+
+**Status:** kjent mangel, 2026-11-07
+
 ---
 
 ## Forfattere kan lese alt kursinnhold — juks er den enkeltes eget ansvar

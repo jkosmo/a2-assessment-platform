@@ -111,6 +111,24 @@ export function normalizeRubricScoresToContract(
 }
 
 /**
+ * 2.140.0 (QA-funn): når plattformen har rettet kriteriepoengene (trinnvalg, skala), fulgte ikke modellens
+ * `practical_score_scaled` med. Sammenligningen mellom første og andre vurdering leser det tallet, og to
+ * vurderinger med samme trinn kunne meldes uenige. Er poengene rettet, regnes delpoenget fra dem, på
+ * kontraktens 0–70, med kriteriene × 4 som tak — samme tak som vedtaket bruker.
+ */
+export function practicalFollowsCorrectedScores(
+  original: LlmStructuredAssessment,
+  corrected: LlmStructuredAssessment,
+): LlmStructuredAssessment {
+  const ids = Object.keys(corrected.rubric_scores);
+  const unchanged = ids.length === Object.keys(original.rubric_scores).length
+    && ids.every((id) => original.rubric_scores[id] === corrected.rubric_scores[id]);
+  if (unchanged || ids.length === 0) return corrected;
+  const practical = Number(((corrected.rubric_total / (ids.length * 4)) * 70).toFixed(2));
+  return { ...corrected, practical_score_scaled: Math.max(0, Math.min(70, practical)) };
+}
+
+/**
  * #1135, målt mot stage-modellen 2026-10-27: på et svar midt på skalaen skrev modellen en begrunnelse
  * som ordrett beskrev trinn 1 («står der, men blandet med diskusjonen») og ga 0. Det skjedde med begge
  * modellene, ved temperatur 0, og en uvesentlig endring i meldingen vippet det mellom 0 og 33.
@@ -227,15 +245,18 @@ export async function evaluatePracticalWithAzureOpenAi(
 
         // #1135: trinnet modellen valgte setter poenget; så regnes kriteriets egen skala om til 0–4 her,
         // ikke av modellen.
-        return normalizeRubricScoresToContract(
-          scoresFromChosenSteps(
-            {
-              ...parsedAssessment,
-              red_flags: normalizeRedFlags(parsedAssessment.red_flags),
-            },
+        return practicalFollowsCorrectedScores(
+          parsedAssessment,
+          normalizeRubricScoresToContract(
+            scoresFromChosenSteps(
+              {
+                ...parsedAssessment,
+                red_flags: normalizeRedFlags(parsedAssessment.red_flags),
+              },
+              input.rubricCriteria,
+            ),
             input.rubricCriteria,
           ),
-          input.rubricCriteria,
         );
       }
     }

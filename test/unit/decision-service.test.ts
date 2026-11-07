@@ -148,6 +148,31 @@ describe("decision service", () => {
     });
   });
 
+  // 2.140.0 (QA-funn): plattformen retter kriteriepoengene etter trinnvalget og skalaen, men lagret modellens
+  // eget delpoeng. En blandet modul viste da «Flervalg 30 · Praktisk 0» ved siden av total 100.
+  it("lagrer det praktiske delpoenget vedtaket regnet ut, ikke modellens eget tall", async () => {
+    assessmentDecisionCreate.mockResolvedValue({ id: "decision-praktisk", passFailTotal: true, decisionReason: "x" });
+    submissionUpdate.mockResolvedValue({ id: "submission-1" });
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 200,
+      expectedMinWords: 100,
+      submissionId: "submission-1",
+      userId: "user-1",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      mcqScaledScore: 30,
+      mcqPercentScore: 100,
+      rubricMaxTotal: 4,
+      rubricCriteriaIds: ["vedtak"],
+      llmResult: buildLlmResult({ rubric_scores: { vedtak: 4 }, rubric_total: 4, practical_score_scaled: 0, criterion_rationales: { vedtak: "ok" } }),
+    });
+
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(expect.objectContaining({ practicalScaledScore: 70, mcqScaledScore: 30, totalScore: 100 }));
+  });
+
   it("opens manual review and skips the certification write when manual review is forced", async () => {
     assessmentDecisionCreate.mockResolvedValue({
       id: "decision-2",

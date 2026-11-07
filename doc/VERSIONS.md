@@ -4,9 +4,11 @@ This document tracks release versions and what each version includes.
 
 ## 2.140.0 - 2026-11-07
 
-KI-vurderingen: et trinnvalg på feil sted stopper ikke lenger vurderingen.
+KI-vurderingen: et trinnvalg på feil sted stopper ikke lenger vurderingen, og det praktiske delpoenget følger poengene plattformen har rettet.
 
 - **Modellen la av og til `criterion_steps` inne i `criterion_rationales`.** Målt på stage med en modul med ett kriterium med trinn: fem av fem ganger. Svaret ble avvist på formatet, jobben ble prøvd om igjen til den ga opp, og deltakeren så «vurderes» i mellomtiden. Nå flyttes trinnvalget ut og brukes. Står det også på riktig sted, vinner det. Prod har ikke hatt feilen: sju fritekstvurderinger siden 28. oktober, alle på første forsøk.
+- **Det praktiske delpoenget i vedtaket er plattformens eget.** Plattformen retter kriteriepoengene (trinnvalg siden 2.118.0, skala siden 2.114.0), men lagret modellens delpoeng. En blandet modul kunne da vise «Flervalg 30 · Praktisk 0» under total 100. Nå lagres delpoenget vedtaket regnet totalen fra. Er poengene rettet, følger også KI-resultatets delpoeng dem, så første og andre vurdering ikke meldes uenige bare fordi modellens tall sto igjen. Gjelder nye vedtak; gamle står som de er.
+- **Kjente mangler** er ført i `doc/DECISIONS.md` under «Vurdering».
 - **Stage har nå samme tak på KI-svarets lengde som prod** (`AZURE_OPENAI_MAX_TOKENS=2500`, `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER=auto`, GitHub-variabler for staging). Med 1200 manglet KI-svaret av og til de siste feltene.
 
 ## 2.139.0 - 2026-11-07

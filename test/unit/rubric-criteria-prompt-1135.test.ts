@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAssessmentInputContext, parseRubricCriteriaForPrompt } from "../../src/modules/assessment/AssessmentInputFactory.js";
-import { buildAzureOpenAiMessages, buildRequiredResponseContract, buildRubricCriteriaSection, normalizeRubricScoresToContract, scoresFromChosenSteps } from "../../src/modules/assessment/llmAssessmentService.js";
+import { buildAzureOpenAiMessages, buildRequiredResponseContract, buildRubricCriteriaSection, normalizeRubricScoresToContract, practicalFollowsCorrectedScores, scoresFromChosenSteps } from "../../src/modules/assessment/llmAssessmentService.js";
 import { llmResponseCodec } from "../../src/codecs/llmResponseCodec.js";
 
 // #1135: KI-vurdereren fikk bare kriterienes ID-er. Nå får den det kriteriet sier — etikett og
@@ -223,6 +223,17 @@ describe("#1135 trinnet modellen valgte setter poenget", () => {
       { step: 2, text: "vedtakene står først, presist og hver for seg" },
     ] }];
     expect(scoresFromChosenSteps(lest, kriterier).rubric_scores).toEqual({ vedtak: 2 });
+    // Etter omregningen til 0–4 følger delpoenget de rettede poengene, ikke modellens 0.
+    const rettet = normalizeRubricScoresToContract(scoresFromChosenSteps(lest, kriterier), kriterier);
+    expect(practicalFollowsCorrectedScores(lest, rettet)).toMatchObject({ rubric_scores: { vedtak: 4 }, practical_score_scaled: 70 });
+  });
+
+  it("er poengene ikke rettet, står modellens delpoeng", () => {
+    const svar = llmResponseCodec.parse({
+      module_id: "m", criterion_rationales: { a: "x", b: "y" }, rubric_scores: { a: 2, b: 3 }, rubric_total: 5,
+      practical_score_scaled: 41, pass_fail_practical: true, improvement_advice: [], red_flags: [], manual_review_recommended: false, confidence_note: "",
+    });
+    expect(practicalFollowsCorrectedScores(svar, { ...svar }).practical_score_scaled).toBe(41);
   });
 
   it("står trinnvalget begge steder, vinner det på toppnivå, og begrunnelsene blir bare tekst", () => {

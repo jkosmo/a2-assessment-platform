@@ -67,6 +67,12 @@ type BuildDecisionInput = {
 
 export type ResolvedAssessmentDecision = {
   totalScore: number;
+  /**
+   * Det praktiske delpoenget regnet fra kriteriepoengene vedtaket selv bruker (0–70, eller 0–100 for ren
+   * fritekst). Det er dette som lagres og vises, ikke modellens eget tall: plattformen retter kriteriepoengene
+   * (trinnvalg, skala), og modellens delpoeng fulgte ikke med. Målt 2026-11-07: «Praktisk 0» ved siden av total 100.
+   */
+  practicalScaledScore: number;
   practicalPercent: number | null;
   hasOpenRedFlag: boolean;
   passesThresholds: boolean;
@@ -287,6 +293,7 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
 
   return {
     totalScore,
+    practicalScaledScore: recomputedPracticalScoreScaled,
     practicalPercent,
     hasOpenRedFlag,
     passesThresholds,
@@ -438,7 +445,6 @@ export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
 }
 
 export async function createAssessmentDecision(input: BuildDecisionInput) {
-  const practicalScoreScaled = input.llmResult.practical_score_scaled;
   const resolved = resolveAssessmentDecision(input);
 
   // #934 skive 5a-1: deltakerlåsen, som første setning. `input.userId` er den som leverte.
@@ -466,7 +472,7 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
       rubricVersionId: input.rubricVersionId,
       promptTemplateVersionId: input.promptTemplateVersionId,
       mcqScaledScore: input.mcqScaledScore,
-      practicalScaledScore: practicalScoreScaled,
+      practicalScaledScore: resolved.practicalScaledScore,
       totalScore: resolved.totalScore,
       redFlagsJson: redFlagsCodec.serialize(input.llmResult.red_flags),
       aiInfluenceJson: input.aiInfluenceJson ?? null,
