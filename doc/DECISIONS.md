@@ -613,7 +613,10 @@ praktiske delpoenget ikke fulgte de rettede kriteriepoengene. Dette står igjen,
 
 - **Et kriterium som heter som et felt i svarkontrakten** (`criterion_steps`, `confidence_note`, `rubric_total`
   …) kan miste begrunnelsen: den leses som et feilplassert felt når den ikke er tekst, eller når feltet mangler
-  på toppnivå. Krever at en forfatter gir et kriterium akkurat et slikt navn. Poenget står.
+  på toppnivå. Krever at en forfatter gir et kriterium akkurat et slikt navn. Poenget står. Heter kriteriet
+  `evidence_sufficiency` og begrunnelsen er «insufficient», kan den bli et signal i vedtaket (QA runde 4).
+- **Den fulle deltakerflyten med et feilformet KI-svar** har ingen automatisk test: e2e-suiten bruker falske
+  API-er og ser aldri vurdereren. Den er målt på stage med `maal-format.mjs` (seks fritekstsvar).
 - **`pass_fail_practical` er modellens eget flagg**, også når kriteriepoengene er rettet. Vedtaket bruker
   det ikke (det har egne grenser), men flagget lagres med KI-vurderingen og kan vises på vurderingsflaten.
 - **Benchmarken** (`runModelComparisonBenchmark`) kan ikke beskrive kriterier med trinn, så den ber aldri om
