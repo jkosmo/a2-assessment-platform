@@ -105,11 +105,10 @@ når appene gjennom Bicep, og Bicep kan sette ny verdi før ny kode er ute. Da s
 **Samtidighet:** ingen. Pakken leses ved oppstart og endres bare ved ny utrulling.
 **Utrulling:** skive 1 kan gå ut alene. Skive 2 endrer ingenting før noen bytter valget i en fork.
 
-## Må avgjøres før bygging
+## Avgjort før bygging (produkteier 2026-11-07)
 
-1. **Favicon:** maskot (i pakken) eller merkevare (utenfor)? Anbefaling: i pakken, fordi det i dag er båtmerket.
-2. **Retningen på fremdriftslinja** (fylles fra høyre fordi båten seiler mot venstre): i pakken eller felles?
-   Anbefaling: i pakken, siden den kommer av figuren.
+1. **Faviconet følger maskoten** og ligger i pakken.
+2. **Retningen på fremdriftslinja følger maskoten** og ligger i pakken. Seilbåten fyller fra høyre.
 
 ## Åpent, ikke nå
 
