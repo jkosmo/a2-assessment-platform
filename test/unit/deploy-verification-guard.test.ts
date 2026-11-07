@@ -142,6 +142,21 @@ describe("workeren kjører den nye pakken etter utrulling", () => {
     const venter = kropp.indexOf("Wait-StartedAtChanged");
     expect(venter, "ventingen må komme før omstarten").toBeGreaterThanOrEqual(0);
     expect(venter).toBeLessThan(kropp.indexOf("az webapp restart"));
+    // Etter omstarten er det `$WaitMinutes` som gjelder: den må dekke en treg omstart.
+    const etterOmstart = kropp.slice(kropp.indexOf("az webapp restart"));
+    expect(etterOmstart).toContain("-Minutes $WaitMinutes");
+  });
+
+  it("⚠️ ventetiden FØR omstarten er kort: pakken starter ikke workeren av seg selv", () => {
+    // MÅLT 2026-11-07 (2.141.0 på stage): workeren var uendret etter 20 min, og en eksplisitt omstart tok 33 s.
+    // 20 min venting før omstart la et kvarter til hver utrulling uten å gi noe.
+    const start = ps.indexOf("function Assert-WorkerRestarted");
+    const kropp = ps.slice(start, ps.indexOf("\nfunction ", start + 1));
+    const minutter = Number((kropp.match(/\[int\]\$InitialWaitMinutes\s*=\s*(\d+)/) ?? [])[1]);
+    expect(minutter, "fant ikke InitialWaitMinutes").toBeGreaterThan(0);
+    expect(minutter, "ventetiden før omstart skal være kort").toBeLessThanOrEqual(8);
+    const førOmstart = kropp.slice(0, kropp.indexOf("az webapp restart"));
+    expect(førOmstart).toContain("-Minutes $InitialWaitMinutes");
   });
 
   it("⚠️ oppstartstiden leses som tekst, ikke gjennom ConvertFrom-Json", () => {

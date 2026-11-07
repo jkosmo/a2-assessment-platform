@@ -328,9 +328,10 @@ function Get-ProcessStartedAt([string]$Url) {
 # se dette: den gamle prosessen er frisk. Derfor sammenlignes oppstartstiden før og etter. Uendret → start workeren
 # på nytt; fortsatt uendret → feil utrullingen i stedet for å melde grønt med gammel kode.
 #
-# ⚠️ MÅLT SAMME KVELD: en omstart av workeren på B1 tar ~15 min før ny prosess svarer (den gamle svarer imens). Første
-# versjon av sjekken ga opp etter 10 min og gjorde en vellykket utrulling rød. Derfor: vent først på at workeren starter
-# av seg selv, start den så på nytt, og feil bare om den fortsatt kjører gammel prosess etter en ny ventetid.
+# ⚠️ MÅLT SAMME KVELD: en omstart kan ta fra 30 s til ~15 min før ny prosess svarer (den gamle svarer imens). Første
+# versjon av sjekken ga opp etter 10 min og gjorde en vellykket utrulling rød. Utrullingen av 2.141.0 viste at pakken
+# IKKE starter workeren (uendret etter 20 min), mens en eksplisitt omstart tok 33 s. Derfor: vent kort (5 min) på at
+# den starter av seg selv, start den så på nytt, og gi omstarten god tid (20 min) før utrullingen feiler.
 # Versjonen workeren selv rapporterer (fra 2.141.0). Tom streng når den mangler — en eldre worker har ikke feltet.
 function Get-ProcessVersion([string]$Url) {
   try {
@@ -360,18 +361,18 @@ function Wait-StartedAtChanged([string]$Url, [string]$Before, [int]$Minutes, [st
 }
 
 function Assert-WorkerRestarted {
-  param([string]$Url, [string]$Before, [string]$AppName, [string]$ResourceGroup, [string]$HealthUrl, [string]$ExpectedVersion, [int]$WaitMinutes = 20)
+  param([string]$Url, [string]$Before, [string]$AppName, [string]$ResourceGroup, [string]$HealthUrl, [string]$ExpectedVersion, [int]$InitialWaitMinutes = 5, [int]$WaitMinutes = 20)
   if (-not $Before) {
     Write-Host "Worker startedAt was unavailable before deploy; cannot compare (first deploy or worker down)."
     return
   }
-  $after = Wait-StartedAtChanged -Url $Url -Before $Before -Minutes $WaitMinutes -ExpectedVersion $ExpectedVersion
+  $after = Wait-StartedAtChanged -Url $Url -Before $Before -Minutes $InitialWaitMinutes -ExpectedVersion $ExpectedVersion
   if ($after) {
     Write-Host "Worker restarted with the new package: startedAt $Before -> $after."
     Wait-Healthy -Url $HealthUrl -Label "Worker App" -AppName $AppName -ResourceGroup $ResourceGroup
     return
   }
-  Write-Warning "Worker startedAt is still $Before after $WaitMinutes min: the old process is still running. Restarting $AppName."
+  Write-Warning "Worker startedAt is still $Before after $InitialWaitMinutes min: the old process is still running. Restarting $AppName."
   Refresh-AzureCliOidcLogin "restarting $AppName (startedAt unchanged)"
   az webapp restart --resource-group $ResourceGroup --name $AppName | Out-Null
   Assert-LastExitCode "restart $AppName"
