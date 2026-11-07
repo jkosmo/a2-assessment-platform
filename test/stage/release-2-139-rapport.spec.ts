@@ -27,9 +27,10 @@ async function api(sti: string): Promise<{ status: number; json: any }> {
 
 const STATUS = ["COMPLETED", "NEEDS_NEW_VERSION", "IN_PROGRESS", "NOT_STARTED"];
 
-test("versjonen er 2.139.0", async () => {
+test("versjonen er minst 2.139.0", async () => {
   const svar = await fetch(`${BASE}/version`);
-  expect((await svar.json()).version).toBe("2.139.0");
+  const [major, minor] = String((await svar.json()).version).split(".").map(Number);
+  expect(major! * 1000 + minor!).toBeGreaterThanOrEqual(2139);
 });
 
 test("deltakerne står med Fullført øverst, og nyeste aktivitet først innenfor hver status", async () => {

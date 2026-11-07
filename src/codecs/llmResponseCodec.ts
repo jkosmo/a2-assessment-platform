@@ -39,10 +39,25 @@ export const llmResponseSchema = z.object({
 
 export type LlmStructuredAssessment = z.infer<typeof llmResponseSchema>;
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * Målt på stage 2026-11-07: med ett kriterium med trinn la modellen `criterion_steps` INNE I
+ * `criterion_rationales`, fem av fem ganger. Begrunnelsene er tekst, så et objekt der er aldri en begrunnelse;
+ * det flyttes ut. Står trinnvalget også på toppnivå, vinner det.
+ */
+function liftNestedCriterionSteps(raw: unknown): unknown {
+  if (!isObject(raw) || !isObject(raw.criterion_rationales)) return raw;
+  const { criterion_steps: nested, ...rationales } = raw.criterion_rationales;
+  if (!isObject(nested)) return raw;
+  return { ...raw, criterion_rationales: rationales, criterion_steps: raw.criterion_steps ?? nested };
+}
+
 export const llmResponseCodec = {
   /** Parses and validates a raw JSON string. Throws if the content is invalid. */
   parse(raw: unknown): LlmStructuredAssessment {
-    return llmResponseSchema.parse(raw);
+    return llmResponseSchema.parse(liftNestedCriterionSteps(raw));
   },
 
   serialize(value: LlmStructuredAssessment): string {

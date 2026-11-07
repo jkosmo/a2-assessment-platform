@@ -198,6 +198,50 @@ describe("#1135 trinnet modellen valgte setter poenget", () => {
     const gyldig = { module_id: "m", rubric_scores: { vedtak: 1 }, rubric_total: 1, practical_score_scaled: 10, pass_fail_practical: false, criterion_rationales: { vedtak: "x" }, improvement_advice: [], red_flags: [], manual_review_recommended: false, confidence_note: "" };
     expect(() => llmResponseCodec.parse({ ...gyldig, criterion_steps: { vedtak: ["en", "liste"] } })).not.toThrow();
   });
+
+  // Målt på stage 2026-11-07: med ett kriterium med trinn la modellen trinnvalget INNE I begrunnelsene, fem av fem
+  // ganger. Jobben feilet på formatet og ble prøvd om igjen til den ga opp, mens deltakeren så «vurderes».
+  it("et trinnvalg modellen la inne i begrunnelsene, flyttes ut og brukes", () => {
+    const svar = {
+      module_id: "m",
+      criterion_rationales: { vedtak: "Vedtakene står først.", criterion_steps: { vedtak: "vedtakene står først, presist og hver for seg" } },
+      rubric_scores: { vedtak: 0 },
+      rubric_total: 0,
+      practical_score_scaled: 0,
+      pass_fail_practical: false,
+      improvement_advice: [],
+      red_flags: [],
+      manual_review_recommended: false,
+      confidence_note: "",
+    };
+    const lest = llmResponseCodec.parse(svar);
+    expect(lest.criterion_rationales).toEqual({ vedtak: "Vedtakene står først." });
+    expect(lest.criterion_steps).toEqual({ vedtak: "vedtakene står først, presist og hver for seg" });
+    const kriterier: Parameters<typeof scoresFromChosenSteps>[1] = [{ id: "vedtak", label: "Vedtakene", description: "", scaleMax: 2, steps: [
+      { step: 0, text: "vedtakene mangler" },
+      { step: 1, text: "vedtakene står der, men blandet med diskusjonen" },
+      { step: 2, text: "vedtakene står først, presist og hver for seg" },
+    ] }];
+    expect(scoresFromChosenSteps(lest, kriterier).rubric_scores).toEqual({ vedtak: 2 });
+  });
+
+  it("står trinnvalget begge steder, vinner det på toppnivå, og begrunnelsene blir bare tekst", () => {
+    const lest = llmResponseCodec.parse({
+      module_id: "m",
+      criterion_rationales: { vedtak: "x", criterion_steps: { vedtak: "inne" } },
+      criterion_steps: { vedtak: "ute" },
+      rubric_scores: { vedtak: 1 },
+      rubric_total: 1,
+      practical_score_scaled: 10,
+      pass_fail_practical: false,
+      improvement_advice: [],
+      red_flags: [],
+      manual_review_recommended: false,
+      confidence_note: "",
+    });
+    expect(lest.criterion_steps).toEqual({ vedtak: "ute" });
+    expect(lest.criterion_rationales).toEqual({ vedtak: "x" });
+  });
 });
 
 // #1135, målt mot stage-modellen: malene ble sendt som hele språkkartet, og vedtaket fikk «ikke
