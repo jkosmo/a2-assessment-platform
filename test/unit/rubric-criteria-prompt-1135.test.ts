@@ -244,6 +244,9 @@ describe("#1135 trinnet modellen valgte setter poenget", () => {
       practical_score_scaled: 41, pass_fail_practical: true, improvement_advice: [], red_flags: [], manual_review_recommended: false, confidence_note: "",
     });
     expect(practicalFromRubricScores(svar, ["a", "b"]).practical_score_scaled).toBe(43.75);
+    // Uten kriterier i modulen kjenner ikke funksjonen taket vedtaket bruker; da står modellens tall.
+    expect(practicalFromRubricScores(svar, []).practical_score_scaled).toBe(41);
+    expect(practicalFromRubricScores(svar, undefined).practical_score_scaled).toBe(41);
   });
 
   it("står trinnvalget begge steder, vinner det på toppnivå, og begrunnelsene blir bare tekst", () => {

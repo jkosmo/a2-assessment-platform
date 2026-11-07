@@ -618,6 +618,11 @@ praktiske delpoenget ikke fulgte de rettede kriteriepoengene. Dette står igjen,
   det ikke (det har egne grenser), men flagget lagres med KI-vurderingen og kan vises på vurderingsflaten.
 - **Benchmarken** (`runModelComparisonBenchmark`) kan ikke beskrive kriterier med trinn, så den ber aldri om
   trinnvalg og måler modellens rå tall, ikke det plattformen ville gitt.
+- **Andre vurdering sammenligner modellens egen sum** (`rubric_total`). Har to vurderinger like kriteriepoeng,
+  men én modell summerte feil med minst tre, meldes de uenige, og svaret går til sensor. Summen skrives ikke
+  om, for vedtaket bruker nettopp en feil sum som tegn på at et menneske bør se saken.
+- **En modul uten kriterier** får modellens eget praktiske delpoeng i KI-resultatet. Vedtaket regner sitt eget
+  fra `scalingRule.max_total`, og det er vedtakets som vises.
 
 **Status:** kjent mangel, 2026-11-07
 

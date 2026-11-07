@@ -117,12 +117,15 @@ export function normalizeRubricScoresToContract(
  * rettede poengene, på kontraktens 0–70, slik vedtaket gjør: modulens egne kriterier, hvert klemt til 0–4,
  * manglende teller 0, og kriteriene × 4 som tak. Alltid, ikke bare når noe ble rettet: to rettelser kan
  * oppheve hverandre i tall, og en vurdering som ikke ble rettet, skal sammenlignes på samme mål.
+ *
+ * Uten kriterier i modulen står modellens tall (QA runde 3): vedtaket bruker da `scalingRule.max_total` som tak,
+ * og det har ikke denne funksjonen.
  */
 export function practicalFromRubricScores(
   result: LlmStructuredAssessment,
   criteriaIds: string[] | undefined,
 ): LlmStructuredAssessment {
-  const ids = criteriaIds?.length ? criteriaIds : Object.keys(result.rubric_scores);
+  const ids = criteriaIds ?? [];
   if (ids.length === 0) return result;
   const total = ids.reduce((sum, id) => sum + Math.max(0, Math.min(4, result.rubric_scores[id] ?? 0)), 0);
   const practical = Number(((total / (ids.length * 4)) * 70).toFixed(2));
