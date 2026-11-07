@@ -1515,3 +1515,8 @@ Kjente mangler, godtatt fordi plattformen er intern:
 - Ligger en modul i flere kurs, velger lenken det som krever nytt forsøk, ellers det første. E-posten vet ikke hvilket kurs svaret kom fra.
 - De siste «modulen er revidert»-radene i køen går som ren tekst, uten bilde og lenke.
 - Lenken til en modul henter kursene etter tur for å finne modulen. En deltaker med svært mange kurs kan nå grensen på 120 kall i minuttet og få beskjeden om at modulen ikke finnes, selv om den gjør det.
+- Et domene uten `http` og `www`, med stor bokstav (`Github.com`, `EVIL.COM`), står urørt og kan bli en lenke i Outlook. Det kan ikke skilles fra `ASP.NET` og `Node.js` uten en liste over toppdomener.
+- Lenken til en modul som ikke finnes i kursene, viser en beskjed. Det gjelder også en frittstående modul i miljøer med `PARTICIPANT_COURSE_ONLY=false`.
+- Er modulen arkivert eller avpublisert etter at e-posten gikk, åpner lenken bare kurset, uten forklaring.
+
+Heller for få e-poster enn for mange (produkteier, 2026-11-07): mange e-poster oppfattes som mas og støy. Endres fristen på et tildelt kurs, får ikke klassen e-post. Tildeles et kurs mens det er upublisert, går det ingen e-post når det publiseres, og heller ikke om det tildeles på nytt.

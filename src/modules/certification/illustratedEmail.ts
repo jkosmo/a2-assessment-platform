@@ -149,6 +149,10 @@ const ANCHOR_ELEMENT = /<a\s/i;
 // Uten ordgrense, så de fanger alt LINK_LIKE fanger: «xhttp://…» skal gjøres ufarlig, ikke stoppe e-posten.
 const URL_SCHEME = /https?:\/*/gi;
 const WWW_PREFIX = /www\./gi;
+/** Står det `http` eller `www` foran, er resten en adresse uansett store og små bokstaver. Må tas før skjemadelen fjernes. */
+const EXPLICIT_ADDRESS = /(?:https?:\/*|www\.)\S*/gi;
+/** Bare punktum inne i adressen: punktumet som avslutter en setning, skal stå. */
+const DOT_INSIDE_ADDRESS = /\.(?=[\p{L}\p{N}-])/gu;
 /**
  * Det e-postklienter gjør til lenker av seg selv, uten `http` eller `www`: e-postadresser og domenenavn (QA-porten
  * 2.132.0). Hvilke endelser en klient kjenner, varierer, så alt med små bokstaver rundt punktumet regnes som et domene
@@ -165,6 +169,7 @@ const NOT_A_DOMAIN = new Set(["f.eks"]);
  */
 export function neutralizeAddresses(text: string): string {
   return text
+    .replace(EXPLICIT_ADDRESS, (address) => address.replace(DOT_INSIDE_ADDRESS, "[.]"))
     .replace(URL_SCHEME, "")
     .replace(EMAIL_ADDRESS, (address) => {
       const at = address.lastIndexOf("@");

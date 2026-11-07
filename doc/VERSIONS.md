@@ -10,7 +10,7 @@ E-poster til dem som bruker plattformen: bilde, lenke, og en ny e-post når et s
 - **Lenker.** Kurs, frister og ny hovedversjon lenker til kurset, resultat, sensor og anke til modulen, og diskusjon til tråden. Lenken er en knapp med adressen synlig under, og inneholder bare en id.
 - **Innstillingen `PUBLIC_APP_BASE_URL` slår lenkene på.** Den må stå på både appen og workeren. Uten den går e-postene som før, uten lenke. En ugyldig verdi gir et varsel ved oppstart.
 - **Adresser i tekst fra andre blir ufarlige.** `github.com` i en kurstittel blir `github[.]com`, så den eneste lenken i en e-post er vår egen. Tidligere ville en slik tittel stoppet e-posten.
-- **Ny e-post: «til sensor».** Går til deltakeren når et svar sendes til manuell vurdering. Køraden venter fem minutter, så en worker som ikke er rullet ut ennå, ikke bruker opp forsøkene. Er sensor ferdig før den, sendes den ikke.
+- **Ny e-post: «til sensor».** Går til deltakeren når et svar sendes til manuell vurdering. Køraden venter fem minutter, så en worker som ikke er rullet ut ennå, ikke bruker opp forsøkene. Er sensor ferdig før den, sendes den ikke, heller ikke om deltakeren har anket i mellomtiden.
 - **E-posten om nytt kurs i en klasse går én gang.** Et dobbeltklikk på «Tildel kurs» eller en endret frist sendte den til hele klassen på nytt. Nå oppdateres bare fristen. Tildeles et kurs mens det er upublisert, går det fortsatt ingen e-post, heller ikke når det publiseres senere.
 - **Deltakersiden.** `/participant?moduleId=` finner kurset modulen ligger i, helst det som krever nytt forsøk, og åpner modulen. `?courseId=&threadId=` åpner kurset, diskusjonen og tråden. Finnes ikke modulen i kursene, vises en beskjed.
 

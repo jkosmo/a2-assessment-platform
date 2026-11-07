@@ -151,6 +151,47 @@ describe("e-post gjennom rutene", () => {
     expect(mailsTo(participant["x-user-email"])).toHaveLength(0);
   });
 
+  it("sensor har tatt saken, men er ikke ferdig: deltakeren får e-posten om sensor", async () => {
+    const participant = seededParticipant;
+    const reviewer = headers("sensor-person", "REVIEWER");
+    const { submissionId } = await submitAndAssess(
+      participant,
+      "Submission contains sensitive client data references.",
+      "Manual review should be triggered due to sensitive handling concerns.",
+    );
+    const [row] = await rowsFor(OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification, submissionId);
+    const review = await prisma.manualReview.findFirstOrThrow({ where: { submissionId }, select: { id: true } });
+    expect((await request(app).post(`/api/reviews/${review.id}/claim`).set(reviewer)).status).toBe(200);
+
+    await deliverOutboxEvent({ type: row.type, payloadJson: row.payloadJson });
+    expect(mailsTo(participant["x-user-email"])).toHaveLength(1);
+  });
+
+  it("sensor ble ferdig og deltakeren anket før raden gikk: anken gjør ikke e-posten om sensor gyldig igjen", async () => {
+    const participant = seededParticipant;
+    const reviewer = headers("sensor-person", "REVIEWER");
+    const { submissionId } = await submitAndAssess(
+      participant,
+      "Submission contains sensitive client data references.",
+      "Manual review should be triggered due to sensitive handling concerns.",
+    );
+    const [row] = await rowsFor(OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification, submissionId);
+    const review = await prisma.manualReview.findFirstOrThrow({ where: { submissionId }, select: { id: true } });
+    expect((await request(app).post(`/api/reviews/${review.id}/claim`).set(reviewer)).status).toBe(200);
+    const override = await request(app)
+      .post(`/api/reviews/${review.id}/override`)
+      .set(reviewer)
+      .send({ passFailTotal: false, decisionReason: "Manual reviewer overrode the decision.", overrideReason: "Insufficient practical depth." });
+    expect(override.status).toBe(200);
+    const appeal = await request(app).post(`/api/submissions/${submissionId}/appeals`).set(participant).send({ appealReason: "I request a second review of the practical quality." });
+    expect(appeal.status).toBe(201);
+    const submission = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId }, select: { submissionStatus: true } });
+    expect(submission.submissionStatus).toBe("UNDER_REVIEW");
+
+    await deliverOutboxEvent({ type: row.type, payloadJson: row.payloadJson });
+    expect(mailsTo(participant["x-user-email"])).toHaveLength(0);
+  });
+
   it("anke: opprettet, tatt og avgjort har alle lenke til modulen", async () => {
     const participant = seededParticipant;
     const { moduleId, submissionId } = await submitAndAssess(

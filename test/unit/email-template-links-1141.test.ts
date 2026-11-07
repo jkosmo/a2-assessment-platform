@@ -129,24 +129,33 @@ describe("adresser i tekst fra forfattere og deltakere", () => {
   it.each([
     ["Hvordan bruke github.com?", "Hvordan bruke github[.]com?"],
     ["Se https://evil.example/logg-inn nå", "Se evil[.]example/logg-inn nå"],
-    ["HTTP://EVIL.EXAMPLE", "EVIL.EXAMPLE"],
+    ["HTTP://EVIL.EXAMPLE", "EVIL[.]EXAMPLE"],
+    ["Https://Evil.Example/Logg.Inn", "Evil[.]Example/Logg[.]Inn"],
+    ["http://1.2.3.4/logg-inn", "1[.]2[.]3[.]4/logg-inn"],
+    ["http://https://EVIL.EXAMPLE", "EVIL[.]EXAMPLE"],
+    ["Se HTTP://EVIL.EXAMPLE.", "Se EVIL[.]EXAMPLE."],
     ["Skriv til kari@firma.no", "Skriv til kari@firma[.]no"],
     ["Skriv til KARI@FIRMA.NO", "Skriv til KARI@FIRMA[.]NO"],
     ["www.a-2.no", "www[.]a-2[.]no"],
-    ["WWW.A-2.NO", "WWW[.]A-2.NO"],
+    ["WWW.A-2.NO", "WWW[.]A-2[.]NO"],
+    ["Se www. der", "Se www[.] der"],
     ["training.example.co.uk", "training[.]example[.]co[.]uk"],
     ["xhttp://evil.example", "xevil[.]example"],
-    ["_www.A-2.NO", "_www[.]A-2.NO"],
+    ["_www.A-2.NO", "_www[.]A-2[.]NO"],
   ])("%s", (input, expected) => {
     expect(neutralizeAddresses(input)).toBe(expected);
   });
 
-  it.each(["xhttp://evil.example", "_www.A-2.NO"])("%s stopper ikke e-posten", (text) => {
+  it.each(["xhttp://evil.example", "_www.A-2.NO", "http://https://EVIL.EXAMPLE", "Se www. der"])("%s stopper ikke e-posten", (text) => {
     expect(() => renderIllustratedEmail({ locale: "nb", subject: text, paragraphs: [text], illustration: EMAIL_ILLUSTRATIONS.appeal })).not.toThrow();
   });
 
   it.each(["ASP.NET grunnkurs", "Node.js for prosjektledere", "Versjon 2.0 av KI-kurset", "Kurs i HMS. Del 2", "Dette gjelder f.eks. to kurs", "Bruk href i HTML"])("%s er ikke en adresse", (text) => {
     expect(neutralizeAddresses(text)).toBe(text);
+  });
+
+  it("kjent mangel: et domene uten http og www, med stor bokstav, står urørt, siden det ser ut som ASP.NET", () => {
+    expect(neutralizeAddresses("Github.com og EVIL.COM")).toBe("Github.com og EVIL.COM");
   });
 
   it("en tråd om github.com gir e-posten, med adressen ufarlig i emne og tekst, og bare vår lenke", async () => {
