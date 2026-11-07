@@ -37,8 +37,8 @@ async function mockProfile(page: Page) {
   await page.route("**/api/queue-counts", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ counts: {} }) }),
   );
-  await page.route("**/api/modules/completed**", (route: Route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ modules: [] }) }),
+  await page.route("**/api/me/stats", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ mood: "ny", weeks: [], recent: {}, totals: {}, passedModules: [] }) }),
   );
 }
 
@@ -67,6 +67,8 @@ test("profile: completed courses link to the printable certificate", async ({ pa
   );
 
   await page.goto("/profile");
+  // #1138: kursene står i sin egen fane.
+  await page.getByRole("tab", { name: /Passed courses/ }).click();
 
   const link = page.locator('#coursesBody a[href="/certificate?id=cert-abc"]');
   await expect(link).toBeVisible();

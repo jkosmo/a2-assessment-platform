@@ -23,12 +23,12 @@ Begge deler teller likt mot «X/Y fullført» i kursvisningen. Når det siste el
 
 ## Se og skriv ut kursbeviset
 
-Bevis-IDen vises på kurskortet i «Mine kurs» (`/participant`) og under «Fullførte kurs» i Profil:
+Beviset nås fra kurskortet i «Mine kurs» (`/participant`) og fra fanen «Beståtte kurs» i Profil:
 
 1. **I «Mine kurs»** på et fullført kurs — sammen med en **«Vis bevis»**-lenke. Fullførte kurs står
    nederst i hvert tema.
-2. **I Profil** (`/profile`), under «Fullførte kurs» — hvert bevis har en
-   **«Vis / skriv ut bevis»**-lenke.
+2. **I Profil** (`/profile`), fanen «Beståtte kurs» — hvert bevis har lenken **«Vis kursbevis»**.
+   Bevis-IDen står ikke lenger i tabellen (2.141.0); den står på selve beviset.
 
 Lenken åpner en ren bevis-side (`/certificate?id=<bevis-ID>`) med kursnavn, deltakerens navn,
 fullføringsdato, sertifiseringsnivå og bevis-ID. Klikk **«Skriv ut / lagre som PDF»** for å skrive

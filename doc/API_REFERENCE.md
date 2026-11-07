@@ -32,9 +32,10 @@ See [DOMAIN_LIFECYCLE.md](DOMAIN_LIFECYCLE.md) for the full ownership model.
 | Method | Route | Role(s) |
 |---|---|---|
 | `GET` | `/api/me` | any authenticated |
+| `GET` | `/api/me/stats` | any authenticated, **always the caller** (2.141.0, #1138). Takes no user id in path, query or body; no role reaches another person's numbers. «Min statistikk» on `/profile`: `mood` (`ny` \| `mett` \| `sulten` \| `sur` \| `dramatisk`, by calendar weeks since last activity, Europe/Oslo), `lastActivityAt`, `weeks` (12 × `{ from, to, partial, sectionsRead, modulesPassed, coursesCompleted, readingMinutes }`, Monday–Sunday Oslo, oldest first, empty weeks included), `recent` (sum of the last 4 weeks), `totals` (`coursesCompleted` = certificates, `modulesPassed` = distinct modules, `sectionsRead` = distinct sections), `passedModules` (`moduleId`, `moduleTitle` localised, `passedAt`, `totalScore` of the latest passed attempt per module). Events come from the same loader as the activity report (`loadActivitySources`); a module is passed when the submission is settled and its latest decision passed. Reading time = words in the section version current at the read, in the caller's language, / 200 per minute, once per section per week |
 | `GET` | `/api/me/data` | any authenticated. What is stored about the caller. Since 2.134.0 also `profile.modulePasses`: `moduleId`, `moduleVersionId`, `submissionId`, `passedAt`, `invalidatedAt` |
 | `GET` | `/api/modules` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
-| `GET` | `/api/modules/completed?limit=<n>` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
+| `GET` | `/api/modules/completed?limit=<n>` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER. Since 2.141.0 no client in the app calls it (the profile reads `passedModules` from `/api/me/stats`) |
 | `GET` | `/api/modules/:moduleId` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
 | `GET` | `/api/modules/:moduleId/active-version` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
 | `GET` | `/api/modules/:moduleId/mcq/start?submissionId=<id>` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |

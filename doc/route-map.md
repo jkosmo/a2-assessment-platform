@@ -95,7 +95,8 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 | `/review` | Manual review queue and workspace (a «Deltakere» sub-tab) |
 | `/calibration` | **Retired (#836)** — 301-redirects to `/admin-content/calibration` |
 | `/results` | Results / history view (a «Deltakere» sub-tab). A course row opens its participants, sorted on status with Completed first and then latest activity. «Eksporter denne listen (CSV)» downloads that table, made in the browser for Excel (2.139.0) |
-| `/profile` | User profile |
+| `/profile` | User profile. 2.141.0 (#1138): account first, then three tabs — «Statistikk» (the boat, last four weeks, 12 weeks as bars with a screen-reader table, totals; only for the user, from `GET /api/me/stats`), «Beståtte kurs» (link «Vis kursbevis», no certificate id) and «Beståtte moduler» (passed only) — then rights and agent access |
+| `/static/boat/<file>.jpg` | The boat images from the e-mails (`src/assets/email/`), served for the profile (2.141.0) |
 | `/admin-platform` | Platform administration |
 
 ## API base paths
@@ -106,7 +107,7 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 | `/api/assessments` | Participant | Trigger assessment, poll job status |
 | `/api/modules` | Participant | Browse available modules, run MCQ |
 | `/api/courses` | Participant | Browse courses; read learning sections + mark read (#476); discussion/Q&A threads + replies (#495) |
-| `/api/me` | All | Current user identity and roles |
+| `/api/me` | All | Current user identity and roles. `GET /api/me/stats` (2.141.0, #1138): the caller's own statistics; never takes a user id |
 | `/api/reviews` | Reviewer / Admin | Manual review queue and override |
 | `/api/cohort-status` | SMO / Admin / Report reader | Cohort enrollment-status aggregate per course (#498) |
 | `/api/appeals` | Appeal Handler / Admin | Appeal queue and resolution |

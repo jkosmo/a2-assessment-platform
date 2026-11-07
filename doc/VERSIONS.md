@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.141.0 - 2026-11-07
+
+Profilen: innsatsen i tre faner, med «Min statistikk» og seilbåten (#1138). Produkteier: «Oversikten over fullførte moduler og kurs i Profil er alt for dominerende.»
+
+- **Rekkefølgen:** kontoen først, så fanene «Statistikk», «Beståtte kurs» og «Beståtte moduler», så rettighetene og agent-tilgangen. Fanene er de samme som i skjemasidene, med piltaster, Home og End.
+- **Statistikk** er bare for brukeren selv. Båten øverst i humøret fra siste aktivitet (denne uka mett, forrige uke sulten, to uker sur, tre eller mer dramatisk, ingen ennå «klar til å legge ut»), med en maritim linje. Bildene er e-postbildene fra 2.138.0. Under: de fire siste ukene, tolv uker som søyler (seksjoner lest og moduler bestått, prikk for kurs fullført) med en tabell for skjermlesere, og totalene.
+- **Nytt endepunkt `GET /api/me/stats`.** Det leser alltid den innloggede brukeren og tar aldri imot en bruker-ID. Hendelsene hentes gjennom den samme funksjonen som «Aktivitet» (`loadActivitySources` i `activityReport.ts`), så de to teller etter samme regler. Uker er mandag–søndag i Europe/Oslo. Anslått lesetid er antall ord i seksjonsversjonen som gjaldt da brukeren leste, på brukerens språk, delt på 200 ord per minutt. Samme seksjon lest flere ganger i en uke teller én gang.
+- **Beståtte moduler viser bare beståtte**, avgjort på serveren: innleveringen er avgjort, og siste vedtak er bestått. Lista kom før fra `/api/modules/completed` (siste forsøk per modul, også stryk). En modul som er bestått før, står nå selv om et senere forsøk strøk. Ingen klient i appen kaller `/api/modules/completed` lenger.
+- **Beståtte kurs:** kursbevis-ID-en er fjernet fra tabellen. Lenken heter «Vis kursbevis».
+- **Resultater:** «Kurs-deltakere» er fjernet fra eksportmenyen. «Eksporter denne listen (CSV)» i kursdetaljen (2.139.0) dekker det. Eksporttypen `course-learners` finnes fortsatt i API-et.
+- **Telefon:** målt på 390 og 360 px i Chromium. Radene i profiltabellene fikk `box-sizing: border-box`; uten det var hver rad bredere enn rammen og ga vannrett rulling inne i tabellen.
+- **Ikke bygget:** båten for anker når brukeren har meldt seg av den ukentlige e-posten. Det kommer med #1139, som en overstyring i `src/modules/gamification/boatMood.ts`.
+- **Ved utrulling:** ingen migrering. Båtbildene serveres fra `src/assets/email/` under `/static/boat/`.
+
 ## 2.140.0 - 2026-11-07
 
 KI-vurderingen: et trinnvalg på feil sted stopper ikke lenger vurderingen, og det praktiske delpoenget følger poengene plattformen har rettet.

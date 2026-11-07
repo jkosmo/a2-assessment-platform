@@ -71,6 +71,19 @@ test.describe("Resultater: eksport av deltakerne i ett kurs", () => {
     await expect(page.locator("#exportCourseView")).toBeHidden();
   });
 
+  // 2.141.0 (produkteier 2026-11-07): «Kurs-deltakere» i eksportmenyen er fjernet; knappen i kursdetaljen
+  // dekker det. De fem andre valgene står. Kontrollen (fem valg, «Kurs-sammendrag» blant dem) viser at
+  // menyen faktisk ble lest.
+  test("eksportmenyen har ikke lenger «Kurs-deltakere»", async ({ page }) => {
+    await mockResults(page, () => []);
+    await page.goto("/results");
+    await page.locator("#exportMenu > summary").click();
+    const valg = page.locator("#exportMenu .row-more-menu button");
+    await expect(valg).toHaveCount(5);
+    await expect(valg.filter({ hasText: "Kurs-sammendrag" })).toHaveCount(1);
+    await expect(valg.filter({ hasText: "Kurs-deltakere" })).toHaveCount(0);
+  });
+
   test("fila er tabellen: samme rekkefølge, norske overskrifter, klar for Excel", async ({ page }) => {
     await mockResults(page, () => [
       learner({}),

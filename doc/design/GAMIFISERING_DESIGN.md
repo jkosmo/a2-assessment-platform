@@ -136,6 +136,14 @@ Bare for brukeren selv. Per uke, de siste 12 ukene (tomme uker vises): seksjoner
 bestått, kurs fullført, anslått lesetid — og XP når XP finnes. Båten øverst i humøret fra humørregelen,
 for anker når e-posten er slått av. Nivå, rekke, skjold og merker kommer med XP. Spesifisert i #1138.
 
+**Bygget i 2.141.0** (produkteier 2026-11-07): profilen har konto først, så tre faner — «Statistikk»,
+«Beståtte kurs», «Beståtte moduler» — så rettighetene. Statistikken viser båten med en maritim linje per
+humør, de fire siste ukene, tolv uker som søyler (med en tabell for skjermlesere) og totalene. Bildene er
+e-postbildene fra 2.138.0 (`/static/boat/`): mett = «vurdering bestått», sulten = «frist snart», sur =
+«ikke bestått», dramatisk = «frist forfalt», ny = «kurs tildelt». Humørregelen er én funksjon på
+serveren (`src/modules/gamification/boatMood.ts`). Anker er ikke bygget; det kommer med avmeldingen i
+#1139, som en overstyring i den samme funksjonen.
+
 ### Merker (få, og morsomme)
 
 Bare for ekte milepæler: første kurs, fem kurs, ti uker på rad, første svar i en diskusjon, ti svar,
@@ -146,6 +154,10 @@ ikke står på lista i forkant.
 
 - XP-hendelser lagres per bruker, men leses bare av brukerens egne flater og av summen for felles mål.
   Ingen rapport, ingen rolle og ingen eksport viser én persons poeng, nivå, rekke eller maskot.
+- «Min statistikk» (2.141.0) leses bare gjennom `GET /api/me/stats`, som alltid svarer for den innloggede
+  og aldri tar imot en bruker-ID. Integrasjonstesten (`test/me-stats-1138.test.ts`) prøver bruker-ID i
+  spørrestrengen og adressen, også som administrator. Bekreftet: ingen rapport eller eksport leser
+  `myStats.ts`.
 - «Aktivitet»-fanen blir bare for administrator.
 - E-posten har ingen sporing av hvem som åpner den.
 
