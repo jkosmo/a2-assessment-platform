@@ -331,23 +331,41 @@ function Get-ProcessStartedAt([string]$Url) {
 # ⚠️ MÅLT SAMME KVELD: en omstart av workeren på B1 tar ~15 min før ny prosess svarer (den gamle svarer imens). Første
 # versjon av sjekken ga opp etter 10 min og gjorde en vellykket utrulling rød. Derfor: vent først på at workeren starter
 # av seg selv, start den så på nytt, og feil bare om den fortsatt kjører gammel prosess etter en ny ventetid.
-function Wait-StartedAtChanged([string]$Url, [string]$Before, [int]$Minutes) {
+# Versjonen workeren selv rapporterer (fra 2.141.0). Tom streng når den mangler — en eldre worker har ikke feltet.
+function Get-ProcessVersion([string]$Url) {
+  try {
+    $response = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec 10 -UseBasicParsing
+    $match = [regex]::Match([string]$response.Content, '"version"\s*:\s*"([^"]+)"')
+    if ($match.Success) { return $match.Groups[1].Value }
+  } catch {
+    # Best-effort.
+  }
+  return ""
+}
+
+# QA 2026-11-07: ny `startedAt` alene beviser ikke ny pakke — workeren kan ha startet på nytt av en annen grunn med
+# den gamle pakken. Derfor godtas en ny prosess bare når den også rapporterer den versjonen vi rullet ut.
+function Wait-StartedAtChanged([string]$Url, [string]$Before, [int]$Minutes, [string]$ExpectedVersion) {
   $deadline = (Get-Date).AddMinutes($Minutes)
   while ((Get-Date) -lt $deadline) {
     $after = Get-ProcessStartedAt -Url $Url
-    if ($after -and $after -ne $Before) { return $after }
+    if ($after -and $after -ne $Before) {
+      $version = Get-ProcessVersion -Url $Url
+      if ($version -eq $ExpectedVersion) { return $after }
+      Write-Host "Worker restarted (startedAt $after) but reports version '$version', expected $ExpectedVersion; waiting."
+    }
     Start-Sleep -Seconds 20
   }
   return ""
 }
 
 function Assert-WorkerRestarted {
-  param([string]$Url, [string]$Before, [string]$AppName, [string]$ResourceGroup, [string]$HealthUrl, [int]$WaitMinutes = 20)
+  param([string]$Url, [string]$Before, [string]$AppName, [string]$ResourceGroup, [string]$HealthUrl, [string]$ExpectedVersion, [int]$WaitMinutes = 20)
   if (-not $Before) {
     Write-Host "Worker startedAt was unavailable before deploy; cannot compare (first deploy or worker down)."
     return
   }
-  $after = Wait-StartedAtChanged -Url $Url -Before $Before -Minutes $WaitMinutes
+  $after = Wait-StartedAtChanged -Url $Url -Before $Before -Minutes $WaitMinutes -ExpectedVersion $ExpectedVersion
   if ($after) {
     Write-Host "Worker restarted with the new package: startedAt $Before -> $after."
     Wait-Healthy -Url $HealthUrl -Label "Worker App" -AppName $AppName -ResourceGroup $ResourceGroup
@@ -357,7 +375,7 @@ function Assert-WorkerRestarted {
   Refresh-AzureCliOidcLogin "restarting $AppName (startedAt unchanged)"
   az webapp restart --resource-group $ResourceGroup --name $AppName | Out-Null
   Assert-LastExitCode "restart $AppName"
-  $after = Wait-StartedAtChanged -Url $Url -Before $Before -Minutes $WaitMinutes
+  $after = Wait-StartedAtChanged -Url $Url -Before $Before -Minutes $WaitMinutes -ExpectedVersion $ExpectedVersion
   if ($after) {
     Write-Host "Worker restarted after explicit restart: startedAt $Before -> $after."
     Wait-Healthy -Url $HealthUrl -Label "Worker App" -AppName $AppName -ResourceGroup $ResourceGroup
@@ -1072,7 +1090,7 @@ $packageVersion = (Get-Content (Join-Path $PSScriptRoot '..\..\package.json') | 
 
 Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App" -AppName $webAppName -ResourceGroup $ResourceGroupName
 Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App" -AppName $workerAppName -ResourceGroup $ResourceGroupName
-Assert-WorkerRestarted -Url "https://$workerAppName.azurewebsites.net/version" -Before $workerStartedAtBefore -AppName $workerAppName -ResourceGroup $ResourceGroupName -HealthUrl "https://$workerAppName.azurewebsites.net/healthz"
+Assert-WorkerRestarted -Url "https://$workerAppName.azurewebsites.net/version" -Before $workerStartedAtBefore -AppName $workerAppName -ResourceGroup $ResourceGroupName -HealthUrl "https://$workerAppName.azurewebsites.net/healthz" -ExpectedVersion $packageVersion
 Wait-Healthy -Url "https://$parserAppName.azurewebsites.net/health" -Label "Parser App" -AppName $parserAppName -ResourceGroup $ResourceGroupName
 
 # Version-aware stability check: confirms the NEW code is consistently being served.

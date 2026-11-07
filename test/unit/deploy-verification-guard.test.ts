@@ -119,6 +119,19 @@ describe("workeren kjører den nye pakken etter utrulling", () => {
     expect(kropp, "en worker som fortsatt kjører gammel kode, skal feile utrullingen, ikke melde grønt").toMatch(/\bthrow\b/);
   });
 
+  it("⚠️ en ny prosess godtas bare når den rapporterer versjonen som ble rullet ut", () => {
+    // QA 2026-11-07: ny `startedAt` alene kan være en omstart av den GAMLE pakken.
+    const idx = les("../../src/index.ts");
+    expect(idx, "workerens svar må ha versjonen").toMatch(/version:\s*appVersion/);
+    const start = ps.indexOf("function Wait-StartedAtChanged");
+    const kropp = ps.slice(start, ps.indexOf("\nfunction ", start + 1));
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(kropp, "ventingen må sammenligne versjonen").toMatch(/\$version -eq \$ExpectedVersion/);
+    const kall = linjer[linjeMed("Assert-WorkerRestarted -Url")] ?? "";
+    expect(kall).toContain("-ExpectedVersion $packageVersion");
+    expect(linjeMed("$packageVersion = "), "versjonen må være lest før sjekken").toBeLessThan(linjeMed("Assert-WorkerRestarted -Url"));
+  });
+
   it("⚠️ sjekken venter på en treg omstart før den starter på nytt eller feiler", () => {
     // MÅLT 2026-11-07: en omstart på B1 tar ~15 min. Første versjon ga opp etter 10 og gjorde en vellykket
     // utrulling rød. Ventetiden må dekke en omstart, og den må komme FØR omstarten.

@@ -12,6 +12,7 @@ import { CourseMajorEmailMonitor } from "./modules/course/CourseMajorEmailMonito
 import { OutboxDeliveryWorker } from "./modules/outbox/OutboxDeliveryWorker.js";
 import { evaluateWorkerHealth, drainInFlightTicks, type MonitorHealthSnapshot } from "./observability/workerHealth.js";
 import { prisma } from "./db/prisma.js";
+import { appVersion } from "./config/appMetadata.js";
 
 export function resolveProcessRoleFlags(role: string) {
   return {
@@ -127,6 +128,8 @@ async function startServer() {
       res.end(JSON.stringify({
         status: report.healthy ? "ok" : "degraded",
         role: env.PROCESS_ROLE,
+        // Utrullingen sjekker at workeren kjører den nye pakken: ny `startedAt` alene kan være en omstart av den gamle.
+        version: appVersion,
         startedAt: startedAt.toISOString(),
         health: report,
       }));

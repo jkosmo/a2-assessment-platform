@@ -122,6 +122,21 @@ describe("ukene i statistikken", () => {
     expect(stats.weeks[11]!.readingMinutes).toBe(3); // 2,5 → 3
   });
 
+  // QA: summen for de fire siste ukene er summen av ukene som VISES. Fire uker à 100 ord (0,5 min → «1 min»)
+  // skal gi 4, ikke 2 (som en avrunding av den urundede summen ga).
+  it("lesetida for de fire siste ukene er summen av de avrundede ukene", () => {
+    const stats = build(sources({
+      reads: [
+        read("a", "2026-10-20T08:00:00Z"),
+        read("b", "2026-10-27T08:00:00Z"),
+        read("c", "2026-11-03T08:00:00Z"),
+        read("d", "2026-11-10T08:00:00Z"),
+      ],
+    }), { a: 100, b: 100, c: 100, d: 100 });
+    expect(stats.weeks.slice(8).map((w) => w.readingMinutes)).toEqual([1, 1, 1, 1]);
+    expect(stats.recent.readingMinutes).toBe(4);
+  });
+
   it("bestått: avgjort og siste vedtak bestått; et anket stryk og et forsøk hos sensor teller ikke", () => {
     const stats = build(sources({
       submissions: [

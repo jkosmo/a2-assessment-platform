@@ -144,7 +144,8 @@ export function buildMyStats(input: {
     sectionsRead: recentSlice(sectionSets.map((s) => s.size)),
     modulesPassed: recentSlice(moduleSets.map((s) => s.size)),
     coursesCompleted: recentSlice(courses),
-    readingMinutes: Math.round(recentSlice(minutes)),
+    // Summen av de avrundede ukene som vises, ikke de urundede (QA): ellers kan fire uker à «1 min» bli «2 min».
+    readingMinutes: recentSlice(weeks.map((week) => week.readingMinutes)),
   };
 
   let last: Date | null = null;
