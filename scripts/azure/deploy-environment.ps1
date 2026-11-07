@@ -327,32 +327,43 @@ function Get-ProcessStartedAt([string]$Url) {
 # KI-vurderingen kjører i workeren, så en rettelse der så ut til å være ute uten å være det. Helsesjekken kan ikke
 # se dette: den gamle prosessen er frisk. Derfor sammenlignes oppstartstiden før og etter. Uendret → start workeren
 # på nytt; fortsatt uendret → feil utrullingen i stedet for å melde grønt med gammel kode.
+#
+# ⚠️ MÅLT SAMME KVELD: en omstart av workeren på B1 tar ~15 min før ny prosess svarer (den gamle svarer imens). Første
+# versjon av sjekken ga opp etter 10 min og gjorde en vellykket utrulling rød. Derfor: vent først på at workeren starter
+# av seg selv, start den så på nytt, og feil bare om den fortsatt kjører gammel prosess etter en ny ventetid.
+function Wait-StartedAtChanged([string]$Url, [string]$Before, [int]$Minutes) {
+  $deadline = (Get-Date).AddMinutes($Minutes)
+  while ((Get-Date) -lt $deadline) {
+    $after = Get-ProcessStartedAt -Url $Url
+    if ($after -and $after -ne $Before) { return $after }
+    Start-Sleep -Seconds 20
+  }
+  return ""
+}
+
 function Assert-WorkerRestarted {
-  param([string]$Url, [string]$Before, [string]$AppName, [string]$ResourceGroup, [string]$HealthUrl)
+  param([string]$Url, [string]$Before, [string]$AppName, [string]$ResourceGroup, [string]$HealthUrl, [int]$WaitMinutes = 20)
   if (-not $Before) {
     Write-Host "Worker startedAt was unavailable before deploy; cannot compare (first deploy or worker down)."
     return
   }
-  $after = Get-ProcessStartedAt -Url $Url
-  if ($after -and $after -ne $Before) {
+  $after = Wait-StartedAtChanged -Url $Url -Before $Before -Minutes $WaitMinutes
+  if ($after) {
     Write-Host "Worker restarted with the new package: startedAt $Before -> $after."
+    Wait-Healthy -Url $HealthUrl -Label "Worker App" -AppName $AppName -ResourceGroup $ResourceGroup
     return
   }
-  Write-Warning "Worker startedAt is unchanged ($Before) after deploy: the old process is still running. Restarting $AppName."
+  Write-Warning "Worker startedAt is still $Before after $WaitMinutes min: the old process is still running. Restarting $AppName."
   Refresh-AzureCliOidcLogin "restarting $AppName (startedAt unchanged)"
   az webapp restart --resource-group $ResourceGroup --name $AppName | Out-Null
   Assert-LastExitCode "restart $AppName"
-  $deadline = (Get-Date).AddMinutes(10)
-  while ((Get-Date) -lt $deadline) {
-    Start-Sleep -Seconds 15
-    $after = Get-ProcessStartedAt -Url $Url
-    if ($after -and $after -ne $Before) {
-      Write-Host "Worker restarted after explicit restart: startedAt $Before -> $after."
-      Wait-Healthy -Url $HealthUrl -Label "Worker App" -AppName $AppName -ResourceGroup $ResourceGroup
-      return
-    }
+  $after = Wait-StartedAtChanged -Url $Url -Before $Before -Minutes $WaitMinutes
+  if ($after) {
+    Write-Host "Worker restarted after explicit restart: startedAt $Before -> $after."
+    Wait-Healthy -Url $HealthUrl -Label "Worker App" -AppName $AppName -ResourceGroup $ResourceGroup
+    return
   }
-  throw "Worker $AppName still reports startedAt $Before after an explicit restart: the new package is not running."
+  throw "Worker $AppName still reports startedAt $Before after an explicit restart and $WaitMinutes more min: the new package is not running."
 }
 
 function Restart-WebAppForKeyVaultReferences([string]$ResourceGroup, [string]$AppName) {

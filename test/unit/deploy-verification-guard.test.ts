@@ -119,6 +119,18 @@ describe("workeren kjører den nye pakken etter utrulling", () => {
     expect(kropp, "en worker som fortsatt kjører gammel kode, skal feile utrullingen, ikke melde grønt").toMatch(/\bthrow\b/);
   });
 
+  it("⚠️ sjekken venter på en treg omstart før den starter på nytt eller feiler", () => {
+    // MÅLT 2026-11-07: en omstart på B1 tar ~15 min. Første versjon ga opp etter 10 og gjorde en vellykket
+    // utrulling rød. Ventetiden må dekke en omstart, og den må komme FØR omstarten.
+    const start = ps.indexOf("function Assert-WorkerRestarted");
+    const kropp = ps.slice(start, ps.indexOf("\nfunction ", start + 1));
+    const minutter = Number((kropp.match(/\[int\]\$WaitMinutes\s*=\s*(\d+)/) ?? [])[1]);
+    expect(minutter, "ventetiden må dekke en omstart på B1 (~15 min)").toBeGreaterThanOrEqual(18);
+    const venter = kropp.indexOf("Wait-StartedAtChanged");
+    expect(venter, "ventingen må komme før omstarten").toBeGreaterThanOrEqual(0);
+    expect(venter).toBeLessThan(kropp.indexOf("az webapp restart"));
+  });
+
   it("⚠️ oppstartstiden leses som tekst, ikke gjennom ConvertFrom-Json", () => {
     // PowerShell 7 gjør ISO-tider om til DateTime; to like tider kunne da sammenlignes ulikt, eller omvendt.
     const start = ps.indexOf("function Get-ProcessStartedAt");

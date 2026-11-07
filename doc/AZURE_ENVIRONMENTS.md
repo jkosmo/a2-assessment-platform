@@ -367,7 +367,7 @@ No manual resource creation is required. To activate:
 3. Set `PUBLIC_APP_BASE_URL` to the environment's https address, or the e-mails go without a link.
 4. Trigger a deploy. ACS resources will be provisioned on the first run.
 
-**Changing an app setting by hand does not reliably restart the worker** (measured 2026-11-07 on staging and production). Compare `startedAt` on `https://<worker>/version` before and after; if it is unchanged, run `az webapp restart` on the worker, and on the web app if the setting is read there. `deploy-environment.ps1` does this comparison for the worker on every deploy (`Assert-WorkerRestarted`) and fails the run if a restart does not take.
+**A new setting or package is not live until the worker process has restarted, and on B1 that takes ~15 minutes or may not happen at all** (measured 2026-11-07; the old process keeps answering health checks meanwhile). Compare `startedAt` on `https://<worker>/version` before and after; if it is still unchanged after ~20 minutes, run `az webapp restart` on the worker, and on the web app if the setting is read there. `deploy-environment.ps1` does this for the worker on every deploy (`Assert-WorkerRestarted`: waits 20 min, restarts, waits 20 more, then fails the run).
 
 Note: AzureManagedDomain uses an auto-generated `azurecomm.net` sender address. To use a custom verified domain, replace the domain resource in `infra/azure/main.bicep`.
 

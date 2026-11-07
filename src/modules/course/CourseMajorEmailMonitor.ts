@@ -6,8 +6,8 @@ import { runCourseMajorEmailSchedule } from "./courseMajorVersionEmail.js";
 // CourseReminderMonitor: setInterval i worker-rollen, feil logges og velter aldri workeren.
 //
 // Kjører bare når COURSE_MAJOR_EMAIL_ENABLED=true OG varselkanalen er på. Av: ingen hendelse av den nye typen legges
-// i outboxen, og radene venter. ⚠️ En endret innstilling i App Service starter IKKE alltid workeren på nytt (målt
-// 2026-11-07, stage og prod): sjekk `startedAt` på workerens /version, og kjør `az webapp restart` om den er uendret.
+// i outboxen, og radene venter. ⚠️ En endret innstilling er ikke virksom før workeren har startet på nytt, og det
+// kan ta ~15 min på B1, eller ikke skje (målt 2026-11-07): sjekk `startedAt` på workerens /version før du stoler på den.
 
 export type CourseMajorEmailMonitorStatus = {
   enabled: boolean;
