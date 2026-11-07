@@ -6,7 +6,7 @@ import { mondayOfKey, osloDayKey } from "../reporting/activityReport.js";
 //   sist aktiv forrige uke     → sulten
 //   for to uker siden          → sur
 //   tre uker eller mer         → dramatisk
-//   aldri gjort noe            → ny (klar til å legge ut)
+//   aldri gjort noe            → ny (klar til å kaste loss)
 //
 // ⚠️ ÉN funksjon. Profilen bruker den nå; den ukentlige e-posten (#1139) og maskoten skal bruke den
 // samme, så båten aldri har to humør samtidig.

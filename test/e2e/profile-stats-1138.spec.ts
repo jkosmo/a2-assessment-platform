@@ -236,9 +236,9 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
   for (const [mood, line, image] of [
     ["mett", "Full fart! God bør i seilene.", "vurdering-bestatt.jpg"],
     ["sulten", "Flau vind her ute. En seksjon til, så fyller vi seilene.", "frist-snart.jpg"],
-    ["sur", "To uker med havblikk. Jeg sier ikke noe. Jeg bare nevner det.", "frist-forfalt.jpg"],
-    ["dramatisk", "Seilene henger slakt. Jeg har begynt å snakke med måkene.", "frist-forfalt.jpg"],
-    ["ny", "Klar til å legge ut. Les din første seksjon, så setter vi seil.", "kurs-tildelt.jpg"],
+    ["sur", "Vi ligger i dødvannet. Jeg sier ikke noe. Jeg bare nevner det.", "frist-forfalt.jpg"],
+    ["dramatisk", "Jeg begynner å føle meg akterutseilt. Måkene er hyggelige, da.", "frist-forfalt.jpg"],
+    ["ny", "Klar til å kaste loss. Les din første seksjon, så setter vi kursen.", "kurs-tildelt.jpg"],
   ] as const) {
     test(`humøret «${mood}» gir sin linje og sitt bilde`, async ({ page }) => {
       await mockProfile(page, { stats: statsFor(mood) });
@@ -251,7 +251,7 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
   test("ny bruker: vennlig tom tilstand, alle tolv ukene står tomme, og listene sier at de er tomme", async ({ page }) => {
     await mockProfile(page, { stats: statsFor("ny"), completions: [] });
     await page.goto("/profile");
-    await expect(page.locator("#statsMoodLine")).toHaveText("Klar til å legge ut. Les din første seksjon, så setter vi seil.");
+    await expect(page.locator("#statsMoodLine")).toHaveText("Klar til å kaste loss. Les din første seksjon, så setter vi kursen.");
     await expect(page.locator(".stats-chart .stats-col")).toHaveCount(12);
     await expect(page.locator(".stats-chart .stats-bar, .stats-chart .stats-dot")).toHaveCount(0);
     await expect(page.locator(".stats-figures-recent .stats-figure").nth(3)).toHaveText(/0 min/);

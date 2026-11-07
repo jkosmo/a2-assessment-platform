@@ -82,7 +82,7 @@ test("profile: switching locale re-renders the completed tables, not just the he
   await page.goto("/profile");
 
   // Loaded in English: the boat's line, the module title from the server and the certificate link.
-  await expect(page.locator("#statsMoodLine")).toHaveText("Two weeks of flat calm. I'm not saying anything. I'm just mentioning it.");
+  await expect(page.locator("#statsMoodLine")).toHaveText("We're stuck in dead water. I'm not saying anything. I'm just mentioning it.");
   await expect(page.locator("#modulesBody")).toContainText("Module A");
   await expect(page.locator("#modulesBody")).toContainText("Jun 2026");
   await expect(page.locator("#coursesBody")).toContainText("View certificate");
@@ -92,7 +92,7 @@ test("profile: switching locale re-renders the completed tables, not just the he
 
   // The dynamically built content must follow the new locale (no mixed-locale leftovers): what the
   // client formats (line, date, link) and what the server localises (module title, refetched).
-  await expect(page.locator("#statsMoodLine")).toHaveText("To uker med havblikk. Jeg sier ikke noe. Jeg bare nevner det.");
+  await expect(page.locator("#statsMoodLine")).toHaveText("Vi ligger i dødvannet. Jeg sier ikke noe. Jeg bare nevner det.");
   await expect(page.locator("#modulesBody")).toContainText("Modul A");
   await expect(page.locator("#modulesBody")).toContainText("juni 2026");
   await expect(page.locator("#coursesBody")).toContainText("Vis kursbevis");
