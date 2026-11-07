@@ -12,7 +12,7 @@ Profilen: innsatsen i tre faner, med «Min statistikk» og seilbåten (#1138). P
 - **Beståtte moduler viser bare beståtte**, avgjort på serveren: innleveringen er avgjort, og siste vedtak er bestått. Lista kom før fra `/api/modules/completed` (siste forsøk per modul, også stryk). En modul som er bestått før, står nå selv om et senere forsøk strøk. Ingen klient i appen kaller `/api/modules/completed` lenger.
 - **Beståtte kurs:** kursbevis-ID-en er fjernet fra tabellen. Lenken heter «Vis kursbevis».
 - **Resultater:** «Kurs-deltakere» er fjernet fra eksportmenyen. «Eksporter denne listen (CSV)» i kursdetaljen (2.139.0) dekker det. Eksporttypen `course-learners` finnes fortsatt i API-et.
-- **Telefon:** målt på 390 og 360 px i Chromium. Radene i profiltabellene fikk `box-sizing: border-box`; uten det var hver rad bredere enn rammen og ga vannrett rulling inne i tabellen.
+- **Telefon:** målt på 390 og 360 px i Chromium. Radene i profiltabellene fikk `box-sizing: border-box`; uten det var hver rad bredere enn rammen og ga vannrett rulling inne i tabellen. Rammen rundt tabellen er borte under 600 px: radene er kort, og rammen ble en tom, avrundet ramme under det siste kortet. Fanene har ingen overgang på understreken; knappenes overgang på 0,15 s lot den forrige fanen stå understreket et øyeblikk etter et klikk.
 - **Ikke bygget:** båten for anker når brukeren har meldt seg av den ukentlige e-posten. Det kommer med #1139, som en overstyring i `src/modules/gamification/boatMood.ts`.
 - **Ved utrulling:** ingen migrering. Båtbildene serveres fra `src/assets/email/` under `/static/boat/`.
 

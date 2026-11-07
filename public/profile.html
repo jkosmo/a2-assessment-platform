@@ -34,12 +34,19 @@
       tr:hover td { background: var(--color-row-hover); }
       /* #1138: innsatsen i tre faner. Fanene er de samme som i skjemasidene (.form-page-tabs i shared.css). */
       .profile-tabs { margin: 0 0 var(--space-2); flex-wrap: wrap; }
-      .profile-tabs .form-page-tab { min-height: 44px; }
+      /* Ingen overgang på understreken: knapper i shared.css toner border-color over 0,15 s, og da sto den
+         forrige fanen understreket et øyeblikk etter et klikk, som om to faner var valgt. */
+      .profile-tabs .form-page-tab { min-height: 44px; transition: color 0.15s ease; }
       .profile-panel:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 4px; }
       .profile-list-table { min-width: 0; }
       /* Under 600 px er hver rad et kort med ramme og luft (shared.css). Uten border-box ble raden bredere
          enn rammen rundt tabellen, og fikk en vannrett rullefelt (målt på 390 og 360 px). */
       .profile-list-table tr, .profile-list-table td { box-sizing: border-box; }
+      /* Under 600 px er hver rad sitt eget kort. Rammen rundt tabellen ble da en tom, avrundet ramme under
+         det siste kortet (radens marg nederst), og en ramme rundt kortene. Kortene står alene. */
+      @media (max-width: 600px) {
+        .profile-panel .table-wrap { border: 0; border-radius: 0; margin-top: 0; }
+      }
       .profile-list-table td { overflow-wrap: anywhere; font-size: 13px; }
       .profile-list-table td.profile-nowrap { white-space: nowrap; }
       .stats-hero { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; background: var(--color-module-summary-bg); border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-2); }

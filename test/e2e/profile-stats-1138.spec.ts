@@ -21,41 +21,65 @@ const addDays = (key: string, n: number) => new Date(Date.parse(`${key}T00:00:00
 
 type Mood = "mett" | "sulten" | "sur" | "dramatisk" | "ny";
 
-function statsFor(mood: Mood, extra: Record<string, unknown> = {}) {
+// ⚠️ Fiksturen er innbyrdes konsistent, som det ekte svaret: ukene, de fire siste ukene og totalene regnes
+// ut av de samme listene under (totalt ≥ fire siste uker ≥ hver uke), og hver beståtte modul og hvert
+// kursbevis ligger i uka den er telt i. Tallene i fanene og totalene er da like.
+const PASSED_MODULES = [
+  { moduleId: "m1", moduleTitle: "Risikostyring i praksis", passedAt: "2026-11-10T10:00:00.000Z", totalScore: 82 }, // uke 46
+  { moduleId: "m2", moduleTitle: "Interessentanalyse", passedAt: "2026-10-21T10:00:00.000Z", totalScore: 91 }, // uke 43
+  { moduleId: "m3", moduleTitle: "Phishing og sosial manipulasjon", passedAt: "2026-10-20T10:00:00.000Z", totalScore: 76 }, // uke 43
+  { moduleId: "m4", moduleTitle: "Gode ledetekster", passedAt: "2026-10-14T10:00:00.000Z", totalScore: 88 }, // uke 42
+  { moduleId: "m5", moduleTitle: "Kildekritikk og KI", passedAt: "2026-09-30T10:00:00.000Z", totalScore: 79 }, // uke 40
+  { moduleId: "m6", moduleTitle: "Personvern i praksis", passedAt: "2026-09-09T10:00:00.000Z", totalScore: 85 }, // uke 37
+];
+
+const COMPLETIONS = [
+  { courseId: "c1", certificateId: "cert-abc-123", completedAt: "2026-11-10T12:00:00.000Z", courseTitle: "Prosjektledelse grunnkurs", certificationLevel: "basic" }, // uke 46
+  { courseId: "c2", certificateId: "cert-def-456", completedAt: "2026-10-22T12:00:00.000Z", courseTitle: "Sikkerhet i hverdagen", certificationLevel: "basic" }, // uke 43
+  { courseId: "c3", certificateId: "cert-ghi-789", completedAt: "2026-10-01T12:00:00.000Z", courseTitle: "KI i rådgivning", certificationLevel: "advanced" }, // uke 40
+];
+
+const isoWeekIndex = (iso: string) => WEEK_FROMS.findIndex((from) => iso.slice(0, 10) >= from && iso.slice(0, 10) <= addDays(from, 6));
+const countPerWeek = (dates: string[]) => WEEK_FROMS.map((_, i) => dates.filter((d) => isoWeekIndex(d) === i).length);
+const sum = (list: number[]) => list.reduce((a, b) => a + b, 0);
+
+function statsFor(mood: Mood, extra: { passedModules?: typeof PASSED_MODULES } = {}) {
   const active = mood !== "ny";
-  const sections = [2, 0, 3, 5, 1, 4, 0, 2, 6, 3, 1, 4];
-  const modules = [0, 0, 1, 0, 0, 1, 0, 1, 2, 0, 0, 1];
-  const courses = [0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1];
+  const passedModules = active ? (extra.passedModules ?? PASSED_MODULES) : [];
+  // Hver seksjon er lest én gang, så totalen er summen av ukene.
+  const sections = active ? [2, 0, 3, 5, 1, 4, 0, 2, 6, 3, 1, 4] : new Array(12).fill(0);
+  const modules = countPerWeek(passedModules.map((m) => m.passedAt));
+  const courses = countPerWeek(active ? COMPLETIONS.map((c) => c.completedAt) : []);
+  const minutes = sections.map((s: number) => s * 12);
+  const last4 = (list: number[]) => sum(list.slice(8));
   return {
     generatedAt: "2026-11-11T10:30:00.000Z",
     mood,
-    lastActivityAt: active ? "2026-11-10T08:00:00.000Z" : null,
+    lastActivityAt: active ? "2026-11-10T12:00:00.000Z" : null,
     weeks: WEEK_FROMS.map((from, i) => ({
       from,
       to: addDays(from, 6),
       partial: i === 11,
-      sectionsRead: active ? sections[i] : 0,
-      modulesPassed: active ? modules[i] : 0,
-      coursesCompleted: active ? courses[i] : 0,
-      readingMinutes: active ? sections[i]! * 12 : 0,
+      sectionsRead: sections[i],
+      modulesPassed: modules[i],
+      coursesCompleted: courses[i],
+      readingMinutes: minutes[i],
     })),
-    recent: active
-      ? { weeks: 4, sectionsRead: 14, modulesPassed: 3, coursesCompleted: 2, readingMinutes: 168 }
-      : { weeks: 4, sectionsRead: 0, modulesPassed: 0, coursesCompleted: 0, readingMinutes: 0 },
-    totals: active ? { coursesCompleted: 3, modulesPassed: 2, sectionsRead: 31 } : { coursesCompleted: 0, modulesPassed: 0, sectionsRead: 0 },
-    passedModules: active
-      ? [
-          { moduleId: "m1", moduleTitle: "Risikostyring i praksis", passedAt: "2026-11-04T10:00:00.000Z", totalScore: 82 },
-          { moduleId: "m2", moduleTitle: "Interessentanalyse", passedAt: "2026-10-21T10:00:00.000Z", totalScore: 91 },
-        ]
-      : [],
-    ...extra,
+    recent: { weeks: 4, sectionsRead: last4(sections), modulesPassed: last4(modules), coursesCompleted: last4(courses), readingMinutes: last4(minutes) },
+    totals: { coursesCompleted: sum(courses), modulesPassed: passedModules.length, sectionsRead: sum(sections) },
+    passedModules,
   };
 }
 
-const COMPLETIONS = [
-  { courseId: "c1", certificateId: "cert-abc-123", completedAt: "2026-11-04T10:00:00.000Z", courseTitle: "Prosjektledelse grunnkurs", certificationLevel: "basic" },
-];
+test("fiksturen er innbyrdes konsistent: totalt ≥ fire siste uker ≥ hver uke", () => {
+  const s = statsFor("mett");
+  for (const key of ["sectionsRead", "modulesPassed", "coursesCompleted"] as const) {
+    expect(s.totals[key]).toBeGreaterThanOrEqual(s.recent[key]);
+    for (const week of s.weeks.slice(8)) expect(s.recent[key]).toBeGreaterThanOrEqual(week[key]);
+  }
+  expect(s.totals).toEqual({ coursesCompleted: 3, modulesPassed: 6, sectionsRead: 31 });
+  expect(s.recent).toEqual({ weeks: 4, sectionsRead: 14, modulesPassed: 3, coursesCompleted: 2, readingMinutes: 168 });
+});
 
 async function mockProfile(page: Page, opts: { stats?: unknown; statsStatus?: number; completions?: unknown[]; locale?: string } = {}) {
   await page.addInitScript((locale) => {
@@ -95,7 +119,7 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
     expect(order.tabs).toBeLessThan(order.rights);
 
     const tabs = page.getByRole("tab");
-    await expect(tabs).toHaveText(["Statistikk", "Beståtte kurs (1)", "Beståtte moduler (2)"]);
+    await expect(tabs).toHaveText(["Statistikk", "Beståtte kurs (3)", "Beståtte moduler (6)"]);
     await expect(page.getByRole("tablist")).toHaveAttribute("aria-label", "Oversikten min");
     await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#profilePanel-stats")).toBeVisible();
@@ -136,6 +160,44 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
     await expect(page.locator("#profilePanel-modules")).toBeVisible();
   });
 
+  // Skjermbildet på 390 px viste understreken under to faner. Årsaken var overgangen på border-color for
+  // knapper i shared.css (0,15 s): den forrige fanen tonet ut etter klikket. Målt i den BEREGNEDE stilen,
+  // bilde for bilde de første 300 ms etter hvert klikk, ikke bare aria-selected — og med musa over en fane
+  // som ikke er valgt, så heller ikke hover ligner valgt fane.
+  test("bare én fane har understreken, også rett etter et klikk og med musa over en annen fane", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockProfile(page);
+    await page.goto("/profile");
+    await expect(page.locator("#statsMoodLine")).toBeVisible();
+
+    const sample = () => page.evaluate(() => new Promise<string[]>((resolve) => {
+      const problems: string[] = [];
+      const start = performance.now();
+      const step = () => {
+        const tabs = Array.from(document.querySelectorAll("[role=tab]")) as HTMLElement[];
+        const underlined = tabs.filter((b) => {
+          const c = getComputedStyle(b).borderBottomColor;
+          return !/rgba\(0, 0, 0, 0\)|transparent/.test(c);
+        });
+        const selected = tabs.filter((b) => b.getAttribute("aria-selected") === "true");
+        if (underlined.length !== 1 || selected.length !== 1 || underlined[0] !== selected[0]) {
+          problems.push(`${Math.round(performance.now() - start)} ms: understreket ${underlined.map((b) => b.textContent).join(" + ")}; valgt ${selected.map((b) => b.textContent).join(" + ")}`);
+        }
+        if (performance.now() - start < 300) requestAnimationFrame(step);
+        else resolve(problems);
+      };
+      step();
+    }));
+
+    for (const name of [/Beståtte kurs/, /Beståtte moduler/, /Statistikk/, /Beståtte moduler/]) {
+      await page.getByRole("tab", { name }).click();
+      expect(await sample(), `etter klikk på ${name}`).toEqual([]);
+    }
+    // Musa over en fane som ikke er valgt.
+    await page.getByRole("tab", { name: /Beståtte kurs/ }).hover();
+    expect(await sample(), "med musa over «Beståtte kurs»").toEqual([]);
+  });
+
   test("statistikken: båten, de fire siste ukene, tolv uker med tabell for skjermlesere, totalene", async ({ page }) => {
     await mockProfile(page);
     await page.goto("/profile");
@@ -167,7 +229,7 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
     await expect(page.locator(".stats-chart")).toHaveAttribute("aria-hidden", "true");
     expect(await table.evaluate((el) => getComputedStyle(el).display)).toBe("table");
 
-    await expect(page.locator(".stats-figures-totals .stats-figure")).toHaveText([/3\s*kurs fullført/, /2\s*moduler bestått/, /31\s*seksjoner lest/]);
+    await expect(page.locator(".stats-figures-totals .stats-figure")).toHaveText([/3\s*kurs fullført/, /6\s*moduler bestått/, /31\s*seksjoner lest/]);
     await expect(page.locator(".stats-private")).toHaveText("Bare du ser denne oversikten.");
   });
 
@@ -223,8 +285,8 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
 
     await expect(page.locator("#profilePanel-modules thead th")).toHaveText(["Modul", "Bestått", "Poeng"]);
     const rows = page.locator("#modulesBody tr");
-    await expect(rows).toHaveCount(2);
-    await expect(rows.first().locator("td")).toHaveText(["Risikostyring i praksis", "4. nov. 2026", "82"]);
+    await expect(rows).toHaveCount(6);
+    await expect(rows.first().locator("td")).toHaveText(["Risikostyring i praksis", "10. nov. 2026", "82"]);
     // Ingen «Ikke bestått» eller utfallskolonne lenger.
     await expect(page.locator("#modulesBody")).not.toContainText("Ikke bestått");
   });
@@ -251,7 +313,7 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
 
     await page.selectOption("#localeSelect", "nn");
     await expect(page.locator("#statsMoodLine")).toHaveText("Full fart! God bør i segla.");
-    await expect(page.getByRole("tab").nth(2)).toHaveText("Beståtte modular (2)");
+    await expect(page.getByRole("tab").nth(2)).toHaveText("Beståtte modular (6)");
   });
 });
 
@@ -263,12 +325,13 @@ const LONG_MODULE = "Risikostyringogusikkerhetsanalyseiprosjektermedlangeordsomi
 for (const width of [390, 360]) {
   test(`telefon ${width} px: ingenting renner over, og lange titler brytes`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
+    // Samme fikstur som over, med lange titler på den nyeste raden i hver liste.
     const stats = statsFor("mett", {
-      passedModules: [{ moduleId: "m1", moduleTitle: LONG_MODULE, passedAt: "2026-11-04T10:00:00.000Z", totalScore: 82 }],
+      passedModules: [{ ...PASSED_MODULES[0]!, moduleTitle: LONG_MODULE }, ...PASSED_MODULES.slice(1)],
     });
     await mockProfile(page, {
       stats,
-      completions: [{ ...COMPLETIONS[0], courseTitle: LONG_COURSE, certificationLevel: "advanced" }],
+      completions: [{ ...COMPLETIONS[0]!, courseTitle: LONG_COURSE, certificationLevel: "advanced" }, ...COMPLETIONS.slice(1)],
     });
     await page.goto("/profile");
     await expect(page.locator("#statsMoodLine")).toBeVisible();
@@ -288,6 +351,25 @@ for (const width of [390, 360]) {
       return { page: doc.scrollWidth - doc.clientWidth, card: [Math.round(card.left), Math.round(card.right)], offenders };
     });
 
+    // En ramme som er høyere enn innholdet sitt: et tomt, innrammet felt under det siste kortet. Måles som
+    // avstanden fra innerkanten nederst i rammen til det nederste barnet. Marg på det siste barnet teller
+    // som tomt — det var nettopp den som laget feltet (2.141.0, skjermbildet på 390 px).
+    const emptyFramedBands = () => page.evaluate(() => {
+      const out: string[] = [];
+      for (const el of Array.from(document.querySelectorAll(".profile-effort .profile-panel *"))) {
+        const h = el as HTMLElement;
+        if (h.offsetParent === null || h.closest(".sr-only")) continue;
+        const s = getComputedStyle(h);
+        const framed = parseFloat(s.borderBottomWidth) > 0 || parseFloat(s.borderTopWidth) > 0;
+        const kids = Array.from(h.children).filter((k) => (k as HTMLElement).offsetParent !== null && k.getBoundingClientRect().height > 0);
+        if (!framed || kids.length === 0) continue;
+        const inner = h.getBoundingClientRect().bottom - parseFloat(s.borderBottomWidth) - parseFloat(s.paddingBottom);
+        const band = inner - Math.max(...kids.map((k) => k.getBoundingClientRect().bottom));
+        if (band > 2) out.push(`${h.tagName.toLowerCase()}.${h.className}: ${Math.round(band)} px tomt nederst`);
+      }
+      return out;
+    });
+
     // Statistikk
     let m = await overflow();
     expect(m.page, "vannrett rulling på siden").toBeLessThanOrEqual(0);
@@ -305,7 +387,9 @@ for (const width of [390, 360]) {
     const titleCell = page.locator("#coursesBody tr").first().locator("td").first();
     const lineHeight = await titleCell.evaluate((td) => parseFloat(getComputedStyle(td).lineHeight) || 18);
     expect((await titleCell.boundingBox())!.height).toBeGreaterThan(lineHeight * 1.5);
-    await expect(page.locator("#coursesBody a")).toBeVisible();
+    await expect(page.locator("#coursesBody a")).toHaveCount(3);
+    await expect(page.locator("#coursesBody a").first()).toBeVisible();
+    expect(await emptyFramedBands(), "tomme rammer i «Beståtte kurs»").toEqual([]);
     if (shots) await page.screenshot({ path: path.join(shots, `profil-kurs-${width}.png`), fullPage: true });
 
     // Beståtte moduler: et ord uten mellomrom brytes også.
@@ -313,6 +397,7 @@ for (const width of [390, 360]) {
     m = await overflow();
     expect(m.page).toBeLessThanOrEqual(0);
     expect(m.offenders, `utenfor kortet ${JSON.stringify(m.card)}`).toEqual([]);
+    expect(await emptyFramedBands(), "tomme rammer i «Beståtte moduler»").toEqual([]);
     if (shots) await page.screenshot({ path: path.join(shots, `profil-moduler-${width}.png`), fullPage: true });
   });
 }
