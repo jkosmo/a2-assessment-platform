@@ -227,8 +227,13 @@ function renderProfile(meData) {
   profileName.textContent = user.name || "—";
   profileEmail.textContent = user.email || "—";
   profileDepartment.textContent = user.department || "—";
+  // Rollenavnet på brukerens språk, ikke nøkkelen («PARTICIPANT»). En rolle uten oversettelse står som nøkkelen.
   profileRoles.textContent = Array.isArray(user.roles) && user.roles.length > 0
-    ? user.roles.join(", ")
+    ? user.roles.map((role) => {
+        const key = `profile.role.${role}`;
+        const label = t(key);
+        return label && label !== key ? label : role;
+      }).join(", ")
     : "—";
 
   if (consent.accepted && consent.acceptedAt) {
@@ -295,16 +300,27 @@ function renderStatsPanel() {
 }
 
 // Antallet står i fanen når lista er hentet og ikke tom: «Beståtte kurs (3)».
+// På smal skjerm vises det korte navnet («Kurs (3)»), så fanelinja får plass på én linje med antallet
+// (produkteier 2026-11-07: antallet skal vises, og linja brakk på mobil). CSS velger hvilket span som vises;
+// det skjulte er display:none og leses ikke av skjermleser.
 function renderTabCounts() {
   const counts = {
     courses: Array.isArray(cachedCoursesData?.completions) ? cachedCoursesData.completions.length : 0,
     modules: Array.isArray(cachedStatsData?.passedModules) ? cachedStatsData.passedModules.length : 0,
   };
+  const withCount = (label, n) => (n > 0 ? t("profile.tabs.count").replace("{label}", label).replace("{n}", formatNumber(n)) : label);
   for (const button of tabButtons) {
     const id = button.dataset.profileTab;
-    const label = t(`profile.tabs.${id}`);
     const n = counts[id] ?? 0;
-    button.textContent = n > 0 ? t("profile.tabs.count").replace("{label}", label).replace("{n}", formatNumber(n)) : label;
+    const long = document.createElement("span");
+    long.className = "profile-tab-long";
+    long.textContent = withCount(t(`profile.tabs.${id}`), n);
+    const short = document.createElement("span");
+    short.className = "profile-tab-short";
+    short.textContent = withCount(t(`profile.tabs.${id}.short`), n);
+    button.replaceChildren(long, short);
+    // Det fulle navnet for skjermleser på alle skjermbredder, også når det korte vises.
+    button.setAttribute("aria-label", long.textContent);
   }
 }
 

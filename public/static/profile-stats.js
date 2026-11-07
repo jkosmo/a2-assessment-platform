@@ -36,8 +36,11 @@ export function isoWeekNumber(key) {
   return 1 + Math.round((date.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000));
 }
 
-/** «ca. 1 t 36 min», «ca. 12 min», «0 min». */
-export function formatReadingTime(minutes, t) {
+/**
+ * «ca. 1 t 36 min», «ca. 12 min», «0 min». Med `approx: false` uten «ca.»: i det store tallet står «anslått» allerede
+ * i etiketten under, og «ca. 2 t 48 min» brakk over to linjer på 360 px (produkteier 2026-11-07).
+ */
+export function formatReadingTime(minutes, t, { approx = true } = {}) {
   const total = Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : 0;
   if (total === 0) return t("profile.stats.minutes").replace("{m}", "0");
   const hours = Math.floor(total / 60);
@@ -45,7 +48,7 @@ export function formatReadingTime(minutes, t) {
   const parts = [];
   if (hours > 0) parts.push(t("profile.stats.hours").replace("{h}", String(hours)));
   if (rest > 0) parts.push(t("profile.stats.minutes").replace("{m}", String(rest)));
-  return t("profile.stats.approx").replace("{v}", parts.join(" "));
+  return approx ? t("profile.stats.approx").replace("{v}", parts.join(" ")) : parts.join(" ");
 }
 
 function formatWeekRange(week, locale) {
@@ -135,7 +138,7 @@ export function renderStats(container, stats, { t, locale }) {
           ${figure(n(recent.sectionsRead), t("profile.stats.sectionsRead.lower"))}
           ${figure(n(recent.modulesPassed), t("profile.stats.modulesPassed.lower"))}
           ${figure(n(recent.coursesCompleted), t("profile.stats.coursesCompleted.lower"))}
-          ${figure(formatReadingTime(recent.readingMinutes, t), t("profile.stats.readingTime.lower"))}
+          ${figure(formatReadingTime(recent.readingMinutes, t, { approx: false }), t("profile.stats.readingTime.lower"))}
         </div>
       </div>
     </div>

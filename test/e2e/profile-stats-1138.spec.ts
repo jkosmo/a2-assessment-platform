@@ -119,7 +119,10 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
     expect(order.tabs).toBeLessThan(order.rights);
 
     const tabs = page.getByRole("tab");
-    await expect(tabs).toHaveText(["Statistikk", "Beståtte kurs (3)", "Beståtte moduler (6)"]);
+    await expect(tabs.nth(0)).toHaveAccessibleName("Statistikk");
+    await expect(tabs.nth(1)).toHaveAccessibleName("Beståtte kurs (3)");
+    await expect(tabs.nth(2)).toHaveAccessibleName("Beståtte moduler (6)");
+    await expect(page.locator(".profile-tab-long:visible")).toHaveText(["Statistikk", "Beståtte kurs (3)", "Beståtte moduler (6)"]);
     await expect(page.getByRole("tablist")).toHaveAttribute("aria-label", "Oversikten min");
     await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#profilePanel-stats")).toBeVisible();
@@ -211,7 +214,8 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
     const recent = page.locator(".stats-figures-recent .stats-figure");
     await expect(recent).toHaveCount(4);
     await expect(recent.nth(0)).toHaveText(/14\s*seksjoner lest/);
-    await expect(recent.nth(3)).toHaveText(/ca\. 2 t 48 min\s*anslått lesetid/);
+    // Uten «ca.» i det store tallet: etiketten sier «anslått», og «ca. 2 t 48 min» brakk på 360 px.
+    await expect(recent.nth(3)).toHaveText(/^2 t 48 min\s*anslått lesetid$/);
 
     await expect(page.locator(".stats-chart .stats-col")).toHaveCount(12);
     await expect(page.locator(".stats-axis .stats-axis-label")).toHaveText(["u35", "u36", "u37", "u38", "u39", "u40", "u41", "u42", "u43", "u44", "u45", "u46"]);
@@ -255,7 +259,7 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
     await expect(page.locator(".stats-chart .stats-col")).toHaveCount(12);
     await expect(page.locator(".stats-chart .stats-bar, .stats-chart .stats-dot")).toHaveCount(0);
     await expect(page.locator(".stats-figures-recent .stats-figure").nth(3)).toHaveText(/0 min/);
-    await expect(page.getByRole("tab")).toHaveText(["Statistikk", "Beståtte kurs", "Beståtte moduler"]);
+    await expect(page.locator(".profile-tab-long:visible")).toHaveText(["Statistikk", "Beståtte kurs", "Beståtte moduler"]);
 
     await page.getByRole("tab", { name: "Beståtte kurs" }).click();
     await expect(page.locator("#coursesBody")).toHaveText("Ingen beståtte kurs ennå.");
@@ -308,12 +312,12 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
 
     await page.selectOption("#localeSelect", "en-GB");
     await expect(page.locator("#statsMoodLine")).toHaveText("Full speed! A fine breeze in the sails.");
-    await expect(page.getByRole("tab").first()).toHaveText("Statistics");
+    await expect(page.getByRole("tab").first()).toHaveAccessibleName("Statistics");
     await expect(page.locator(".stats-axis .stats-axis-label").last()).toHaveText("w46");
 
     await page.selectOption("#localeSelect", "nn");
     await expect(page.locator("#statsMoodLine")).toHaveText("Full fart! God bør i segla.");
-    await expect(page.getByRole("tab").nth(2)).toHaveText("Beståtte modular (6)");
+    await expect(page.getByRole("tab").nth(2)).toHaveAccessibleName("Beståtte modular (6)");
   });
 });
 
@@ -370,6 +374,31 @@ for (const width of [390, 360]) {
       return out;
     });
 
+    // Visuell inspeksjon 2026-11-07 (produkteier): fanelinja brakk over to linjer, og kontoens verdikolonne var for smal.
+    // Fanene: alle tre på samme linje, med antallet, og det fulle navnet for skjermleser.
+    const tabTops = await page.getByRole("tab").evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+    expect(new Set(tabTops).size, `fanene står på ${new Set(tabTops).size} linjer`).toBe(1);
+    await expect(page.locator(".profile-tab-short:visible")).toHaveText(["Statistikk", "Kurs (3)", "Moduler (6)"]);
+    await expect(page.getByRole("tab").nth(2)).toHaveAccessibleName("Beståtte moduler (6)");
+    // Konto: ledeteksten over verdien, og verdien har hele bredden (ikke en smal kolonne til høyre).
+    const account = await page.evaluate(() => {
+      const dl = document.querySelector(".profile-dl")!.getBoundingClientRect();
+      const email = document.getElementById("profileEmail")!.getBoundingClientRect();
+      const label = document.querySelector(".profile-dl dt:nth-of-type(2)")!.getBoundingClientRect();
+      return { dlWidth: dl.width, emailLeft: email.left - dl.left, emailBelowLabel: email.top >= label.bottom - 1 };
+    });
+    expect(account.emailLeft, "e-posten starter i venstre kant").toBeLessThanOrEqual(1);
+    expect(account.emailBelowLabel, "e-posten står under ledeteksten").toBe(true);
+    // Rollen med navn, ikke nøkkelen «PARTICIPANT».
+    await expect(page.locator("#profileRoles")).toHaveText("Deltaker");
+    // Tallene i statistikken står på én linje (lesetida brakk: «ca. 2 t 48» / «min»).
+    const figureLines = await page.locator(".stats-figure-value").evaluateAll((els) =>
+      els.map((el) => Math.round(el.getBoundingClientRect().height / (parseFloat(getComputedStyle(el).lineHeight) || 24))));
+    expect(figureLines.every((n) => n <= 1), `tall over flere linjer: ${JSON.stringify(figureLines)}`).toBe(true);
+    // Totalt: tre tall på én rad.
+    const totalTops = await page.locator(".stats-figures-totals .stats-figure").evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+    expect(new Set(totalTops).size, "totalene står på én rad").toBe(1);
+
     // Statistikk
     let m = await overflow();
     expect(m.page, "vannrett rulling på siden").toBeLessThanOrEqual(0);
@@ -387,6 +416,22 @@ for (const width of [390, 360]) {
     const titleCell = page.locator("#coursesBody tr").first().locator("td").first();
     const lineHeight = await titleCell.evaluate((td) => parseFloat(getComputedStyle(td).lineHeight) || 18);
     expect((await titleCell.boundingBox())!.height).toBeGreaterThan(lineHeight * 1.5);
+    // Tittelen står som overskrift i hele kortets bredde, ikke i en smal høyrekolonne (seks linjer på 360 px).
+    // Målt på selve teksten, ikke cellen: cellen er alltid like bred som kortet, også når teksten står i en smal kolonne.
+    const titleText = await titleCell.evaluate((td) => {
+      const node = Array.from(td.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim())!;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const text = range.getBoundingClientRect();
+      const cell = td.getBoundingClientRect();
+      const padding = parseFloat(getComputedStyle(td).paddingLeft) || 0;
+      return { offset: text.left - cell.left - padding, share: text.width / (cell.width - 2 * padding) };
+    });
+    expect(titleText.offset, "tittelen starter i venstre kant").toBeLessThanOrEqual(2);
+    expect(titleText.share, "tittelen bruker bredden").toBeGreaterThan(0.8);
+    // «Vis kursbevis» i portalens lenkefarge, ikke nettleserens blå.
+    const linkColor = await page.locator("#coursesBody a").first().evaluate((a) => getComputedStyle(a).color);
+    expect(linkColor, "lenkefarge").not.toBe("rgb(0, 0, 238)");
     await expect(page.locator("#coursesBody a")).toHaveCount(3);
     await expect(page.locator("#coursesBody a").first()).toBeVisible();
     expect(await emptyFramedBands(), "tomme rammer i «Beståtte kurs»").toEqual([]);
