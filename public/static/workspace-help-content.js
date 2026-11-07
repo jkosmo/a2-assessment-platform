@@ -397,7 +397,7 @@ const workspaceContent = {
           title: "Good to know",
           items: [
             "The same top filters also shape the detail tables.",
-            "Summary exports are separate from future participant-level CSV work.",
+            "Click a course and use «Export this list (CSV)» to download its participants. Completed is at the top. The export menu holds the summaries.",
           ],
         },
       ],
@@ -414,7 +414,7 @@ const workspaceContent = {
           title: "Greit å vite",
           items: [
             "De samme toppfiltrene styrer også detaljtabellene.",
-            "Dagens eksport gjelder sammendrag. Deltakernivå i CSV er et eget videre arbeid.",
+            "Klikk på et kurs og bruk «Eksporter denne listen (CSV)» for å laste ned deltakerne. Fullført står øverst. Eksportmenyen gir sammendragene.",
           ],
         },
       ],
@@ -431,7 +431,7 @@ const workspaceContent = {
           title: "Greitt å vite",
           items: [
             "Dei same toppfiltra styrer også detaljtabellane.",
-            "Dagens eksport gjeld samandrag. Deltakarnivå i CSV er eit eige vidare arbeid.",
+            "Klikk på eit kurs og bruk «Eksporter denne lista (CSV)» for å laste ned deltakarane. Fullført står øvst. Eksportmenyen gir samandraga.",
           ],
         },
       ],

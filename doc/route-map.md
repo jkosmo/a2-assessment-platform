@@ -94,7 +94,7 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 | `/deltakere/aktivitet` | Administrator only (from 2.128.0): activity across all courses over time, and who is active (#1099) |
 | `/review` | Manual review queue and workspace (a «Deltakere» sub-tab) |
 | `/calibration` | **Retired (#836)** — 301-redirects to `/admin-content/calibration` |
-| `/results` | Results / history view (a «Deltakere» sub-tab) |
+| `/results` | Results / history view (a «Deltakere» sub-tab). A course row opens its participants, sorted on status with Completed first and then latest activity. «Eksporter denne listen (CSV)» downloads that table, made in the browser for Excel (2.139.0) |
 | `/profile` | User profile |
 | `/admin-platform` | Platform administration |
 

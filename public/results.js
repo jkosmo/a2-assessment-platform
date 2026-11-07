@@ -296,8 +296,8 @@ const rapporter = lagLokalisertRessurs({
     renderCompletion(passRatesData.rows, completionData.rows);
     renderCourseReport(courseData.rows ?? []);
     await Promise.all([
-      selectedModuleRow ? loadModuleLearners() : Promise.resolve(renderParticipants([])),
-      selectedCourseRow ? loadCourseLearners() : Promise.resolve(renderCourseLearners([])),
+      loadModuleLearners(),
+      loadCourseLearners(),
     ]);
     log({ passRates: passRatesData, completion: completionData, courses: courseData });
   },
@@ -701,49 +701,57 @@ function renderCourseLearners(rows, courseTitle = "") {
   }
 }
 
+// Bare den siste hentingen teller: et nytt valg eller et nytt filter under hentingen skal ikke få et sent svar lagt over seg, og ikke bli fila.
+let moduleLearnerRequest = 0;
+let courseLearnerRequest = 0;
+
 async function loadModuleLearners() {
+  const request = ++moduleLearnerRequest;
   if (!selectedModuleRow) {
     moduleDetailMeta.textContent = t("results.participants.placeholder");
     renderParticipants([]);
     return;
   }
 
+  const row = selectedModuleRow;
   const params = buildFilterParams();
-  params.set("selectedModuleId", selectedModuleRow.moduleId);
+  params.set("selectedModuleId", row.moduleId);
   try {
     const data = await apiFetch(`/api/reports/completion/details?${params}`, headers);
+    if (request !== moduleLearnerRequest) return;
     moduleDetailMeta.textContent = tf("results.participants.selected", {
-      title: selectedModuleRow.moduleTitle,
+      title: row.moduleTitle,
       count: data.rows?.length ?? 0,
     });
     renderParticipants(data.rows ?? []);
   } catch (error) {
+    if (request !== moduleLearnerRequest) return;
     moduleDetailMeta.textContent = describeApiError(error, t).headline;
     renderParticipants([]);
   }
 }
 
 async function loadCourseLearners() {
+  const request = ++courseLearnerRequest;
   if (!selectedCourseRow) {
     courseDetailMeta.textContent = t("results.courses.placeholder");
     renderCourseLearners([]);
     return;
   }
 
-  // Et klikk på et annet kurs under hentingen: svaret på det første skal ikke legge seg over, og ikke bli fila.
   const course = selectedCourseRow;
   const params = buildFilterParams();
   params.set("selectedCourseId", course.courseId);
   try {
     const data = await apiFetch(`/api/reports/courses/details?${params}`, headers);
-    if (course !== selectedCourseRow) return;
+    if (request !== courseLearnerRequest) return;
     courseDetailMeta.textContent = tf("results.courses.selected", {
       title: course.courseTitle,
       count: data.rows?.length ?? 0,
     });
     renderCourseLearners(data.rows ?? [], course.courseTitle);
   } catch (error) {
-    if (course !== selectedCourseRow) return;
+    if (request !== courseLearnerRequest) return;
     courseDetailMeta.textContent = describeApiError(error, t).headline;
     renderCourseLearners([]);
   }

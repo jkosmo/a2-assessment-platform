@@ -395,7 +395,7 @@ describe("participant console runtime config", () => {
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/courses?${params}`, headers)');
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/completion/details?${params}`, headers)');
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/courses/details?${params}`, headers)');
-    expect(resultsJsResponse.text).toContain('function renderCourseLearners(rows)');
+    expect(resultsJsResponse.text).toContain('function renderCourseLearners(rows');
     expect(resultsJsResponse.text).toContain('tr.tabIndex = 0');
     // #966 hadde en tomrad med colspan="8". #1046 J6: tom tabell skjules i stedet (setTableEmpty),
     // så det finnes ingen tomrad som kan spenne feil antall kolonner.

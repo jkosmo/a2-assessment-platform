@@ -126,4 +126,63 @@ test.describe("Resultater: eksport av deltakerne i ett kurs", () => {
     expect(name).toMatch(/^Kurs- B-C /);
     expect(bytes.toString("utf8")).toContain("Deltaker B");
   });
+
+  test("nytt datofilter under hentingen: den ufiltrerte lista blir verken tabellen eller fila", async ({ page }) => {
+    let releaseFirst: () => void = () => {};
+    const first = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let firstAnswered = false;
+    let calls = 0;
+    await mockResults(page, async () => {
+      calls += 1;
+      if (calls > 1) return [learner({ participantName: "Filtrert" })];
+      await first;
+      firstAnswered = true;
+      return [learner({ participantName: "Ufiltrert" })];
+    });
+    await page.goto("/results");
+    await page.locator("#courseReportBody tr").first().click();
+    await expect.poll(() => calls).toBe(1);
+    await page.fill("#filterDateFrom", "2026-10-01");
+    await page.locator("#filterDateFrom").dispatchEvent("change");
+    await expect(page.locator("#courseLearnerBody")).toContainText("Filtrert");
+
+    releaseFirst();
+    await expect.poll(() => firstAnswered).toBe(true);
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator("#courseLearnerBody")).not.toContainText("Ufiltrert");
+    expect((await download(page)).bytes.toString("utf8")).toContain("Filtrert");
+  });
+
+  test("klikk på en annen modul under hentingen: svaret på den første legger seg ikke over", async ({ page }) => {
+    let releaseA: () => void = () => {};
+    const a = new Promise<void>((resolve) => { releaseA = resolve; });
+    let aAnswered = false;
+    await mockResults(page, () => []);
+    const moduleRow = (moduleId: string, moduleTitle: string) => ({ moduleId, moduleTitle, attempts: 1, passes: 1, passRate: 1, started: 1, completed: 1, passed: 1, failed: 0, underReview: 0, completionRate: 1 });
+    const modules = [moduleRow("m-a", "Modul A"), moduleRow("m-b", "Modul B")];
+    await page.route("**/api/reports/pass-rates**", (r: Route) => r.fulfill(json({ rows: modules })));
+    await page.route("**/api/reports/completion**", (r: Route) => r.fulfill(json({ rows: modules })));
+    await page.route("**/api/reports/completion/details**", async (r: Route) => {
+      const moduleId = new URL(r.request().url()).searchParams.get("selectedModuleId");
+      if (moduleId === "m-a") {
+        await a;
+        aAnswered = true;
+        await r.fulfill(json({ rows: [{ participantName: "Deltaker A", participantEmail: "a@example.com", status: "COMPLETED" }] }));
+        return;
+      }
+      await r.fulfill(json({ rows: [{ participantName: "Deltaker B", participantEmail: "b@example.com", status: "COMPLETED" }] }));
+    });
+    await page.goto("/results");
+    await page.locator("#completionBody tr").first().click();
+    await page.locator("#completionBody tr").nth(1).click();
+    await expect(page.locator("#participantBody")).toContainText("b@example.com");
+
+    releaseA();
+    await expect.poll(() => aAnswered).toBe(true);
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator("#participantBody")).not.toContainText("a@example.com");
+    await expect(page.locator("#moduleDetailMeta")).toContainText("Modul B");
+  });
 });
