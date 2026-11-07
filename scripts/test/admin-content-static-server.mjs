@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 const publicRoot = path.join(repoRoot, "public");
+const emailAssetsRoot = path.join(repoRoot, "src", "assets", "email");
 const port = Number.parseInt(process.env.PORT || "4173", 10);
 
 const contentTypes = new Map([
@@ -89,6 +90,11 @@ function resolvePublicFile(requestPath) {
     return path.join(publicRoot, "admin-content.html");
   }
 
+  // #1138: båtbildene fra e-postene, som app.ts serverer fra src/assets/email.
+  if (requestPath.startsWith("/static/boat/")) {
+    return path.join(emailAssetsRoot, path.basename(requestPath));
+  }
+
   if (requestPath.startsWith("/static/i18n/")) {
     return path.join(publicRoot, "i18n", requestPath.slice("/static/i18n/".length));
   }
@@ -126,7 +132,8 @@ const server = http.createServer((request, response) => {
   }
   const resolvedPath = resolvePublicFile(pathname);
 
-  if (!resolvedPath.startsWith(publicRoot)) {
+  // #1138: båtbildene ligger utenfor public/ (src/assets/email), som i appen.
+  if (!resolvedPath.startsWith(publicRoot) && !resolvedPath.startsWith(emailAssetsRoot)) {
     send(response, 403, "Forbidden");
     return;
   }

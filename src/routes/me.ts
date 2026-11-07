@@ -10,6 +10,7 @@ import {
 } from "../modules/user/pseudonymizationService.js";
 import { AppError } from "../errors/AppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
+import { getMyStats } from "../modules/reporting/myStats.js";
 
 const meRouter = Router();
 
@@ -201,6 +202,23 @@ meRouter.get("/data", async (request, response, next) => {
       deletionHistory: deletionRequests,
       accessLog,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── GET /api/me/stats ────────────────────────────────────────────────────────
+// #1138: «Min statistikk» på profilen. ⚠️ Leser ALLTID den innloggede brukeren. Ruta tar ikke imot
+// en bruker-ID i adressen, spørrestrengen eller kroppen, og ingen rolle gir tilgang til en annens
+// statistikk (produkteier 2026-11-01: arbeidsgiver ser bare resultat).
+meRouter.get("/stats", async (request, response, next) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    response.json(await getMyStats(userId, requestLocale(request)));
   } catch (error) {
     next(error);
   }

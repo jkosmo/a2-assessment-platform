@@ -91,6 +91,9 @@ app.use(express.json({ limit: "5mb" }));
 // Ikonbiblioteket (Lucide): /static/icons/<navn>.svg tegnes av ruta, ikke lest fra disk. Står foran
 // de statiske mappene så ruta vinner; selve biblioteksfila og lisensen ligger i public/static/icons.
 app.use("/static/icons", iconsRouter);
+// #1138: båtbildene fra e-postene (2.138.0) brukes også på profilen. Samme filer, ikke kopier: et bilde
+// byttes ved å erstatte fila i src/assets/email/, og da følger både e-posten og profilen med.
+app.use("/static/boat", express.static(path.resolve(process.cwd(), "src", "assets", "email"), { index: false }));
 app.use("/static", express.static(publicStaticPath));
 app.use("/static", express.static(publicRootPath));
 
