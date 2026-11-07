@@ -15,6 +15,7 @@ import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showLoading } from "/static/loading.js";
 import { setHidden } from "/static/dom-visibility.js";
 import { setTableEmpty } from "/static/table-empty.js";
+import { saveCsvFile } from "/static/csv-file.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -557,6 +558,10 @@ loadMeButton?.addEventListener("click", async () => {
 const courseReportBody = document.getElementById("courseReportBody");
 const courseLearnerBody = document.getElementById("courseLearnerBody");
 const courseDetailMeta = document.getElementById("courseDetailMeta");
+const exportCourseViewButton = document.getElementById("exportCourseView");
+// Det tabellen viser akkurat nå. Tittelen følger radene, så fila ikke får navnet til et kurs som er valgt, men ikke hentet.
+let courseLearnerView = { courseTitle: "", rows: [] };
+exportCourseViewButton.addEventListener("click", exportCourseLearners);
 
 
 function renderCourseReport(rows) {
@@ -633,9 +638,50 @@ function renderCourseReport(rows) {
   }
 }
 
-function renderCourseLearners(rows) {
+/** Tid på formen Excel leser som dato, i leserens egen tidssone. Tom når det ikke finnes noen. */
+function spreadsheetDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Fila er tabellen på skjermen, ett kurs om gangen. «3/4» ville blitt en dato i Excel, derfor «3 av 4».
+function exportCourseLearners() {
+  const { courseTitle, rows } = courseLearnerView;
+  const today = spreadsheetDateTime(new Date()).slice(0, 10);
+  saveCsvFile(
+    `${courseTitle.replace(/[\\/:*?"<>|]/g, "-")} ${today}.csv`,
+    [
+      t("results.courses.course"),
+      t("results.participants.name"),
+      t("results.participants.email"),
+      t("results.participants.department"),
+      t("results.courses.detail.status"),
+      t("results.courses.detail.completedModules"),
+      t("results.courses.detail.readSections"),
+      t("results.participants.score"),
+      t("results.courses.detail.latestActivityAt"),
+    ],
+    rows.map((row) => [
+      courseTitle,
+      row.participantName,
+      row.participantEmail,
+      row.participantDepartment,
+      formatStatus(row.status),
+      tf("results.courses.detail.ofTotal", { done: row.completedModules, total: row.totalModules }),
+      tf("results.courses.detail.ofTotal", { done: row.readSections ?? 0, total: row.totalSections ?? 0 }),
+      typeof row.score === "number" ? formatScore(row.score) : "",
+      spreadsheetDateTime(row.latestActivityAt),
+    ]),
+  );
+}
+
+function renderCourseLearners(rows, courseTitle = "") {
   courseLearnerBody.innerHTML = "";
   const empty = !Array.isArray(rows) || rows.length === 0;
+  courseLearnerView = { courseTitle, rows: empty ? [] : rows };
+  setHidden(exportCourseViewButton, empty);
   setTableEmpty(courseLearnerBody, empty ? (selectedCourseRow ? t("results.courses.detail.empty") : "") : null);
   if (empty) return;
 
@@ -684,16 +730,20 @@ async function loadCourseLearners() {
     return;
   }
 
+  // Et klikk på et annet kurs under hentingen: svaret på det første skal ikke legge seg over, og ikke bli fila.
+  const course = selectedCourseRow;
   const params = buildFilterParams();
-  params.set("selectedCourseId", selectedCourseRow.courseId);
+  params.set("selectedCourseId", course.courseId);
   try {
     const data = await apiFetch(`/api/reports/courses/details?${params}`, headers);
+    if (course !== selectedCourseRow) return;
     courseDetailMeta.textContent = tf("results.courses.selected", {
-      title: selectedCourseRow.courseTitle,
+      title: course.courseTitle,
       count: data.rows?.length ?? 0,
     });
-    renderCourseLearners(data.rows ?? []);
+    renderCourseLearners(data.rows ?? [], course.courseTitle);
   } catch (error) {
+    if (course !== selectedCourseRow) return;
     courseDetailMeta.textContent = describeApiError(error, t).headline;
     renderCourseLearners([]);
   }

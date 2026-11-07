@@ -50,6 +50,23 @@ type CourseLearnerRow = {
   earlierCertificateVersion: number | null;
 };
 
+// Rapporten leses for å se hvem som har fullført (produkteier 2026-11-07): de ferdige øverst, og innenfor hver
+// status de med nyeste aktivitet først. Den som aldri har vært aktiv, kommer sist. Navnet gir en fast rekkefølge.
+const LEARNER_STATUS_ORDER: Record<CourseLearnerRow["status"], number> = {
+  COMPLETED: 0,
+  NEEDS_NEW_VERSION: 1,
+  IN_PROGRESS: 2,
+  NOT_STARTED: 3,
+};
+
+function compareLearnerRows(a: CourseLearnerRow, b: CourseLearnerRow): number {
+  return (
+    LEARNER_STATUS_ORDER[a.status] - LEARNER_STATUS_ORDER[b.status] ||
+    (b.latestActivityAt ?? "").localeCompare(a.latestActivityAt ?? "") ||
+    a.participantName.localeCompare(b.participantName, "nb")
+  );
+}
+
 // #969: «hvem er med i dette kurset» besvares ETT sted — `resolveCourseAudience` (#498), det samme
 // publikummet kullstatus-dashbordet og påminnelsesjobben bruker. Rapporten hadde sin egen, fjerde
 // definisjon: distinkte brukere med INNLEVERING på kursets moduler. Navnet lovet innmelding,
@@ -451,7 +468,7 @@ export async function getCourseLearnerReport(
       certificateId: learner.completion?.certificateId ?? null,
       earlierCertificateVersion: learner.completion ? null : (learner.earlier?.versionMajor ?? null),
     };
-  });
+  }).sort(compareLearnerRows);
 
   return {
     selectedCourseId: course.id,

@@ -319,6 +319,47 @@ describe("#996: kursdrilldownen bruker samme publikum som sammendraget", () => {
     expect(report.totals.learners).toBe(1);
   });
 
+  it("rekkefølgen: status med Fullført øverst, så nyeste aktivitet, og den uten aktivitet sist", async () => {
+    findPublishedCoursesWithModuleDetails.mockResolvedValue([{ ...course("c1", ["m1", "m2"]), versionMajor: 2 }]);
+    const person = (id: string) => ({ id, name: id, email: `${id}@example.com`, department: null });
+    const levert = (id: string, dag: string) => ({
+      userId: id,
+      moduleId: "m1",
+      submittedAt: new Date(`2026-08-${dag}T00:00:00Z`),
+      submissionStatus: "COMPLETED",
+      decisions: [],
+      user: person(id),
+    });
+    const bevis = (id: string, dag: string, versionMajor: number) => ({
+      userId: id,
+      versionMajor,
+      completedAt: new Date(`2026-08-${dag}T00:00:00Z`),
+      certificateId: `bevis-${id}`,
+      user: person(id),
+    });
+    findLearnerSubmissionsForModules.mockResolvedValue([levert("pågår-ny", "20"), levert("pågår-gammel", "10")]);
+    findCourseCompletionsForLearnerReport.mockResolvedValue([
+      bevis("fullført-gammel", "01", 2),
+      bevis("eldre-versjon", "28", 1),
+      bevis("fullført-ny", "05", 2),
+    ]);
+    resolveCourseAudience.mockResolvedValue(audience("venter-b", "venter-a"));
+    findUsersByIds.mockResolvedValue([person("venter-b"), person("venter-a")]);
+
+    const { getCourseLearnerReport } = await import("../../src/modules/course/courseReport.js");
+    const { rows } = await getCourseLearnerReport("c1");
+
+    expect(rows.map((row) => row.participantId)).toEqual([
+      "fullført-ny",
+      "fullført-gammel",
+      "eldre-versjon",
+      "pågår-ny",
+      "pågår-gammel",
+      "venter-a",
+      "venter-b",
+    ]);
+  });
+
   it("KONTROLLCASE: en deltaker med aktivitet får radene sine fra innleveringen, ikke fra oppslaget", async () => {
     // Uten denne kunne fiksen ha slått ut de ekte radene og erstattet dem med tomme oppslag.
     // `findUsersByIds` skal bare kalles for dem som MANGLER — ikke for alle.

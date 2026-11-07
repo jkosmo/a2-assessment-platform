@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.139.0 - 2026-11-07
+
+Resultater, kursgjennomføringsrapporten: laget for å se hvem som har fullført et kurs (produkteier).
+
+- **Deltakerne i et kurs er sortert.** Fullført øverst, så «Må ta ny versjon», «Pågår» og «Ikke startet». Innenfor hver status står den med nyeste aktivitet først. Rekkefølgen settes på serveren, så den gjelder også `course-learners` i eksporten.
+- **«Eksporter denne listen (CSV)»** i detaljvisningen lager en fil av tabellen som vises, for ett kurs om gangen, med kurset som første kolonne. Fila er laget for norsk Excel: semikolon, æøå leses riktig, og tider står i leserens tidssone. Fremdrift står som «3 av 4», siden «3/4» blir en dato i Excel.
+- **Klikk på et annet kurs mens listen hentes:** svaret på det første kurset legger seg ikke lenger over det andre.
+
 ## 2.138.0 - 2026-11-06
 
 E-poster til dem som bruker plattformen: bilde, lenke, og en ny e-post når et svar går til sensor (#1141, compliance godkjente lenker 2026-11-06).

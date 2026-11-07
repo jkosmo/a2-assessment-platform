@@ -72,6 +72,8 @@ const extraTranslations = {
     "results.courses.placeholder": "Select a course row to see learner details.",
     "results.courses.selected": "{count} learners for {title}",
     "results.courses.detail.empty": "No learners match the current filters.",
+    "results.courses.detail.export": "Export this list (CSV)",
+    "results.courses.detail.ofTotal": "{done} of {total}",
     "results.courses.detail.status": "Course status",
     "results.courses.detail.completedModules": "Completed modules",
 
@@ -165,6 +167,8 @@ const extraTranslations = {
     "results.courses.placeholder": "Velg en kursrad for å se deltakerdetaljer.",
     "results.courses.selected": "{count} deltakere for {title}",
     "results.courses.detail.empty": "Ingen deltakere matcher gjeldende filter.",
+    "results.courses.detail.export": "Eksporter denne listen (CSV)",
+    "results.courses.detail.ofTotal": "{done} av {total}",
     "results.courses.detail.status": "Kursstatus",
     "results.courses.detail.completedModules": "Fullførte moduler",
 
@@ -258,6 +262,8 @@ const extraTranslations = {
     "results.courses.placeholder": "Vel ein kursrad for å sjå deltakardetaljar.",
     "results.courses.selected": "{count} deltakarar for {title}",
     "results.courses.detail.empty": "Ingen deltakarar passar gjeldande filter.",
+    "results.courses.detail.export": "Eksporter denne lista (CSV)",
+    "results.courses.detail.ofTotal": "{done} av {total}",
     "results.courses.detail.status": "Kursstatus",
     "results.courses.detail.completedModules": "Fullførte modular",
 
