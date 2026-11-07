@@ -92,6 +92,32 @@ describe("llmAssessmentService azure_openai adapter", () => {
     expect(result.rubric_total).toBe(14);
   });
 
+  // 2.140.0, målt på stage: modellen la trinnvalget inne i begrunnelsene og ga «praktisk 0». Svaret fra Azure skal
+  // leses, trinnet skal sette poenget, og delpoenget skal følge kriteriepoengene — hele veien gjennom adapteren.
+  it("2.140.0: trinnvalg inne i begrunnelsene brukes, og delpoenget følger de rettede poengene", async () => {
+    const svar = {
+      ...validPayload,
+      rubric_scores: { vedtak: 0 },
+      rubric_total: 0,
+      practical_score_scaled: 0,
+      criterion_rationales: { vedtak: "Vedtakene står først.", criterion_steps: { vedtak: "flere" } },
+    };
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(svar) } }] }), { status: 200, headers: { "content-type": "application/json" } }),
+    ) as unknown as typeof fetch;
+    const result = await evaluatePracticalWithAzureOpenAi(
+      {
+        ...baseInput,
+        rubricCriteriaIds: ["vedtak"],
+        rubricCriteria: [{ id: "vedtak", label: "Vedtak", description: "0 = ingen; 1 = én; 2 = flere", scaleMax: 2, steps: [{ step: 0, text: "ingen" }, { step: 1, text: "én" }, { step: 2, text: "flere" }] }],
+      },
+      baseConfig,
+    );
+    expect(result.criterion_rationales).toEqual({ vedtak: "Vedtakene står først." });
+    expect(result.rubric_scores).toEqual({ vedtak: 4 });
+    expect(result.practical_score_scaled).toBe(70);
+  });
+
   it("maps Azure OpenAI chat completion output to validated assessment payload", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAssessmentInputContext, parseRubricCriteriaForPrompt } from "../../src/modules/assessment/AssessmentInputFactory.js";
-import { buildAzureOpenAiMessages, buildRequiredResponseContract, buildRubricCriteriaSection, normalizeRubricScoresToContract, practicalFollowsCorrectedScores, scoresFromChosenSteps } from "../../src/modules/assessment/llmAssessmentService.js";
+import { buildAzureOpenAiMessages, buildRequiredResponseContract, buildRubricCriteriaSection, normalizeRubricScoresToContract, practicalFromRubricScores, scoresFromChosenSteps } from "../../src/modules/assessment/llmAssessmentService.js";
 import { llmResponseCodec } from "../../src/codecs/llmResponseCodec.js";
 
 // #1135: KI-vurdereren fikk bare kriterienes ID-er. Nå får den det kriteriet sier — etikett og
@@ -225,15 +225,25 @@ describe("#1135 trinnet modellen valgte setter poenget", () => {
     expect(scoresFromChosenSteps(lest, kriterier).rubric_scores).toEqual({ vedtak: 2 });
     // Etter omregningen til 0–4 følger delpoenget de rettede poengene, ikke modellens 0.
     const rettet = normalizeRubricScoresToContract(scoresFromChosenSteps(lest, kriterier), kriterier);
-    expect(practicalFollowsCorrectedScores(lest, rettet)).toMatchObject({ rubric_scores: { vedtak: 4 }, practical_score_scaled: 70 });
+    expect(practicalFromRubricScores(rettet, ["vedtak"])).toMatchObject({ rubric_scores: { vedtak: 4 }, practical_score_scaled: 70 });
   });
 
-  it("er poengene ikke rettet, står modellens delpoeng", () => {
+  // QA runde 2: delpoenget regnes som vedtaket gjør det — modulens kriterier, manglende teller 0, klemt til 0–4.
+  it("delpoenget regnes over modulens kriterier, også når modellen utelot ett eller la til et ukjent", () => {
+    const svar = llmResponseCodec.parse({
+      module_id: "m", criterion_rationales: { a: "x" }, rubric_scores: { a: 4, ukjent: 4 }, rubric_total: 8,
+      practical_score_scaled: 70, pass_fail_practical: true, improvement_advice: [], red_flags: [], manual_review_recommended: false, confidence_note: "",
+    });
+    // a = 4, b mangler (0), ukjent teller ikke: 4 av 8 → 35. Vedtaket regner det samme.
+    expect(practicalFromRubricScores(svar, ["a", "b"]).practical_score_scaled).toBe(35);
+  });
+
+  it("delpoenget regnes på nytt også når ingenting ble rettet, så to vurderinger måles likt", () => {
     const svar = llmResponseCodec.parse({
       module_id: "m", criterion_rationales: { a: "x", b: "y" }, rubric_scores: { a: 2, b: 3 }, rubric_total: 5,
       practical_score_scaled: 41, pass_fail_practical: true, improvement_advice: [], red_flags: [], manual_review_recommended: false, confidence_note: "",
     });
-    expect(practicalFollowsCorrectedScores(svar, { ...svar }).practical_score_scaled).toBe(41);
+    expect(practicalFromRubricScores(svar, ["a", "b"]).practical_score_scaled).toBe(43.75);
   });
 
   it("står trinnvalget begge steder, vinner det på toppnivå, og begrunnelsene blir bare tekst", () => {

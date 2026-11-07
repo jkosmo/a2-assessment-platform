@@ -111,21 +111,22 @@ export function normalizeRubricScoresToContract(
 }
 
 /**
- * 2.140.0 (QA-funn): når plattformen har rettet kriteriepoengene (trinnvalg, skala), fulgte ikke modellens
- * `practical_score_scaled` med. Sammenligningen mellom første og andre vurdering leser det tallet, og to
- * vurderinger med samme trinn kunne meldes uenige. Er poengene rettet, regnes delpoenget fra dem, på
- * kontraktens 0–70, med kriteriene × 4 som tak — samme tak som vedtaket bruker.
+ * 2.140.0 (QA-funn): plattformen retter kriteriepoengene (trinnvalg, skala), men modellens
+ * `practical_score_scaled` fulgte ikke med. Sammenligningen mellom første og andre vurdering leser det tallet,
+ * og to vurderinger med samme kriteriepoeng kunne meldes uenige. Derfor regnes delpoenget ALLTID fra de
+ * rettede poengene, på kontraktens 0–70, slik vedtaket gjør: modulens egne kriterier, hvert klemt til 0–4,
+ * manglende teller 0, og kriteriene × 4 som tak. Alltid, ikke bare når noe ble rettet: to rettelser kan
+ * oppheve hverandre i tall, og en vurdering som ikke ble rettet, skal sammenlignes på samme mål.
  */
-export function practicalFollowsCorrectedScores(
-  original: LlmStructuredAssessment,
-  corrected: LlmStructuredAssessment,
+export function practicalFromRubricScores(
+  result: LlmStructuredAssessment,
+  criteriaIds: string[] | undefined,
 ): LlmStructuredAssessment {
-  const ids = Object.keys(corrected.rubric_scores);
-  const unchanged = ids.length === Object.keys(original.rubric_scores).length
-    && ids.every((id) => original.rubric_scores[id] === corrected.rubric_scores[id]);
-  if (unchanged || ids.length === 0) return corrected;
-  const practical = Number(((corrected.rubric_total / (ids.length * 4)) * 70).toFixed(2));
-  return { ...corrected, practical_score_scaled: Math.max(0, Math.min(70, practical)) };
+  const ids = criteriaIds?.length ? criteriaIds : Object.keys(result.rubric_scores);
+  if (ids.length === 0) return result;
+  const total = ids.reduce((sum, id) => sum + Math.max(0, Math.min(4, result.rubric_scores[id] ?? 0)), 0);
+  const practical = Number(((total / (ids.length * 4)) * 70).toFixed(2));
+  return { ...result, practical_score_scaled: practical };
 }
 
 /**
@@ -245,8 +246,7 @@ export async function evaluatePracticalWithAzureOpenAi(
 
         // #1135: trinnet modellen valgte setter poenget; så regnes kriteriets egen skala om til 0–4 her,
         // ikke av modellen.
-        return practicalFollowsCorrectedScores(
-          parsedAssessment,
+        return practicalFromRubricScores(
           normalizeRubricScoresToContract(
             scoresFromChosenSteps(
               {
@@ -257,6 +257,7 @@ export async function evaluatePracticalWithAzureOpenAi(
             ),
             input.rubricCriteria,
           ),
+          input.rubricCriteriaIds,
         );
       }
     }
