@@ -228,6 +228,40 @@ describe("#1135 trinnet modellen valgte setter poenget", () => {
     expect(practicalFromRubricScores(rettet, ["vedtak"])).toMatchObject({ rubric_scores: { vedtak: 4 }, practical_score_scaled: 70 });
   });
 
+  // Målt på stage 2026-11-07, etter første rettelse: modellen lukket ikke begrunnelsene, og hele resten av svaret
+  // havnet inne i dem — tre av seks ganger.
+  it("et svar der begrunnelsene aldri ble lukket, leses med feltene på riktig sted", () => {
+    const lest = llmResponseCodec.parse({
+      module_id: "m",
+      criterion_rationales: {
+        vedtak: "Vedtakene står først.",
+        criterion_steps: { vedtak: "flere" },
+        rubric_scores: { vedtak: 2 },
+        rubric_total: 2,
+        practical_score_scaled: 70,
+        pass_fail_practical: true,
+        improvement_advice: ["Skriv kortere."],
+        red_flags: [],
+        manual_review_recommended: false,
+        confidence_note: "Sikker.",
+        evidence_sufficiency: "sufficient",
+        recommended_outcome: "pass",
+        manual_review_reason_code: "none",
+      },
+    });
+    expect(lest.criterion_rationales).toEqual({ vedtak: "Vedtakene står først." });
+    expect(lest).toMatchObject({ rubric_scores: { vedtak: 2 }, rubric_total: 2, confidence_note: "Sikker.", recommended_outcome: "pass", criterion_steps: { vedtak: "flere" } });
+  });
+
+  it("en tekstbegrunnelse for et kriterium som heter som et felt, står når feltet finnes på toppnivå", () => {
+    const lest = llmResponseCodec.parse({
+      module_id: "m", criterion_rationales: { confidence_note: "Begrunnelse for kriteriet." }, rubric_scores: { confidence_note: 2 }, rubric_total: 2,
+      practical_score_scaled: 35, pass_fail_practical: true, improvement_advice: [], red_flags: [], manual_review_recommended: false, confidence_note: "Toppnivå.",
+    });
+    expect(lest.criterion_rationales).toEqual({ confidence_note: "Begrunnelse for kriteriet." });
+    expect(lest.confidence_note).toBe("Toppnivå.");
+  });
+
   // QA runde 2: delpoenget regnes som vedtaket gjør det — modulens kriterier, manglende teller 0, klemt til 0–4.
   it("delpoenget regnes over modulens kriterier, også når modellen utelot ett eller la til et ukjent", () => {
     const svar = llmResponseCodec.parse({
