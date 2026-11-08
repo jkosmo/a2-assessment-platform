@@ -1482,38 +1482,9 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Norsk scenario")).toBeVisible();
   });
 
-  test("an unsaved draft is carried along on a tab switch, without a dialog", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-          taskText: localizedText("Norsk scenario"),
-        }),
-      },
-    });
-
-    await page.goto("/admin-content/module/module-1/conversation");
-
-    // Produce an unsaved draft without opening the edit form: confirm a direct edit, which
-    // leaves a sessionDraft behind and makes the status rail say "unsaved".
-    await page.locator("#previewEditTitle").waitFor();
-    await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
-    await page.locator("#formSaveBtn").click();
-    // Mocken har ingen flervalg, så lagringen stopper («legg til minst ett spørsmål») og skjemaet
-    // står igjen — med utkastet i seg og hodet på «Ulagrede endringer».
-    await expect(page.locator("#formPageDirty")).toHaveClass(/is-dirty/);
-    await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
-
-    // Produkteier 13.09: fanebytte spør ikke; utkastet følger med og er det forhåndsvisningen viser.
-    await page.locator("#formTab-preview").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
-    await expect(page.locator("#formTab-preview")).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
-    await expect(page.locator("#formPageDirty")).toHaveClass(/is-dirty/);
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 4.1): «an unsaved draft is carried along on a tab switch, without a dialog» hadde
+  // samme mock og vei som «moving between the tabs never asks about the draft» under. Det eneste den sjekket i tillegg —
+  // at forhåndsvisningen viser utkastet og fanen er valgt — står nå der.
 
   // #896 S2: Lagre is one commitment - translate, then write. These guard the three rules
   // that make that safe: no edit costs nothing, an abort writes nothing, and a locale that
@@ -1676,35 +1647,9 @@ test.describe("admin content browser coverage", () => {
     expect(state.lastTitlePatchBody.title.nn).toBeUndefined();
   });
 
-  test("switching an open form into Forhaandsvisning shows the typed text and keeps it", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-          taskText: localizedText("Norsk scenario"),
-        }),
-      },
-    });
-
-    await page.goto("/admin-content/module/module-1/conversation");
-    await page.locator("#previewEditTitle").waitFor();
-    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
-
-    // Produkteier 13.09: fanebytte spør ikke. Forhåndsvisning viser det som er skrevet (ulagret),
-    // og tilbake i Rediger står teksten der — redigerbar, ikke frosset.
-    await page.locator("#formTab-preview").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
-    await expect(page.locator(".preview-pane--editing")).toHaveCount(0);
-    await expect(page.getByText("Halvferdig endring")).toBeVisible();
-
-    await page.locator("#formTab-edit").click();
-    await page.locator("#previewEditTitle").waitFor();
-    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
-    await expect(page.locator("#formPageDirty")).toHaveClass(/is-dirty/);
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 4.1): «switching an open form into Forhaandsvisning shows the typed text and keeps
+  // it» hadde samme oppsett og vei som «leaving Rediger with an open edit form asks nothing» lenger ned. Det eneste den
+  // sjekket i tillegg (`.preview-pane--editing` er borte i forhåndsvisningen) står nå der.
 
   test("moving between the tabs never asks about the draft", async ({ page }) => {
     await mockCommonApis(page, {
@@ -1726,10 +1671,13 @@ test.describe("admin content browser coverage", () => {
     // Mocken har ingen flervalg, så lagringen stopper («legg til minst ett spørsmål») og skjemaet
     // står igjen — med utkastet i seg og hodet på «Ulagrede endringer».
     await expect(page.locator("#formPageDirty")).toHaveClass(/is-dirty/);
+    await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
 
-    // Produkteier 13.09: ingen fane spør. Utkastet følger med hele veien rundt.
+    // Produkteier 13.09: ingen fane spør. Utkastet følger med hele veien rundt, og er det forhåndsvisningen viser.
     await page.locator("#formTab-preview").click();
     await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
+    await expect(page.locator("#formTab-preview")).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
     await page.locator("#formTab-settings").click();
     await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator("#tabPanelSettings")).toBeVisible();
@@ -2397,6 +2345,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator("#formTab-preview")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await expect(page.locator(".preview-pane--editing")).toHaveCount(0);
     await expect(page.locator(".chat-pane")).toHaveCount(0);
     // Forhåndsvisningen viser det som er skrevet — ulagret.
     await expect(page.getByText("Halvferdig endring")).toBeVisible();

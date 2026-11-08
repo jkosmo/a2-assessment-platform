@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.123.0 mot UTRULLET stage: #1077 leveranse 3, «fyll inn ordet som mangler». Lagres med typen og de
@@ -46,10 +47,8 @@ const fyllInn = { questionType: "fill", stem: L("The deadline for an appeal is _
 const begrep = { questionType: "fill", stem: L("The legal basis when the person agrees is ___.", "Grunnlaget når personen sier ja, er ___."), options: [L("consent", "samtykke")], rationale: L("Consent.", "Samtykke.") };
 const tilstand: { moduleId?: string; versionId?: string } = {};
 
-test("versjonen er 2.123.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.123.0");
+test("versjonen er minst 2.123.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.123.0"));
 });
 
 test("lagres med typen; uten lukke avvises; eksporten har typen og de godkjente svarene", async () => {

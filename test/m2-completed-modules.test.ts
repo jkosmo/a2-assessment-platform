@@ -12,7 +12,9 @@ const participantHeaders = {
 };
 
 describe("Participant completed modules and available list filtering", () => {
-  it("lists a completed module with its latest decision, and exposes it in the completed endpoint", async () => {
+  // Testgjennomgangen 2026-11 (avsnitt 1.1): het «… and exposes it in the completed endpoint». Endepunktet er fjernet
+  // (2.141.0); at stien gir 404, står i test/removed-routes.test.ts.
+  it("lists a completed module with its latest decision, and a retake can be submitted after it", async () => {
     const participant = await prisma.user.findUnique({
       where: { externalId: "participant-1" },
       select: { id: true },
@@ -136,13 +138,5 @@ describe("Participant completed modules and available list filtering", () => {
         },
       });
     expect(retakeSubmissionResponse.status).toBe(201);
-
-    // 2.141.0 (produkteier 2026-11-07): `GET /api/modules/completed` er fjernet; profilen leser beståtte moduler fra
-    // `GET /api/me/stats`. Stien treffer nå `/:moduleId` og finner ingen modul som heter «completed».
-    const completedResponse = await request(app)
-      .get("/api/modules/completed?limit=20")
-      .set(participantHeaders);
-    expect(completedResponse.status).toBe(404);
-    expect(completedResponse.body.modules).toBeUndefined();
   });
 });

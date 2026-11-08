@@ -76,6 +76,8 @@ test.describe("#1137 seilbåten på fremdriftslinja", () => {
     await expect(item(page, "cRun").locator(".course-boat")).toHaveCount(1);
     await expect(item(page, "cRun").locator(".course-boat")).toHaveAttribute("aria-hidden", "true");
     await expect(item(page, "cRun").locator(".course-progress-bar")).toHaveAttribute("aria-valuenow", "38");
+    // Kontrollcase (fra participant-course-list-grouping.spec.ts): uten dette ville «grønn overalt» bestått sjekken under.
+    await expect(item(page, "cRun").locator(".course-progress-fill")).not.toHaveClass(/completed/);
 
     // Fullført: hel grønn linje (opphever #939s «ingen linje»), ingen båt.
     const doneFill = item(page, "cDone").locator(".course-progress-fill");
@@ -311,6 +313,12 @@ test.describe("#1137 seilbåten på fremdriftslinja", () => {
     // QA 2.130.1: raden selv må heller ikke si «5/6» ved siden av den grønne «Fullført»-linja.
     await expect(item(page, "cGrown")).not.toContainText("5/6");
     await expect(item(page, "cGrown").locator(".course-accordion-progress")).toHaveCount(0);
+    // Fra «#939 funn A» i participant-course-list-grouping.spec.ts (testgjennomgangen 2026-11, avsnitt 4.1): raden er en
+    // fullført rad, grønn uten båt, og beholder lenka til kursbeviset.
+    await expect(item(page, "cGrown")).toHaveClass(/course-accordion-item--done/);
+    await expect(item(page, "cGrown").locator(".course-progress-fill")).toHaveClass(/completed/);
+    await expect(item(page, "cGrown").locator(".course-boat")).toHaveCount(0);
+    await expect(item(page, "cGrown").locator(".course-certificate-link")).toHaveAttribute("href", "/certificate?id=cert-g");
   });
 
   test("kontroll: et fullført kurs med full telling viser tellingen i raden", async ({ page }) => {

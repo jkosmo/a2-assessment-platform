@@ -215,7 +215,15 @@ jobs:
     # the static server defined in playwright.admin-content.config.ts. Catches UX
     # regressions like the v1.1.54 silent ReferenceError that prompted #432.
     # Total runtime ~90s including browser install (~30s with caching).
-    runs-on: ubuntu-latest
+    #
+    # ⚠️ Låst til ubuntu-24.04 (2026-11-08). `ubuntu-latest` ble ubuntu 26.04 rundt 2026-10-27, og
+    # Playwright 1.59.1 kan ikke installere Chromium der («Playwright does not support chromium on
+    # ubuntu26.04-x64»). Jobben feilet i installasjonen i alle kjøringer fra 2026-10-27 til 2.145.0,
+    # så e2e kjørte bare lokalt i den perioden. Å oppgradere Playwright i stedet ville byttet
+    # Chromium, og skjermbildene i test/e2e/mascot-fasit-figure.spec.ts-snapshots/ krever null
+    # pikslers avvik. Lås opp når Playwright oppgraderes til en versjon som støtter 26.04, og ta
+    # skjermbildene på nytt i samme endring.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2

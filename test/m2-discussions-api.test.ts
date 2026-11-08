@@ -198,24 +198,10 @@ describe("Discussions API (#495/T-QA-2)", () => {
     expect(res.body.error).toBe("discussions_disabled");
   });
 
-  it("per-item: tråd på CourseItem med avskrudd toggle gir 403; ukjent item gir 404", async () => {
+  // Testgjennomgangen 2026-11 (avsnitt 4.2): første halvdel (avskrudd element gir 403) er tatt ut. Den dekkes av
+  // «per-element toggle: admin skrur av diskusjon på et element → deltaker blokkeres» lenger ned, som går gjennom ruta.
+  it("per-item: tråd på et ukjent CourseItem gir 404", async () => {
     const courseId = await makeOpenCourse();
-    const section = await prisma.courseSection.create({
-      data: { title: JSON.stringify({ "en-GB": "S", nb: "S", nn: "S" }) },
-      select: { id: true },
-    });
-    createdSectionIds.push(section.id);
-    const item = await prisma.courseItem.create({
-      data: { courseId, itemType: "SECTION", sortOrder: 0, sectionId: section.id, discussionsEnabled: false },
-      select: { id: true },
-    });
-
-    const disabled = await request(app)
-      .post(`/api/courses/${courseId}/discussions`)
-      .set(asker)
-      .send({ kind: "QUESTION", title: "q", bodyMarkdown: "b", courseItemId: item.id });
-    expect(disabled.status).toBe(403);
-    expect(disabled.body.error).toBe("discussions_disabled");
 
     const unknown = await request(app)
       .post(`/api/courses/${courseId}/discussions`)
@@ -294,33 +280,9 @@ describe("Discussions API (#495/T-QA-2)", () => {
     expect(detailOn.body.course.discussionsEnabled).toBe(true);
   });
 
-  it("varsler kursets SMO ved nytt spørsmål (#495/T-QA-5)", async () => {
-    // En aktiv SMO med rolle via RoleAssignment (varsel-mottaker-spørringen bruker RoleAssignment).
-    const smoUser = await prisma.user.create({
-      data: {
-        externalId: `${idPrefix}-smo-recipient`,
-        name: "SMO Mottaker",
-        email: `${idPrefix}-smo-recipient@example.com`,
-        roleAssignments: { create: { appRole: "SUBJECT_MATTER_OWNER", validFrom: new Date("2020-01-01") } },
-      },
-      select: { id: true },
-    });
-
-    const courseId = await makeOpenCourse();
-    const q = await request(app)
-      .post(`/api/courses/${courseId}/discussions`)
-      .set(asker)
-      .send({ kind: "QUESTION", title: "Trenger hjelp", bodyMarkdown: "Forklar?" });
-    const threadId = q.body.thread.id as string;
-
-    const events = await prisma.auditEvent.findMany({
-      where: { entityId: threadId, action: "participant_notification_sent" },
-    });
-    expect(events.some((e) => e.metadataJson.includes("discussion_question_created"))).toBe(true);
-
-    // rydd opp denne SMO-en (cascader RoleAssignment)
-    await prisma.user.deleteMany({ where: { id: smoUser.id } });
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 4.2): «varsler kursets SMO ved nytt spørsmål» er slettet. Mottakerne er kursets eiere,
+  // ikke rolleholdere (kommentaren om RoleAssignment var utdatert). «et spørsmål gjennom ruta varsler eieren — og ingen når
+  // bryteren er av» i test/discussion-owner-notifications.test.ts sjekker det samme, og i tillegg antall mottakere og bryteren.
 
   it("varsler trådabonnenter ved nytt svar (#495/T-QA-5)", async () => {
     const courseId = await makeOpenCourse();

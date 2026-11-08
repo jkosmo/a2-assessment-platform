@@ -116,12 +116,13 @@ event-driven issuance. See `src/modules/course/courseCompletionService.ts`.
 
 **Guards (all run locally with no DB — static-server + mocked routes):**
 `test/e2e/participant-certificate.spec.ts`,
-`test/e2e/profile-certificate-link.spec.ts`, `test/e2e/participant-course-banner.spec.ts` (#630 —
+`test/e2e/profile-stats-1138.spec.ts` (the profile link; it replaced `profile-certificate-link.spec.ts` in the
+2026-11 test review), `test/e2e/participant-course-banner.spec.ts` (#630 —
 result-banner surface), plus server-side `test/m2-course-completions.test.ts` (issuance + reconcile,
 incl. module-less). All three surfaces have guards.
 
 **Pre-deploy gate:** run the journey locally before deploying any cert change —
-`npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-certificate.spec.ts test/e2e/profile-certificate-link.spec.ts test/e2e/participant-course-banner.spec.ts` (~10s, no Docker/Postgres).
+`npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-certificate.spec.ts test/e2e/profile-stats-1138.spec.ts test/e2e/participant-course-banner.spec.ts` (~10s, no Docker/Postgres).
 
 ## 6b. Participant course view — opening an item inline (#865)
 
@@ -141,7 +142,7 @@ are two distinct code paths + a relocated singleton to keep in sync when touchin
 
 | Reading mode (#1079) | `openInlineItemByEntry` adds `course-reading` on the `.course-accordion-item` when a SECTION opens; `collapseInlineOpen` removes it. CSS in `participant.html` («Lesemodus») hides everything in the course that is not the open section (`:has()`, never `.hidden`), restyles the panel as a sheet, and shows the width switch (`.course-reading-width`, `data-reader-width` on the panel, remembered in `localStorage` `participant.readerWidth`). Modules are NOT in reading mode. | Guard: `test/e2e/reading-mode-1079.spec.ts`. A test that expects the course header, other steps or the discussion toggle to be visible while a section is open must close the reader first (`participant-section-advance.spec.ts` was changed for this). |
 
-**Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts test/e2e/participant-course-sequence.spec.ts test/e2e/participant-course-focus.spec.ts test/e2e/participant-section-advance.spec.ts` (~10s, no Docker/Postgres). `participant-inline-open` is the consistency guard (section + module both inline, one open, workspace relocated); `participant-course-sequence` guards the serial presentation; `participant-course-focus` guards list-vs-course state (#921/#922); `participant-section-advance` guards the combined advance button and the absent item-level discussion (#923/#924).
+**Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts test/e2e/participant-course-sequence.spec.ts test/e2e/participant-course-focus.spec.ts test/e2e/participant-section-advance.spec.ts` (~10s, no Docker/Postgres). `participant-inline-open` is the consistency guard (section + module both inline, one open, workspace relocated); `participant-course-sequence` guards the serial presentation; `participant-course-focus` guards list-vs-course state (#921/#922); `participant-section-advance` guards the combined advance button and the absent item-level discussion (#923/#924), and since the 2026-11 test review also the section reader (image hydrated to `blob:`, «Avslutt kurset», reader closes) that `participant-section-reader.spec.ts` covered.
 
 ## 6b. Course versions — minor or major (#934, 2.129.0)
 

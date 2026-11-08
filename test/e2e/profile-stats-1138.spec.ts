@@ -282,6 +282,9 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
     const link = row.locator('a[href="/certificate?id=cert-abc-123"]');
     await expect(link).toBeVisible();
     await expect(link).toHaveText("Vis kursbevis");
+    // Fra profile-certificate-link.spec.ts (testgjennomgangen 2026-11, avsnitt 4.1): kursbeviset åpnes i en ny fane. Den
+    // engelske teksten, «View certificate», sjekkes i profile-locale-switch.spec.ts.
+    await expect(link).toHaveAttribute("target", "_blank");
   });
 
   test("Beståtte moduler: bare de beståtte fra statistikken, med dato og poeng", async ({ page }) => {

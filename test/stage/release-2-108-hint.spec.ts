@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.108.0 mot UTRULLET stage: #1119, skillets hint-kontroll på plattformen — varsel, ikke stopp. Lagring
@@ -51,10 +52,8 @@ const avslørende = [
 const tilstand: { sectionId?: string; moduleId?: string; courseIds: string[]; importedModuleIds: string[] } = { courseIds: [], importedModuleIds: [] };
 const policy = { passRules: { mcqMinPercent: 60 }, mcq: { reviewAfterSubmit: true } };
 
-test("versjonen er 2.108.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.108.0");
+test("versjonen er minst 2.108.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.108.0"));
 });
 
 test("lagring: lagres, og svaret bærer funnene", async () => {

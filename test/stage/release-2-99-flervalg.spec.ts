@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.98.1–2.99.0 mot UTRULLET stage: det som bare kan måles når den ekte tjeneren, den ekte databasen
@@ -54,11 +55,8 @@ const flere = { questionType: "multiple", stem: L("What must the record state?",
 
 const tilstand: { moduleId?: string; moduleIdAlle?: string; versionId?: string; sectionId?: string } = {};
 
-test("versjonen er 2.107.0", async () => {
-  const svar = await fetch(`${BASE}/version`);
-  const json = await svar.json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.107.0");
+test("versjonen er minst 2.107.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.107.0"));
 });
 
 test("#1077: et «velg alle» lagres med typen; feil form avvises", async () => {

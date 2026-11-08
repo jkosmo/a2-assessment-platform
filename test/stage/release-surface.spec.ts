@@ -79,12 +79,6 @@ test.describe("utrullet stage — er endringene faktisk med?", () => {
     ).toEqual([]);
   });
 
-  test("#942: kursimport krever innlogging (vakta ligger bak den)", async ({ request }) => {
-    // Selve eierskapsvakta kan ikke prøves uten en ikke-eiende SMO-sesjon; den er dekket av
-    // integrasjonstester med mutasjonsverifisering. Her sjekkes bare at ruta ikke er åpen.
-    const response = await request.post(`${BASE}/api/admin/content/courses/import`, {
-      data: { payload: {}, mode: "createNew" },
-    });
-    expect(response.status(), "kursimport skal kreve innlogging").toBe(401);
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 3.1): «#942: kursimport krever innlogging» er slettet. Den samme sjekken (POST
+  // /api/admin/content/courses/import gir 401 uten innlogging) står i lista over beskyttede ruter i deployed-surface.spec.ts.
 });

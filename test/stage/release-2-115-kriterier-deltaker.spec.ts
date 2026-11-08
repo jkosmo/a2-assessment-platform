@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.115.0 mot UTRULLET stage: #1124 del 1 og #1136. Deltakerens modulvisning bærer kriteriene (synlige,
@@ -40,10 +41,8 @@ const tre = (nb: string) => ({ nb, nn: nb, "en-GB": nb });
 const FASIT = "FASIT-1124: vedtaket først, Ola innen 1. november, lokale uklart.";
 const tilstand: { moduleId?: string; submissionId?: string } = {};
 
-test("versjonen er 2.115.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.115.0");
+test("versjonen er minst 2.115.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.115.0"));
 });
 
 test("deltakerens modul bærer de synlige kriteriene med trinn — og aldri fasiten", async () => {

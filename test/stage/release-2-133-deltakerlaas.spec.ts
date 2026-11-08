@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.133.0 mot UTRULLET stage: #934 skive 5a-1 — deltakerlåsen, låst utstedelse, versjonen deltakeren så
@@ -85,10 +86,8 @@ test.afterAll(async () => {
   if (tilstand.moduleId) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/archive`)).status);
 });
 
-test("versjonen er 2.133.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.133.0");
+test("versjonen er minst 2.133.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.133.0"));
 });
 
 test("lesing: uten versjon og med en eldre versjon → 409 og ikke lest; med versjonen siden viste → lest, og kursbevis", async () => {

@@ -134,18 +134,9 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
     expect(skriv.body.error).toBe("content_ownership");
   });
 
-  // Lista skal FORTSATT være åpen. Den er hvordan man finner sine egne kurs, og hver rad bærer
-  // allerede `canManage`. Uten denne testen ville en senere «stram alt»-runde kunne lukke lista
-  // uten at noe ble rødt — og da fant ingen SMO fram til noe som helst.
-  it("COURSE-lista forblir lesbar for en fremmed SMO, med canManage: false", async () => {
-    const create = await request(app).post("/api/admin/content/courses").set(smoA).send({ title: L("Listed course") });
-    const id = create.body.course.id as string;
-
-    const list = await request(app).get("/api/admin/content/courses").set(smoB);
-    expect(list.status).toBe(200);
-    const row = (list.body.courses as Array<{ id: string; canManage?: boolean }>).find((c) => c.id === id);
-    expect(row?.canManage).toBe(false);
-  });
+  // Lista skal FORTSATT være åpen for en fremmed SMO, med `canManage: false`. Testgjennomgangen 2026-11 (avsnitt 4.2): testen
+  // av det er slettet; den var en delmengde av «COURSE list: canManage true for owner+admin, false for non-owner» over, som
+  // leser lista som fremmed SMO og krever `canManage: false`. Lukkes lista, blir den rød.
 
   // ⚠️ Denne er saken #943 IKKE navnga — den pekte på kurs. Klassene har samme form én ruter
   // bortenfor, og lesingen der er den som lekker mest: `/members` gir NAVN og E-POST.

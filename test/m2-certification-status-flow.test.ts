@@ -4,8 +4,8 @@ import { prisma } from "../src/db/prisma.js";
 import { seenModuleVersionId } from "./support/participantFlow.js";
 
 // #989: het `m2-recertification-flow.test.ts` og verifiserte utløpsdatoer + påminnelseskjøringer.
-// Nå verifiserer den det motsatte: en bestått modul får ACTIVE og `passedAt`, INGEN utløpsdato, og
-// påminnelses-endepunktet finnes ikke lenger.
+// Nå verifiserer den det motsatte: en bestått modul får ACTIVE og `passedAt`, og INGEN utløpsdato. At
+// påminnelses-endepunktet ikke finnes lenger, står i test/removed-routes.test.ts.
 
 const participantHeaders = {
   "x-user-id": "participant-recert-1",
@@ -130,11 +130,5 @@ describe("Certification status without expiry", () => {
     expect(stored?.expiryDate).toBeNull();
   });
 
-  it("no longer exposes the recertification reminder endpoint", async () => {
-    const response = await request(app)
-      .post("/api/reports/recertification/reminders/run")
-      .set(adminHeaders);
-
-    expect(response.status).toBe(404);
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 2): at påminnelses-endepunktet gir 404, står i tabellen i test/removed-routes.test.ts.
 });

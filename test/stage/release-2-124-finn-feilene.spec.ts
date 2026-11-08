@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.124.0 mot UTRULLET stage: #1123 «Finn feilene». Forhåndsvisningen tegner `:::feil`-rammen som
@@ -64,10 +65,8 @@ async function forhåndsvis(markdown: string, locale: string): Promise<string> {
   return svar.json.html as string;
 }
 
-test("versjonen er 2.124.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.124.0");
+test("versjonen er minst 2.124.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.124.0"));
 });
 
 test("forhåndsvisningen tegner setningene med fasiten", async () => {

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.106.0 mot UTRULLET stage: #1077 leveranse 2a, «sett i riktig rekkefølge». Lagres med typen og
@@ -46,10 +47,8 @@ const NB = ["Motta", "Vurdere", "Avgjøre", "Arkivere"];
 const rekkefølge = { questionType: "order", stem: L("Put the steps in order.", "Sett stegene i rekkefølge."), options: STEG, rationale: L("Receive first.", "Motta først.") };
 const tilstand: { moduleId?: string; versionId?: string } = {};
 
-test("versjonen er 2.107.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.107.0");
+test("versjonen er minst 2.107.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.107.0"));
 });
 
 test("lagres med typen; for få elementer avvises; eksporten har typen og rekkefølgen", async () => {

@@ -93,21 +93,9 @@ test("«Eksporter» calls the export-package endpoint for that row", async ({ pa
   await expect(toastOf(page)).toContainText(/eksportert/i);
 });
 
-test("«Eksporter» and «Dupliser» stay on a row the viewer may not manage; «Åpne» does not", async ({ page }) => {
-  // Snudd 12.09 (#1046, produkteier): samme logikk som Moduler. Eksport og duplisering er lese-/
-  // kopihandlinger, og ruten sluttet å kreve eierskap 2026-09-08 (forfattere skal kunne se
-  // hverandres innhold). Det som fortsatt bare er for eier, er å åpne og endre.
-  await mockBaseApis(page);
-  await mockSectionList(page, [{ ...SECTION_ROW, canManage: false }]);
-
-  await page.goto("/admin-content/sections");
-
-  await expect(page.getByText("Portabel seksjon")).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Eksporter$/ })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /^Dupliser$/ })).toHaveCount(1);
-  await expect(page.locator('[data-action="edit"]')).toHaveCount(0);
-  await expect(page.locator(".row-readonly-note")).toBeVisible();
-});
+// Testgjennomgangen 2026-11 (avsnitt 4.1): ««Eksporter» and «Dupliser» stay on a row the viewer may not manage» er slettet.
+// Den var en ren delmengde av «seksjon-liste: edit/lifecycle hidden for canManage:false …» i content-owner-surfaces.spec.ts,
+// som sjekker Eksporter, Dupliser, at rediger mangler og merket «Kun for eier» på en rad uten eierskap.
 
 test("importing a package posts the envelope and opens the new draft", async ({ page }) => {
   await mockBaseApis(page);

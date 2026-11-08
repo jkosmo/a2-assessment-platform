@@ -1,8 +1,18 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import unitConfig from "./vitest.unit.config";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
+
+// Testgjennomgangen 2026-11 (avsnitt 4.4): alt enhetskjøringen tar, er utelukket her, lest fra vitest.unit.config.ts.
+//
+// ⚠️ Før sto bare de sju første rotfilene i lista under. De 24 kilde- og kontraktstestene i rota som senere ble lagt i
+// enhetskonfigurasjonen (vaktene, oversettelsene, `admin-content-ui-contracts` …), kjørte dermed i BEGGE, og `test:native` kjørte
+// dem to ganger (~22 s, `content-lock-write-guard` alene 16–18 s). En liste som må holdes lik en annen liste for hånd, driver
+// fra hverandre; derfor leses den. `npm test` (vitest.config.ts, CI) kjører fortsatt alt én gang.
+const unitInclude = unitConfig.test?.include ?? [];
+if (unitInclude.length === 0) throw new Error("vitest.integration.config.ts: fant ingen include-liste i vitest.unit.config.ts");
 
 export default defineConfig({
   // #975: se vitest.unit.config.ts — public/api-client.js importerer /static/dom-visibility.js.
@@ -20,8 +30,8 @@ export default defineConfig({
     environment: "node",
     include: ["test/**/*.test.ts", "test/**/*.test.js"],
     exclude: [
-      "test/unit/**/*.test.ts",
-      "test/unit/**/*.test.js",
+      // Enhetskjøringen: test/unit/** og rotfilene uten database (se toppen av fila).
+      ...unitInclude,
       // ⚠️ DOM-testene har sin egen kjøring med jsdom (`vitest.dom.config.ts`). Uten denne
       // utelukkelsen kjører de OGSÅ her, i Node uten `document`, og feiler med «document is not
       // defined» — en rød suite som ikke sier noe om produktet.
@@ -30,13 +40,6 @@ export default defineConfig({
       // Feilen dukket derfor først opp da en test som faktisk bygger noder ble lagt til.
       "test/dom/**/*.test.ts",
       "test/dom/**/*.test.js",
-      "test/module-completion-policy.test.ts",
-      "test/secondary-assessment.test.ts",
-      "test/process-error-handlers.test.ts",
-      "test/assessment-worker-process-error.test.ts",
-      "test/app-error-middleware.test.ts",
-      "test/document-parsing.test.ts",
-      "test/sensitive-data-masking.test.ts",
       // #804: these exercise the GLOBAL audit hash chain (whole-table verify/backfill + deleteMany), so
       // they require exclusive DB access — even with fileParallelism:false, since they mutate the whole
       // table other files have already written to. Run them with `npm run test:integration:audit`.

@@ -73,13 +73,9 @@ describe("kursinnhold kan leses av enhver forfatter", () => {
     await prisma.$disconnect();
   });
 
-  it("⚠️ en fremmed SMO kan lese et kurs hen ikke eier", async () => {
-    const svar = await request(app).get(`/api/admin/content/courses/${courseId}`).set(fremmedSmo);
-    expect(
-      svar.status,
-      "403 her betyr at #943-vakta er tilbake — se beslutningen i toppen av fila",
-    ).toBeLessThan(300);
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 4.2): «en fremmed SMO kan lese et kurs hen ikke eier» er slettet. «COURSE-lesing er
+  // åpen for enhver forfatter — skrivingen er det ikke» i test/m2-content-ownership-enforcement.test.ts leser det samme kurset
+  // som fremmed SMO på tre ruter (detalj, elementer, forhåndsvisning), med kontrollen for skriving.
 
   it("⚠️ og seksjoner, som er det tydeligste tilfellet", async () => {
     // Produkteier: «Når det gjelder seksjoner så er det i alle fall ingen grunn til å beskytte mot

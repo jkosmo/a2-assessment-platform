@@ -248,10 +248,11 @@ describe("#934 skive 3 — forfatterens valg og seksjonsregelen", () => {
     expect(bryter.status).toBe(204);
     expect(await version(course.id)).toEqual({ versionMajor: 1, versionMinor: 0 });
 
-    // En modul til, UTEN svar, fra en ny klient (markøren), når noen har kursbevis: avvist — og ingenting lagret.
+    // En modul til, UTEN svar, når noen har kursbevis: avvist — og ingenting lagret. (Testgjennomgangen 2026-11: markøren
+    // `versionAware: true` er tatt ut av kallet. Den har ingen virkning siden 2.131.0, src/routes/adminCourses.ts.)
     const ny = await createPublishedModule(`934 s3 mindre ny ${Date.now()}`);
     const nytt = [{ type: "MODULE", moduleId: modulId }, { type: "MODULE", moduleId: ny.module.id }];
-    const uten = await request(app).put(`/api/admin/content/courses/${course.id}/items`).set(admin()).send(await withRevision(course.id, { items: nytt, versionAware: true }));
+    const uten = await request(app).put(`/api/admin/content/courses/${course.id}/items`).set(admin()).send(await withRevision(course.id, { items: nytt }));
     expect(uten.status).toBe(400);
     expect(uten.body.error).toBe("course_version_required");
     expect(await prisma.courseItem.count({ where: { courseId: course.id } })).toBe(1);

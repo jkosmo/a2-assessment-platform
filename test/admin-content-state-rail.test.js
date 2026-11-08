@@ -165,16 +165,9 @@ describe("deriveModuleStatusChains", () => {
 // #1046 (13.09): tilstandslinja er borte. Versjonsfaktaene står som merker i hodet, og «Forhåndsvisning
 // viser …» står i Forhåndsvisning-fanen. Kontrakten er at ingenting av den gamle linja blir igjen.
 describe("state rail is gone — badges in the header, «preview shows» in the preview tab", () => {
-  it("public/admin-content.html has no state rail and no sr-slots", () => {
-    const html = readFile("public/admin-content.html");
-    expect(html).not.toContain('id="stateRail"');
-    for (const id of ["srEditing", "srLive", "srChanges", "srPreview", "srModuleName"]) expect(html).not.toContain(`id="${id}"`);
-    // #1046 (14.09): hodet tegnes av form-page.js inn i #moduleFormHead — sida har bare festet.
-    expect(html).toContain('id="moduleFormHead"');
-    expect(html).not.toContain('id="moduleLifecycleBadge"');
-    expect(html).not.toContain('id="moduleDirtyBadge"');
-    expect(html).toContain('id="previewShows"');
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 4.3): «public/admin-content.html has no state rail and no sr-slots» er slått sammen
+  // med «the module workspace carries its state in the shared header» i test/admin-content-ui-contracts.test.js, som
+  // hadde de samme sjekkene. sr-plassene står nå der.
 
   it("shared.css has no .state-rail rules", () => {
     const css = readFile("public/static/shared.css");
@@ -203,32 +196,8 @@ describe("shared editing-source contract", () => {
     expect(js).toContain("deriveModuleStatusChains");
   });
 
-  it("state 1 — working draft: hasUnsaved overrides chain (liveChain exists but draft takes priority)", () => {
-    const chains = deriveModuleStatusChains(
-      makeModuleExport({ activeVersionId: "v1", moduleVersions: [makeVersion("v1", 1)] }),
-    );
-    // Module is live; editing source is determined by hasUnsaved at render time.
-    // Chains confirm the live state is detectable.
-    expect(chains.liveChain.length).toBeGreaterThan(0);
-    expect(chains.latestDraftChain.length).toBe(0);
-    // hasUnsaved=true → UI renders "working draft" regardless of chain
-  });
-
-  it("state 2 — saved draft (not yet published): latestDraftChain populated, liveChain empty", () => {
-    const chains = deriveModuleStatusChains(
-      makeModuleExport({ moduleVersions: [makeVersion("v1", 1)] }),
-    );
-    expect(chains.latestDraftChain).toEqual([{ label: "Module", versionNo: 1 }]);
-    expect(chains.liveChain).toEqual([]);
-  });
-
-  it("state 3 — live version (no newer draft): liveChain populated, latestDraftChain empty", () => {
-    const chains = deriveModuleStatusChains(
-      makeModuleExport({ activeVersionId: "v1", moduleVersions: [makeVersion("v1", 1)] }),
-    );
-    expect(chains.liveChain).toEqual([{ label: "Module", versionNo: 1 }]);
-    expect(chains.latestDraftChain).toEqual([]);
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 4.3): «state 1/2/3» er slettet. State 1 og 3 var samme oppsett og sjekk som
+  // «published (activeVersionId == only version)» over, og state 2 det samme som «draft only». De to dekker dem.
 });
 
 // ---------------------------------------------------------------------------
@@ -239,10 +208,13 @@ describe("updateStateRail call sites", () => {
     // Verify both the function definition and that renderPreview triggers it
     expect(js).toContain("function updateStateRail(");
     expect(js).toContain("function renderPreview(");
-    // updateStateRail() must appear after renderPreview's opening brace
-    const renderPreviewIdx = js.indexOf("function renderPreview(");
-    const updateCallIdx = js.indexOf("updateStateRail()", renderPreviewIdx);
-    expect(updateCallIdx).toBeGreaterThan(renderPreviewIdx);
+    // ⚠️ Testgjennomgangen 2026-11 (avsnitt 5.1): før godtok testen et kall HVOR SOM HELST etter renderPreview, og det
+    // finnes flere senere i fila. Nå leses bare kroppen: fra `function renderPreview(` til neste toppnivå-funksjon.
+    const start = js.indexOf("function renderPreview(");
+    const end = js.indexOf("\nfunction ", start + 1);
+    expect(end, "fant ikke slutten på renderPreview").toBeGreaterThan(start);
+    const body = js.slice(start, end);
+    expect(body).toContain("updateStateRail()");
   });
 
   // #896 S3c: three call-site tests for `public/admin-content.js` sat here — renderModuleStatus,

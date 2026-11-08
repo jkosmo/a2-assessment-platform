@@ -26,7 +26,8 @@ describe("workspace validation accessibility", () => {
     // Accessibility: module selection and submission validation must remain wired up
     expect(participantHtml).toContain('aria-describedby="moduleSelectionHint"');
     expect(participantHtml).toContain('id="submissionValidationHint"');
-    expect(participantHtml).not.toContain('id="selectedModuleGuidanceText"');
+    // Testgjennomgangen 2026-11 (avsnitt 2): at `selectedModuleGuidanceText` er borte, sjekkes i
+    // test/participant-console-config.test.ts (den serverte sida).
 
     const reviewHtml = readFile("public/review.html");
     expect(reviewHtml).toContain('aria-describedby="resolveValidationMessage"');

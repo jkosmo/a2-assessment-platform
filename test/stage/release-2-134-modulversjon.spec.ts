@@ -2,15 +2,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.134.0 mot UTRULLET stage: #934 skive 5a-2, grunnmuren ved siden av dagens regel (doc/DESIGN_934.md, «5a-2»). Bare API,
 // med tjenestekontoen.
-//   - publisering gir versjonsnummer: 1.0, mindre uten avkrysning, 2.0 med avkrysning, og kalibreringen er mindre;
-//   - to ting avvises med 409, og ingenting er endret: den aktive versjonen som ny hovedversjon, og en eldre hovedversjon;
+//   - publisering gir versjonsnummer: 1.0, mindre uten avkrysning, og kalibreringen er mindre;
 //   - flervalg gjennom hele veien: innsynseksporten viser en `modulePasses`-rad med versjonen deltakeren svarte på, og
-//     status for modulen er som før;
-//   - en revisjon tar statusen som før (ingen leser har byttet regel).
+//     status for modulen er som før.
+//
+// Testgjennomgangen 2026-11: testene av den gamle avkrysningen (2.0 og `SUPERSEDED`) og de to avvisningene som bygget på den,
+// er fjernet. Med bryteren på gir avkrysningen `409 client_outdated` (src/modules/adminContent/adminContentCommands.ts), og
+// det testes i `release-2-136-regelen-per-kurs.spec.ts`. Avvisningene med bryteren på er dekket av
+// test/m2-module-pass-per-course-934-5a3.test.ts («module_version_number_fixed», «module_version_outdated»).
 //
 // Hva testen IKKE kan se: kravet per kurs, tilbakefyllingen og rapporten har ingen rute. De kjøres mot databasen (se
 // «5a-2 — bygget» for rekkefølgen), og er dekket av `test/m2-module-credit-934-5a2.test.ts`.
@@ -83,10 +87,8 @@ test.afterAll(async () => {
   if (tilstand.moduleId) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/archive`)).status);
 });
 
-test("versjonen er 2.134.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.134.0");
+test("versjonen er minst 2.134.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.134.0"));
 });
 
 test("publisering gir nummer: 1.0, 1.1 uten avkrysning, og kurset beholder modulen", async () => {
@@ -147,41 +149,11 @@ test("flervalg hele veien: innsynseksporten viser beståtten med versjonen, og s
   expect(status?.status).toBe("ACTIVE");
 });
 
-test("med avkrysning: ny hovedversjon, og statusen tas som før", async () => {
-  test.setTimeout(120_000);
-  const hoved = await publiserOk(await nyVersjon("tredje"), { supersedesEarlierPasses: true });
-  noter("med avkrysning", hoved);
-  expect(hoved).toBe("2.0");
-  const eksport = await api("GET", "/api/me/data");
-  const status = (eksport.json.profile.certifications as Array<{ moduleId: string; status: string }>).find((c) => c.moduleId === tilstand.moduleId);
-  noter("modulstatus etter revisjon", status?.status);
-  expect(status?.status).toBe("SUPERSEDED");
-});
-
-test("de to avvisningene: 409, og den aktive versjonen står", async () => {
-  test.setTimeout(120_000);
-  const aktiv = tilstand.versjoner[2];
-  const somHoved = await publiser(aktiv, { supersedesEarlierPasses: true });
-  noter("aktiv versjon som hoved", { status: somHoved.status, error: somHoved.json.error });
-  expect(somHoved.status).toBe(409);
-  expect(somHoved.json.error).toBe("module_version_number_fixed");
-
-  const eldre = await publiser(tilstand.versjoner[0]);
-  noter("eldre hovedversjon", { status: eldre.status, error: eldre.json.error });
-  expect(eldre.status).toBe(409);
-  expect(eldre.json.error).toBe("module_version_outdated");
-
-  const vist = await api("GET", `/api/modules/${tilstand.moduleId}`);
-  expect(vist.json.module.activeVersion.id).toBe(aktiv);
-
-  // Et nytt forsøk uten avkrysning på den aktive er ufarlig, og nummeret står.
-  expect(await publiserOk(aktiv)).toBe("2.0");
-});
-
 test("kalibreringen er mindre", async () => {
   test.setTimeout(60_000);
   const svar = await api("POST", "/api/calibration/workspace/publish-thresholds", { moduleId: tilstand.moduleId, totalMin: 70 });
   noter("kalibrering", { status: svar.status, versjon: svar.json.moduleVersion ? `${svar.json.moduleVersion.versionMajor}.${svar.json.moduleVersion.versionMinor}` : null });
   expect(svar.status, svar.tekst.slice(0, 300)).toBe(200);
-  expect(`${svar.json.moduleVersion.versionMajor}.${svar.json.moduleVersion.versionMinor}`).toBe("2.1");
+  // Etter 1.0 og 1.1 over. Før testgjennomgangen kom avkrysningen (2.0) imellom, og svaret var 2.1.
+  expect(`${svar.json.moduleVersion.versionMajor}.${svar.json.moduleVersion.versionMinor}`).toBe("1.2");
 });
