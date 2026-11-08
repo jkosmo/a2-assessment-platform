@@ -152,5 +152,11 @@ når appene gjennom Bicep, og Bicep kan sette ny verdi før ny kode er ute. Da s
   skriptet likt avsenderne. `test/unit/mascot-preview.test.ts` kjører skriptet.
 - **README-malen:** `mascots/seilbat/README.md`.
 
+**Fasiten endret med vilje (oppfølgingen av #1137, smale linjer):** i `test/fixtures/mascot-fasit/figure-dom.json`
+er `style` på båten for tilstandene 1 av 300, 29 % og 30 % ny. Øvre grense i `clamp()` er nå
+`max(calc(100% - <rekkevidde>px), calc((<rekkevidde>px - 100%) * 10000))`, så stripegrensen bare gjelder når linja er
+minst like bred som stripenes rekkevidde. Med dagens linjebredder gir det samme posisjon: skjermbildene på 390 og
+1280 px er uendret, med null pikslers avvik.
+
 Ikke dekket: sjekken ser ikke på PNG-ene i faviconet (størrelse og format), og ikke på om `{course}` og `{major}` står
 i verft-setningen.

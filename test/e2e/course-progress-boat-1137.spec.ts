@@ -22,7 +22,12 @@ function apiCourse(c: Course) {
   };
 }
 
-async function mockBase(page: Page, getCourses: () => Course[], completions: () => unknown[] = () => []) {
+async function mockBase(
+  page: Page,
+  getCourses: () => Course[],
+  completions: () => unknown[] = () => [],
+  { failCourses = () => false }: { failCourses?: () => boolean } = {},
+) {
   await page.addInitScript(() => {
     try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
   });
@@ -37,10 +42,12 @@ async function mockBase(page: Page, getCourses: () => Course[], completions: () 
   await page.route("**/version", (r: Route) => r.fulfill(json({ version: "test" })));
   await page.route("**/api/me", (r: Route) => r.fulfill(json({ user: { roles: ["PARTICIPANT"] }, consent: { accepted: true, currentVersion: "1.0" } })));
   await page.route("**/api/queue-counts", (r: Route) => r.fulfill(json({ counts: {} })));
-  await page.route("**/api/courses", (r: Route) => r.fulfill(json({
-    courses: getCourses().map(apiCourse),
-    themes: [...new Map(getCourses().flatMap((c) => c.themes ?? []).map((th) => [th.id, th])).values()],
-  })));
+  await page.route("**/api/courses", (r: Route) => (failCourses()
+    ? r.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "boom" }) })
+    : r.fulfill(json({
+      courses: getCourses().map(apiCourse),
+      themes: [...new Map(getCourses().flatMap((c) => c.themes ?? []).map((th) => [th.id, th])).values()],
+    }))));
   await page.route("**/api/courses/completions", (r: Route) => r.fulfill(json({ completions: completions() })));
   await page.route(/\/api\/courses\/c(?!ompletions)[^/?]*$/, (r: Route) => {
     const id = new URL(r.request().url()).pathname.split("/").pop()!;
@@ -267,7 +274,9 @@ test.describe("#1137 seilbåten på fremdriftslinja", () => {
     expect(await page.evaluate(() => (window as unknown as { feiret: string[] }).feiret)).toEqual([]);
 
     await page.locator("#courseBackBtn").click();
-    await expect.poll(async () => (await page.evaluate(() => (window as unknown as { feiret: string[] }).feiret)).sort())
+    // Båtene starter på kortene som står i det fokus fjernes, og startes igjen der de var når den nye lastingen
+    // tegner lista på nytt (#1137, oppfølgingen). Det som teller her, er hvilke kort som feiret.
+    await expect.poll(async () => [...new Set(await page.evaluate(() => (window as unknown as { feiret: string[] }).feiret))].sort())
       .toEqual(["cA", "cA-kopi", "cB"]);
   });
 
@@ -346,4 +355,251 @@ test.describe("#1137 seilbåten på fremdriftslinja", () => {
       expect(overlaps).toBe(false);
     });
   }
+});
+
+// ── Oppfølgingen av #1137 (QA av 2.130.1) ─────────────────────────────────────────────────────────────────────────────
+
+type BoatEvent = { kind: "add" | "remove"; card: string; at: number; delay: string };
+
+/** Logger hver feiringsbåt som legges til eller fjernes, med kort og tidspunkt (performance.now() i siden). */
+async function watchCelebrations(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { boatEvents: BoatEvent[] };
+    w.boatEvents = [];
+    const cardOf = (n: Element, parent: Node | null) => {
+      const card = ((n.isConnected ? n : parent) as Element | null)?.closest?.(".course-accordion-item") as HTMLElement | null;
+      return card ? `${card.dataset.courseId}${card.dataset.courseCopy ? "-kopi" : ""}` : "?";
+    };
+    new MutationObserver((records) => {
+      for (const r of records) {
+        for (const n of r.addedNodes) {
+          if (n instanceof HTMLElement && n.matches(".course-boat--feirer")) {
+            w.boatEvents.push({ kind: "add", card: cardOf(n, r.target), at: performance.now(), delay: n.style.animationDelay });
+          }
+        }
+        for (const n of r.removedNodes) {
+          if (n instanceof HTMLElement && n.matches(".course-boat--feirer")) {
+            w.boatEvents.push({ kind: "remove", card: "", at: performance.now(), delay: "" });
+          }
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+}
+
+const boatEvents = (page: Page) => page.evaluate(() => (window as unknown as { boatEvents: BoatEvent[] }).boatEvents);
+
+/** Fullfører kurset «cGo» i økta: inn i kurset, og tilbake til lista når det er fullført. */
+async function finishCourseInSession(page: Page, extra: Course[] = [], themes?: Course["themes"]) {
+  let finished = false;
+  await mockBase(
+    page,
+    () => [
+      { id: "cGo", title: "Siste steg", done: finished ? 4 : 3, total: 4, status: finished ? "COMPLETED" : "IN_PROGRESS", themes },
+      ...extra,
+    ],
+    () => (finished ? [{ courseId: "cGo", certificateId: "cert-go", completedAt: "2026-11-02T10:00:00.000Z", courseTitle: "Siste steg" }] : []),
+  );
+  await page.goto("/participant");
+  await item(page, "cGo").locator(".course-accordion-header").click();
+  await expect(page.locator("#courseBackBtn")).toBeVisible();
+  await watchCelebrations(page);
+  finished = true;
+  await page.locator("#courseBackBtn").click();
+  await expect(item(page, "cGo").locator(".course-boat--feirer")).toHaveCount(1);
+}
+
+test.describe("#1137 oppfølging: smale linjer, omtegning midt i feiringen, rulling og kø", () => {
+  // Punkt 1: på en linje smalere enn stripenes rekkevidde (48 px med flatt seil, 56 px med fullt) ble
+  // `100% - <rekkevidde>` negativ, og båten sto i venstre kant uansett fremdrift. Der gjelder hekkregelen alene.
+  test("smal linje: båten følger hekkregelen; bred nok linje: stripegrensen gjelder som før", async ({ page }) => {
+    await mockBase(page, () => [
+      { id: "c10", title: "Ti", done: 1, total: 10, status: "IN_PROGRESS" },       // 10 %, flatt seil, rekkevidde 48
+      { id: "c30", title: "Tretti", done: 3, total: 10, status: "IN_PROGRESS" },   // 30 %, fullt seil, rekkevidde 56
+      { id: "cFirst", title: "Første", done: 1, total: 300, status: "IN_PROGRESS" }, // 0 % (ett steg), flatt seil
+    ]);
+    await page.goto("/participant");
+    await expect(item(page, "c30").locator(".course-boat")).toHaveCount(1);
+
+    /** Båtens venstrekant fra linjas venstrekant, med linja satt til `width` px. Ren CSS: bare bredden endres. */
+    const leftAt = (id: string, width: number) => item(page, id).locator(".course-progress").evaluate((el: HTMLElement, w) => {
+      el.style.width = `${w}px`;
+      const boat = el.querySelector(".course-boat")!.getBoundingClientRect();
+      return boat.left - el.getBoundingClientRect().left;
+    }, width);
+    const stern = (pct: number, width: number) => Math.max(0, (1 - pct / 100) * width - 31);
+
+    // Smalere enn rekkevidden: hekken på grensa mellom tomt og fylt (før: 0 px for alle tre).
+    expect(await leftAt("c10", 45)).toBeCloseTo(stern(10, 45), 0); // 9,5 px
+    expect(await leftAt("c30", 54)).toBeCloseTo(stern(30, 54), 0); // 6,8 px
+    expect(await leftAt("cFirst", 40)).toBeCloseTo(stern(0, 40), 0); // 9 px
+
+    // Kontroll: bred nok linje. Stripegrensen holder båten igjen, så stripene ikke klippes.
+    expect(await leftAt("cFirst", 50)).toBeCloseTo(50 - 48, 0);    // hekkregelen alene ville gitt 19 px
+    expect(await leftAt("c30", 60)).toBeCloseTo(60 - 56, 0);       // hekkregelen alene ville gitt 11 px
+    expect(await leftAt("cFirst", 200)).toBeCloseTo(200 - 48, 0);  // hekkregelen alene ville gitt 169 px
+    expect(await leftAt("c10", 300)).toBeCloseTo(stern(10, 300), 0); // innenfor begge: hekkregelen
+  });
+
+  // Punkt 2: et språkbytte tegner lista på nytt, og båten forsvant midt i feiringen (4,2 s).
+  test("språkbytte midt i feiringen: båten fortsetter der den var, og er borte når den opprinnelige tiden er ute", async ({ page }) => {
+    test.setTimeout(20_000);
+    await finishCourseInSession(page);
+    const first = (await boatEvents(page)).find((e) => e.kind === "add")!;
+
+    await page.waitForTimeout(1500);
+    const reloaded = page.waitForResponse((r) => r.url().endsWith("/api/courses"));
+    await page.selectOption("#localeSelect", "nn");
+    await reloaded;
+    // Lista er tegnet på nytt (nynorsk), og kortet har fått en ny båt som er kommet like langt.
+    await expect(page.locator("#courseBackBtn")).toBeHidden();
+    await expect.poll(async () => (await boatEvents(page)).filter((e) => e.kind === "add").length).toBe(2);
+    await expect(item(page, "cGo").locator(".course-boat--feirer")).toHaveCount(1);
+    const resumed = (await boatEvents(page)).filter((e) => e.kind === "add")[1]!;
+    const delay = -Number.parseFloat(resumed.delay);
+    expect(delay).toBeGreaterThan(resumed.at - first.at - 300);
+    expect(delay).toBeLessThan(resumed.at - first.at + 300);
+
+    // Ferdig når de 4,2 s fra første start er ute, ikke 4,2 s etter omtegningen.
+    await expect(item(page, "cGo").locator(".course-boat")).toHaveCount(0, { timeout: 6000 });
+    const gone = (await boatEvents(page)).filter((e) => e.kind === "remove").at(-1)!;
+    expect(gone.at - first.at).toBeGreaterThan(4200 - 400);
+    expect(gone.at - first.at).toBeLessThan(4200 + 700);
+    await expect(item(page, "cGo").locator(".course-progress-fill")).toHaveClass(/completed/);
+  });
+
+  // Sikkerhetsnettet (for en fane i bakgrunnen, der animasjonshendelsen kan bli holdt igjen) regner også fra første start.
+  test("omtegning midt i feiringen uten animasjonshendelse: sikkerhetsnettet rydder når den opprinnelige tiden er ute", async ({ page }) => {
+    test.setTimeout(20_000);
+    await finishCourseInSession(page);
+    const first = (await boatEvents(page)).find((e) => e.kind === "add")!;
+    await page.waitForTimeout(1500);
+    const reloaded = page.waitForResponse((r) => r.url().endsWith("/api/courses"));
+    await page.selectOption("#localeSelect", "nn");
+    await reloaded;
+    await expect.poll(async () => (await boatEvents(page)).filter((e) => e.kind === "add").length).toBe(2);
+    // Animasjonen står stille, så `animationend` kommer aldri: bare sikkerhetsnettet kan fjerne båten.
+    await page.evaluate(() => { for (const animation of document.getAnimations()) animation.pause(); });
+
+    await expect(item(page, "cGo").locator(".course-boat")).toHaveCount(0, { timeout: 7000 });
+    const gone = (await boatEvents(page)).filter((e) => e.kind === "remove").at(-1)!;
+    // 4,2 s + 0,4 s fra første start, ikke fra omtegningen (det ville vært rundt 6,1 s).
+    expect(gone.at - first.at).toBeGreaterThan(4200);
+    expect(gone.at - first.at).toBeLessThan(4600 + 500);
+    await expect(item(page, "cGo").locator(".course-progress--celebrating")).toHaveCount(0);
+  });
+
+  test("visningsbytte midt i feiringen: båten fortsetter på kortene i den nye visningen", async ({ page }) => {
+    const t1 = { id: "t1", name: "Etikk" };
+    await finishCourseInSession(page, [{ id: "cRun", title: "I gang", done: 1, total: 4, status: "IN_PROGRESS", themes: [t1] }], [t1]);
+    await page.waitForTimeout(800);
+    await page.locator('.course-view-btn[data-view="alphabetical"]').click();
+    await expect(page.locator('.course-view-btn[data-view="alphabetical"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(item(page, "cGo").locator(".course-boat--feirer")).toHaveCount(1);
+    const adds = (await boatEvents(page)).filter((e) => e.kind === "add");
+    expect(adds).toHaveLength(2);
+    expect(-Number.parseFloat(adds[1]!.delay)).toBeGreaterThan(600);
+  });
+
+  // Punkt 3: rullingen til det fullførte kurset skjedde i det kursene ble fullført, mens kortene var skjult.
+  test("lang liste: kurs fullført mens et kurs er åpent rulles fram når lista vises igjen", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 700 });
+    let finished = false;
+    const fillers: Course[] = Array.from({ length: 24 }, (_, i) => ({
+      id: `cFill${String(i).padStart(2, "0")}`, title: `Kurs ${i + 1}`, done: 1, total: 4, status: "IN_PROGRESS",
+    }));
+    await mockBase(
+      page,
+      () => [
+        { id: "cA", title: "Kurs A", done: finished ? 2 : 1, total: 2, status: finished ? "COMPLETED" : "IN_PROGRESS" },
+        { id: "cC", title: "Kurs C", done: 1, total: 4, status: "IN_PROGRESS" },
+        ...fillers,
+      ],
+      () => (finished ? [{ courseId: "cA", certificateId: "cert-cA", completedAt: "2026-11-02T10:00:00.000Z", courseTitle: "Kurs A" }] : []),
+    );
+    await page.goto("/participant");
+    await item(page, "cC").locator(".course-accordion-header").click();
+    await expect(page.locator("#courseBackBtn")).toBeVisible();
+
+    // Kurs A fullføres mens kurs C er åpent (lista lastes på nytt, slik en bestått delt modul gjør).
+    finished = true;
+    const reloaded = page.waitForResponse((r) => r.url().endsWith("/api/courses"));
+    await page.selectOption("#localeSelect", "nn");
+    await reloaded;
+    await expect(page.locator('.course-accordion-item--done[data-course-id="cA"]')).toHaveCount(1);
+
+    await page.locator("#courseBackBtn").click();
+    // Kurs A står nå nederst, under «Fullført», etter 25 kurs i gang: det må rulles fram for å synes.
+    await expect(item(page, "cA")).toBeInViewport({ ratio: 0.9 });
+    await expect(item(page, "cA").locator(".course-boat--feirer")).toHaveCount(1);
+    // Kontroll: lista er lengre enn skjermen, så det var rullingen som førte kortet fram.
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(700 * 2);
+    await expect(item(page, "cC")).not.toBeInViewport();
+  });
+
+  // Punkt 4: køen ble bare tømt ved en vellykket ny lasting. Feilet den, ble de ventende båtene aldri vist.
+  test("ny lasting feiler når deltakeren går tilbake: de ventende båtene feirer på kortene som står", async ({ page }) => {
+    let finished = false;
+    let failing = false;
+    const t1 = { id: "t1", name: "Etikk" };
+    const t2 = { id: "t2", name: "Sikkerhet" };
+    await mockBase(
+      page,
+      () => [
+        { id: "cA", title: "Kurs A", done: finished ? 2 : 1, total: 2, status: finished ? "COMPLETED" : "IN_PROGRESS", themes: [t1, t2] },
+        { id: "cB", title: "Kurs B", done: finished ? 2 : 1, total: 2, status: finished ? "COMPLETED" : "IN_PROGRESS", themes: [t1] },
+        { id: "cC", title: "Kurs C", done: 1, total: 4, status: "IN_PROGRESS", themes: [t2] },
+      ],
+      () => (finished ? ["cA", "cB"].map((courseId) => ({ courseId, certificateId: `cert-${courseId}`, completedAt: "2026-11-02T10:00:00.000Z", courseTitle: courseId })) : []),
+      { failCourses: () => failing },
+    );
+    await page.goto("/participant");
+    await item(page, "cC").locator(".course-accordion-header").click();
+    await expect(page.locator("#courseBackBtn")).toBeVisible();
+    await watchCelebrations(page);
+
+    finished = true;
+    const reloaded = page.waitForResponse((r) => r.url().endsWith("/api/courses"));
+    await page.selectOption("#localeSelect", "nn");
+    await reloaded;
+    await expect(page.locator('.course-accordion-item--done[data-course-id="cB"]')).toHaveCount(1);
+    expect(await boatEvents(page)).toEqual([]);
+
+    failing = true;
+    const failed = page.waitForResponse((r) => r.url().endsWith("/api/courses") && r.status() === 500);
+    await page.locator("#courseBackBtn").click();
+    await failed;
+    await expect.poll(async () => (await boatEvents(page)).filter((e) => e.kind === "add").map((e) => e.card).sort())
+      .toEqual(["cA", "cA-kopi", "cB"]);
+    await expect(page.locator(".course-boat--feirer")).toHaveCount(3);
+  });
+
+  test("kontroll: ny lasting lykkes når deltakeren går tilbake — hvert kort feirer, med én båt om gangen", async ({ page }) => {
+    let finished = false;
+    const t1 = { id: "t1", name: "Etikk" };
+    await mockBase(
+      page,
+      () => [
+        { id: "cA", title: "Kurs A", done: finished ? 2 : 1, total: 2, status: finished ? "COMPLETED" : "IN_PROGRESS", themes: [t1] },
+        { id: "cC", title: "Kurs C", done: 1, total: 4, status: "IN_PROGRESS", themes: [t1] },
+      ],
+      () => (finished ? [{ courseId: "cA", certificateId: "cert-cA", completedAt: "2026-11-02T10:00:00.000Z", courseTitle: "Kurs A" }] : []),
+    );
+    await page.goto("/participant");
+    await item(page, "cC").locator(".course-accordion-header").click();
+    await expect(page.locator("#courseBackBtn")).toBeVisible();
+    finished = true;
+    const reloaded = page.waitForResponse((r) => r.url().endsWith("/api/courses"));
+    await page.selectOption("#localeSelect", "nn");
+    await reloaded;
+    await expect(page.locator('.course-accordion-item--done[data-course-id="cA"]')).toHaveCount(1);
+
+    const reloadedAgain = page.waitForResponse((r) => r.url().endsWith("/api/courses"));
+    await page.locator("#courseBackBtn").click();
+    await reloadedAgain;
+    await expect(item(page, "cA").locator(".course-boat--feirer")).toHaveCount(1);
+    await page.waitForTimeout(300);
+    await expect(page.locator(".course-boat--feirer")).toHaveCount(1);
+    await expect(page.locator(".course-progress--celebrating")).toHaveCount(1);
+  });
 });

@@ -38,13 +38,21 @@ function boatSvg(mood) {
 }
 
 /**
- * Venstrekanten til figuren: hekken (`sternPx` fra venstrekanten) på grensa mellom tomt og fylt, men aldri så langt
- * til høyre at fartsstripene klippes. QA 2.130.0: med 1 av 300 steg sto båten ved `100% - 32px`, og stripa havnet
- * utenfor linja, der foreldren klipper den bort.
+ * Venstrekanten til figuren: hekken (`sternPx` fra venstrekanten) på grensa mellom tomt og fylt (hekkregelen), men
+ * aldri så langt til høyre at fartsstripene klippes (stripegrensen). QA 2.130.0: med 1 av 300 steg sto båten ved
+ * `100% - 32px`, og stripa havnet utenfor linja, der foreldren klipper den bort.
+ *
+ * Stripegrensen gjelder bare når linja er minst like bred som stripenes rekkevidde. På en smalere linje (kraftig zoom)
+ * ville `100% - <rekkevidde>` blitt negativ og låst båten til venstre kant uansett fremdrift (#1137); der får stripene
+ * uansett ikke plass, og hekkregelen alene bestemmer. Det avgjøres i CSS, uten måling: det andre leddet i `max()` er
+ * negativt når linja er bred nok (da vinner stripegrensen), og svært stort når den er smalere (da løftes grensa ut av
+ * veien). Faktoren gjør overgangen brå: allerede en sekstifiredels piksel under rekkevidden gir over 150 px.
  */
 function boatLeft(pct, mood) {
   const reach = Math.max(FIGURE.widthPx, FIGURE.stripeReachPx[FIGURE_STATE[mood]] ?? FIGURE.widthPx);
-  return `clamp(0px, calc(${100 - pct}% - ${FIGURE.sternPx}px), calc(100% - ${reach}px))`;
+  const stern = `calc(${100 - pct}% - ${FIGURE.sternPx}px)`;
+  const stripeLimit = `max(calc(100% - ${reach}px), calc((${reach}px - 100%) * 10000))`;
+  return `clamp(0px, ${stern}, ${stripeLimit})`;
 }
 
 /**
@@ -66,8 +74,13 @@ export function renderCourseProgress({ completed, stepsDone, pct, barAttrs }) {
  * Øyeblikket kurset fullføres: figuren kommer i mål ytterst til venstre, feirer med konfetti og glir ut.
  * Med redusert bevegelse vises den ikke i det hele tatt — den «forsvinner med en gang» (#1137).
  * Returnerer figuren (eller null), så kalleren kan vente på den.
+ *
+ * `elapsedMs`: feiringen har allerede vart så lenge, og fortsetter der den var (#1137: lista ble tegnet på nytt midt i
+ * feiringen, etter et språk- eller visningsbytte). Animasjonen startes med negativ forsinkelse, og sikkerhetsnettet
+ * kortes ned tilsvarende, så feiringen er over når den opprinnelige tiden er ute. Kalleren starter den bare mens det
+ * er tid igjen.
  */
-export function launchCourseBoatCelebration(progressEl, { reducedMotion } = {}) {
+export function launchCourseBoatCelebration(progressEl, { reducedMotion, elapsedMs = 0 } = {}) {
   if (!progressEl || reducedMotion) return null;
   progressEl.querySelector(".course-boat")?.remove();
   progressEl.classList.add("course-progress--celebrating");
@@ -76,6 +89,7 @@ export function launchCourseBoatCelebration(progressEl, { reducedMotion } = {}) 
   boat.dataset.boatMood = "feirer";
   boat.setAttribute("aria-hidden", "true");
   boat.style.left = "0px";
+  if (elapsedMs > 0) boat.style.animationDelay = `-${Math.round(elapsedMs)}ms`;
   boat.innerHTML = boatSvg("feirer");
   progressEl.appendChild(boat);
   let done = false;
@@ -89,6 +103,6 @@ export function launchCourseBoatCelebration(progressEl, { reducedMotion } = {}) 
     if (event.target === boat) finish();
   });
   // Sikkerhetsnett: en fane i bakgrunnen kan holde igjen animasjonshendelsen.
-  setTimeout(finish, COURSE_BOAT_CELEBRATION_MS + 400);
+  setTimeout(finish, COURSE_BOAT_CELEBRATION_MS - elapsedMs + 400);
   return boat;
 }

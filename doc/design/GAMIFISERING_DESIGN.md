@@ -43,6 +43,12 @@ konkurranse med fakturering. Vi bruker virkemidlene som virker: en maskot som sa
   **i gang** har båt (fra første steg). Ikke påbegynt: tom linje. Fullført: **hel grønn linje uten
   båt**. Under 30 % flatt seil og én fartsstripe, fra 30 % fullt seil og tre. Når kurset fullføres i
   økta, kommer båten i mål, feirer og glir ut; med redusert bevegelse vises den ikke.
+  Oppfølgingen fra QA av 2.130.1 (grenen `oppfolging-1137`): på en linje smalere enn fartsstripenes
+  rekkevidde (kraftig zoom) står hekken på grensa mellom tomt og fylt, i stedet for i venstre kant.
+  Tegnes lista på nytt midt i feiringen (språk- eller visningsbytte), fortsetter båten der den var og
+  er borte når de 4,2 s fra start er ute. Kurs som ble fullført mens deltakeren sto inne i et annet
+  kurs, feirer i det deltakeren går tilbake, på kortene som står (også om den nye lastingen feiler),
+  og siden ruller da til det første av dem.
 - **Humørregelen** (profilen #1138, e-posten #1139, senere maskoten): aktivitet denne uka = mett,
   forrige uke = sulten, for to uker siden = sur, tre uker eller mer = dramatisk. Har brukeren meldt
   seg av e-posten, **ligger båten for anker** på profilen, uansett aktivitet.

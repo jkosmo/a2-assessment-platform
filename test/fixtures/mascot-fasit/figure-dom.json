@@ -141,7 +141,7 @@
           ],
           [
             "style",
-            "left:clamp(0px, calc(100% - 31px), calc(100% - 48px))"
+            "left:clamp(0px, calc(100% - 31px), max(calc(100% - 48px), calc((48px - 100%) * 10000)))"
           ]
         ],
         "children": [
@@ -381,7 +381,7 @@
           ],
           [
             "style",
-            "left:clamp(0px, calc(71% - 31px), calc(100% - 48px))"
+            "left:clamp(0px, calc(71% - 31px), max(calc(100% - 48px), calc((48px - 100%) * 10000)))"
           ]
         ],
         "children": [
@@ -621,7 +621,7 @@
           ],
           [
             "style",
-            "left:clamp(0px, calc(70% - 31px), calc(100% - 56px))"
+            "left:clamp(0px, calc(70% - 31px), max(calc(100% - 56px), calc((56px - 100%) * 10000)))"
           ]
         ],
         "children": [

@@ -17,7 +17,7 @@ import { createNumberFormatter, createDateTimeFormatter } from "/static/format-d
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlP } from "/static/html-escape.js";
-import { renderCourseProgress, launchCourseBoatCelebration } from "/static/course-progress-boat.js";
+import { renderCourseProgress, launchCourseBoatCelebration, COURSE_BOAT_CELEBRATION_MS } from "/static/course-progress-boat.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { certLevelKey, localizeCertLevel } from "/static/cert-level.js";
 import { setSectionLocked } from "/static/section-lock.js";
@@ -3936,6 +3936,64 @@ const celebratedCompletedCourses = new Set();
 // #1137 (QA 2.130.1): kurs som er fullført, men der båten ennå ikke har fått komme i mål fordi lista var
 // skjult (deltakeren sto inne i et kurs). Feires når lista vises igjen.
 const pendingBoatCelebrations = new Set();
+// #1137: kurs der båten feirer akkurat nå → når feiringen startet (performance.now()). En omtegning av lista
+// (språk- eller visningsbytte, ny lasting) bytter ut kortene og dermed båtene; da startes de igjen der de var,
+// til den opprinnelige tiden er ute. Ikke på nytt fra start.
+const runningBoatCelebrations = new Map();
+
+function boatClock() {
+  return window.performance?.now?.() ?? Date.now();
+}
+
+function boatReducedMotion() {
+  return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+}
+
+function courseCardsFor(container, courseId) {
+  return container.querySelectorAll(`.course-accordion-item[data-course-id="${courseId}"]`);
+}
+
+// Feiringer som ble avbrutt av en omtegning, fortsetter på de nye kortene. Kalles bare rett etter en omtegning:
+// på kort som fortsatt står, går båten allerede.
+function resumeRunningBoatCelebrations(container) {
+  if (focusedCourseId || runningBoatCelebrations.size === 0) return;
+  const reducedMotion = boatReducedMotion();
+  const now = boatClock();
+  for (const [id, startedAt] of runningBoatCelebrations) {
+    const elapsedMs = now - startedAt;
+    if (elapsedMs >= COURSE_BOAT_CELEBRATION_MS) {
+      runningBoatCelebrations.delete(id);
+      continue;
+    }
+    for (const card of courseCardsFor(container, id)) {
+      launchCourseBoatCelebration(card.querySelector(".course-progress"), { reducedMotion, elapsedMs });
+    }
+  }
+}
+
+// Tømmer køen av ventende båter mot kortene som står i lista nå: ruller til det første ventende kortet, og
+// starter båten på hvert kort for hvert kurs, også temakopiene. Gjør ingenting mens lista er skjult.
+//
+// Rullingen skjer HER, når kortene vises — ikke i øyeblikket kursene ble fullført. Sto deltakeren da inne i et
+// kurs, var kortene skjult, og rullingen gjorde ingenting (QA 2.130.1, runde 3): i en lang liste feiret båtene
+// nederst i «Fullført», utenfor synsfeltet. Rullingen gjelder også med redusert bevegelse; det er bare båten
+// som ikke vises.
+function flushPendingBoatCelebrations(container) {
+  if (!container || focusedCourseId || pendingBoatCelebrations.size === 0) return;
+  const selector = [...pendingBoatCelebrations].map((id) => `.course-accordion-item[data-course-id="${id}"]`).join(", ");
+  // #936/#929: kurset har nettopp flyttet seg ned under «Fullført». Uten rullingen skjer flyttingen utenfor
+  // synsfeltet, og deltakeren står igjen med inntrykket av at ingenting hendte — nøyaktig klagen #929 kom fra.
+  container.querySelector(selector)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  const reducedMotion = boatReducedMotion();
+  const now = boatClock();
+  for (const id of pendingBoatCelebrations) {
+    for (const card of courseCardsFor(container, id)) {
+      launchCourseBoatCelebration(card.querySelector(".course-progress"), { reducedMotion });
+    }
+    if (!reducedMotion) runningBoatCelebrations.set(id, now);
+  }
+  pendingBoatCelebrations.clear();
+}
 
 
 async function loadParticipantCourses() {
@@ -4074,6 +4132,10 @@ function unfocusCourse(options = {}) {
   focusedCourseId = null;
   applyCourseFocusState();
   if (options.pushHistory !== false) pushCourseFocusHistory(null);
+  // #1137 (QA 2.130.1, runde 3): båtene som ventet på at lista skulle vises, feirer nå, på kortene som allerede
+  // står. Ikke først etter den nye lastingen: feiler den (feilen svelges med vilje), ville de aldri blitt vist.
+  // Lykkes den, tegnes lista på nytt, og båtene fortsetter der de var (resumeRunningBoatCelebrations).
+  flushPendingBoatCelebrations(document.getElementById("courseAccordion"));
   // Tilbake til lista er det naturlige tidspunktet å vise fersk progresjon på — og det er her
   // #550-feiringen lander når siste seksjon ble lest uten en «marker lest»-knapp (#924).
   loadParticipantCourses().catch(() => {/* stille */});
@@ -4210,25 +4272,15 @@ function renderParticipantCourseAccordion() {
   if (newlyCompletedIds.length > 0) {
     launchConfetti();
     showToast(t("courses.celebrateComplete"), "success");
-    // #936/#929: kurset har nettopp flyttet seg ned under «Fullført». Uten dette skjer flyttingen
-    // utenfor synsfeltet, og deltakeren står igjen med inntrykket av at ingenting hendte — som er
-    // nøyaktig klagen #929 kom fra. Handlingen fortjener et synlig resultat.
-    const moved = container.querySelector(`.course-accordion-item[data-course-id="${newlyCompletedIds[0]}"]`);
-    moved?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
   // #1137: båten kommer i mål på den grønne linja, feirer og glir ut — på hvert kort for hvert kurs som ble
   // fullført, også temakopiene. Står deltakeren inne i et kurs, er lista skjult (en delt modul fullfører ofte
-  // flere kurs der), så båtene venter til lista vises igjen. Med redusert bevegelse vises de ikke.
+  // flere kurs der), så båtene venter til lista vises igjen. Med redusert bevegelse vises de ikke. Rullingen
+  // til det fullførte kurset skjer i det køen tømmes (flushPendingBoatCelebrations), når kortene vises.
+  // Omtegningen byttet ut kortene: feiringer som var i gang, fortsetter først, så feirer de nye.
+  resumeRunningBoatCelebrations(container);
   for (const id of newlyCompletedIds) pendingBoatCelebrations.add(id);
-  if (!focusedCourseId && pendingBoatCelebrations.size > 0) {
-    const reducedMotion = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
-    for (const id of pendingBoatCelebrations) {
-      for (const card of container.querySelectorAll(`.course-accordion-item[data-course-id="${id}"]`)) {
-        launchCourseBoatCelebration(card.querySelector(".course-progress"), { reducedMotion });
-      }
-    }
-    pendingBoatCelebrations.clear();
-  }
+  flushPendingBoatCelebrations(container);
   courseAccordionInitialized = true;
 
   // Deep link: ?courseId=xxx opens that course — only on the FIRST render, so a later re-render (e.g. after
