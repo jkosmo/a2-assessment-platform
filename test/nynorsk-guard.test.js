@@ -126,4 +126,33 @@ describe("nynorsk-tabellene inneholder ikke bokmål", () => {
     expect(scanned).toBeGreaterThan(0);
     expect(found, `Bokmål i LABELS.nn:\n${found.join("\n")}`).toEqual([]);
   });
+
+  it("mascots/*/mascot.json — hver nn-tekst i maskotpakkene er nynorsk", () => {
+    // Humørlinjene sto i public/i18n/profile-translations.js og ble skannet av testen over. I maskotpakken
+    // (doc/design/MASKOTPAKKE.md) ligger de i JSON, sammen med bildetekstene i e-posten, så de må leses her.
+    const dir = abs("mascots");
+    const found = [];
+    let scanned = 0;
+
+    const walk = (node, where, file) => {
+      if (!node || typeof node !== "object") return;
+      for (const [key, value] of Object.entries(node)) {
+        if (key === "nn" && typeof value === "string") {
+          scanned++;
+          const hit = offend(value);
+          if (hit) found.push(`${file} → ${where}: «${hit.word}» (nynorsk: ${hit.hint}) — "${value}"`);
+        } else {
+          walk(value, where ? `${where}.${key}` : key, file);
+        }
+      }
+    };
+    for (const pack of readdirSync(dir)) {
+      const file = `${pack}/mascot.json`;
+      walk(JSON.parse(readFileSync(`${dir}/${file}`, "utf8")), "", file);
+    }
+
+    // Kontrollcase: fem humør og ni e-postsituasjoner gir langt flere enn ti tekster i seilbåten.
+    expect(scanned).toBeGreaterThan(10);
+    expect(found, `Bokmål i maskotpakke:\n${found.join("\n")}`).toEqual([]);
+  });
 });

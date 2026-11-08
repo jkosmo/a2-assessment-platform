@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.142.0 - 2026-11-08
+
+Maskotpakken, skive 1 (`doc/design/MASKOTPAKKE.md`): alt som hører til seilbåten ligger i én mappe, `mascots/seilbat/`, valgt i `mascot.config.json`. **Brukerne ser ingen endring.** Produkteier 2026-11-07: «Det kan være ønskelig å bytte metaforer og bilder i ulike organisasjoner, og det vil være enklere om alt er samlet.»
+
+- **I pakken:** e-postbildene og bildetekstene (ni situasjoner), verft-setningen i e-posten om ny hovedversjon, humørlinjene og -bildene på Profil, figuren på fremdriftslinja i «Mine kurs» (SVG for flatt seil, fullt seil og feiring, stilen og målene) og faviconet. Alt på nb, nn og en-GB.
+- **Felles for alle pakker, ikke i pakken:** humørregelen (`boatMood.ts`), grensen på 30 % for fullt seil, tallene og at e-post bruker innebygde bilder.
+- **Fasit før flyttingen:** e-post byte for byte (ni situasjoner × tre språk × med og uten lenke, påminnelser og ny hovedversjon), sha256 per bilde og favicon, Profil for fem humør × tre språk og språkbyttet, og figuren som DOM og skjermbilder på 390 og 1280 px. Fasiten er laget av 2.141.0-koden og står uendret etter flyttingen. Skjermbildene sammenlignes bare på Windows.
+- **Adresser:** bildene ligger under `/static/mascot/seilbat/...`; `/static/boat/` virker fortsatt. Profilen henter humørene fra `/static/mascot/moods.json`, «Mine kurs» figuren fra `/static/mascot/figure.js` og `figure.css`. Faviconet har de samme adressene som før.
+- **Pakken sjekkes når den leses:** mangler et humør, en situasjon, en tekst på ett av språkene eller en fil, starter ikke appen, og feilmeldingen lister alt som mangler. Nynorsk-sjekken leser nå også pakkens tekster.
+- **Ved utrulling:** ingen migrering. `mascots/` og `mascot.config.json` følger med i pakkefila til både app og worker.
+- **Ikke bygget ennå (skive 2):** sjekken i CI og ved oppstart over alle pakker, en testpakke som viser at et bytte endrer alle flater, og et skript som viser alle e-poster, humør og figurtilstander for en pakke.
+
 ## 2.141.0 - 2026-11-07
 
 Profilen: innsatsen i tre faner, med «Min statistikk» og seilbåten (#1138). Produkteier: «Oversikten over fullførte moduler og kurs i Profil er alt for dominerende.»
