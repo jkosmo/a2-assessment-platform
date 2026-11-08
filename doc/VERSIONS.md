@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.144.0 - 2026-11-08
+
+Maskotpakken, skive 2 (`doc/design/MASKOTPAKKE.md`): det som trengs for å lage og bytte en pakke trygt. **Brukerne ser ingen endring.**
+
+- **Sjekken** (`npm run mascot:check`, kjøres i CI via `test/unit/mascot-check.test.ts`) går over alle pakker i `mascots/` og lister alle feil på én gang:
+  - humør, e-postsituasjoner, tekster, figurtilstander, favicon og språk er de samme som i koden; ukjente nøkler gir feil;
+  - ingen tom tekst;
+  - filene ligger inne i pakkemappa;
+  - bildene er JPEG, 600 × 200 og under 30 kB;
+  - ingen adresser i tekstene (samme regel som e-postene, nå i `linkLike.ts`);
+  - SVG og CSS har ikke skript, `on…`-attributter, `<foreignObject>` eller eksterne referanser;
+  - feiringens varighet i `mascot.json` er lik animasjonen i `figure.css`;
+  - en pakke i eldre format får beskjed om hvilke nøkler som mangler.
+- **Ved oppstart** sjekker både app og worker pakken før noe annet starter. Er noe galt, starter ikke prosessen, og loggen lister hva som mangler.
+- **Testpakke** (`test/fixtures/mascot-swap/`, kan ikke velges i drift) viser at et bytte endrer e-postbildet, bildeteksten, verft-setningen, Profil, figuren og faviconet, og ingenting annet.
+- **Forhåndsvisning:** `npm run mascot:preview -- <navn>` lager én HTML-side med alle e-poster (9 situasjoner × 3 språk), alle humør og alle figurtilstander for en pakke, laget med de ekte funksjonene.
+- **README** i `mascots/seilbat/`: hva hver nøkkel betyr, krav til bildene og hvordan man lager en ny pakke.
+- **Ved utrulling:** ingen migrering. Loggen viser «Maskotpakken «seilbat» er lest og sjekket.» ved oppstart av både app og worker.
+
 ## 2.143.0 - 2026-11-08
 
 Profilen: eget bilde for humøret «flau vind» (siste aktivitet forrige uke). Produkteier 2026-11-08: slakt seil, sola steker, 2-eren fisker med snøret rett ned og ser lett frustrert ut, en måke sitter i baugen.

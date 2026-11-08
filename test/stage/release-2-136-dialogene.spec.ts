@@ -87,10 +87,10 @@ test.afterAll(async () => {
   if (tilstand.moduleId) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/archive`)).status);
 });
 
-test("versjonen er 2.143.0", async () => {
+test("versjonen er 2.144.0", async () => {
   const json = await (await fetch(`${BASE}/version`)).json();
   noter("versjon", json.version);
-  expect(json.version).toBe("2.143.0");
+  expect(json.version).toBe("2.144.0");
 });
 
 test("forhåndsvisningen sier hvilken vei dialogen skal gå, og publiseringen virker den veien", async () => {
