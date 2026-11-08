@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.145.0 - 2026-11-08
+
+Seilbåten i «Mine kurs»: de fire oppfølgingspunktene fra QA av 2.130.1 (#1137).
+
+- **Smale linjer** (under ca. 56 px, bare ved kraftig zoom): båten låses ikke lenger til venstre kant uansett fremdrift. Er linja for smal til fartsstripene, gjelder hekkregelen alene. Fortsatt ren CSS.
+- **Språk- eller visningsbytte midt i feiringen** avbryter den ikke lenger. Båten fortsetter der den var og er borte 4,2 s etter at feiringen startet.
+- **Feiringen havner ikke lenger utenfor synsfeltet:** siden ruller til det første kortet som feirer, i det kortene vises igjen, ikke mens de er skjult.
+- **Feiler lastingen når deltakeren går tilbake fra et kurs**, feirer båtene likevel på kortene som står.
+- **Testoppsett:** `ADMIN_CONTENT_E2E_PORT` styrer nå også testtjenerens port, så e2e kan kjøres på en annen port uten å henge.
+- **Fasiten for figuren** er endret med vilje i tre tilstander (1 av 300, 29 % og 30 %): bare `style`-strengen med den nye grensen. Skjermbildene er uendret, med null pikslers avvik.
+- **Ved utrulling:** ingen migrering.
+
 ## 2.144.0 - 2026-11-08
 
 Maskotpakken, skive 2 (`doc/design/MASKOTPAKKE.md`): det som trengs for å lage og bytte en pakke trygt. **Brukerne ser ingen endring.**
