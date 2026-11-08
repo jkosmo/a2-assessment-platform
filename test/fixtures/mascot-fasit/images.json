@@ -9,6 +9,11 @@
     "bytes": 22157,
     "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
   },
+  "/static/boat/flau-vind.jpg": {
+    "contentType": "image/jpeg",
+    "bytes": 19594,
+    "sha256": "2cc32fea406efdd0535a5c66e8e14c32b5dc24285e9d6160aa7af75c24edc416"
+  },
   "/static/boat/frist-forfalt.jpg": {
     "contentType": "image/jpeg",
     "bytes": 17460,

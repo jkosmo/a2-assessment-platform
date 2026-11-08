@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.143.0 - 2026-11-08
+
+Profilen: eget bilde for humøret «flau vind» (siste aktivitet forrige uke). Produkteier 2026-11-08: slakt seil, sola steker, 2-eren fisker med snøret rett ned og ser lett frustrert ut, en måke sitter i baugen.
+
+- **Nytt bilde** `mascots/seilbat/images/flau-vind.jpg` (600 × 200, 19 kB), laget i samme stil som e-postbildene. Før delte humøret bilde med e-posten «frist snart». Bare `mascot.json` og bildefila er endret; det første byttet gjennom maskotpakken.
+- **Fasiten** for profilen er oppdatert for dette humøret alene: bildets bytes og sha256 i 11 forekomster (tre språk og språkbyttet). Alt annet står uendret.
+- **Ved utrulling:** ingen migrering.
+
 ## 2.142.0 - 2026-11-08
 
 Maskotpakken, skive 1 (`doc/design/MASKOTPAKKE.md`): alt som hører til seilbåten ligger i én mappe, `mascots/seilbat/`, valgt i `mascot.config.json`. **Brukerne ser ingen endring.** Produkteier 2026-11-07: «Det kan være ønskelig å bytte metaforer og bilder i ulike organisasjoner, og det vil være enklere om alt er samlet.»

@@ -10,6 +10,7 @@ import { fasit, sha256 } from "../support/mascotFasit.js";
 const BOAT_IMAGES = [
   "anke.jpg",
   "diskusjon.jpg",
+  "flau-vind.jpg",
   "frist-forfalt.jpg",
   "frist-snart.jpg",
   "kurs-ny-versjon.jpg",

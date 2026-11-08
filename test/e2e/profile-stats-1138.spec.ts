@@ -240,7 +240,8 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
 
   for (const [mood, line, image] of [
     ["mett", "Full fart! God bør i seilene.", "vurdering-bestatt.jpg"],
-    ["sulten", "Flau vind her ute. En seksjon til, så fyller vi seilene.", "frist-snart.jpg"],
+    // Eget bilde fra 2.143.0 (produkteier 2026-11-08): slakt seil, stekende sol, 2-eren fisker, måke i baugen.
+    ["sulten", "Flau vind her ute. En seksjon til, så fyller vi seilene.", "flau-vind.jpg"],
     ["sur", "Vi ligger i dødvannet. Jeg sier ikke noe. Jeg bare nevner det.", "frist-forfalt.jpg"],
     ["dramatisk", "Jeg begynner å føle meg akterutseilt. Måkene er hyggelige, da.", "frist-forfalt.jpg"],
     ["ny", "Klar til å kaste loss. Les din første seksjon, så setter vi kursen.", "kurs-tildelt.jpg"],
