@@ -183,7 +183,7 @@ major_email_confirm_required` without it. Sending: `CourseMajorEmailMonitor` →
 outbox `course_major_version_notification` → `deliverCourseMajorVersionNotice` (`courseMajorVersionEmail.ts`), only
 with `COURSE_MAJOR_EMAIL_ENABLED=true` on the worker. The e-mail uses the shared illustrated template
 (`renderIllustratedEmail` / `deliverIllustratedEmail`, `src/modules/certification/illustratedEmail.ts`, image
-`src/assets/email/kurs-ny-versjon.jpg` as a CID attachment) that all e-mails to people using the platform go through
+`kurs-ny-versjon.jpg` from the mascot pack, `mascots/seilbat/images/`, as a CID attachment; see §29) that all e-mails to people using the platform go through
 (#1141, 2.138.0). The template inserts our own link (`emailLinks.ts`, on when `PUBLIC_APP_BASE_URL` is set on both app
 and worker) and neutralizes addresses in other text (`github[.]com`).
 
@@ -1298,3 +1298,22 @@ Regexen matcher nå ethvert navn som inneholder «passFail». Skrivinger (`passF
 ikke ved å stramme serveren.** `isAppealableFail` krevde `COMPLETED` i første utkast. Produkteier
 2026-08-24: anke er kraftigere lut enn manuell behandling, og en regel uten skjellig grunn skal ikke
 lages. Se `doc/DECISIONS.md` → «Anke kan sendes også mens saken er til manuell vurdering».
+
+## 29. Maskoten — én pakke, fem flater (doc/design/MASKOTPAKKE.md, skive 1)
+
+Alt som hører til maskoten ligger i `mascots/<valgt>/` (valgt i `mascot.config.json`), lest av
+`src/modules/mascot/mascotPack.ts`. Felles for alle pakker, og derfor ikke i pakken: humørregelen
+(`gamification/boatMood.ts`, humørene i `gamification/moods.ts`) og grensen på 30 % (`course-progress-boat.js`).
+
+| Flate | Leser pakken via | Fra pakken |
+| --- | --- | --- |
+| E-post, bilde og bildetekst (web og worker) | `illustratedEmail.ts` → `EMAIL_ILLUSTRATIONS`, `mascotImagePath` | `emails.<situasjon>`, `images/` |
+| E-post, verft-setningen (ny hovedversjon) | `notificationMessages.ts` → `mascotEmailText("courseNewVersionIntro")` | `emailTexts` |
+| Profil, båten og linja | `profile-stats.js` → `/static/mascot/moods.json` (laget av `mascotMoodsJson`) | `moods.<humør>` |
+| «Mine kurs», figuren på linja | `course-progress-boat.js` → `/static/mascot/figure.js` (JS-modul) og `/static/mascot/figure.css` | `figure`, `figure/*.svg`, `figure.css` |
+| Favicon (faste adresser i alle `public/*.html`) | `routes/mascot.ts` | `favicon` |
+| Bildeadresser | `/static/mascot/<navn>/...`; `/static/boat/` er alias i skive 1 | |
+| Testserveren for e2e | `scripts/test/admin-content-static-server.mjs` (samme `resolveMascotRequest` som appen) | alt over |
+
+Vakt: fasiten i `test/fixtures/mascot-fasit` (e-post byte for byte, bildene, profilen, figuren med
+skjermbilder), laget av koden før flyttingen. En endring i en fasitfil er en endring brukerne ser.

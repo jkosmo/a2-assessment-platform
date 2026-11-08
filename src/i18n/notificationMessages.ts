@@ -1,5 +1,6 @@
 import type { AppealStatus } from "@prisma/client";
 import type { SupportedLocale } from "./locale.js";
+import { mascotEmailText } from "../modules/mascot/mascotPack.js";
 
 type AssessmentOutcome = "pass" | "fail" | "under_review";
 
@@ -464,12 +465,12 @@ export function getModuleRevisedNotificationMessage(
 // Siste avsnitt sier hvor kurset ligger, så teksten virker også uten lenken fra malen. Tonen som i #1139: voksen, litt
 // humor (båten er på verftet, som på bildet), aldri skam — det gamle beviset står, og ingen har gjort noe galt.
 // Teksten er avsnitt, ikke én streng: den felles malen (illustratedEmail.ts) lager både HTML og ren tekst av dem.
+// Setningen som nevner maskoten («har vært en tur på verftet») står hel i maskotpakken (`courseNewVersionIntro`).
 export type CourseMajorVersionMessage = { subject: string; paragraphs: string[]; reason: string };
 
 type CourseMajorVersionLabels = {
   subject: string; // {course} {major}
   greeting: string;
-  intro: string; // {course} {major}
   changedOne: string;
   // «Det er …», ikke «3 elementer …»: rett etter «versjon 4.» ville tallet lest som «versjon 4.3».
   changedMany: string; // {n}
@@ -482,7 +483,6 @@ const courseMajorVersionMessages: Record<SupportedLocale, CourseMajorVersionLabe
   "en-GB": {
     subject: "«{course}» has a new version: version {major}",
     greeting: "Hello!",
-    intro: "The course «{course}» has been to the boatyard and now has a new major version: version {major}.",
     changedOne: "There is one new or changed item.",
     changedMany: "There are {n} new or changed items.",
     certificate:
@@ -493,7 +493,6 @@ const courseMajorVersionMessages: Record<SupportedLocale, CourseMajorVersionLabe
   nb: {
     subject: "«{course}» har fått versjon {major}",
     greeting: "Hei!",
-    intro: "Kurset «{course}» har vært en tur på verftet og har fått en ny hovedversjon: versjon {major}.",
     changedOne: "Det er ett nytt eller endret element.",
     changedMany: "Det er {n} nye eller endrede elementer.",
     certificate:
@@ -504,7 +503,6 @@ const courseMajorVersionMessages: Record<SupportedLocale, CourseMajorVersionLabe
   nn: {
     subject: "«{course}» har fått versjon {major}",
     greeting: "Hei!",
-    intro: "Kurset «{course}» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon {major}.",
     changedOne: "Det er eitt nytt eller endra element.",
     changedMany: "Det er {n} nye eller endra element.",
     certificate:
@@ -526,7 +524,7 @@ export function getCourseMajorVersionNotificationMessage(
   const changed = n == null || n <= 0 ? "" : n === 1 ? t.changedOne : t.changedMany.split("{n}").join(String(n));
   return {
     subject: fill(t.subject),
-    paragraphs: [t.greeting, [fill(t.intro), changed].filter(Boolean).join(" "), fill(t.certificate), t.closing],
+    paragraphs: [t.greeting, [fill(mascotEmailText("courseNewVersionIntro", locale)), changed].filter(Boolean).join(" "), fill(t.certificate), t.closing],
     reason: fill(t.reason),
   };
 }

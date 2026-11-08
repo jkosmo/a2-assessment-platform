@@ -96,7 +96,12 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 | `/calibration` | **Retired (#836)** — 301-redirects to `/admin-content/calibration` |
 | `/results` | Results / history view (a «Deltakere» sub-tab). A course row opens its participants, sorted on status with Completed first and then latest activity. «Eksporter denne listen (CSV)» downloads that table, made in the browser for Excel (2.139.0) |
 | `/profile` | User profile. 2.141.0 (#1138): account first, then three tabs — «Statistikk» (the boat, last four weeks, 12 weeks as bars with a screen-reader table, totals; only for the user, from `GET /api/me/stats`), «Beståtte kurs» (link «Vis kursbevis», no certificate id) and «Beståtte moduler» (passed only) — then rights and agent access |
-| `/static/boat/<file>.jpg` | The boat images from the e-mails (`src/assets/email/`), served for the profile (2.141.0) |
+| `/static/mascot/<pack>/<file>` | Files in the selected mascot pack (`mascots/<pack>/`, chosen in `mascot.config.json`): the images from the e-mails and the profile, the progress-bar figure, the favicon (doc/design/MASKOTPAKKE.md) |
+| `/static/boat/<file>.jpg` | Alias for `/static/mascot/<pack>/images/<file>.jpg` (slice 1), so an open, old tab keeps its images |
+| `/static/mascot/moods.json` | Made from the pack: per mood, the image address and the line in nb/nn/en-GB, read by the profile. `Cache-Control: no-cache` |
+| `/static/mascot/figure.js` | Made from the pack: the progress-bar figure as a JS module (SVG per state, measures), imported by `course-progress-boat.js`. `Cache-Control: no-cache` |
+| `/static/mascot/figure.css` | The figure's stylesheet from the pack, linked by `participant.html` |
+| `/static/favicon.svg`, `/static/favicon-32.png`, `/static/favicon-16.png`, `/static/apple-touch-icon-180.png` | Fixed addresses every page links to; the files come from the mascot pack |
 | `/admin-platform` | Platform administration |
 
 ## API base paths

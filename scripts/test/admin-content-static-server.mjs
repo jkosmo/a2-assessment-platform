@@ -2,12 +2,19 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { register } from "tsx/esm/api";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 const publicRoot = path.join(repoRoot, "public");
-const emailAssetsRoot = path.join(repoRoot, "src", "assets", "email");
 const port = Number.parseInt(process.env.PORT || "4173", 10);
+
+// Maskotpakken (doc/design/MASKOTPAKKE.md): bildene, figuren og faviconet kommer fra mascots/<valgt>/, som i appen.
+// Hvilken adresse som gir hva, leses fra samme kode som appen bruker (src/modules/mascot/mascotPack.ts), så denne
+// tjeneren ikke kan svare annerledes enn appen. tsx lar en vanlig `node` laste TypeScript-fila.
+register();
+const { loadMascotPack, resolveMascotRequest } = await import("../../src/modules/mascot/mascotPack.ts");
+const mascot = loadMascotPack(repoRoot);
 
 const contentTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -90,11 +97,6 @@ function resolvePublicFile(requestPath) {
     return path.join(publicRoot, "admin-content.html");
   }
 
-  // #1138: båtbildene fra e-postene, som app.ts serverer fra src/assets/email.
-  if (requestPath.startsWith("/static/boat/")) {
-    return path.join(emailAssetsRoot, path.basename(requestPath));
-  }
-
   if (requestPath.startsWith("/static/i18n/")) {
     return path.join(publicRoot, "i18n", requestPath.slice("/static/i18n/".length));
   }
@@ -120,8 +122,31 @@ function iconSvg(name) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#33312b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconBundle.icons[name]}</svg>`;
 }
 
+function sendFile(response, file) {
+  fs.readFile(file, (error, body) => {
+    if (error) {
+      send(response, 404, "Not found");
+      return;
+    }
+    send(response, 200, body, {
+      "Content-Type": contentTypes.get(path.extname(file).toLowerCase()) || "application/octet-stream",
+      "Cache-Control": "no-store",
+    });
+  });
+}
+
 const server = http.createServer((request, response) => {
   const url = new URL(request.url || "/", `http://${request.headers.host || "127.0.0.1"}`);
+  // Maskotpakken får adressen slik den kom (pakken dekoder selv, del for del).
+  const fromMascot = resolveMascotRequest(mascot, url.pathname);
+  if (fromMascot?.kind === "body") {
+    send(response, 200, fromMascot.body, { "Content-Type": fromMascot.contentType, "Cache-Control": "no-store" });
+    return;
+  }
+  if (fromMascot?.kind === "file") {
+    sendFile(response, fromMascot.file);
+    return;
+  }
   const pathname = decodeURIComponent(url.pathname);
   const icon = /^\/static\/icons\/([^/]+)\.svg$/.exec(pathname);
   if (icon) {
@@ -132,24 +157,12 @@ const server = http.createServer((request, response) => {
   }
   const resolvedPath = resolvePublicFile(pathname);
 
-  // #1138: båtbildene ligger utenfor public/ (src/assets/email), som i appen.
-  if (!resolvedPath.startsWith(publicRoot) && !resolvedPath.startsWith(emailAssetsRoot)) {
+  if (!resolvedPath.startsWith(publicRoot)) {
     send(response, 403, "Forbidden");
     return;
   }
 
-  fs.readFile(resolvedPath, (error, file) => {
-    if (error) {
-      send(response, 404, "Not found");
-      return;
-    }
-
-    const extension = path.extname(resolvedPath).toLowerCase();
-    send(response, 200, file, {
-      "Content-Type": contentTypes.get(extension) || "application/octet-stream",
-      "Cache-Control": "no-store",
-    });
-  });
+  sendFile(response, resolvedPath);
 });
 
 server.listen(port, "127.0.0.1", () => {

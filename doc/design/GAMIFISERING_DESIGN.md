@@ -35,7 +35,7 @@ konkurranse med fakturering. Vi bruker virkemidlene som virker: en maskot som sa
 - **Størrelser:** hele båten fra 48 px; under det **merket** (rund mørk plate, hvitt seil med
   tverrstrek, messingskrog, hodet til 2-tallet som en liten sirkel inne i båten, tett bak seilet).
   Humøret må kunne leses fra 32 px; i 24 og 16 px skal merket bare kjennes igjen. Merket er også
-  **favicon** (2.130.0, `public/static/favicon*.png|svg`, på alle sider).
+  **favicon** (2.130.0, på alle sider; filene ligger i maskotpakken, `mascots/seilbat/favicon*.png|svg`).
 - **Konfetti er animert**, og står stille som noen få lyse prikker når brukeren har slått av
   bevegelse.
 - **Fremdriftslinja i «Mine kurs» (#1137, bygget i 2.130.0):** linja fylles fra **høyre mot venstre**
@@ -139,7 +139,7 @@ for anker når e-posten er slått av. Nivå, rekke, skjold og merker kommer med 
 **Bygget i 2.141.0** (produkteier 2026-11-07): profilen har konto først, så tre faner — «Statistikk»,
 «Beståtte kurs», «Beståtte moduler» — så rettighetene. Statistikken viser båten med en maritim linje per
 humør, de fire siste ukene, tolv uker som søyler (med en tabell for skjermlesere) og totalene. Bildene er
-e-postbildene fra 2.138.0 (`/static/boat/`): mett = «vurdering bestått», sulten = «frist snart», sur =
+e-postbildene fra 2.138.0 (i maskotpakken, `/static/mascot/seilbat/images/`): mett = «vurdering bestått», sulten = «frist snart», sur =
 «ikke bestått», dramatisk = «frist forfalt», ny = «kurs tildelt». Humørregelen er én funksjon på
 serveren (`src/modules/gamification/boatMood.ts`). Anker er ikke bygget; det kommer med avmeldingen i
 #1139, som en overstyring i den samme funksjonen.

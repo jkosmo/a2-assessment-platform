@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { loadMascotPack, resolveMascotRequest } from "../../src/modules/mascot/mascotPack.js";
 
 // 2.130.0: portalen fikk favicon (merket fra gamifiseringen, godkjent av produkteier 2026-11-02). Før
 // viste fanen nettleserens standardikon. Hver side i public/*.html skal lenke til ikonet — en ny side
@@ -27,9 +28,14 @@ describe("favicon på alle sider", () => {
     for (const link of required) expect(head, `${page} mangler ${link}`).toContain(link);
   });
 
-  it("filene lenkene peker på finnes under /static (public/static)", () => {
+  // Faviconet følger maskoten (doc/design/MASKOTPAKKE.md): adressene er faste, filene ligger i pakken.
+  it("filene lenkene peker på kommer fra maskotpakken", () => {
+    const pack = loadMascotPack();
     for (const file of ["favicon.svg", "favicon-32.png", "favicon-16.png", "apple-touch-icon-180.png"]) {
-      expect(fs.existsSync(path.join(publicDir, "static", file)), file).toBe(true);
+      const hit = resolveMascotRequest(pack, `/static/${file}`);
+      expect(hit?.kind, file).toBe("file");
+      expect(hit?.kind === "file" && fs.existsSync(hit.file), file).toBe(true);
+      expect(fs.existsSync(path.join(publicDir, "static", file)), `${file} ligger igjen i public/static`).toBe(false);
     }
   });
 });

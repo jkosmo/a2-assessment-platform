@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // #934 skive 4b: e-posten om at et kurs har fått en ny hovedversjon, og den felles malen med bildet (#1139/#1141).
@@ -20,6 +19,7 @@ import { buildCourseMajorVersionEmail, deliverIllustratedEmail, sendViaAcs } fro
 import { EMAIL_ILLUSTRATIONS, EmailContainsLinkError, renderIllustratedEmail } from "../../src/modules/certification/illustratedEmail.js";
 import { countChangedItems } from "../../src/modules/course/courseVersioning.js";
 import { env } from "../../src/config/env.js";
+import { activeMascot, mascotImagePath } from "../../src/modules/mascot/mascotPack.js";
 
 const LINK = /http|www|href/i;
 const LOCALES = ["nb", "nn", "en-GB"] as const;
@@ -95,8 +95,8 @@ describe("#934 skive 4b: e-posten om ny hovedversjon", () => {
     expect(alt["en-GB"]).toMatch(/boatyard/);
   });
 
-  it("bildet i repoet er en JPEG på 600 × 200 under 30 KB", () => {
-    const bytes = readFileSync(path.resolve(process.cwd(), "src", "assets", "email", EMAIL_ILLUSTRATIONS.courseNewVersion.file));
+  it("bildet i maskotpakken er en JPEG på 600 × 200 under 30 KB", () => {
+    const bytes = readFileSync(mascotImagePath(activeMascot(), EMAIL_ILLUSTRATIONS.courseNewVersion.file));
     expect(bytes.length).toBeLessThan(30 * 1024);
     expect([bytes[0], bytes[1], bytes[2]]).toEqual([0xff, 0xd8, 0xff]);
     // Bredde og høyde står i SOF-segmentet (0xFFC0/0xFFC2).

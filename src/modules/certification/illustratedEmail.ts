@@ -12,104 +12,29 @@
 // Denne fila vet ingenting om kurs eller versjoner. Hver e-posttype lager teksten sin (notificationMessages.ts),
 // velger scenen sin (`EMAIL_ILLUSTRATIONS`) og kaller `renderIllustratedEmail`, så `deliverIllustratedEmail`
 // (participantNotificationService.ts). Kanalene `log` og `webhook` får ren tekst; bare e-post får HTML og bildet.
+//
+// Bildene og bildetekstene kommer fra maskotpakken (mascots/<valgt>/mascot.json, doc/design/MASKOTPAKKE.md). Både web
+// og worker lager e-post, og begge har samme pakke. En e-post i køen lages ved sending, med pakken som gjelder da.
 import { readFileSync } from "node:fs";
-import path from "node:path";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { activeMascot, mascotImagePath, MASCOT_EMAIL_SITUATIONS, type MascotEmailSituation } from "../mascot/mascotPack.js";
 
-/** Et ferdig bilde i repoet (`src/assets/email/`), JPEG 600 × 200 under 30 KB, med alt-tekst på alle tre språk. */
+/** Et bilde i maskotpakken (`images/`), JPEG 600 × 200 under 30 KB, med alt-tekst på alle tre språk. */
 export type EmailIllustration = {
-  /** Filnavnet i `src/assets/email/`. */
+  /** Filnavnet i pakkens `images/`; også navnet på vedlegget. */
   file: string;
-  /** Innholds-id-en HTML-en viser til (`cid:…`). */
+  /** Innholds-id-en HTML-en viser til (`cid:…`): filnavnet uten endelsen. */
   contentId: string;
   alt: Record<SupportedLocale, string>;
 };
 
-/** Scenene, valgt av produkteier i #1141. Et bilde byttes ved å erstatte fila. */
-export const EMAIL_ILLUSTRATIONS = {
-  // #934: seilbåten står på bukker i båtverftet og får et nytt strøk maling (utkast A, valgt 2026-11-03).
-  courseNewVersion: {
-    file: "kurs-ny-versjon.jpg",
-    contentId: "kurs-ny-versjon",
-    alt: {
-      nb: "Båten står på bukker i båtverftet og får et nytt strøk maling",
-      nn: "Båten står på bukkar i båtverftet og får eit nytt strøk måling",
-      "en-GB": "The boat stands on trestles in the boatyard, getting a fresh coat of paint",
-    },
-  },
-  courseAssigned: {
-    file: "kurs-tildelt.jpg",
-    contentId: "kurs-tildelt",
-    alt: {
-      nb: "Båten kaster loss: fortøyningen slippes og seilet går opp",
-      nn: "Båten kastar laus: fortøyinga vert sleppt og seglet går opp",
-      "en-GB": "The boat casts off: the mooring line is released and the sail goes up",
-    },
-  },
-  dueSoon: {
-    file: "frist-snart.jpg",
-    contentId: "frist-snart",
-    alt: {
-      nb: "Båten holder god fart mot et fyr i horisonten",
-      nn: "Båten held god fart mot eit fyr i horisonten",
-      "en-GB": "The boat makes good speed towards a lighthouse on the horizon",
-    },
-  },
-  overdue: {
-    file: "frist-forfalt.jpg",
-    contentId: "frist-forfalt",
-    alt: {
-      nb: "Båten ligger i havna og venter på vind, med slakt seil",
-      nn: "Båten ligg i hamna og ventar på vind, med slakt segl",
-      "en-GB": "The boat lies in the harbour waiting for wind, its sail slack",
-    },
-  },
-  passed: {
-    file: "vurdering-bestatt.jpg",
-    contentId: "vurdering-bestatt",
-    alt: {
-      nb: "Båten seiler for fullt seil, med vimpelen til topps",
-      nn: "Båten seglar for fullt segl, med vimpelen til topps",
-      "en-GB": "The boat sails under full sail, with its pennant flying",
-    },
-  },
-  notPassed: {
-    file: "vurdering-ikke-bestatt.jpg",
-    contentId: "vurdering-ikke-bestatt",
-    alt: {
-      nb: "Båten krysser mot vinden: kursen holdes, det tar ett slag til",
-      nn: "Båten kryssar mot vinden: kursen vert halden, det tek eitt slag til",
-      "en-GB": "The boat tacks into the wind: it holds its course, and it takes one more tack",
-    },
-  },
-  underReview: {
-    file: "vurdering-sensor.jpg",
-    contentId: "vurdering-sensor",
-    alt: {
-      nb: "Båten venter ved fyret til losen har sett på saken",
-      nn: "Båten ventar ved fyret til losen har sett på saka",
-      "en-GB": "The boat waits by the lighthouse until the pilot has looked at the matter",
-    },
-  },
-  appeal: {
-    file: "anke.jpg",
-    contentId: "anke",
-    alt: {
-      nb: "Båten ligger ved havnekontoret",
-      nn: "Båten ligg ved hamnekontoret",
-      "en-GB": "The boat lies by the harbour office",
-    },
-  },
-  discussion: {
-    file: "diskusjon.jpg",
-    contentId: "diskusjon",
-    alt: {
-      nb: "To båter signaliserer til hverandre med flagg",
-      nn: "To båtar signaliserer til kvarandre med flagg",
-      "en-GB": "Two boats signal to each other with flags",
-    },
-  },
-} as const satisfies Record<string, EmailIllustration>;
+/** Scenene, valgt av produkteier i #1141, én per situasjon. Bildet og bildeteksten står i maskotpakken. */
+export const EMAIL_ILLUSTRATIONS: Record<MascotEmailSituation, EmailIllustration> = Object.fromEntries(
+  MASCOT_EMAIL_SITUATIONS.map((situation) => {
+    const { image, alt } = activeMascot().emails[situation];
+    return [situation, { file: image, contentId: image.replace(/\.[^.]+$/, ""), alt }];
+  }),
+) as Record<MascotEmailSituation, EmailIllustration>;
 
 /** Et innebygd vedlegg, i formen ACS tar imot (`EmailAttachment` med `contentId`). */
 export type InlineImageAttachment = {
@@ -189,11 +114,11 @@ export class EmailContainsLinkError extends Error {
 
 const imageCache = new Map<string, string>();
 
-/** Bildet som base64, lest fra repoet én gang. Hele repoet følger med i utrullingen (deploy-app.yml). */
+/** Bildet som base64, lest fra pakken én gang. Hele repoet, også mascots/, følger med i utrullingen (deploy-app.yml). */
 function illustrationBase64(file: string): string {
   const cached = imageCache.get(file);
   if (cached) return cached;
-  const bytes = readFileSync(path.resolve(process.cwd(), "src", "assets", "email", file));
+  const bytes = readFileSync(mascotImagePath(activeMascot(), file));
   const encoded = bytes.toString("base64");
   imageCache.set(file, encoded);
   return encoded;

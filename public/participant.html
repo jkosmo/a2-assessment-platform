@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="/static/shared.css" />
     <link rel="stylesheet" href="/static/loading.css" />
     <link rel="stylesheet" href="/static/toast.css" />
+    <link rel="stylesheet" href="/static/mascot/figure.css" />
     <style>
       .assessment-progress { margin-top: calc(var(--space-1) * 1.25); font-size: 16px; font-weight: 600; color: var(--color-progress-text); }
       /* Telleren staar nå på linje med overskriften. Den skal fortsatt lese som «det skjer noe» —
@@ -215,48 +216,14 @@
       .course-view-toggle + .course-theme-heading { margin-top: 0; }
       .course-accordion--focused .course-view-toggle,
       .course-accordion--focused .course-theme-heading { display: none; }
-      /* #1137: seilbåten. Linja fylles fra HØYRE — båten seiler mot venstre (2-tallet styrer fra høyre,
-         som i logoen), og det fylte er kjølvannet bak den. Båten er 27 px og står på linja, så en rad
-         med båt er om lag 28 px høyere (godtatt av produkteier). */
-      .course-progress-bar { height: 6px; background: var(--color-border-soft); border-radius: 999px; overflow: hidden; display: flex; justify-content: flex-end; }
+      /* #1137: fremdriftslinja. Figuren på linja (seilbåten), retningen linja fylles fra, og radhøyden med figur
+         kommer fra maskotpakken: /static/mascot/figure.css (mascots/<valgt>/figure.css). */
+      .course-progress-bar { height: 6px; background: var(--color-border-soft); border-radius: 999px; overflow: hidden; display: flex; }
       .course-progress-fill { height: 100%; background: var(--color-blue); border-radius: 999px; transition: width 0.3s; }
       .course-progress-fill.completed { background: var(--color-success, #1f7a4d); }
       .course-progress { position: relative; }
-      .course-progress--boat, .course-progress--celebrating { height: 34px; overflow: hidden; }
-      .course-progress--boat .course-progress-bar,
-      .course-progress--celebrating .course-progress-bar { position: absolute; left: 0; right: 0; top: 25px; }
       /* Fullført: én grønn linje under den grønne raden (produkteier 2026-11-02), utenfor kroppen som er skjult. */
       .course-accordion-item--done > .course-progress { margin: 0 var(--space-2) var(--space-1); }
-      .course-boat { position: absolute; top: 0; width: 60px; height: 34px; pointer-events: none; }
-      .course-boat-svg { display: block; overflow: visible; }
-      .course-boat .cb-sail { fill: var(--color-surface); stroke: var(--color-text); stroke-width: 5; stroke-linejoin: round; }
-      .course-boat .cb-batten { stroke: var(--color-text); stroke-width: 4; }
-      .course-boat .cb-mast, .course-boat .cb-boom { stroke: var(--color-text); stroke-width: 6; stroke-linecap: round; }
-      .course-boat .cb-hull { fill: var(--color-primary); stroke: var(--color-text); stroke-width: 5; stroke-linejoin: round; }
-      .course-boat .cb-head { fill: var(--color-surface); stroke: var(--color-text); stroke-width: 5; }
-      .course-boat .cb-stripes { stroke: var(--color-meta); stroke-width: 2; stroke-linecap: round; fill: none; }
-      .course-boat .cb-c1, .course-boat .cb-c4 { fill: var(--color-link-hover-border); }
-      .course-boat .cb-c2 { fill: var(--color-success); }
-      .course-boat .cb-c3 { fill: var(--color-primary); }
-      /* Øyeblikket kurset fullføres: inn fra høyre, feirer, glir ut mot venstre og blekner. */
-      .course-boat--leaving { animation: course-boat-leave 4.2s ease-in-out forwards; }
-      @keyframes course-boat-leave {
-        0% { transform: translateX(36px); opacity: 0; }
-        10% { transform: translateX(0); opacity: 1; }
-        62% { transform: translateX(0); opacity: 1; }
-        100% { transform: translateX(-28px); opacity: 0; }
-      }
-      .course-boat .cb-c { transform-box: fill-box; transform-origin: center; animation: course-boat-burst 1.4s ease-out 3; }
-      .course-boat .cb-c2 { animation-delay: .1s; } .course-boat .cb-c3 { animation-delay: .2s; } .course-boat .cb-c4 { animation-delay: .3s; }
-      @keyframes course-boat-burst {
-        0% { transform: translate(0, 0) scale(1); opacity: 1; }
-        15% { transform: translate(0, -6px) scale(1.5); opacity: 1; }
-        70% { transform: translate(0, 14px) rotate(200deg) scale(1); opacity: 0; }
-        100% { transform: translate(0, 0) scale(1); opacity: 0; }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .course-boat--leaving, .course-boat .cb-c { animation: none; }
-      }
       /* #714-followup: kurselement-lista speiler admin-oversiktene — luftige rader, fet tittel,
          dempet handlingsverb som type-hint, status som pille til høyre. */
       .course-module-row { display: flex; align-items: center; gap: var(--space-2); padding: 10px 12px; border-bottom: 1px solid var(--color-border-soft); }

@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "name": {
+    "nb": "Seilbåten",
+    "nn": "Seglbåten",
+    "en-GB": "The sailing boat"
+  },
+  "moods": {
+    "ny": {
+      "image": "kurs-tildelt.jpg",
+      "line": {
+        "nb": "Klar til å kaste loss. Les din første seksjon, så setter vi kursen.",
+        "nn": "Klar til å kaste laus. Les den første seksjonen din, så set vi kursen.",
+        "en-GB": "Ready to cast off. Read your first section and we'll set our course."
+      }
+    },
+    "mett": {
+      "image": "vurdering-bestatt.jpg",
+      "line": {
+        "nb": "Full fart! God bør i seilene.",
+        "nn": "Full fart! God bør i segla.",
+        "en-GB": "Full speed! A fine breeze in the sails."
+      }
+    },
+    "sulten": {
+      "image": "frist-snart.jpg",
+      "line": {
+        "nb": "Flau vind her ute. En seksjon til, så fyller vi seilene.",
+        "nn": "Flau vind her ute. Ein seksjon til, så fyller vi segla.",
+        "en-GB": "Light airs out here. One more section and we'll fill the sails."
+      }
+    },
+    "sur": {
+      "image": "frist-forfalt.jpg",
+      "line": {
+        "nb": "Vi ligger i dødvannet. Jeg sier ikke noe. Jeg bare nevner det.",
+        "nn": "Vi ligg i daudvatnet. Eg seier ikkje noko. Eg berre nemner det.",
+        "en-GB": "We're stuck in dead water. I'm not saying anything. I'm just mentioning it."
+      }
+    },
+    "dramatisk": {
+      "image": "frist-forfalt.jpg",
+      "line": {
+        "nb": "Jeg begynner å føle meg akterutseilt. Måkene er hyggelige, da.",
+        "nn": "Eg byrjar å kjenne meg akterutsegla. Måsane er hyggelege, då.",
+        "en-GB": "I'm starting to feel left behind in port. The seagulls are nice, though."
+      }
+    }
+  },
+  "emails": {
+    "courseNewVersion": {
+      "image": "kurs-ny-versjon.jpg",
+      "alt": {
+        "nb": "Båten står på bukker i båtverftet og får et nytt strøk maling",
+        "nn": "Båten står på bukkar i båtverftet og får eit nytt strøk måling",
+        "en-GB": "The boat stands on trestles in the boatyard, getting a fresh coat of paint"
+      }
+    },
+    "courseAssigned": {
+      "image": "kurs-tildelt.jpg",
+      "alt": {
+        "nb": "Båten kaster loss: fortøyningen slippes og seilet går opp",
+        "nn": "Båten kastar laus: fortøyinga vert sleppt og seglet går opp",
+        "en-GB": "The boat casts off: the mooring line is released and the sail goes up"
+      }
+    },
+    "dueSoon": {
+      "image": "frist-snart.jpg",
+      "alt": {
+        "nb": "Båten holder god fart mot et fyr i horisonten",
+        "nn": "Båten held god fart mot eit fyr i horisonten",
+        "en-GB": "The boat makes good speed towards a lighthouse on the horizon"
+      }
+    },
+    "overdue": {
+      "image": "frist-forfalt.jpg",
+      "alt": {
+        "nb": "Båten ligger i havna og venter på vind, med slakt seil",
+        "nn": "Båten ligg i hamna og ventar på vind, med slakt segl",
+        "en-GB": "The boat lies in the harbour waiting for wind, its sail slack"
+      }
+    },
+    "passed": {
+      "image": "vurdering-bestatt.jpg",
+      "alt": {
+        "nb": "Båten seiler for fullt seil, med vimpelen til topps",
+        "nn": "Båten seglar for fullt segl, med vimpelen til topps",
+        "en-GB": "The boat sails under full sail, with its pennant flying"
+      }
+    },
+    "notPassed": {
+      "image": "vurdering-ikke-bestatt.jpg",
+      "alt": {
+        "nb": "Båten krysser mot vinden: kursen holdes, det tar ett slag til",
+        "nn": "Båten kryssar mot vinden: kursen vert halden, det tek eitt slag til",
+        "en-GB": "The boat tacks into the wind: it holds its course, and it takes one more tack"
+      }
+    },
+    "underReview": {
+      "image": "vurdering-sensor.jpg",
+      "alt": {
+        "nb": "Båten venter ved fyret til losen har sett på saken",
+        "nn": "Båten ventar ved fyret til losen har sett på saka",
+        "en-GB": "The boat waits by the lighthouse until the pilot has looked at the matter"
+      }
+    },
+    "appeal": {
+      "image": "anke.jpg",
+      "alt": {
+        "nb": "Båten ligger ved havnekontoret",
+        "nn": "Båten ligg ved hamnekontoret",
+        "en-GB": "The boat lies by the harbour office"
+      }
+    },
+    "discussion": {
+      "image": "diskusjon.jpg",
+      "alt": {
+        "nb": "To båter signaliserer til hverandre med flagg",
+        "nn": "To båtar signaliserer til kvarandre med flagg",
+        "en-GB": "Two boats signal to each other with flags"
+      }
+    }
+  },
+  "emailTexts": {
+    "courseNewVersionIntro": {
+      "nb": "Kurset «{course}» har vært en tur på verftet og har fått en ny hovedversjon: versjon {major}.",
+      "nn": "Kurset «{course}» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon {major}.",
+      "en-GB": "The course «{course}» has been to the boatyard and now has a new major version: version {major}."
+    }
+  },
+  "figure": {
+    "direction": "fromRight",
+    "states": {
+      "flatt": "figure/flatt.svg",
+      "fullt": "figure/fullt.svg",
+      "feiring": "figure/feiring.svg"
+    },
+    "css": "figure.css",
+    "widthPx": 32,
+    "sternPx": 31,
+    "stripeReachPx": {
+      "flatt": 48,
+      "fullt": 56
+    },
+    "celebrationMs": 4200
+  },
+  "favicon": {
+    "svg": "favicon.svg",
+    "png32": "favicon-32.png",
+    "png16": "favicon-16.png",
+    "appleTouchIcon": "apple-touch-icon-180.png"
+  }
+}

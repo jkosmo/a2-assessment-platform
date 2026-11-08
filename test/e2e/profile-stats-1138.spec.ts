@@ -207,7 +207,8 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
 
     await expect(page.locator("#statsMoodLine")).toHaveText("Full fart! God bør i seilene.");
     const boat = page.locator(".stats-boat");
-    await expect(boat).toHaveAttribute("src", "/static/boat/vurdering-bestatt.jpg");
+    // Bildet kommer fra maskotpakken, med pakkenavnet i adressen (doc/design/MASKOTPAKKE.md).
+    await expect(boat).toHaveAttribute("src", "/static/mascot/seilbat/images/vurdering-bestatt.jpg");
     // Bildet finnes og er lastet (ikke en 404 med alt-tekst).
     await expect.poll(() => boat.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(600);
 
@@ -248,7 +249,7 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
       await mockProfile(page, { stats: statsFor(mood) });
       await page.goto("/profile");
       await expect(page.locator("#statsMoodLine")).toHaveText(line);
-      await expect(page.locator(".stats-boat")).toHaveAttribute("src", `/static/boat/${image}`);
+      await expect(page.locator(".stats-boat")).toHaveAttribute("src", `/static/mascot/seilbat/images/${image}`);
     });
   }
 

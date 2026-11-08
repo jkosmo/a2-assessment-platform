@@ -1,3 +1,10 @@
 # SRI-protected vendored assets (#393) must stay byte-exact across platforms —
 # any line-ending conversion would break the Subresource Integrity hash and block MSAL.
 public/static/vendor/** binary
+
+# Maskotpakkene (doc/design/MASKOTPAKKE.md) skal være like byte for byte på alle maskiner: LF i tekstfilene, og
+# bildene urørt. Valget av pakke likeså.
+mascots/** eol=lf
+mascots/**/*.jpg binary
+mascots/**/*.png binary
+mascot.config.json eol=lf

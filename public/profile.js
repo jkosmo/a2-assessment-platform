@@ -27,7 +27,7 @@ import {
 } from "/static/participant-console-state.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { setHidden } from "/static/dom-visibility.js";
-import { renderStats } from "/static/profile-stats.js";
+import { loadMascotMoods, renderStats } from "/static/profile-stats.js";
 // #1138: «Beståtte moduler» kommer fra /api/me/stats, der serveren alt har avgjort hva som er bestått
 // (`passedAt` i activityReport.ts: avgjort, og siste vedtak bestått). Flaten utleder ingenting selv, og
 // importerer derfor ikke lenger /static/outcome.js.
@@ -103,6 +103,8 @@ let cachedDataExport = null;
 // these on locale change — otherwise headers switch language while the values stay behind.
 let cachedStatsData = null;
 let cachedStatsFailed = false;
+// Maskotpakkens humør (bilde og linje på alle tre språk), hentet sammen med statistikken første gang.
+let cachedMascotMoods = null;
 let cachedCoursesData = null;
 let selectedTab = "stats";
 
@@ -288,7 +290,7 @@ function renderModules(stats) {
 
 function renderStatsPanel() {
   if (cachedStatsData) {
-    renderStats(statsBody, cachedStatsData, { t, locale: currentLocale });
+    renderStats(statsBody, cachedStatsData, { t, locale: currentLocale, mascot: cachedMascotMoods });
   } else if (cachedStatsFailed) {
     statsBody.innerHTML = "";
     const p = document.createElement("p");
@@ -711,7 +713,8 @@ const profillister = lagLokalisertRessurs({
     showLoading(modulesBody, { rows: 3, columns: 3 });
     showLoading(coursesBody, { rows: 2, columns: 4 });
     return Promise.allSettled([
-      apiFetch("/api/me/stats", headers),
+      // Statistikken tegnes med båten, så de hentes sammen: feiler en av dem, er det statistikken som ikke kunne hentes.
+      Promise.all([apiFetch("/api/me/stats", headers), loadMascotMoods()]),
       apiFetch("/api/courses/completions", headers),
     ]).finally(() => {
       hideLoading(statsBody);
@@ -721,7 +724,7 @@ const profillister = lagLokalisertRessurs({
   },
   tegn: ([statsResult, coursesResult]) => {
     if (statsResult.status === "fulfilled") {
-      cachedStatsData = statsResult.value;
+      [cachedStatsData, cachedMascotMoods] = statsResult.value;
       cachedStatsFailed = false;
     } else if (!cachedStatsData) {
       cachedStatsFailed = true;

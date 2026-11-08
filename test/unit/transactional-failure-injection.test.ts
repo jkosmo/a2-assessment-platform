@@ -144,7 +144,9 @@ vi.mock("../../src/i18n/content.js", () => ({
   localizeContentText: (_locale: string, value: unknown) =>
     typeof value === "string" ? value : "Module Title",
 }));
-vi.mock("../../src/i18n/locale.js", () => ({
+// Resten av modulen (SUPPORTED_LOCALES) er ekte: maskotpakken leser språkene når e-postmalen lastes.
+vi.mock("../../src/i18n/locale.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/i18n/locale.js")>()),
   normalizeLocale: (v: string) => v,
 }));
 

@@ -1,6 +1,7 @@
 # Maskotpakke: båten som kan byttes ut
 
-**Status:** plan, revidert 2026-11-07 etter en uavhengig gjennomlesing (Codex var over utgiftstaket). Ikke bygget.
+**Status:** plan, revidert 2026-11-07 etter en uavhengig gjennomlesing (Codex var over utgiftstaket). Steg 0 og 1
+bygget 2026-11-08 (grenen `maskotpakke-skive-1`); steg 2 gjenstår.
 Bygges etter Profil (2.141.0) og før den ukentlige e-posten (#1139), så den leser pakken fra første dag.
 
 **Bestilt av produkteier (2026-11-07):** «Det kan være ønskelig å bytte metaforer og bilder i ulike organisasjoner, og

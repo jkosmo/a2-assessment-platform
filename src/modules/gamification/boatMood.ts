@@ -1,4 +1,5 @@
 import { mondayOfKey, osloDayKey } from "../reporting/activityReport.js";
+import type { BoatMood } from "./moods.js";
 
 // #1138: humørregelen for seilbåten (produkteier 2026-11-01, doc/design/GAMIFISERING_DESIGN.md).
 //
@@ -18,8 +19,8 @@ import { mondayOfKey, osloDayKey } from "../reporting/activityReport.js";
 // uansett aktivitet. Det blir en overstyring FØR regelen under, i denne fila, ikke en ny regel et
 // annet sted.
 
-export type BoatMood = "ny" | "mett" | "sulten" | "sur" | "dramatisk";
-export const BOAT_MOODS: readonly BoatMood[] = ["ny", "mett", "sulten", "sur", "dramatisk"];
+// Humørene står i moods.ts, så maskotpakken kan lese dem uten resten av appen.
+export { BOAT_MOODS, type BoatMood } from "./moods.js";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 

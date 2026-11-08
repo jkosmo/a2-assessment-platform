@@ -1,37 +1,25 @@
-// #1137: seilbåten på fremdriftslinja i «Mine kurs» (gamifisering, produkteier 2026-11-01/02).
+// #1137: figuren på fremdriftslinja i «Mine kurs» (gamifisering, produkteier 2026-11-01/02).
 //
-// Båten seiler mot VENSTRE — 2-tallet styrer fra høyre, som i A-2-logoen — så linja fylles fra
-// høyre: det fylte er kjølvannet bak båten, og båten står i forkant av det. Det er bevisst motsatt
-// leseretningen. Bare kurs i gang har båt: ikke påbegynt er dagens tomme linje, fullført er en hel
-// grønn linje uten båt. Øyeblikket et kurs fullføres i økta kommer båten i mål til venstre, feirer
-// og glir ut (`launchCourseBoatCelebration`). Figuren er godkjent på skisse-lerretet (tavla
-// «Fremdriftslinja»): lukket trekantseil med én tynn tverrstrek — sammen A-en — og 2-tallets hode ved
-// roret. Fargene er portalens egne (CSS-variabler i participant.html), ikke hex her.
+// Bare kurs i gang har figur: ikke påbegynt er dagens tomme linje, fullført er en hel grønn linje uten figur.
+// Øyeblikket et kurs fullføres i økta kommer figuren i mål til venstre, feirer og glir ut
+// (`launchCourseBoatCelebration`).
+//
+// Selve figuren kommer fra maskotpakken (doc/design/MASKOTPAKKE.md): SVG-en for hver tilstand og målene, som
+// serveren leverer som JS-modul (/static/mascot/figure.js), så tegningen er synkron. SVG-en settes rett inn i siden,
+// aldri som <img>, så stilen (/static/mascot/figure.css) og animasjonen virker. Seilbåten seiler mot VENSTRE — 2-tallet
+// styrer fra høyre, som i A-2-logoen — så linja fylles fra høyre: det fylte er kjølvannet bak båten, og båten står i
+// forkant av det. Det er bevisst motsatt leseretningen. Klassenavnene og `data-boat-mood` er de samme for alle pakker.
 
-/** Under denne andelen har båten flatt seil og én fartsstripe; fra den er seilet fullt. */
+import { FIGURE } from "/static/mascot/figure.js";
+
+/** Under denne andelen har figuren flatt seil og én fartsstripe; fra den er seilet fullt. Felles for alle pakker. */
 export const COURSE_BOAT_FULL_SAIL_PCT = 30;
 
-/** Hvor lenge feiringen står før båten har glidd ut (ms). Speiles av animasjonen i participant.html. */
-export const COURSE_BOAT_CELEBRATION_MS = 4200;
+/** Hvor lenge feiringen står før figuren har glidd ut (ms). Speiles av animasjonen i pakkens figure.css. */
+export const COURSE_BOAT_CELEBRATION_MS = FIGURE.celebrationMs;
 
-// Båten er tegnet i egne enheter (100 × 84) og skalert til 27 px høy. Hekken (høyre ende av skroget,
-// x = 96) står på grensa mellom tomt og fylt.
-const SCALE = 0.32;
-const BOAT_W = Math.round(100 * SCALE); // 32 px
-const STERN_PX = Math.round(96 * SCALE); // 31 px
-
-const SAILS = {
-  // Flatt seil: rett bakkant. Tverrstreken (A-ens) går fra masta ut til bakkanten ved y = 37.
-  sulten: { sail: "M42 6 L72 58 L42 58 Z", boom: "M40 58 L72 58", batten: "M42 37 L59.5 37" },
-  // Fullt seil: bakkanten bukter. Tverrstreken ender der kurven krysser y = 37 (x ≈ 77,5).
-  mett: { sail: "M42 6 Q90 24 74 58 L42 58 Z", boom: "M40 58 L74 58", batten: "M42 37 L77 37" },
-};
-SAILS.feirer = SAILS.mett;
-
-const STRIPES = {
-  sulten: "M37 14 L47 14",
-  mett: "M35 8 L49 8 M39 14 L55 14 M35 20 L47 20",
-};
+/** Humøret på linja (`data-boat-mood`) → figurens tilstand i pakken. */
+const FIGURE_STATE = { sulten: "flatt", mett: "fullt", feirer: "feiring" };
 
 /**
  * Hvordan linja skal se ut for et kurs.
@@ -46,44 +34,22 @@ export function courseBoatState({ completed, stepsDone, pct }) {
 }
 
 function boatSvg(mood) {
-  const s = SAILS[mood];
-  const headY = mood === "feirer" ? 42 : 48;
-  const confetti = mood === "feirer"
-    ? `<g class="course-boat-confetti">
-        <rect class="cb-c cb-c1" x="40" y="1" width="5" height="5" rx="1"></rect>
-        <circle class="cb-c cb-c2" cx="48" cy="10" r="3"></circle>
-        <rect class="cb-c cb-c3" x="56" y="4" width="5" height="5" rx="1"></rect>
-        <circle class="cb-c cb-c4" cx="4" cy="16" r="2.5"></circle>
-      </g>`
-    : "";
-  const stripes = STRIPES[mood] ? `<path class="cb-stripes" d="${STRIPES[mood]}"></path>` : "";
-  return `<svg class="course-boat-svg" width="60" height="34" viewBox="0 0 60 34" focusable="false">
-      ${stripes}
-      <g transform="translate(0 1) scale(${SCALE})">
-        <path class="cb-sail" d="${s.sail}"></path>
-        <path class="cb-batten" d="${s.batten}"></path>
-        <path class="cb-mast" d="M40 64 L40 4"></path>
-        <path class="cb-boom" d="${s.boom}"></path>
-        <path class="cb-hull" d="M6 62 L96 62 Q90 82 52 82 Q20 82 6 62 Z"></path>
-        <circle class="cb-head" cx="86" cy="${headY}" r="10"></circle>
-      </g>
-      ${confetti}
-    </svg>`;
+  return FIGURE.svg[FIGURE_STATE[mood]];
 }
 
-// Hvor langt til høyre fra båtens venstrekant fartsstripene rekker (px). QA 2.130.0: med 1 av 300 steg sto
-// båten ved `100% - 32px`, og stripa havnet utenfor linja, der foreldren klipper den bort.
-const STRIPE_REACH_PX = { sulten: 48, mett: 56 };
-
-/** Venstrekanten til båten: hekken på grensa, men aldri så langt til høyre at stripene klippes. */
+/**
+ * Venstrekanten til figuren: hekken (`sternPx` fra venstrekanten) på grensa mellom tomt og fylt, men aldri så langt
+ * til høyre at fartsstripene klippes. QA 2.130.0: med 1 av 300 steg sto båten ved `100% - 32px`, og stripa havnet
+ * utenfor linja, der foreldren klipper den bort.
+ */
 function boatLeft(pct, mood) {
-  const reach = Math.max(BOAT_W, STRIPE_REACH_PX[mood] ?? BOAT_W);
-  return `clamp(0px, calc(${100 - pct}% - ${STERN_PX}px), calc(100% - ${reach}px))`;
+  const reach = Math.max(FIGURE.widthPx, FIGURE.stripeReachPx[FIGURE_STATE[mood]] ?? FIGURE.widthPx);
+  return `clamp(0px, calc(${100 - pct}% - ${FIGURE.sternPx}px), calc(100% - ${reach}px))`;
 }
 
 /**
  * HTML for fremdriftslinja. `barAttrs` er progressbar-attributtene (rolle, verdier, etikett) og
- * brukes uendret — retningen og båten er bare visuelle, båten er aria-hidden.
+ * brukes uendret — retningen og figuren er bare visuelle, figuren er aria-hidden.
  */
 export function renderCourseProgress({ completed, stepsDone, pct, barAttrs }) {
   const state = courseBoatState({ completed, stepsDone, pct });
@@ -97,9 +63,9 @@ export function renderCourseProgress({ completed, stepsDone, pct, barAttrs }) {
 }
 
 /**
- * Øyeblikket kurset fullføres: båten kommer i mål ytterst til venstre, feirer med konfetti og glir ut.
+ * Øyeblikket kurset fullføres: figuren kommer i mål ytterst til venstre, feirer med konfetti og glir ut.
  * Med redusert bevegelse vises den ikke i det hele tatt — den «forsvinner med en gang» (#1137).
- * Returnerer båten (eller null), så kalleren kan vente på den.
+ * Returnerer figuren (eller null), så kalleren kan vente på den.
  */
 export function launchCourseBoatCelebration(progressEl, { reducedMotion } = {}) {
   if (!progressEl || reducedMotion) return null;

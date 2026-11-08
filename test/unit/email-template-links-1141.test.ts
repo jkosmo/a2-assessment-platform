@@ -29,6 +29,7 @@ import {
 import { EMAIL_ILLUSTRATIONS, EmailContainsLinkError, neutralizeAddresses, renderIllustratedEmail } from "../../src/modules/certification/illustratedEmail.js";
 import { buildEmailLink } from "../../src/modules/certification/emailLinks.js";
 import { defaultSendCourseReminder } from "../../src/modules/course/courseReminderService.js";
+import { activeMascot, mascotImagePath } from "../../src/modules/mascot/mascotPack.js";
 
 // #994: testen av varselet ved oppstart laster env.js på nytt inne i testkroppen.
 warmModuleGraph(() => import("../../src/config/env.js"));
@@ -249,9 +250,9 @@ describe("neste e-post kan ikke glemme malen", () => {
     expect(service.match(/\bsendViaAcs\(/g)).toHaveLength(2);
   });
 
-  it("alle bildene finnes, er JPEG, og er under 30 KB", () => {
+  it("alle bildene finnes i maskotpakken, er JPEG, og er under 30 KB", () => {
     for (const { file } of Object.values(EMAIL_ILLUSTRATIONS)) {
-      const bytes = readFileSync(path.resolve("src/assets/email", file));
+      const bytes = readFileSync(mascotImagePath(activeMascot(), file));
       expect(bytes.length, file).toBeLessThan(30 * 1024);
       expect(bytes[0], file).toBe(0xff);
       expect(bytes[1], file).toBe(0xd8);

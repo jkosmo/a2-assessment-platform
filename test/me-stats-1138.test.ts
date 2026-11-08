@@ -209,4 +209,18 @@ describe("GET /api/me/stats (#1138)", () => {
     const outside = await request(app).get("/static/boat/..%2Femail%2F..%2F..%2F..%2Fpackage.json");
     expect(outside.status).toBe(404);
   });
+
+  // Maskotpakken (doc/design/MASKOTPAKKE.md): bildet har pakkenavnet i adressen, og humørene profilen leser peker dit.
+  it("maskotpakken: humørene og bildene de peker på serveres, og ingenting utenfor pakken", async () => {
+    const moods = await request(app).get("/static/mascot/moods.json");
+    expect(moods.status).toBe(200);
+    expect(moods.headers["cache-control"]).toBe("no-cache");
+    expect(moods.body.moods.mett.image).toBe("/static/mascot/seilbat/images/vurdering-bestatt.jpg");
+    const image = await request(app).get(moods.body.moods.mett.image);
+    expect(image.status).toBe(200);
+    expect(image.headers["content-type"]).toBe("image/jpeg");
+    for (const url of ["/static/mascot/seilbat/..%2F..%2Fpackage.json", "/static/mascot/seilbat/images/..%2F..%2F..%2Fpackage.json", "/static/mascot/seilbat/%2E%2E/%2E%2E/package.json"]) {
+      expect((await request(app).get(url)).status, url).toBe(404);
+    }
+  });
 });

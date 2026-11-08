@@ -4,24 +4,28 @@
 // Humøret avgjøres på serveren (`src/modules/gamification/boatMood.ts`), ikke her, så profilen, den
 // ukentlige e-posten (#1139) og maskoten aldri kan være uenige.
 //
-// Bildene er båtbildene fra e-postene (2.138.0), servert fra `/static/boat/`. Ingen nye bilder.
-// Bildet er pynt (alt=""): linja ved siden av sier det samme med ord.
+// Bildet og linja for hvert humør kommer fra maskotpakken (doc/design/MASKOTPAKKE.md), som serveren lager
+// `/static/mascot/moods.json` av: bildeadressen og linja på alle tre språk, så et språkbytte gir riktig linje med en
+// gang, også om ny henting av statistikken feiler. Bildet er pynt (alt=""): linja ved siden av sier det samme med ord.
 
 import { escapeHtml } from "/static/html-escape.js";
 
-/** Humør → bilde og linje. Et humør serveren ikke kjenner (for eksempel «anker» fra #1139) faller til «mett». */
-export const MOOD_VIEW = {
-  mett: { image: "vurdering-bestatt.jpg", lineKey: "profile.stats.mood.mett" },
-  sulten: { image: "frist-snart.jpg", lineKey: "profile.stats.mood.sulten" },
-  // Havblikk er stillstand: båten ved kaia med slakke seil. Ikke «ikke bestått», som viser motvind (produkteier
-  // 2026-11-07). Deler bilde med «dramatisk» til egne bilder kommer i runden om båtsymbolikken.
-  sur: { image: "frist-forfalt.jpg", lineKey: "profile.stats.mood.sur" },
-  dramatisk: { image: "frist-forfalt.jpg", lineKey: "profile.stats.mood.dramatisk" },
-  ny: { image: "kurs-tildelt.jpg", lineKey: "profile.stats.mood.ny" },
-};
+export const MASCOT_MOODS_URL = "/static/mascot/moods.json";
 
-export function moodView(mood) {
-  return MOOD_VIEW[mood] ?? MOOD_VIEW.mett;
+let mascotMoods = null;
+
+/** Humørene fra maskotpakken, hentet én gang. En feil kastes videre, og neste kall prøver igjen. */
+export async function loadMascotMoods() {
+  if (mascotMoods) return mascotMoods;
+  const response = await fetch(MASCOT_MOODS_URL);
+  if (!response.ok) throw new Error(`${MASCOT_MOODS_URL}: ${response.status}`);
+  mascotMoods = await response.json();
+  return mascotMoods;
+}
+
+/** Humør → bilde og linje. Et humør pakken ikke har (for eksempel «anker» fra #1139) faller til «mett». */
+export function moodView(mood, mascot) {
+  return mascot?.moods?.[mood] ?? mascot?.moods?.mett;
 }
 
 /** ISO-ukenummeret til en dato (YYYY-MM-DD). */
@@ -89,10 +93,11 @@ function figure(value, label) {
  * Tegner statistikken inn i `container`.
  * @param {HTMLElement} container
  * @param {object} stats svaret fra /api/me/stats
- * @param {{ t: (key: string) => string, locale: string }} options
+ * @param {{ t: (key: string) => string, locale: string, mascot: object }} options `mascot` er svaret fra `loadMascotMoods`
  */
-export function renderStats(container, stats, { t, locale }) {
-  const view = moodView(stats?.mood);
+export function renderStats(container, stats, { t, locale, mascot }) {
+  const view = moodView(stats?.mood, mascot);
+  const line = view?.line?.[locale] ?? view?.line?.["en-GB"] ?? "";
   const weeks = Array.isArray(stats?.weeks) ? stats.weeks : [];
   const recent = stats?.recent ?? {};
   const totals = stats?.totals ?? {};
@@ -130,9 +135,9 @@ export function renderStats(container, stats, { t, locale }) {
 
   container.innerHTML = `
     <div class="stats-hero" data-mood="${escapeHtml(stats?.mood ?? "")}">
-      <img class="stats-boat" src="/static/boat/${escapeHtml(view.image)}" alt="" width="600" height="200" />
+      <img class="stats-boat" src="${escapeHtml(view?.image ?? "")}" alt="" width="600" height="200" />
       <div class="stats-hero-text">
-        <p class="stats-line" id="statsMoodLine">${escapeHtml(t(view.lineKey))}</p>
+        <p class="stats-line" id="statsMoodLine">${escapeHtml(line)}</p>
         <h3 class="stats-kicker">${escapeHtml(t("profile.stats.recentTitle"))}</h3>
         <div class="stats-figures stats-figures-recent">
           ${figure(n(recent.sectionsRead), t("profile.stats.sectionsRead.lower"))}

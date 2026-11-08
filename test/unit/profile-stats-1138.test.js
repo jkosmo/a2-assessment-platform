@@ -1,10 +1,11 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MOOD_VIEW, formatReadingTime, isoWeekNumber, moodView } from "../../public/static/profile-stats.js";
+import { formatReadingTime, isoWeekNumber, moodView } from "../../public/static/profile-stats.js";
 import { BOAT_MOODS } from "../../src/modules/gamification/boatMood.ts";
+import { loadMascotPack, mascotMoodsJson, resolveMascotRequest } from "../../src/modules/mascot/mascotPack.ts";
 
 // #1138: klientdelen av «Statistikk» på profilen — bildet per humør, ukenummeret og lesetida.
+// Bildet og linja per humør kommer fra maskotpakken (doc/design/MASKOTPAKKE.md), som serveren gjør til
+// /static/mascot/moods.json.
 
 const t = (key) => ({
   "profile.stats.minutes": "{m} min",
@@ -12,18 +13,22 @@ const t = (key) => ({
   "profile.stats.approx": "ca. {v}",
 })[key] ?? key;
 
+const pack = loadMascotPack();
+const mascot = JSON.parse(mascotMoodsJson(pack));
+
 describe("båtbildene på profilen", () => {
-  it("hvert humør serveren kan svare, har et bilde som finnes blant e-postbildene", () => {
+  it("hvert humør serveren kan svare, har et bilde i pakken som serveres", () => {
     for (const mood of BOAT_MOODS) {
-      const view = MOOD_VIEW[mood];
+      const view = moodView(mood, mascot);
       expect(view, `humøret ${mood} mangler på profilen`).toBeDefined();
-      expect(existsSync(join(process.cwd(), "src", "assets", "email", view.image)), view.image).toBe(true);
+      expect(view.image).toMatch(new RegExp(`^/static/mascot/${pack.id}/images/`));
+      expect(resolveMascotRequest(pack, view.image)?.kind, view.image).toBe("file");
     }
   });
 
   it("et humør klienten ikke kjenner (for eksempel anker fra #1139) faller til mett", () => {
-    expect(moodView("anker")).toBe(MOOD_VIEW.mett);
-    expect(moodView(undefined)).toBe(MOOD_VIEW.mett);
+    expect(moodView("anker", mascot)).toBe(mascot.moods.mett);
+    expect(moodView(undefined, mascot)).toBe(mascot.moods.mett);
   });
 });
 
