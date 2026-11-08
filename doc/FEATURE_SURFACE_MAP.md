@@ -1317,3 +1317,11 @@ Alt som hører til maskoten ligger i `mascots/<valgt>/` (valgt i `mascot.config.
 
 Vakt: fasiten i `test/fixtures/mascot-fasit` (e-post byte for byte, bildene, profilen, figuren med
 skjermbilder), laget av koden før flyttingen. En endring i en fasitfil er en endring brukerne ser.
+
+Skive 2: sjekken (`src/modules/mascot/mascotCheck.ts`, `npm run mascot:check`) kjører i CI over alle pakker
+(`test/unit/mascot-check.test.ts`) og ved oppstart av web og worker (`startServer` i `src/index.ts`). Testpakken
+`test/fixtures/mascot-swap/mascots/testbat` viser at et bytte når hver flate i tabellen, og ingenting annet:
+`test/unit/mascot-swap-email.test.ts` (e-post), `test/unit/mascot-swap-files.test.ts` (favicon, bilder, humør og
+figur slik appen serverer dem), `test/e2e/mascot-swap.spec.ts` (Profil og «Mine kurs»). En ny flate som leser pakken,
+skal inn i tabellen, i testene av et bytte og i forhåndsvisningen (`src/scripts/mascotPreview.ts`). Kravene til en
+pakke står i `mascots/seilbat/README.md`.

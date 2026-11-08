@@ -138,9 +138,12 @@ for anker når e-posten er slått av. Nivå, rekke, skjold og merker kommer med 
 
 **Bygget i 2.141.0** (produkteier 2026-11-07): profilen har konto først, så tre faner — «Statistikk»,
 «Beståtte kurs», «Beståtte moduler» — så rettighetene. Statistikken viser båten med en maritim linje per
-humør, de fire siste ukene, tolv uker som søyler (med en tabell for skjermlesere) og totalene. Bildene er
-e-postbildene fra 2.138.0 (i maskotpakken, `/static/mascot/seilbat/images/`): mett = «vurdering bestått», sulten = «frist snart», sur og
-dramatisk = «frist forfalt» (ikke «ikke bestått», som viser motvind, ikke stillstand: produkteier 2026-11-07), ny = «kurs tildelt». Humørregelen er én funksjon på
+humør, de fire siste ukene, tolv uker som søyler (med en tabell for skjermlesere) og totalene. Bildene ligger i
+maskotpakken (`mascots/seilbat/images/`, servert under `/static/mascot/seilbat/images/`): mett = «vurdering bestått»,
+sur og dramatisk = «frist forfalt» (ikke «ikke bestått», som viser motvind, ikke stillstand: produkteier 2026-11-07),
+ny = «kurs tildelt», alle e-postbilder fra 2.138.0. Sulten har sitt eget bilde, `flau-vind.jpg` (2.143.0, produkteier
+2026-11-08): slakt seil, sola steker, 2-eren fisker og en måke sitter i baugen. Før delte sulten bilde med e-posten
+«frist snart». Humørregelen er én funksjon på
 serveren (`src/modules/gamification/boatMood.ts`). Anker er ikke bygget; det kommer med avmeldingen i
 #1139, som en overstyring i den samme funksjonen.
 

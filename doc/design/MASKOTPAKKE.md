@@ -1,7 +1,9 @@
 # Maskotpakke: båten som kan byttes ut
 
-**Status:** plan, revidert 2026-11-07 etter en uavhengig gjennomlesing (Codex var over utgiftstaket). Steg 0 og 1
-bygget 2026-11-08 (grenen `maskotpakke-skive-1`); steg 2 gjenstår.
+**Status:** bygget. Plan revidert 2026-11-07 etter en uavhengig gjennomlesing (Codex var over utgiftstaket). Steg 0 og
+1 bygget 2026-11-08 (grenen `maskotpakke-skive-1`, i 2.142.0). Steg 2 bygget 2026-11-08 (grenen
+`maskotpakke-skive-2`): sjekken (`npm run mascot:check`, i CI og ved oppstart), testpakken, forhåndsvisningen
+(`npm run mascot:preview`) og README-malen (`mascots/seilbat/README.md`). Se «Bygget i skive 2» nederst.
 Bygges etter Profil (2.141.0) og før den ukentlige e-posten (#1139), så den leser pakken fra første dag.
 
 **Bestilt av produkteier (2026-11-07):** «Det kan være ønskelig å bytte metaforer og bilder i ulike organisasjoner, og
@@ -26,16 +28,19 @@ Seilbåten blir den første pakken og gir nøyaktig det brukerne ser i dag.
 - Tallene, og at bare brukeren selv ser statistikken.
 - E-post bruker innebygde bilder (CID), aldri bildeadresser. En sendt e-post blir aldri berørt av et bytte.
 
-## Hva ligger der i dag
+## Hvor ting ligger nå (etter skive 1)
 
-| Flate | Hvor | Innhold |
+| Flate | Leser | Innhold i pakken (`mascots/seilbat/`) |
 |---|---|---|
-| Profil, statistikk | `public/i18n/profile-translations.js`, `public/static/profile-stats.js` | 5 humør: linje på nb, nn og en-GB, bilde |
-| E-post, bildene | `src/modules/certification/illustratedEmail.ts`, `src/assets/email/*.jpg` | 9 situasjoner: bilde (JPEG, 600 × 200, under 30 kB), bildetekst på tre språk |
-| E-post, teksten | `src/i18n/notificationMessages.ts` (ny hovedversjon) | «har vært en tur på verftet» |
-| «Mine kurs», fremdriftslinja | `public/static/course-progress-boat.js`, CSS i `public/participant.html` | SVG i tre tilstander (flatt seil, fullt seil, feiring med konfetti), mål (31 px til hekken, 34 px rad, stripenes rekkevidde), retning fra høyre, 4,2 s feiring |
-| Favicon | `public/static/favicon.*` | båtmerket (`GAMIFISERING_DESIGN.md`: «Merket er også favicon») |
+| Profil, statistikk | `public/static/profile-stats.js` henter `/static/mascot/moods.json` (laget av `mascotMoodsJson`) | 5 humør: linje på nb, nn og en-GB, bilde i `images/` |
+| E-post, bildene | `src/modules/certification/illustratedEmail.ts` (`EMAIL_ILLUSTRATIONS`) | 9 situasjoner: bilde i `images/` (JPEG, 600 × 200, under 30 kB), bildetekst på tre språk |
+| E-post, teksten | `src/i18n/notificationMessages.ts` (ny hovedversjon) via `mascotEmailText` | `emailTexts.courseNewVersionIntro`: «har vært en tur på verftet» |
+| «Mine kurs», fremdriftslinja | `public/static/course-progress-boat.js` henter `/static/mascot/figure.js` og `/static/mascot/figure.css` | `figure/*.svg` i tre tilstander (flatt seil, fullt seil, feiring med konfetti), `figure.css`, målene i `figure` (31 px til hekken, stripenes rekkevidde), retning fra høyre, 4,2 s feiring |
+| Favicon | `src/routes/mascot.ts` på de faste adressene `/static/favicon.*` | `favicon.svg` og tre PNG-er |
 | Ukentlig e-post (#1139) | ikke bygget | skal bruke humørlinjene og bildene |
+
+Før skive 1 lå bildene i `src/assets/email/*.jpg`, faviconet i `public/static/favicon.*`, linjene i
+`public/i18n/profile-translations.js` og figuren i `course-progress-boat.js` og `participant.html`. De er flyttet.
 
 Figuren er tegnet på A-2-logoen (seilet er A-en, 2-tallet sitter ved roret), så den er både merkevare og metafor.
 
@@ -114,3 +119,38 @@ når appene gjennom Bicep, og Bicep kan sette ny verdi før ny kode er ute. Da s
 ## Åpent, ikke nå
 
 - Egne navn i teksten («båten», «fjellgeita»). Verft-setningen løses ved at hele setningen ligger i pakken.
+
+## Bygget i skive 2
+
+- **Sjekken:** `src/modules/mascot/mascotCheck.ts`. `npm run mascot:check` (`src/scripts/mascotCheck.ts`) sjekker alle
+  pakker i `mascots/` og valget i `mascot.config.json`, og lister alle feil på én gang. `test/unit/mascot-check.test.ts`
+  kjører skriptet, så det kjører i CI, og viser hver regel med en kopi av seilbåten som har én feil. I tillegg til
+  punktene over: ukjente nøkler og språk avvises (en skrivefeil blir oppdaget), filene sjekkes også etter at snarveier
+  er fulgt, SVG-ene kan ikke ha `<foreignObject>`, `figure.css` kan ikke hente noe utenfra, og `figure.celebrationMs`
+  må være lik varigheten til animasjonen på `.course-boat--leaving` i `figure.css`.
+- **Versjonen:** en eldre pakke får beskjed om hvilken versjon koden leser, og hver nøkkel som mangler, listes.
+  `ADDED_IN_VERSION` i `mascotPack.ts` fører opp hva som er nytt i hver versjon etter den første.
+- **Ved oppstart:** `startServer` i `src/index.ts` kaller `assertActiveMascotPack()` først, for både web og worker
+  (begge går gjennom samme `index.ts`). En feil går til den vanlige «Application startup failed.» og stopper
+  prosessen med listen over hva som er galt. Pakken leses også når e-postmalen og ruta lastes; en pakke som ikke kan
+  leses, stopper allerede der, med den samme typen melding.
+- **`LINK_LIKE`** er flyttet til `src/modules/certification/linkLike.ts`, så sjekken bruker samme regel som e-postmalen
+  uten å laste malen (som leser den valgte pakken).
+- **Testpakken:** `test/fixtures/mascot-swap/mascots/testbat/` (med egen `mascot.config.json` i
+  `test/fixtures/mascot-swap/`), utenfor `mascots/`, så den aldri kan velges i drift. En ball i stedet for en båt, egne
+  bilder og tekster, og feiringen på 3 s. Den velges i testene med `useMascotPack`, før noe har lest pakken:
+  - `test/unit/mascot-swap-email.test.ts`: de samme e-postene som fasiten. Bildet, bildeteksten og verft-setningen er
+    testpakkens, og med dem byttet tilbake er e-posten lik fasiten byte for byte;
+  - `test/unit/mascot-swap-files.test.ts`: faviconet, bildene, humørene og figuren appen serverer, er testpakkens;
+    seilbåtens bildeadresser gir 404;
+  - `test/e2e/mascot-swap.spec.ts`: på Profil er linja og bildet testpakkens, i «Mine kurs» SVG-en og feiringens
+    varighet; resten er likt fasiten.
+- **Forhåndsvisningen:** `npm run mascot:preview -- <navn> [fil]` (`src/scripts/mascotPreview.ts`) skriver
+  `dist/mascot-preview-<navn>.html` med alle e-poster (ni situasjoner × tre språk), alle humør på Profil og figuren i
+  hver tilstand med feiringen. Tegnet av de ekte funksjonene: e-postmalen med tekstene, `renderStats`,
+  `renderCourseProgress` og `launchCourseBoatCelebration`. Hvilken tekst, grunn og lenke hver e-post får, er satt opp i
+  skriptet likt avsenderne. `test/unit/mascot-preview.test.ts` kjører skriptet.
+- **README-malen:** `mascots/seilbat/README.md`.
+
+Ikke dekket: sjekken ser ikke på PNG-ene i faviconet (størrelse og format), og ikke på om `{course}` og `{major}` står
+i verft-setningen.
