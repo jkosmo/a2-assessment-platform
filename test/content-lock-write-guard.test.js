@@ -448,7 +448,8 @@ function placementViolations(activeProgram, activeFiles) {
     if (w.file !== "modules/adminContent/moduleVersioning.ts") out.push(`${where(w)} skriver kravet utenom moduleVersioning.ts`);
   }
   for (const w of writesOf(activeProgram, activeFiles, "modulePass")) {
-    if (w.file !== "modules/certification/modulePass.ts" && w.file !== "modules/course/moduleCreditBackfill.ts") out.push(`${where(w)} skriver ModulePass utenom de to stedene`);
+    // Tilbakefyllingen (moduleCreditBackfill.ts) skrev også, og er fjernet 2026-11-08.
+    if (w.file !== "modules/certification/modulePass.ts") out.push(`${where(w)} skriver ModulePass utenom vedtakssporet`);
   }
   for (const w of writesOf(activeProgram, activeFiles, "courseItem")) {
     // Slettingen av hele kurset tar kravene med seg: fremmednøkkelen står med CASCADE.
@@ -508,7 +509,7 @@ describe("#934 skive 5a-2: nummeret, kravet og beståtten skrives ett sted", () 
     expect(seen("moduleVersion")).toContain("modules/adminContent/moduleVersioning.ts:numberModuleHistory");
     expect(seen("module")).toContain("modules/adminContent/adminContentRepository.ts:publishModuleVersion");
     expect(seen("courseModuleRequirement")).toContain("modules/adminContent/moduleVersioning.ts:syncModuleRequirements");
-    expect(seen("courseModuleRequirement")).toContain("modules/adminContent/moduleVersioning.ts:raiseModuleRequirements");
+    expect(seen("courseModuleRequirement")).toContain("modules/adminContent/moduleVersioning.ts:raiseModuleRequirementInCourse");
     expect(seen("modulePass")).toContain("modules/certification/modulePass.ts:recordModulePassFromDecision");
     expect(seen("courseItem")).toContain("modules/course/courseCommands.ts:writeCourseItems");
     expect(seen("courseItem")).toContain("modules/course/courseCommands.ts:setCourseModules");
@@ -540,40 +541,35 @@ describe("#934 skive 5a-2: nummeret, kravet og beståtten skrives ett sted", () 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// #934 skive 5a-3 (doc/DESIGN_934.md, «5a-3 — bygget»): fremdrift i kurs går gjennom ÉN funksjon, og `SUPERSEDED` skrives ikke når
-// bryteren er på.
+// #934 skive 5a-3 (doc/DESIGN_934.md, «5a-3 — bygget»): fremdrift i kurs går gjennom ÉN funksjon.
 //   - `CertificationStatus`, `ModulePass` og `CourseModuleRequirement` leses bare av de stedene som står under. Alt som svarer på
-//     «har deltakeren bestått i dette kurset», spør `findModuleProgress` (moduleCredit.ts), som velger regel ut fra bryteren.
+//     «har deltakeren bestått i dette kurset», spør `findModuleProgress` (moduleCredit.ts).
 //   - `isCertificationPassed` og `CERTIFICATION_PASSED_STATUSES` brukes ikke utenfor disse stedene. Heller ikke via en relasjon.
-//   - `SUPERSEDED` skrives bare av `supersedeCertificationsForModule`, og den kalles bare der bryteren er sjekket først.
-//   - Bryteren leses bare i modulePassSwitch.ts, og der er det ingen mellomlagring.
+//   - 2026-11-08: den gamle regelen (bryteren av) er fjernet. Ingenting skriver `SUPERSEDED` på modulstatus, og ingenting i `src/`
+//     leser bryteren: regelen om beståtte per kurs gjelder alltid. Bare modulePassSwitch.ts kjenner raden, for skriptet som slår
+//     den på. Listene under har også en sjekk for oppføringer som ikke finnes lenger.
 // ─────────────────────────────────────────────────────────────────────────────
 const PROGRESS_READERS = new Map([
   [
     "certificationStatus",
     new Set([
-      // Regelen med bryteren av.
-      "modules/course/moduleCredit.ts:readModuleStatusRule",
-      // Det som gjelder modulen uten kurs: statusrapporten, #997-tallet i dialogen og vakta mot nedgradering.
+      // Det som gjelder modulen uten kurs: statusrapporten, #997-tallet i den gamle dialogen og vakta mot nedgradering.
       "repositories/reportingRepository.ts:findCertificationsForStatusReport",
       "modules/certification/certificationRepository.ts:findPassedCertificationsForModule",
       "modules/certification/certificationRepository.ts:findByUserAndModule",
-      // Sammenligningen og tilbakefyllingen, som regner på den gamle regelen med vilje.
-      "modules/course/moduleCreditComparison.ts:compareModuleCredit",
-      "modules/course/moduleCreditBackfill.ts:rebuildModulePassesForUser",
+      // Nummereringen av historikk uten nummer leser #997-sporet (`supersededByVersionId`).
       "modules/adminContent/moduleVersioning.ts:numberModuleHistory",
     ]),
   ],
   [
     "modulePass",
-    new Set(["modules/course/moduleCredit.ts:readPerCourseRule", "modules/course/moduleCredit.ts:findCreditedModules", "modules/course/moduleCredit.ts:hasValidModulePass", "modules/course/moduleCreditComparison.ts:compareModuleCredit"]),
+    new Set(["modules/course/moduleCredit.ts:readPerCourseRule", "modules/course/moduleCredit.ts:findCreditedModules", "modules/course/moduleCredit.ts:hasValidModulePass"]),
   ],
   [
     "courseModuleRequirement",
     new Set([
       "modules/course/moduleCredit.ts:readPerCourseRule",
       "modules/course/moduleCredit.ts:findCreditedModules",
-      "modules/course/moduleCreditComparison.ts:compareModuleCredit",
       "modules/adminContent/moduleVersioning.ts:syncModuleRequirements",
     ]),
   ],
@@ -609,11 +605,7 @@ function progressReadViolations(activeProgram, activeFiles) {
 const PASSED_STATUS_USERS = new Set([
   "modules/certification/certificationRepository.ts",
   "modules/certification/index.ts",
-  "modules/course/moduleCredit.ts",
-  "modules/course/moduleCreditComparison.ts",
   "modules/reporting/reviewAppealReport.ts",
-  // Bare i en kommentar.
-  "modules/adminContent/adminContentCommands.ts",
 ]);
 const SWITCH_FILE = "modules/course/modulePassSwitch.ts";
 
@@ -627,11 +619,12 @@ function progressTextViolationsIn(file, text) {
   if (/\b(certifications|certificationStatuses|modulePasses)\s*:\s*\{/.test(text) && file !== "routes/me.ts") {
     out.push(`${file} leser beståtte via en relasjon. Fremdrift i kurs går gjennom findModuleProgress`);
   }
-  if (/\bstatus\s*:\s*["']SUPERSEDED["']/.test(text) && file !== "modules/certification/certificationRepository.ts") {
-    out.push(`${file} skriver SUPERSEDED utenom supersedeCertificationsForModule`);
+  // 2026-11-08: #997-skrivingen (`supersedeCertificationsForModule`) er fjernet. Ingen kode skriver `SUPERSEDED` på modulstatus.
+  if (/\bstatus\s*:\s*["']SUPERSEDED["']/.test(text) || /\bsupersedeCertificationsForModule\b/.test(text)) {
+    out.push(`${file} skriver SUPERSEDED på modulstatus. Den gamle regelen (#997) er fjernet`);
   }
-  if (file !== SWITCH_FILE && (/module_pass_per_course/.test(text) || /\bMODULE_PASS_SWITCH_KEY\b/.test(text))) {
-    out.push(`${file} leser bryteren selv. Bruk isModulePassPerCourseOn (${SWITCH_FILE}), på klienten avgjørelsen skjer på`);
+  if (file !== SWITCH_FILE && (/module_pass_per_course/.test(text) || /\bMODULE_PASS_SWITCH_KEY\b/.test(text) || /\bisModulePassPerCourseOn\b/.test(text))) {
+    out.push(`${file} leser bryteren. Den gamle regelen er fjernet, og regelen om beståtte per kurs gjelder alltid (${SWITCH_FILE})`);
   }
   if (file === SWITCH_FILE && /^\s*(let|var)\s|new\s+(Map|Set|WeakMap)\b|\bsetTimeout\b|\bcache\b/m.test(text.replace(/^\s*(\/\/|\*|\/\*).*$/gm, ""))) {
     out.push(`${file} mellomlagrer bryteren. Da kan app og worker bli uenige`);
@@ -639,71 +632,40 @@ function progressTextViolationsIn(file, text) {
   return out;
 }
 
-/** Hvem kaller `supersedeCertificationsForModule`, og er bryteren sjekket før kallet, i samme funksjon? */
-function supersedeViolations(activeProgram, activeFiles) {
-  const out = [];
-  const callers = [];
-  for (const fileName of activeFiles) {
-    const sourceFile = activeProgram.getSourceFile(fileName);
-    if (!sourceFile) continue;
-    const file = rel(fileName);
-    const visit = (node) => {
-      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "supersedeCertificationsForModule") {
-        const fn = namedFunctionOf(node);
-        const where = `${file}:${fn?.name.getText() ?? "?"}`;
-        callers.push(where);
-        if (where !== "modules/adminContent/adminContentCommands.ts:publishModuleVersion") out.push(`${where} setter SUPERSEDED utenom publishModuleVersion`);
-        const text = fn?.getText() ?? "";
-        const check = text.indexOf("isModulePassPerCourseOn(");
-        if (check < 0 || check > text.indexOf("supersedeCertificationsForModule(")) out.push(`${where} setter SUPERSEDED uten å sjekke bryteren først`);
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(sourceFile);
-  }
-  return { out, callers };
-}
-
 const PROGRESS_VIRTUAL = join(SRC, "__progress_guard_probe__.ts");
 const PROGRESS_VIRTUAL_TEXT = `
 import { prisma } from "./db/prisma.js";
-import { createCertificationRepository } from "./modules/certification/certificationRepository.js";
-import { runContentWrite } from "./db/contentLock.js";
 export async function probeStatusCount(userId: string) { return prisma.certificationStatus.count({ where: { userId } }); }
 export async function probePassRead(userId: string) { return prisma.modulePass.findMany({ where: { userId } }); }
 export async function probeRequirementRead(courseId: string) { return prisma.courseModuleRequirement.findMany({ where: { courseId } }); }
 export async function probeAlias() { const d = prisma.certificationStatus; return d.count(); }
-export async function probeSupersede() { await runContentWrite(async (tx) => createCertificationRepository(tx).supersedeCertificationsForModule(tx, "m", "v")); }
 `;
 
-describe("#934 skive 5a-3: fremdrift i kurs går gjennom én funksjon, og SUPERSEDED skrives ikke med bryteren på", () => {
+describe("#934 skive 5a-3: fremdrift i kurs går gjennom én funksjon, ingenting skriver SUPERSEDED, og ingenting leser bryteren", () => {
   it("ingenting leser modulstatus, beståtte eller kravet utenom stedene som er listet", () => {
     expect(progressReadViolations(program, files).out).toEqual([]);
   });
 
-  it("tekstsjekkene: reglene for modulstatus, relasjoner, SUPERSEDED og bryteren står der de skal", () => {
+  it("tekstsjekkene: reglene for modulstatus og relasjoner står der de skal, ingenting skriver SUPERSEDED, og ingenting leser bryteren", () => {
     expect(files.flatMap((fileName) => progressTextViolationsIn(rel(fileName), readFileSync(fileName, "utf8")))).toEqual([]);
   });
 
-  it("SUPERSEDED settes bare i publishModuleVersion, og bryteren er sjekket før kallet", () => {
-    const { out, callers } = supersedeViolations(program, files);
-    expect(out).toEqual([]);
-    expect(callers).toEqual(["modules/adminContent/adminContentCommands.ts:publishModuleVersion"]);
-  });
 
   it("KONTROLLCASE: vakta ser de ekte leserne, også regelen selv", () => {
     const { seen } = progressReadViolations(program, files);
     for (const expected of [
-      "certificationStatus modules/course/moduleCredit.ts:readModuleStatusRule",
       "modulePass modules/course/moduleCredit.ts:readPerCourseRule",
       "courseModuleRequirement modules/course/moduleCredit.ts:readPerCourseRule",
       "certificationStatus repositories/reportingRepository.ts:findCertificationsForStatusReport",
     ]) {
       expect(seen).toContain(expected);
     }
+    // Ingen oppføring i lista over lesere peker på noe som ikke finnes lenger.
+    const stale = [...PROGRESS_READERS].flatMap(([table, readers]) => [...readers].filter((where) => !seen.includes(`${table} ${where}`)).map((where) => `${table} ${where}`));
+    expect(stale).toEqual([]);
   });
 
-  it("KONTROLLCASE: en ny leser er rød, på alle tre tabellene og via et alias, og SUPERSEDED uten bryteren er rød", () => {
+  it("KONTROLLCASE: en ny leser er rød, på alle tre tabellene og via et alias", () => {
     const host = ts.createCompilerHost(compilerOptions());
     const getSourceFile = host.getSourceFile.bind(host);
     const same = (a, b) => a.split("\\").join("/") === b.split("\\").join("/");
@@ -717,9 +679,7 @@ describe("#934 skive 5a-3: fremdrift i kurs går gjennom én funksjon, og SUPERS
       expect(out.some((v) => expected.test(v)), `${expected}\n${out.join("\n")}`).toBe(true);
     }
     expect(out).toHaveLength(4);
-    const superseded = supersedeViolations(probe, [PROGRESS_VIRTUAL]).out;
-    expect(superseded.some((v) => /utenom publishModuleVersion/.test(v)), superseded.join("\n")).toBe(true);
-    expect(superseded.some((v) => /uten å sjekke bryteren/.test(v)), superseded.join("\n")).toBe(true);
+
   }, 120_000);
 
   it("KONTROLLCASE: tekstsjekkene fanger de samme feilene, og slipper det som er lov", () => {
@@ -729,14 +689,21 @@ describe("#934 skive 5a-3: fremdrift i kurs går gjennom én funksjon, og SUPERS
     expect(caught("include: { certifications: { where: { moduleId } } }")).toHaveLength(1);
     expect(caught("include: { modulePasses: { where: { moduleId } } }")).toHaveLength(1);
     expect(caught('data: { status: "SUPERSEDED" }')).toHaveLength(1);
+    expect(caught('data: { status: "SUPERSEDED" }', "modules/certification/certificationRepository.ts")).toHaveLength(1);
+    expect(caught("createCertificationRepository(tx).supersedeCertificationsForModule(tx, m, v)")).toHaveLength(1);
     expect(caught('where: { key: "module_pass_per_course" }')).toHaveLength(1);
     expect(caught("where: { key: MODULE_PASS_SWITCH_KEY }")).toHaveLength(1);
+    expect(caught("if (await isModulePassPerCourseOn(tx)) {")).toHaveLength(1);
+    expect(caught('import { isModulePassPerCourseOn } from "./modulePassSwitch.js";')).toHaveLength(1);
+    expect(caught("export async function isModulePassPerCourseOn(client) {", SWITCH_FILE)).toEqual([]);
     expect(caught("let cached = null;", SWITCH_FILE)).toHaveLength(1);
     expect(caught("const seen = new Map();", SWITCH_FILE)).toHaveLength(1);
     // Lov: tellingen i slettesperren, og et svar om en innlevering, en anke eller en sak, som har samme ord.
     expect(caught("_count: { select: { certificationStatuses: true } }")).toEqual([]);
     expect(caught('appealStatus: "SUPERSEDED"')).toEqual([]);
-    expect(caught("isCertificationPassed(row.status)", "modules/course/moduleCredit.ts")).toEqual([]);
+    expect(caught("isCertificationPassed(row.status)", "modules/reporting/reviewAppealReport.ts")).toEqual([]);
+    // 2026-11-08: moduleCredit.ts leste modulstatus for den gamle regelen. Den er fjernet, og nå er det rødt der også.
+    expect(caught("isCertificationPassed(row.status)", "modules/course/moduleCredit.ts")).toHaveLength(1);
     expect(caught("certifications: { select: { moduleId: true } }", "routes/me.ts")).toEqual([]);
   });
 });

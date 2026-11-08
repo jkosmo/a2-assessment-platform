@@ -4,16 +4,15 @@
 // hovedversjon større enn eller lik kravet for (C, M). Tidspunktet spiller ingen rolle.
 //
 // ⚠️ `findModuleProgress` (under) er DEN ENE veien til fremdrift i kurs. Porten for kursbevis, «Mine kurs», kursdetaljen og
-// kursrapporten spør bare den, og den velger regel ut fra bryteren: av = `CertificationStatus`, som i 2.134.0; på = regelen
-// over. `test/content-lock-write-guard.test.js` nekter andre lesere.
-import type { CertificationLifecycleStatus } from "@prisma/client";
+// kursrapporten spør bare den. `test/content-lock-write-guard.test.js` nekter andre lesere.
+//
+// Regelen har vært på i prod siden 2026-11-06 (bryteren i `modulePassSwitch.ts`), og den slås aldri av igjen. Den gamle regelen,
+// som leste `CertificationStatus`, er fjernet (2026-11-08). Bryteren leses ikke her lenger.
 import { prisma } from "../../db/prisma.js";
-import { isCertificationPassed } from "../certification/certificationRepository.js";
 import type { ReportFilters } from "../reporting/types.js";
-import { isModulePassPerCourseOn } from "./modulePassSwitch.js";
 
 type CreditReader = Pick<typeof prisma, "courseModuleRequirement" | "modulePass">;
-type ProgressReader = CreditReader & Pick<typeof prisma, "certificationStatus" | "platformConfig">;
+type ProgressReader = CreditReader;
 
 export type CreditedModule = { userId: string; courseId: string; moduleId: string };
 
@@ -30,7 +29,7 @@ export function passCountsForCourse(
   return pass.versionMajor >= minModuleMajor;
 }
 
-/** Varianten for mange deltakere og mange kurs, uten å se på bryteren. Sammenligningsrapporten bruker den. */
+/** Varianten for mange deltakere og mange kurs. */
 export async function findCreditedModules(
   client: CreditReader,
   input: { userIds: string[]; courseIds: string[] },
@@ -87,7 +86,6 @@ export async function findCreditedModuleIds(client: CreditReader, userId: string
  * Ingen av delene (`null`): resten avgjør leseren selv, ut fra om hen har begynt.
  */
 export type ModuleStanding = "PASSED" | "REVISED";
-export type ModuleProgressRule = "per_course" | "module_status";
 export type ModuleProgressFilters = Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit">;
 
 export type ModuleProgressInput = {
@@ -100,7 +98,6 @@ export type ModuleProgressInput = {
 };
 
 export type ModuleProgress = {
-  rule: ModuleProgressRule;
   standing(userId: string, courseId: string, moduleId: string): ModuleStanding | null;
   /** Modulene som teller for deltakeren i kurset. */
   passedModuleIds(userId: string, courseId: string): Set<string>;
@@ -108,11 +105,11 @@ export type ModuleProgress = {
   passedUserIds(courseId: string, moduleId: string): Set<string>;
 };
 
-function emptyProgress(rule: ModuleProgressRule): ModuleProgress {
-  return { rule, standing: () => null, passedModuleIds: () => new Set(), passedUserIds: () => new Set() };
+function emptyProgress(): ModuleProgress {
+  return { standing: () => null, passedModuleIds: () => new Set(), passedUserIds: () => new Set() };
 }
 
-function collectStandings(rule: ModuleProgressRule) {
+function collectStandings() {
   const standings = new Map<string, ModuleStanding>();
   const byLearner = new Map<string, Set<string>>();
   const byModule = new Map<string, Set<string>>();
@@ -134,7 +131,6 @@ function collectStandings(rule: ModuleProgressRule) {
     },
     result(): ModuleProgress {
       return {
-        rule,
         standing: (userId, courseId, moduleId) => standings.get(`${userId}\n${courseId}\n${moduleId}`) ?? null,
         passedModuleIds: (userId, courseId) => byLearner.get(`${userId}\n${courseId}`) ?? new Set(),
         passedUserIds: (courseId, moduleId) => byModule.get(`${courseId}\n${moduleId}`) ?? new Set(),
@@ -157,30 +153,7 @@ function inOrgUnit(filters: ModuleProgressFilters | undefined) {
   return filters?.orgUnit ? { user: { department: filters.orgUnit } } : {};
 }
 
-/** Regelen slik den var før 5a-3: én rad per person og modul, uansett kurs. */
-async function readModuleStatusRule(client: ProgressReader, input: ModuleProgressInput, moduleIds: string[]): Promise<ModuleProgress> {
-  const rows: Array<{ userId: string; moduleId: string; status: CertificationLifecycleStatus }> = await client.certificationStatus.findMany({
-    where: {
-      moduleId: { in: moduleIds },
-      ...(input.userIds ? { userId: { in: input.userIds } } : {}),
-      ...passedWithin(input.filters),
-      ...inOrgUnit(input.filters),
-    },
-    select: { userId: true, moduleId: true, status: true },
-  });
-  const collected = collectStandings("module_status");
-  for (const course of input.courses) {
-    const inCourse = new Set(course.moduleIds);
-    for (const row of rows) {
-      if (!inCourse.has(row.moduleId)) continue;
-      if (isCertificationPassed(row.status)) collected.set(row.userId, course.courseId, row.moduleId, "PASSED");
-      else if (row.status === "SUPERSEDED") collected.set(row.userId, course.courseId, row.moduleId, "REVISED");
-    }
-  }
-  return collected.result();
-}
-
-/** Regelen etter 5a-3: kravet per kurs og beståtte per innlevering. */
+/** Kravet per kurs og beståtte per innlevering (5a-3). */
 async function readPerCourseRule(client: ProgressReader, input: ModuleProgressInput, moduleIds: string[]): Promise<ModuleProgress> {
   const requirements = await client.courseModuleRequirement.findMany({
     where: { courseId: { in: input.courses.map((course) => course.courseId) }, moduleId: { in: moduleIds } },
@@ -196,7 +169,7 @@ async function readPerCourseRule(client: ProgressReader, input: ModuleProgressIn
     },
     select: { userId: true, moduleId: true, invalidatedAt: true, moduleVersion: { select: { versionMajor: true } } },
   });
-  const collected = collectStandings("per_course");
+  const collected = collectStandings();
   for (const course of input.courses) {
     const inCourse = new Set(course.moduleIds);
     for (const pass of passes) {
@@ -212,12 +185,11 @@ async function readPerCourseRule(client: ProgressReader, input: ModuleProgressIn
 }
 
 /**
- * ⚠️ DEN ENE VEIEN til fremdrift i kurs. Velger regel ut fra bryteren, lest på samme klient som dataene: i en låst transaksjon
- * (utstedelsen) er bryteren og beståttene lest i samme transaksjon. Ingen mellomlagring: app og worker kan ikke bli uenige.
+ * ⚠️ DEN ENE VEIEN til fremdrift i kurs. Leses på samme klient som dataene: i en låst transaksjon (utstedelsen) er kravet og
+ * beståttene lest i samme transaksjon.
  */
 export async function findModuleProgress(client: ProgressReader, input: ModuleProgressInput): Promise<ModuleProgress> {
-  const perCourse = await isModulePassPerCourseOn(client);
   const moduleIds = [...new Set(input.courses.flatMap((course) => course.moduleIds))];
-  if (moduleIds.length === 0 || input.userIds?.length === 0) return emptyProgress(perCourse ? "per_course" : "module_status");
-  return perCourse ? readPerCourseRule(client, input, moduleIds) : readModuleStatusRule(client, input, moduleIds);
+  if (moduleIds.length === 0 || input.userIds?.length === 0) return emptyProgress();
+  return readPerCourseRule(client, input, moduleIds);
 }

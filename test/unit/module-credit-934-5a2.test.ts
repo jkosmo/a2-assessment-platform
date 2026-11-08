@@ -6,10 +6,9 @@ import {
   type RevisionTrailEvent,
 } from "../../src/modules/adminContent/moduleVersioning.js";
 import { passCountsForCourse } from "../../src/modules/course/moduleCredit.js";
-import { computeModulePasses, latestDecisionOf, type PassDecision, type PassSubmission } from "../../src/modules/course/moduleCreditBackfill.js";
-import { classifyCreditDifference, EXPECTED_REASONS, type CreditFacts } from "../../src/modules/course/moduleCreditComparison.js";
 
-// #934 skive 5a-2 (doc/DESIGN_934.md, «5a-2»): nummereringen, beståttene og årsakene i rapporten, som rene funksjoner.
+// #934 skive 5a-2 (doc/DESIGN_934.md, «5a-2»): nummereringen og regelen, som rene funksjoner. Tilbakefyllingen og
+// sammenligningsrapporten er fjernet 2026-11-08, med testene sine: de gjaldt bare med bryteren av.
 
 const at = (day: number) => new Date(Date.UTC(2026, 0, day));
 
@@ -138,86 +137,6 @@ describe("findVersionsStartingMajor: hvilke versjoner startet en ny hovedversjon
   });
 });
 
-function decision(id: string, over: Partial<PassDecision> = {}): PassDecision {
-  return { id, moduleVersionId: "v1", passFailTotal: true, decisionType: "AUTOMATIC", finalisedAt: at(2), createdAt: at(2), parentDecisionId: null, ...over };
-}
-function submission(id: string, decisions: PassDecision[], over: Partial<PassSubmission> = {}): PassSubmission {
-  return { id, moduleId: "m", submissionStatus: "COMPLETED", hasManualReview: false, decisions, ...over };
-}
-const compute = (submissions: PassSubmission[], status?: { status: "ACTIVE" | "DUE" | "EXPIRED" | "SUPERSEDED" | "NOT_CERTIFIED"; updatedAt: Date }, revisionAt?: Date) =>
-  computeModulePasses({
-    submissions,
-    statusByModule: new Map(status ? [["m", status]] : []),
-    latestRevisionAtByModule: new Map(revisionAt ? [["m", revisionAt]] : []),
-  });
-
-describe("computeModulePasses: siste vedtak per innlevering", () => {
-  it("et bestått vedtak gir én rad, med versjonen fra vedtaket", () => {
-    const rows = compute([submission("s", [decision("d", { moduleVersionId: "vX" })])]);
-    expect(rows).toEqual([{ submissionId: "s", moduleId: "m", decisionId: "d", moduleVersionId: "vX", passedAt: at(2), invalidatedAt: null }]);
-  });
-
-  it("en innlevering uten vedtak gir ingen rad", () => {
-    expect(compute([submission("s", [])])).toEqual([]);
-  });
-
-  it("stryk gir ingen rad", () => {
-    expect(compute([submission("s", [decision("d", { passFailTotal: false })])])).toEqual([]);
-  });
-
-  it("en anke som snur en bestått: det siste vedtaket avgjør, og slektskapet går foran tidspunktet", () => {
-    const parent = decision("d1", { finalisedAt: at(5), createdAt: at(5) });
-    const child = decision("d2", { passFailTotal: false, parentDecisionId: "d1", decisionType: "APPEAL_RESOLUTION", finalisedAt: at(5), createdAt: at(5) });
-    expect(compute([submission("s", [parent, child])])).toEqual([]);
-    expect(latestDecisionOf([child, parent])?.id).toBe("d2");
-    expect(latestDecisionOf([decision("a", { finalisedAt: at(1) }), decision("b", { finalisedAt: at(3) })])?.id).toBe("b");
-  });
-
-  it("to vedtak med samme tidspunkt: slektskapet avgjør, ikke id-en", () => {
-    expect(latestDecisionOf([decision("z"), decision("a", { parentDecisionId: "z" })])?.id).toBe("a");
-  });
-
-  it("et automatisk vedtak sendt til manuell vurdering teller ikke, selv om det sier bestått", () => {
-    expect(compute([submission("s", [decision("d")], { hasManualReview: true, submissionStatus: "UNDER_REVIEW" })])).toEqual([]);
-  });
-
-  it("sensorens vedtak over det teller", () => {
-    const rows = compute([
-      submission("s", [decision("d1"), decision("d2", { decisionType: "MANUAL_OVERRIDE", parentDecisionId: "d1", finalisedAt: at(3) })], { hasManualReview: true }),
-    ]);
-    expect(rows.map((r) => r.decisionId)).toEqual(["d2"]);
-  });
-
-  it("en åpen anke på en bestått: beståtten står (innleveringen er UNDER_REVIEW, men gammel status sier bestått)", () => {
-    expect(compute([submission("s", [decision("d")], { submissionStatus: "UNDER_REVIEW" })])).toHaveLength(1);
-  });
-
-  it("et forlatt forsøk (#951) er ikke et utfall", () => {
-    expect(compute([submission("s", [decision("d")], { submissionStatus: "SUPERSEDED" })])).toEqual([]);
-    expect(compute([submission("s", [decision("d")], { submissionStatus: "REJECTED" })])).toEqual([]);
-  });
-
-  it("vedtaket fattet før revisjonen ifølge sporet: ugyldiggjort, også på samme versjon", () => {
-    const rows = compute([submission("s", [decision("d", { finalisedAt: at(2) })])], { status: "ACTIVE", updatedAt: at(9) }, at(3));
-    expect(rows[0]?.invalidatedAt).toEqual(at(3));
-  });
-
-  it("vedtaket fattet etter revisjonen: ikke ugyldiggjort", () => {
-    const rows = compute([submission("s", [decision("d", { finalisedAt: at(4) })])], { status: "ACTIVE", updatedAt: at(9) }, at(3));
-    expect(rows[0]?.invalidatedAt).toBeNull();
-  });
-
-  it("raden står fortsatt som SUPERSEDED: ugyldiggjort, også uten spor", () => {
-    const rows = compute([submission("s", [decision("d")])], { status: "SUPERSEDED", updatedAt: at(7) });
-    expect(rows[0]?.invalidatedAt).toEqual(at(7));
-  });
-
-  it.each(["DUE", "EXPIRED"] as const)("gammel status %s er bestått, og raden står uten ugyldiggjøring", (status) => {
-    const rows = compute([submission("s", [decision("d")])], { status, updatedAt: at(7) });
-    expect(rows[0]?.invalidatedAt).toBeNull();
-  });
-});
-
 describe("passCountsForCourse: regelen", () => {
   it.each([
     [{ invalidatedAt: null, versionMajor: 2 }, 2, true],
@@ -228,41 +147,5 @@ describe("passCountsForCourse: regelen", () => {
     [{ invalidatedAt: null, versionMajor: 1 }, undefined, false],
   ])("%j mot krav %s → %s", (pass, requirement, expected) => {
     expect(passCountsForCourse(pass, requirement)).toBe(expected);
-  });
-});
-
-function facts(over: Partial<CreditFacts>): CreditFacts {
-  return { oldCredit: false, status: null, requirement: 1, latestRevisionAt: undefined, latestDecisionFailedOnOtherSubmission: false, overturnedOnSameSubmission: false, passes: [], ...over };
-}
-
-describe("classifyCreditDifference: årsakene", () => {
-  it("et nytt forsøk som strøk etter bestått: forventet", () => {
-    const reason = classifyCreditDifference(facts({ status: "NOT_CERTIFIED", latestDecisionFailedOnOtherSubmission: true }));
-    expect(reason).toBe("retake_failed_after_pass");
-    expect(EXPECTED_REASONS.has(reason)).toBe(true);
-  });
-
-  it("en bestått på en gammel versjon, vurdert etter revisjonen: forventet", () => {
-    const reason = classifyCreditDifference(facts({ oldCredit: true, status: "ACTIVE", requirement: 2, latestRevisionAt: at(3), passes: [{ versionMajor: 1, invalidatedAt: null, passedAt: at(4) }] }));
-    expect(reason).toBe("pass_on_old_version_after_revision");
-    expect(EXPECTED_REASONS.has(reason)).toBe(true);
-  });
-
-  it("samme, men vedtaket er fra før revisjonen: ikke forklart av den årsaken", () => {
-    expect(classifyCreditDifference(facts({ oldCredit: true, status: "ACTIVE", requirement: 2, latestRevisionAt: at(3), passes: [{ versionMajor: 1, invalidatedAt: null, passedAt: at(2) }] }))).toBe("unexplained");
-  });
-
-  it.each([
-    ["superseded_pass_counts_again", facts({ status: "SUPERSEDED" })],
-    ["unexplained", facts({ status: null })],
-    ["unexplained", facts({ status: "NOT_CERTIFIED", latestDecisionFailedOnOtherSubmission: false })],
-    ["missing_requirement", facts({ oldCredit: true, status: "ACTIVE", requirement: undefined })],
-    ["overturned_pass_kept_by_old_rule", facts({ oldCredit: true, status: "ACTIVE", overturnedOnSameSubmission: true })],
-    ["pass_on_unnumbered_version", facts({ oldCredit: true, status: "ACTIVE", passes: [{ versionMajor: null, invalidatedAt: null, passedAt: at(4) }] })],
-    ["invalidated_but_old_rule_counts", facts({ oldCredit: true, status: "ACTIVE", passes: [{ versionMajor: 1, invalidatedAt: at(4), passedAt: at(2) }] })],
-    ["unexplained", facts({ oldCredit: true, status: "ACTIVE" })],
-  ])("%s er ikke forventet", (reason, input) => {
-    expect(classifyCreditDifference(input)).toBe(reason);
-    expect(EXPECTED_REASONS.has(reason as never)).toBe(false);
   });
 });

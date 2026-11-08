@@ -2,6 +2,7 @@ import request from "supertest";
 import { withRevision } from "./support/courseRevision.js";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { recordFixturePass } from "./support/modulePassFixture.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -162,6 +163,8 @@ describe("Participant courses API", () => {
         { courseId: mixedCourse.id, moduleId: passedModule.module.id, itemType: "MODULE", sortOrder: 2 },
       ],
     });
+    // #934: ModulePass, nummer og krav, som regelen prod bruker leser. Etter at kurset har fått modulen, så kravet skrives.
+    await recordFixturePass({ userId: participant!.id, moduleId: passedModule.module.id, moduleVersionId: passedModule.moduleVersion.id, submissionId: passedSubmission.id, decisionId: passedDecision.id });
 
     const listResponse = await request(app).get("/api/courses").set(participantHeaders);
     expect(listResponse.status).toBe(200);

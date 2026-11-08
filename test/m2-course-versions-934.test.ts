@@ -8,6 +8,7 @@ import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, renameSectionInVersionSn
 import { runContentWrite } from "../src/db/contentLock.js";
 import { publishModuleVersion } from "../src/modules/adminContent/adminContentCommands.js";
 import { readSection } from "./support/participantFlow.js";
+import { recordFixturePass } from "./support/modulePassFixture.js";
 
 // #934 skive 1: kurs har hovedversjon og mindre versjon, og et kursbevis gjelder sin hovedversjon
 // (produkteier 2026-11-01, doc/DESIGN_934.md). Ingen flate setter versjonen ennå — testen gjør det
@@ -903,4 +904,6 @@ async function createPassedCertification(userId: string, fixture: Awaited<Return
   await prisma.certificationStatus.create({
     data: { userId, moduleId: fixture.module.id, latestDecisionId: decision.id, status: "ACTIVE", passedAt: new Date() },
   });
+  // #934: det regelen prod bruker leser (ModulePass, nummer og krav), som vedtakssporet ville skrevet.
+  await recordFixturePass({ userId, moduleId: fixture.module.id, moduleVersionId: fixture.moduleVersion.id, submissionId: submission.id, decisionId: decision.id });
 }

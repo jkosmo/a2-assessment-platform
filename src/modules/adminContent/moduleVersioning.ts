@@ -3,12 +3,12 @@
 // Nummeret settes ett sted: der modulens aktive versjon settes (`publishModuleVersion` i adminContentRepository.ts), under
 // den eksklusive innholdslåsen. Det endres aldri etterpå. `versionNo` står som løpenummer.
 //
-// Dagens regel (#997) er global, og dette speiler den nøyaktig til 5a-3 slår på den nye: en publisering med avkrysningen gir
-// modulen ny hovedversjon og hever kravet i ALLE kurs den ligger i. Ingen leser kravet ennå, utenom sammenligningsrapporten.
+// 5a-3 (på i prod siden 2026-11-06): en hovedversjon hever kravet bare i kursene som fikk hovedversjon (`raiseModuleRequirementInCourse`).
+// Den globale hevingen fra #997, tilbakefyllingen og sammenligningsrapporten er fjernet (2026-11-08).
 //
-// Historikk uten nummer: en modul kan ha versjoner som ble publisert før denne skiva, eller av gammel kode under
-// utrullingen. De får nummer før den neste gir noe videre, av samme funksjon som tilbakefyllingen bruker
-// (`numberModuleHistory`). Derfor spiller det ingen rolle om noen publiserer før tilbakefyllingen er kjørt.
+// Historikk uten nummer: en modul kan ha versjoner som ble publisert før 5a-2, eller av gammel kode under utrullingen. De får
+// nummer før den neste gir noe videre (`numberModuleHistory`). #997-sporet (`SUPERSEDED` og revisjonshendelsen) leses der for
+// å se hvor en hovedversjon startet. Det skrives ikke lenger, men radene står.
 import type { ContentWriteTx } from "../../db/contentLock.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
 import { AppError } from "../../errors/AppError.js";
@@ -120,21 +120,6 @@ function metadataOf(json: string): { moduleVersionId?: unknown; supersededCount?
 
 type TrailReader = Pick<DbTransactionClient, "auditEvent">;
 
-/** Revisjonene av modulene, fra revisjonssporet. Den siste per modul er grensen for hva som ble tatt bort. */
-export async function findLatestRevisionAtByModule(client: TrailReader, moduleIds: string[]): Promise<Map<string, Date>> {
-  if (moduleIds.length === 0) return new Map();
-  const rows = await client.auditEvent.findMany({
-    where: { entityType: auditEntityTypes.module, action: auditActions.adminContent.modulePassesSuperseded, entityId: { in: moduleIds } },
-    select: { entityId: true, timestamp: true },
-  });
-  const latest = new Map<string, Date>();
-  for (const row of rows) {
-    const known = latest.get(row.entityId);
-    if (!known || row.timestamp > known) latest.set(row.entityId, row.timestamp);
-  }
-  return latest;
-}
-
 /**
  * Gir nummer til versjoner som har vært ute, men mangler det. Returnerer nummerene som ble gitt. Gjør ingenting på en modul
  * som er i orden, utover å lese versjonene.
@@ -243,29 +228,6 @@ export async function resolvePublishNumber(
 }
 
 /**
- * Modulen fikk ny hovedversjon: kravet heves i alle kurs den ligger i, i samme transaksjon som versjonen settes live.
- * Dagens regel er global (doc/DESIGN_934.md, «5a-2»). Kravet senkes aldri. Et kurs uten rad (tilbakefyllingen er ikke
- * kjørt ennå) får raden her.
- */
-export async function raiseModuleRequirements(locked: ContentWriteTx, moduleId: string, major: number): Promise<void> {
-  const items = await locked.courseItem.findMany({
-    where: { moduleId, itemType: "MODULE" },
-    distinct: ["courseId"],
-    select: { courseId: true },
-  });
-  if (items.length > 0) {
-    await locked.courseModuleRequirement.createMany({
-      data: items.map((item) => ({ courseId: item.courseId, moduleId, minModuleMajor: major })),
-      skipDuplicates: true,
-    });
-  }
-  await locked.courseModuleRequirement.updateMany({
-    where: { moduleId, minModuleMajor: { lt: major } },
-    data: { minModuleMajor: major },
-  });
-}
-
-/**
  * #934 skive 5a-3: kurset fikk hovedversjon på grunn av en ny versjon av modulen. Kravet heves i dette kurset, og bare her: et
  * kurs som valgte mindre, beholder sitt. Det senkes aldri. Svarer om det faktisk ble hevet. Kalles fra
  * `applyCourseVersionChange`, i transaksjonen som lager hovedversjonen.
@@ -324,36 +286,4 @@ export async function syncModuleRequirements(locked: ContentWriteTx, courseId: s
     data.push({ courseId, moduleId, minModuleMajor: await currentModuleMajor(locked, moduleId) });
   }
   await locked.courseModuleRequirement.createMany({ data });
-}
-
-/**
- * Tilbakefyllingen: nummer på historikken, og krav lik modulens nåværende hovedversjon i hvert kurs den ligger i. Rader for
- * kurs den ikke lenger ligger i, fjernes. Før regelen er slått på, er kravet alltid den nåværende hovedversjonen, for dagens
- * regel er global. Derfor kan dette kjøres flere ganger; etter at regelen er slått på, kjøres det ikke.
- */
-export async function backfillModuleVersionsAndRequirements(
-  locked: ContentWriteTx,
-  moduleId: string,
-): Promise<{ numbered: number; requirements: number }> {
-  const assigned = await numberModuleHistory(locked, moduleId);
-  const highest = await locked.moduleVersion.aggregate({ where: { moduleId }, _max: { versionMajor: true } });
-  const major = highest._max.versionMajor ?? 1;
-  const items = await locked.courseItem.findMany({
-    where: { moduleId, itemType: "MODULE" },
-    distinct: ["courseId"],
-    select: { courseId: true },
-  });
-  const courseIds = items.map((item) => item.courseId);
-  await locked.courseModuleRequirement.deleteMany({ where: { moduleId, courseId: { notIn: courseIds } } });
-  if (courseIds.length > 0) {
-    await locked.courseModuleRequirement.createMany({
-      data: courseIds.map((courseId) => ({ courseId, moduleId, minModuleMajor: major })),
-      skipDuplicates: true,
-    });
-  }
-  await locked.courseModuleRequirement.updateMany({
-    where: { moduleId, minModuleMajor: { not: major } },
-    data: { minModuleMajor: major },
-  });
-  return { numbered: assigned.size, requirements: courseIds.length };
 }

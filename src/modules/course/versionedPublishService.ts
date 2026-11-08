@@ -30,7 +30,6 @@ import {
   type CourseVersionChoice,
   type SectionSnapshot,
 } from "./courseVersioning.js";
-import { assertModuleVersioningActive } from "./modulePassSwitch.js";
 import { publishSection } from "./sectionCommands.js";
 
 export type CourseVersionAnswers = Record<string, CourseVersionChoice>;
@@ -118,7 +117,6 @@ export async function publishModuleVersioned(
   },
 ) {
   return runContentWrite(async (tx) => {
-    await assertModuleVersioningActive(tx);
     const module = await tx.module.findUnique({ where: { id: moduleId }, select: { activeVersionId: true } });
     if (!module) throw new NotFoundError("Module", "module_not_found", "Module not found.");
     const affected = await findAffectedCourses(tx, [{ moduleId }]);
@@ -176,7 +174,6 @@ export async function publishCoursePendingVersioned(
   },
 ): Promise<{ publishedItems: PublishedItemRef[]; courses: CoursePublishOutcome[] }> {
   return runContentWrite(async (tx) => {
-    await assertModuleVersioningActive(tx);
     const fresh = await getCoursePendingVersions(courseId, actor, tx);
     const now = fresh.items.map((item) => item.versionId ?? "").sort();
     const seen = [...new Set(input.versionIds)].sort();

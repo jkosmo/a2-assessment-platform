@@ -6,6 +6,7 @@ import { runContentWrite, runLearnerWrite, type ContentWriteTx, type LearnerTx }
 import { createAssessmentDecision, createMcqOnlyDecision } from "../src/modules/assessment/decisionService.js";
 import { deliverOutboxEvent, OUTBOX_EVENT_TYPES } from "../src/modules/outbox/outboxService.js";
 import { readSection, seenModuleVersionId } from "./support/participantFlow.js";
+import { recordFixturePass } from "./support/modulePassFixture.js";
 
 // #934 skive 5a-1 (doc/DESIGN_934.md, «5a-1»): deltakerlåsen, utstedelse under låsene, og versjonen deltakeren så.
 //   - Et kursbevis måles og skrives i én transaksjon som holder innholdslåsen delt og deltakerlåsen, fra alle tre veiene
@@ -156,6 +157,8 @@ async function pass(userId: string, module: Awaited<ReturnType<typeof createModu
   await prisma.certificationStatus.create({
     data: { userId, moduleId: module.moduleId, latestDecisionId: decision.id, status: "ACTIVE", passedAt: new Date() },
   });
+  // #934: det regelen prod bruker leser (ModulePass, nummer og krav), som vedtakssporet ville skrevet.
+  await recordFixturePass({ userId, moduleId: module.moduleId, moduleVersionId: module.versionId, submissionId: submission.id, decisionId: decision.id });
   return { submissionId: submission.id, decisionId: decision.id };
 }
 
@@ -435,7 +438,12 @@ describe("#934 5a-1: kursbeviset måles og skrives under låsene, fra alle tre v
       const pending = way.run(course, u);
       expect(await stillWaiting(pending)).toBe(true);
       expect(await certificates(u.userId, course.courseId)).toEqual([]);
-      lock.release((tx) => tx.certificationStatus.update({ where: { userId_moduleId: { userId: u.userId, moduleId: course.module.moduleId } }, data: { status: "NOT_CERTIFIED", passedAt: null } }));
+      // Det et ankevedtak som stryker, skriver (`upsertCertificationStatusFromDecision` og `recordModulePassFromDecision`): statusen,
+      // og beståtten på innleveringen er borte. Det siste er det regelen prod bruker (#934) leser.
+      lock.release(async (tx) => {
+        await tx.certificationStatus.update({ where: { userId_moduleId: { userId: u.userId, moduleId: course.module.moduleId } }, data: { status: "NOT_CERTIFIED", passedAt: null } });
+        await tx.modulePass.deleteMany({ where: { userId: u.userId, moduleId: course.module.moduleId } });
+      });
       await lock.done;
       await pending;
       expect(await certificates(u.userId, course.courseId)).toEqual([]);

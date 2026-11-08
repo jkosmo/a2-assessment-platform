@@ -1,18 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
-// #989: resertifisering fjernes. Den bærende påstanden i saken er at fjerningen **ikke endrer én
-// eneste bestått-avgjørelse** — kursbevisporten ignorerte allerede utløp, fordi `EXPIRED` (og `DUE`,
-// `DUE_SOON`) står i CERTIFICATION_PASSED_STATUSES.
+// Kursbevisporten gjennom den ekte koden: courseCompletionService → `findModuleProgress` (moduleCredit.ts) → `passCountsForCourse`.
+// Den falske Prisma-klienten under evaluerer `in`-filtrene på ekte rader, så den måler regelen og ikke en mock som svarer det
+// testen håper.
 //
-// Denne testen pinner nettopp det, gjennom den ekte porten: courseCompletionService →
-// `findModuleProgress` (moduleCredit.ts, med bryteren av) → `isCertificationPassed` → CERTIFICATION_PASSED_STATUSES.
-// Den falske Prisma-klienten under evaluerer `in`-filtrene på ekte rader, så den måler regelen og
-// ikke en mock som svarer det testen håper.
-//
-// ⚠️ Mutasjonsmål: krymp CERTIFICATION_PASSED_STATUSES til ["ACTIVE"] (den «opplagte» forenklingen
-// når bare to tilstander skrives) — da blir de tre legacy-casene røde. Historiske rader med
-// DUE_SOON/DUE/EXPIRED ville mistet kursbeviset sitt.
+// 2026-11-08: porten leser bare regelen om beståtte per kurs (#934 5a-3): `ModulePass` og kravet per kurs. Den gamle regelen
+// (`CertificationStatus`, med DUE/EXPIRED som bestått fra #989) er fjernet; klienten under har ikke engang tabellen, så en
+// leser som gikk tilbake til den, ville feilet her. Gamle DUE/EXPIRED-rader ble gjort om til `ModulePass` av tilbakefyllingen
+// før regelen ble slått på (2026-11-06).
 
 const recordAuditEvent = vi.fn();
 
@@ -23,14 +19,14 @@ vi.mock("../../src/db/prisma.js", () => ({ prisma: prismaHolder }));
 vi.mock("../../src/db/contentLock.js", () => import("../support/contentLockThroughTransaction.js"));
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
 
-type CertRow = { userId: string; moduleId: string; status: string };
+type PassRow = { userId: string; moduleId: string; invalidatedAt: Date | null; versionMajor: number | null };
 
 const COURSE_ID = "course-1";
 const MODULE_ID = "module-1";
 const USER_ID = "user-1";
 
 // Minimal Prisma-lignende klient som faktisk tolker de filtrene porten bruker.
-function createFakeClient(certifications: CertRow[]) {
+function createFakeClient(passes: PassRow[], minModuleMajor: number | null = 1) {
   const created: Array<{ userId: string; courseId: string }> = [];
   // #934: hva tjenesten faktisk spør etter og skriver. Kurset er 3.2 her, så en vei som glemte versjonen
   // (`undefined`, eller standard 1) synes — ekte Prisma ville avvist `undefined` i den sammensatte nøkkelen.
@@ -57,13 +53,15 @@ function createFakeClient(certifications: CertRow[]) {
         { id: "item-1", courseId: COURSE_ID, itemType: "MODULE", moduleId: MODULE_ID, section: null },
       ],
     },
-    // #934 skive 5a-3: bryteren er av (ingen rad). Da er det denne regelen som gjelder.
-    platformConfig: {
-      findUnique: async () => null,
+    // #934 skive 5a-3: kravet for modulen i kurset, og beståttene per innlevering. Det er alt porten leser om modulene.
+    courseModuleRequirement: {
+      findMany: async () => (minModuleMajor === null ? [] : [{ courseId: COURSE_ID, moduleId: MODULE_ID, minModuleMajor }]),
     },
-    certificationStatus: {
+    modulePass: {
       findMany: async ({ where }: { where: { userId: { in: string[] }; moduleId: { in: string[] } } }) =>
-        certifications.filter((row) => where.userId.in.includes(row.userId) && where.moduleId.in.includes(row.moduleId)),
+        passes
+          .filter((row) => where.userId.in.includes(row.userId) && where.moduleId.in.includes(row.moduleId))
+          .map((row) => ({ userId: row.userId, moduleId: row.moduleId, invalidatedAt: row.invalidatedAt, moduleVersion: { versionMajor: row.versionMajor } })),
     },
     courseSectionRead: {
       findMany: async () => [],
@@ -88,10 +86,10 @@ function createFakeClient(certifications: CertRow[]) {
   return { client, created, lookups, versions };
 }
 
-async function issueCompletionsFor(status: string | null) {
-  const { client, created } = createFakeClient(
-    status == null ? [] : [{ userId: USER_ID, moduleId: MODULE_ID, status }],
-  );
+const pass = (over: Partial<PassRow> = {}): PassRow => ({ userId: USER_ID, moduleId: MODULE_ID, invalidatedAt: null, versionMajor: 1, ...over });
+
+async function issueCompletionsFor(passes: PassRow[], minModuleMajor: number | null = 1) {
+  const { client, created } = createFakeClient(passes, minModuleMajor);
 
   const { checkAndIssueCourseCompletions } = await import(
     "../../src/modules/course/courseCompletionService.js"
@@ -105,63 +103,35 @@ async function issueCompletionsFor(status: string | null) {
 // #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
 warmModuleGraph(() => import("../../src/modules/course/courseCompletionService.js"));
 
-describe("kursbevisporten er uendret av at resertifisering fjernes (#989)", () => {
+describe("kursbevisporten leser regelen om beståtte per kurs (#934 5a-3)", () => {
   beforeEach(() => {
     recordAuditEvent.mockReset();
   });
 
-  // De tre livssyklustilstandene som ingenting lenger SKRIVER, men som eksisterende rader har.
-  for (const legacyStatus of ["EXPIRED", "DUE", "DUE_SOON"]) {
-    it(`utsteder fortsatt kursbevis for en historisk rad med status ${legacyStatus}`, async () => {
-      const created = await issueCompletionsFor(legacyStatus);
-
-      expect(created).toEqual([{ userId: USER_ID, courseId: COURSE_ID }]);
-    });
-  }
-
-  // Kontrollcase 1: den tilstanden som fortsatt skrives skal fortsatt slippe gjennom.
-  it("utsteder kursbevis for ACTIVE", async () => {
-    const created = await issueCompletionsFor("ACTIVE");
-
-    expect(created).toEqual([{ userId: USER_ID, courseId: COURSE_ID }]);
+  it("utsteder kursbevis for en bestått som oppfyller kravet, også en høyere hovedversjon", async () => {
+    expect(await issueCompletionsFor([pass()])).toEqual([{ userId: USER_ID, courseId: COURSE_ID }]);
+    expect(await issueCompletionsFor([pass({ versionMajor: 3 })], 2)).toEqual([{ userId: USER_ID, courseId: COURSE_ID }]);
   });
 
-  // Kontrollcase 2: uten en bestått-tilstand må porten fortsatt holde stengt — ellers måler testene
-  // over bare at porten alltid åpner.
-  it("utsteder IKKE kursbevis for NOT_CERTIFIED", async () => {
-    const created = await issueCompletionsFor("NOT_CERTIFIED");
-
-    expect(created).toEqual([]);
+  // Kontrollcasene: uten en bestått som teller, må porten holde stengt, ellers måler testen over bare at porten alltid åpner.
+  it("utsteder IKKE kursbevis uten bestått, under kravet, uten krav, for en ugyldiggjort (#997) eller en versjon uten nummer", async () => {
+    expect(await issueCompletionsFor([])).toEqual([]);
+    expect(await issueCompletionsFor([pass({ versionMajor: 1 })], 2)).toEqual([]);
+    expect(await issueCompletionsFor([pass()], null)).toEqual([]);
+    expect(await issueCompletionsFor([pass({ invalidatedAt: new Date("2026-11-01T00:00:00.000Z") })])).toEqual([]);
+    expect(await issueCompletionsFor([pass({ versionMajor: null })])).toEqual([]);
     expect(recordAuditEvent).not.toHaveBeenCalled();
   });
 
   // #934: beviset slås opp og utstedes for kursets NÅVÆRENDE versjon (her 3.2) — ikke `undefined`, og
   // ikke standardverdien 1.
   it("#934: slår opp beviset for kursets hovedversjon og stempler det nye med versjonen", async () => {
-    const { client, lookups, versions } = createFakeClient([{ userId: USER_ID, moduleId: MODULE_ID, status: "ACTIVE" }]);
+    const { client, lookups, versions } = createFakeClient([pass()]);
     const { checkAndIssueCourseCompletions } = await import("../../src/modules/course/courseCompletionService.js");
     Object.assign(prismaHolder, client);
     await checkAndIssueCourseCompletions({ userId: USER_ID, moduleId: MODULE_ID });
 
     expect(lookups).toEqual([{ userId_courseId_versionMajor: { userId: USER_ID, courseId: COURSE_ID, versionMajor: 3 } }]);
     expect(versions).toEqual([{ versionMajor: 3, versionMinor: 2 }]);
-  });
-
-  it("utsteder IKKE kursbevis når modulen mangler sertifiseringsrad", async () => {
-    const created = await issueCompletionsFor(null);
-
-    expect(created).toEqual([]);
-  });
-
-  // #997: revidert modul. Verdien står med vilje UTENFOR CERTIFICATION_PASSED_STATUSES — det er
-  // hele mekanismen: ingen leser måtte endres for at en revisjon skal slutte å telle.
-  //
-  // ⚠️ Mutasjonsmål: legg "SUPERSEDED" inn i lista. Da blir denne rød, og revisjonen ville vært
-  // et navn uten virkning.
-  it("utsteder IKKE kursbevis for SUPERSEDED — modulen er revidert etter at deltakeren besto", async () => {
-    const created = await issueCompletionsFor("SUPERSEDED");
-
-    expect(created).toEqual([]);
-    expect(recordAuditEvent).not.toHaveBeenCalled();
   });
 });

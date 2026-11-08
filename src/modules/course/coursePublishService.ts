@@ -21,7 +21,7 @@ import {
   type CourseVersionChoice,
 } from "./courseVersioning.js";
 import { findModulesPublishedBefore } from "../adminContent/moduleVersioning.js";
-import { clientOutdatedForVersionChoice, isModulePassPerCourseOn } from "./modulePassSwitch.js";
+import { clientOutdatedForVersionChoice } from "./modulePassSwitch.js";
 
 // #934 skive 4a (kjent hull 2 etter 2.129.0): oppslagene tar klienten som parameter. Inne i en publisering
 // leser de på transaksjonen som holder innholdslåsen — de ser det låsen beskytter, og bruker ikke en forbindelse
@@ -534,18 +534,16 @@ export async function publishCourseCascade(
       if (!fresh.publishable) throw blockedByItems(fresh.unpublishedItems);
       // #934 skive 5a-3 (Codex runde 2 nr. 11): «upublisert» betyr bare at modulen ikke har en aktiv versjon nå. En modul som har
       // vært ute før, kan ha beståtte, og her ville den gått live uten at noen ble spurt per kurs. Moduler som aldri har vært
-      // ute, og seksjoner, går som før. Bryteren leses etter låsen, i denne transaksjonen.
-      if (await isModulePassPerCourseOn(tx)) {
-        const moduleItems = fresh.unpublishedItems.filter((item) => item.type === "MODULE");
-        const publishedBefore = await findModulesPublishedBefore(tx, moduleItems.map((item) => item.id));
-        const republished = moduleItems.filter((item) => publishedBefore.has(item.id));
-        if (republished.length > 0) {
-          throw new ConflictError(
-            "course_publish_has_republished_modules",
-            'These modules have been published before. Use "Publish new versions", which asks per course. Nothing was published.',
-            { modules: republished.map((item) => ({ moduleId: item.id, title: item.title })) },
-          );
-        }
+      // ute, og seksjoner, går som før. Lest etter låsen, i denne transaksjonen.
+      const moduleItems = fresh.unpublishedItems.filter((item) => item.type === "MODULE");
+      const publishedBefore = await findModulesPublishedBefore(tx, moduleItems.map((item) => item.id));
+      const republished = moduleItems.filter((item) => publishedBefore.has(item.id));
+      if (republished.length > 0) {
+        throw new ConflictError(
+          "course_publish_has_republished_modules",
+          'These modules have been published before. Use "Publish new versions", which asks per course. Nothing was published.',
+          { modules: republished.map((item) => ({ moduleId: item.id, title: item.title })) },
+        );
       }
       const plan: Array<{ type: "SECTION"; id: string } | { type: "MODULE"; id: string; versionId: string }> = [];
       for (const item of fresh.unpublishedItems) {
@@ -603,7 +601,7 @@ export async function publishCourseCascade(
 //     Ellers kan en ny test stå bak den gamle seksjonen den prøver.
 //   - Bare elementer forfatteren eier. Et kurs kan inneholde andres moduler og seksjoner (#903);
 //     dem publiserer eieren. De listes for seg og stopper ikke resten.
-//   - Revisjonsspørsmålet (#997) besvares én gang. Har noen bestått en av modulene, KREVES svaret.
+//   - Revisjonsspørsmålet (#997) er borte (2026-11-08). Avkrysningen gir 409; «Publiser nye versjoner» spør per kurs (5a-3).
 //   - Fasiten er det forfatteren så: klienten sender versjonene fra dialogen, og har settet endret
 //     seg i mellomtiden, publiseres ingenting (409).
 // ---------------------------------------------------------------------------
@@ -638,8 +636,8 @@ export type CoursePendingVersions = {
    *  Dialogen spør «mindre eller hovedversjon?» bare når kurset er publisert og tallet er over null.
    *  #934 skive 4b: og hvor mange en hovedversjon sender e-post til. */
   course: CourseVersionFacts;
-  /** #934 skive 5a-3: kursene `publish-pending-versioned` vil ha svar for. Bare når bryteren er på; ellers er svaret som før. */
-  affectedCourses?: AffectedCourse[];
+  /** #934 skive 5a-3: kursene `publish-pending-versioned` vil ha svar for. */
+  affectedCourses: AffectedCourse[];
 };
 
 export type PendingVersionsActor = { userId: string; roles: string[] };
@@ -710,9 +708,7 @@ export async function getCoursePendingVersions(courseId: string, actor: PendingV
     passedTotal: items.reduce((sum, item) => sum + item.passedCount, 0),
     modulesWithPasses: items.filter((item) => item.passedCount > 0).length,
     course: await courseVersionFacts(reader, course),
-    ...((await isModulePassPerCourseOn(reader))
-      ? { affectedCourses: await withVersionChoiceRights(reader, await findAffectedCourses(reader, itemRefs(items)), actor) }
-      : {}),
+    affectedCourses: await withVersionChoiceRights(reader, await findAffectedCourses(reader, itemRefs(items)), actor),
   };
 }
 
@@ -724,9 +720,6 @@ export async function publishCoursePendingVersions(
   input: { versionIds: string[]; supersedesEarlierPasses?: boolean; courseVersion?: CourseVersionChoice; confirmEmailRecipients?: number },
 ): Promise<{ publishedItems: PublishedItemRef[]; version: CourseVersionBump | null }> {
   const pending = await getCoursePendingVersions(courseId, actor);
-  // #934 skive 5a-3: den gamle kontrakten etter bryteren. Avgjøres på nytt etter låsen under; her er det bare for at
-  // spørsmålet om #997 ikke skal stilles når det ikke lenger gjelder.
-  const perCourseRule = await isModulePassPerCourseOn(prisma);
 
   // Det forfatteren så, er det som publiseres. Et annet sett (noen lagret en ny versjon, eller
   // publiserte én, etter at dialogen ble åpnet) betyr at svaret ble gitt på noe annet.
@@ -744,10 +737,6 @@ export async function publishCoursePendingVersions(
       "One or more new versions cannot be published. Fix them before publishing.",
       { items: pending.items },
     );
-  }
-  // #997: svaret sender ett varsel per person — det skal være et valg, ikke en standard.
-  if (!perCourseRule && pending.passedTotal > 0 && input.supersedesEarlierPasses === undefined) {
-    throw new AppError("revision_answer_required", 400, "Participants have passed some of these modules: say whether this is a revision (supersedesEarlierPasses).");
   }
 
   // #934 skive 3: alt i ÉN transaksjon — elementene, kursets versjon og øyeblikksbildet. Stopper noe, er
@@ -771,19 +760,15 @@ export async function publishCoursePendingVersions(
           { items: fresh.items },
         );
       }
-      const perCourse = await isModulePassPerCourseOn(tx);
-      if (perCourse) {
-        // #934 skive 5a-3: avkrysningen sier ingenting om kursene. Berører publiseringen andre kurs med kursbevis, er det et
-        // spørsmål denne kontrakten ikke kan stille. Det samme gjelder hovedversjon av kurset med en ny modul: den skulle bety «må
-        // bestå på nytt», men denne kontrakten kan ikke heve kravet per kurs, og valget skal ikke forsvinne uten at noen sier fra.
-        // Ellers publiseres det med `courseVersion` for dette kurset, og modulene blir mindre.
-        if (input.supersedesEarlierPasses === true) throw clientOutdatedForVersionChoice({ courseId });
-        if (input.courseVersion === "major" && fresh.items.some((item) => item.type === "MODULE")) throw clientOutdatedForVersionChoice({ courseId });
-        const others = (await findAffectedCourses(tx, itemRefs(fresh.items))).filter((course) => course.courseId !== courseId && course.certificateHolders > 0);
-        if (others.length > 0) throw clientOutdatedForVersionChoice({ courseId, courseIds: others.map((course) => course.courseId) });
-      } else if (fresh.passedTotal > 0 && input.supersedesEarlierPasses === undefined) {
-        throw new AppError("revision_answer_required", 400, "Participants have passed some of these modules: say whether this is a revision (supersedesEarlierPasses).");
-      }
+      // #934 skive 5a-3: avkrysningen sier ingenting om kursene. Berører publiseringen andre kurs med kursbevis, er det et
+      // spørsmål denne kontrakten ikke kan stille. Det samme gjelder hovedversjon av kurset med en ny modul: den skulle bety «må
+      // bestå på nytt», men denne kontrakten kan ikke heve kravet per kurs, og valget skal ikke forsvinne uten at noen sier fra.
+      // Ellers publiseres det med `courseVersion` for dette kurset, og modulene blir mindre. (#997-spørsmålet, `revision_answer_required`,
+      // gjaldt bare med bryteren av, og er fjernet 2026-11-08.)
+      if (input.supersedesEarlierPasses === true) throw clientOutdatedForVersionChoice({ courseId });
+      if (input.courseVersion === "major" && fresh.items.some((item) => item.type === "MODULE")) throw clientOutdatedForVersionChoice({ courseId });
+      const others = (await findAffectedCourses(tx, itemRefs(fresh.items))).filter((course) => course.courseId !== courseId && course.certificateHolders > 0);
+      if (others.length > 0) throw clientOutdatedForVersionChoice({ courseId, courseIds: others.map((course) => course.courseId) });
       const repo = createCourseRepository(tx);
       const snapshot = await repo.snapshotContent(courseId);
       const publishedItems: PublishedItemRef[] = [];
@@ -791,10 +776,7 @@ export async function publishCoursePendingVersions(
         if (item.type === "SECTION") {
           await publishSection(item.id, actor.userId, tx, { courseVersionHandledByCaller: true });
         } else {
-          await publishModuleVersion(item.id, item.versionId as string, actor.userId, tx, {
-            supersedesEarlierPasses: input.supersedesEarlierPasses === true && item.passedCount > 0,
-            courseVersionHandledByCaller: true,
-          });
+          await publishModuleVersion(item.id, item.versionId as string, actor.userId, tx, { courseVersionHandledByCaller: true });
         }
         publishedItems.push({ type: item.type, id: item.id });
       }

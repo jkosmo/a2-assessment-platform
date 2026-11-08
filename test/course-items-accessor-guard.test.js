@@ -53,12 +53,6 @@ const EXCEPTIONS = [
       + "kravet. Også arkiverte og avpubliserte teller, så en tilgjengelighetsregel ville gitt feil svar.",
   },
   {
-    file: "modules/course/moduleCreditComparison.ts",
-    reason:
-      "#934 skive 5a-2: sammenligningsrapporten går gjennom alle par av kurs og modul på plattformen. Ingen visning, "
-      + "og ingen deltakerflate.",
-  },
-  {
     file: "modules/course/contentLifecycle.ts",
     reason:
       "findCoursesForSections — omvendt oppslag (seksjon → kurs) for «Brukt i kurs»-kolonnen i "
@@ -70,12 +64,6 @@ const EXCEPTIONS = [
       "setCourseModules leser seksjonsradene for å BEVARE dem gjennom en re-skriving av modulene. "
       + "En skriveoperasjon på rader, ikke en visning av innhold. ⚠️ Denne ruta omgår arkivvakta "
       + "i setCourseItems — kjent hull, #992, og en annen sak enn tilgjengelighetsregelen.",
-  },
-  {
-    file: "modules/adminContent/adminContentRepository.ts",
-    reason:
-      "findLiveCourseTitlesContainingModule (2.101.0) — omvendt oppslag (modul → kurs) for kursnavnet "
-      + "i revisjonsvarselet. Leser bare kursets tittel, ikke kursets innhold.",
   },
   {
     file: "modules/course/enrollmentService.ts",

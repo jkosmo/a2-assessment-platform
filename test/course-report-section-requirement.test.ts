@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { readSection } from "./support/participantFlow.js";
+import { recordFixturePass } from "./support/modulePassFixture.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -101,6 +102,8 @@ describe("Kursrapporten krever leste seksjoner (#966)", () => {
     await prisma.certificationStatus.create({
       data: { userId: participant!.id, moduleId: module.id, latestDecisionId: decision.id, status: "ACTIVE", passedAt: new Date() },
     });
+    // #934: og ModulePass, nummer og krav, som regelen prod bruker leser.
+    await recordFixturePass({ userId: participant!.id, moduleId: module.id, moduleVersionId: moduleVersion.id, submissionId: submission.id, decisionId: decision.id });
 
     const section = await prisma.courseSection.create({
       data: { title: JSON.stringify({ "en-GB": "Les meg" }) },

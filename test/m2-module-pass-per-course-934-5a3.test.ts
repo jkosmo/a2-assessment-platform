@@ -1,11 +1,9 @@
 import request from "supertest";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { runContentWrite, type ContentWriteTx } from "../src/db/contentLock.js";
 import { createMcqOnlyDecision } from "../src/modules/assessment/decisionService.js";
-import { backfillModuleCredit } from "../src/modules/course/moduleCreditBackfill.js";
-import { MODULE_PASS_SWITCH_KEY } from "../src/modules/course/modulePassSwitch.js";
 import { publishCoursePendingVersioned, publishModuleVersioned } from "../src/modules/course/versionedPublishService.js";
 import { deliverOutboxEvent, OUTBOX_EVENT_TYPES } from "../src/modules/outbox/outboxService.js";
 import { auditActions } from "../src/observability/auditEvents.js";
@@ -13,13 +11,11 @@ import { preBodyApiLimiter } from "../src/middleware/rateLimiting.js";
 import { withRevision } from "./support/courseRevision.js";
 import { readSection, seenModuleVersionId } from "./support/participantFlow.js";
 
-// #934 skive 5a-3 (doc/DESIGN_934.md, «5a-3»): bryteren og regelen om beståtte per kurs.
-//   - Med bryteren av er alt som i 2.134.0. Det er det viktigste kravet ved utrulling, så hver regel har en kontroll her.
-//   - Med bryteren på teller en bestått i et kurs når hovedversjonen er minst kravet for (kurs, modul). Bevisene i planen står under.
+// #934 skive 5a-3 (doc/DESIGN_934.md, «5a-3»): regelen om beståtte per kurs.
+//   - En bestått teller i et kurs når hovedversjonen er minst kravet for (kurs, modul). Bevisene i planen står under.
+//   - Regelen har vært på i prod siden 2026-11-06, og den gamle regelen (bryteren av) er fjernet fra koden. Kontrolltestene som
+//     målte den gamle regelen, er fjernet med den.
 // Testene går gjennom rutene (supertest). Gammel kode og sene vedtak lages direkte, slik jobben og sensoren ville gjort det.
-//
-// ⚠️ Bryteren er en rad i den delte testdatabasen. Hver test slår den på selv, og `afterEach` tar den bort igjen, så et brudd midt
-// i en test ikke smitter over på neste fil. Filene kjører etter hverandre (`fileParallelism: false`).
 
 const RUN = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
 const T = (text: string) => ({ "en-GB": text, nb: text, nn: text });
@@ -36,18 +32,11 @@ let seq = 0;
 const tag = (name: string) => `5a3 ${name} ${RUN}-${seq++}`;
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const switchOn = () =>
-  prisma.platformConfig.upsert({ where: { key: MODULE_PASS_SWITCH_KEY }, create: { key: MODULE_PASS_SWITCH_KEY, value: "on" }, update: { value: "on" } });
-const switchOff = () => prisma.platformConfig.deleteMany({ where: { key: MODULE_PASS_SWITCH_KEY } });
-
 // Grensen før innlogging er 600 kall i minuttet per IP, og fila bruker flere enn det gjennom rutene. Grensen er ikke det som måles her.
 beforeEach(async () => {
   for (const ip of ["::ffff:127.0.0.1", "127.0.0.1", "::1"]) preBodyApiLimiter.resetKey(ip);
-  await switchOff();
 });
-afterEach(switchOff);
 afterAll(async () => {
-  await switchOff();
   await prisma.$disconnect();
 });
 
@@ -206,7 +195,7 @@ async function twoCoursesWithCertificates() {
   return { moduleId, versionId, a, b, u };
 }
 
-/** Hever kravet i kurset gjennom ruta. Forutsetter at bryteren er på, og at noen har kursbevis i kurset. */
+/** Hever kravet i kurset gjennom ruta. Forutsetter at noen har kursbevis i kurset. */
 async function majorIn(moduleId: string, answers: Record<string, "major" | "minor">, expected: string[]) {
   const versionId = await newVersion(moduleId);
   const response = await publishVersioned(moduleId, versionId, { moduleVersion: "major", courseVersions: answers, expectedCourseIds: expected });
@@ -234,35 +223,9 @@ async function stillWaiting(promise: Promise<unknown>, ms = 400) {
   return !settled;
 }
 
-describe("#934 5a-3: bryteren", () => {
-  it("leses for hvert kall, uten mellomlagring: samme deltaker får ny regel fra neste kall, og gammel regel når raden er borte", async () => {
-    const { moduleId, a, b, u } = await twoCoursesWithCertificates();
-    await switchOn();
-    await majorIn(moduleId, { [a]: "major", [b]: "minor" }, [a, b]);
-    expect(moduleItem(await courseDetail(u.headers, a), moduleId)?.moduleStatus).toBe("REVISED_RETAKE_REQUIRED");
-    await switchOff();
-    // Bare for å måle at raden leses. I drift slås den aldri av etter at et krav er hevet.
-    expect(moduleItem(await courseDetail(u.headers, a), moduleId)?.moduleStatus).toBe("PASSED");
-    await prisma.platformConfig.create({ data: { key: MODULE_PASS_SWITCH_KEY, value: "off" } });
-    expect(moduleItem(await courseDetail(u.headers, a), moduleId)?.moduleStatus).toBe("PASSED");
-    await switchOff();
-    await switchOn();
-    expect(moduleItem(await courseDetail(u.headers, a), moduleId)?.moduleStatus).toBe("REVISED_RETAKE_REQUIRED");
-  });
-
-  it("tilbakefyllingen nekter å kjøre, også når bryteren slås på etter at den startet", async () => {
-    const { moduleId } = await publishedModule();
-    await switchOn();
-    await expect(backfillModuleCredit({ moduleIds: [moduleId], userIds: [] })).rejects.toMatchObject({ code: "module_credit_backfill_refused" });
-    await switchOff();
-    expect((await backfillModuleCredit({ moduleIds: [moduleId], userIds: [] })).modules).toBe(1);
-  });
-});
-
 describe("#934 5a-3 bevis: modul i to kurs, hoved i A og mindre i B", () => {
   it("B beholder beståtten og fullført. A må ta ny versjon, består på nytt og får kursbevis for den nye hovedversjonen", async () => {
     const { moduleId, versionId, a, b, u } = await twoCoursesWithCertificates();
-    await switchOn();
     const v2 = await newVersion(moduleId);
 
     const response = await publishVersioned(moduleId, v2, { moduleVersion: "major", courseVersions: { [a]: "major", [b]: "minor" }, expectedCourseIds: [a, b] });
@@ -317,35 +280,11 @@ describe("#934 5a-3 bevis: modul i to kurs, hoved i A og mindre i B", () => {
     // Et kursbevis er permanent, og B fikk ikke noe nytt.
     expect((await certificates(u.userId, b)).map((row) => row.versionMajor)).toEqual([1]);
   });
-
-  it("KONTROLL, bryteren av: de nye endepunktene svarer 409, og avkrysningen tar beståtten fra alle kurs, slik 2.134.0 gjør", async () => {
-    const { moduleId, a, b, u } = await twoCoursesWithCertificates();
-    const v2 = await newVersion(moduleId);
-    const refused = await publishVersioned(moduleId, v2, { moduleVersion: "major", courseVersions: { [a]: "major", [b]: "minor" }, expectedCourseIds: [a, b] });
-    expect(refused.status).toBe(409);
-    expect(refused.body.error).toBe("module_versioning_not_active");
-    expect(await activeVersionOf(moduleId)).not.toBe(v2);
-
-    const old = await publishOld(moduleId, v2, { supersedesEarlierPasses: true });
-    expect(old.status, JSON.stringify(old.body).slice(0, 300)).toBe(200);
-    expect(await statusOf(u.userId, moduleId)).toBe("SUPERSEDED");
-    expect([await requirementOf(a, moduleId), await requirementOf(b, moduleId)]).toEqual([2, 2]);
-    expect(await revisedMails(moduleId)).toBe(1);
-    expect(await versionOf(a)).toMatch(/^1\./);
-    for (const courseId of [a, b]) {
-      const detail = await courseDetail(u.headers, courseId);
-      expect(moduleItem(detail, moduleId)?.moduleStatus).toBe("REVISED_RETAKE_REQUIRED");
-      // Feltet til modulsiden finnes bare med den nye regelen.
-      expect(moduleItem(detail, moduleId)).not.toHaveProperty("retakeRequired");
-      expect(detail.progress.moduleCompleted).toBe(0);
-    }
-  });
 });
 
 describe("#934 5a-3 bevis: et nytt forsøk stryker (svar f)", () => {
   it("B beholder beståtten, i detaljen, i lista og i rapporten", async () => {
     const { moduleId, a, b, u } = await twoCoursesWithCertificates();
-    await switchOn();
     await majorIn(moduleId, { [a]: "major", [b]: "minor" }, [a, b]);
     await takeModule(u.headers, moduleId, { pass: false });
     expect(await statusOf(u.userId, moduleId)).toBe("NOT_CERTIFIED"); // Skrives som før; ingen fremdrift leser det.
@@ -357,14 +296,6 @@ describe("#934 5a-3 bevis: et nytt forsøk stryker (svar f)", () => {
     expect(moduleItem(await courseDetail(u.headers, a), moduleId)?.moduleStatus).toBe("REVISED_RETAKE_REQUIRED");
     await openCertificates(u.headers);
     expect((await certificates(u.userId, a)).map((row) => row.versionMajor)).toEqual([1]);
-  });
-
-  it("KONTROLL, bryteren av: strykket tar beståtten, slik 2.134.0 gjør", async () => {
-    const { moduleId, b, u } = await twoCoursesWithCertificates();
-    await takeModule(u.headers, moduleId, { pass: false });
-    const inB = await courseDetail(u.headers, b);
-    expect(moduleItem(inB, moduleId)?.moduleStatus).toBe("IN_PROGRESS");
-    expect(inB.progress.moduleCompleted).toBe(0);
   });
 });
 
@@ -381,7 +312,6 @@ describe("#934 5a-3 bevis: sannhetstabellen", () => {
 
   it("mindre versjon og kalibrering: kravet står, og beståtten teller", async () => {
     const { moduleId, courseId, holder } = await courseWithHolder();
-    await switchOn();
     const v2 = await newVersion(moduleId);
     const minor = await publishVersioned(moduleId, v2, { moduleVersion: "minor" });
     expect(minor.status, JSON.stringify(minor.body).slice(0, 300)).toBe(200);
@@ -399,7 +329,6 @@ describe("#934 5a-3 bevis: sannhetstabellen", () => {
     // Deltakeren har bestått, men ikke åpnet kursbevissiden. Vedtaket er nok: workeren er ikke med her.
     await takeModule(u.headers, moduleId);
     await prisma.courseCompletion.deleteMany({ where: { courseId } });
-    await switchOn();
     const v2 = await newVersion(moduleId);
     const response = await publishVersioned(moduleId, v2, { moduleVersion: "major", courseVersions: { [courseId]: "major" }, expectedCourseIds: [courseId] });
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
@@ -411,7 +340,6 @@ describe("#934 5a-3 bevis: sannhetstabellen", () => {
 
   it("hoppet over en hovedversjon: C 2.0 hevet kravet til 2, C 3.0 rører ikke M. 1.x teller ikke, 2.0 og 2.1 gjør", async () => {
     const { moduleId, versionId, courseId } = await courseWithHolder();
-    await switchOn();
     const v2 = await majorIn(moduleId, { [courseId]: "major" }, [courseId]);
     expect(await requirementOf(courseId, moduleId)).toBe(2);
     const v21 = await newVersion(moduleId);
@@ -441,7 +369,6 @@ describe("#934 5a-3 bevis: sannhetstabellen", () => {
     const otherHolder = await learner();
     await takeModule(otherHolder.headers, moduleId);
     await openCertificates(otherHolder.headers);
-    await switchOn();
     await majorIn(moduleId, { [courseId]: "major", [other]: "minor" }, [courseId, other].sort());
 
     const u = await learner();
@@ -451,16 +378,6 @@ describe("#934 5a-3 bevis: sannhetstabellen", () => {
     await openCertificates(u.headers);
     expect(await certificates(u.userId, courseId)).toEqual([]);
     expect(await certificates(u.userId, other)).toHaveLength(1);
-  });
-
-  it("KONTROLL, bryteren av: samme innlevering gir kursbevis, slik 2.134.0 gjør (mangel 30)", async () => {
-    const { moduleId, versionId, courseId } = await courseWithHolder();
-    const v2 = await newVersion(moduleId);
-    expect((await publishOld(moduleId, v2, { supersedesEarlierPasses: true })).status).toBe(200);
-    const u = await learner();
-    await decideOn(u.userId, moduleId, versionId, 90);
-    await openCertificates(u.headers);
-    expect(await certificates(u.userId, courseId)).toHaveLength(1);
   });
 
   async function appealOverturned(userId: string, submissionId: string) {
@@ -476,7 +393,6 @@ describe("#934 5a-3 bevis: sannhetstabellen", () => {
     const u = await learner();
     const submissionId = await takeModule(u.headers, moduleId);
     await prisma.courseCompletion.deleteMany({ where: { courseId, userId: u.userId } });
-    await switchOn();
     await appealOverturned(u.userId, submissionId);
     expect(await statusOf(u.userId, moduleId)).toBe("ACTIVE"); // Vakta mot nedgradering står som før; regelen leser den ikke.
     expect(moduleItem(await courseDetail(u.headers, courseId), moduleId)?.moduleStatus).toBe("IN_PROGRESS");
@@ -484,23 +400,10 @@ describe("#934 5a-3 bevis: sannhetstabellen", () => {
     expect(await certificates(u.userId, courseId)).toEqual([]);
   });
 
-  it("KONTROLL, bryteren av: statusen står, og kursbevis utstedes, slik 2.134.0 gjør (mangel 41)", async () => {
-    const { moduleId } = await publishedModule();
-    const courseId = await newCourse([moduleId]);
-    const u = await learner();
-    const submissionId = await takeModule(u.headers, moduleId);
-    await prisma.courseCompletion.deleteMany({ where: { courseId, userId: u.userId } });
-    await appealOverturned(u.userId, submissionId);
-    expect(moduleItem(await courseDetail(u.headers, courseId), moduleId)?.moduleStatus).toBe("PASSED");
-    await openCertificates(u.headers);
-    expect(await certificates(u.userId, courseId)).toHaveLength(1);
-  });
-
   it("M legges inn i et kurs senere: kravet er Ms nåværende hovedversjon, og en eldre bestått teller ikke der", async () => {
     const { moduleId, versionId, courseId } = await courseWithHolder();
     const u = await learner();
     await decideOn(u.userId, moduleId, versionId, 90);
-    await switchOn();
     await majorIn(moduleId, { [courseId]: "minor" }, [courseId]);
     expect(await requirementOf(courseId, moduleId)).toBe(1);
     const later = await newCourse([moduleId]);
@@ -509,23 +412,21 @@ describe("#934 5a-3 bevis: sannhetstabellen", () => {
     expect(moduleItem(await courseDetail(u.headers, courseId), moduleId)?.moduleStatus).toBe("PASSED");
   });
 
-  it("gammel SUPERSEDED-rad fra #997: ugyldiggjort av tilbakefyllingen, og teller ikke når regelen er på (svar c)", async () => {
+  it("gammel #997-bestått, ugyldiggjort av tilbakefyllingen: teller ikke (svar c)", async () => {
     const { moduleId, courseId } = await courseWithHolder();
     const u = await learner();
     await takeModule(u.headers, moduleId);
-    const v2 = await newVersion(moduleId);
-    expect((await publishOld(moduleId, v2, { supersedesEarlierPasses: true })).status).toBe(200);
-    expect(await statusOf(u.userId, moduleId)).toBe("SUPERSEDED");
-    await backfillModuleCredit({ moduleIds: [moduleId], userIds: [u.userId] });
-    expect((await prisma.modulePass.findMany({ where: { userId: u.userId, moduleId } })).every((row) => row.invalidatedAt !== null)).toBe(true);
-    await switchOn();
+    expect(moduleItem(await courseDetail(u.headers, courseId), moduleId)?.moduleStatus).toBe("PASSED");
+    // Slik prod står for dem #997 tok beståtten fra: `SUPERSEDED` og en ugyldiggjort rad. Tilbakefyllingen som skrev radene, er
+    // fjernet etter at bryteren ble slått på (2026-11-06), og ingen kode skriver `SUPERSEDED` lenger. Radene leses fortsatt.
+    await prisma.certificationStatus.update({ where: { userId_moduleId: { userId: u.userId, moduleId } }, data: { status: "SUPERSEDED" } });
+    await prisma.modulePass.updateMany({ where: { userId: u.userId, moduleId }, data: { invalidatedAt: new Date() } });
     expect(moduleItem(await courseDetail(u.headers, courseId), moduleId)?.moduleStatus).toBe("REVISED_RETAKE_REQUIRED");
   });
 
   it("et kurs som aldri har vært publisert: ikke berørt, og kravet står", async () => {
     const { moduleId, courseId } = await courseWithHolder();
     const draftCourse = await newCourse([moduleId], { publish: false });
-    await switchOn();
     const v2 = await newVersion(moduleId);
     // Bare kurset som har vært ute, er med i settet. Et svar for utkastet avvises, så det ikke forsvinner.
     const wrong = await publishVersioned(moduleId, v2, { moduleVersion: "major", courseVersions: { [courseId]: "minor", [draftCourse]: "major" }, expectedCourseIds: [courseId] });
@@ -538,7 +439,6 @@ describe("#934 5a-3 bevis: sannhetstabellen", () => {
 
   it("en versjon som har nummer, får ikke ny hovedversjon, og en eldre hovedversjon publiseres ikke: 409 og ingenting skrevet", async () => {
     const { moduleId, versionId, courseId } = await courseWithHolder();
-    await switchOn();
     const fixed = await publishVersioned(moduleId, versionId, { moduleVersion: "major", courseVersions: { [courseId]: "major" }, expectedCourseIds: [courseId] });
     expect(fixed.status).toBe(409);
     expect(fixed.body.error).toBe("module_version_number_fixed");
@@ -553,7 +453,6 @@ describe("#934 5a-3 bevis: sannhetstabellen", () => {
 
   it("samme versjon publisert på nytt som mindre: setter ingenting live, og ingen kursversjon endres", async () => {
     const { moduleId, versionId, courseId } = await courseWithHolder();
-    await switchOn();
     const before = await versionOf(courseId);
     const response = await publishVersioned(moduleId, versionId, { moduleVersion: "minor" });
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
@@ -586,7 +485,6 @@ describe("#934 5a-3: alle tre veiene til et kursbevis bruker regelen", () => {
 
   it("krav 2 og bestått på 1.x: lesingen, workeren og kursbevissiden utsteder ingenting. Etter bestått på 2.x gjør de det", async () => {
     const { moduleId, courseId, sectionId, u } = await pendingOnSection();
-    await switchOn();
     expect((await readSection(app, u.headers, courseId, sectionId)).status).toBe(204);
     expect(await certificates(u.userId, courseId)).toEqual([]);
     await fromWorker(u.userId, moduleId);
@@ -596,19 +494,6 @@ describe("#934 5a-3: alle tre veiene til et kursbevis bruker regelen", () => {
 
     const version = await prisma.moduleVersion.create({ data: { moduleId, versionNo: 9, assessmentMode: "MCQ_ONLY", taskText: L("Ny"), publishedAt: new Date(), versionMajor: 2, versionMinor: 0 }, select: { id: true } });
     await decideOn(u.userId, moduleId, version.id, 90);
-    await fromWorker(u.userId, moduleId);
-    expect(await certificates(u.userId, courseId)).toHaveLength(1);
-  });
-
-  it("KONTROLL, bryteren av: lesingen gir beviset, slik 2.134.0 gjør", async () => {
-    const { courseId, sectionId, u } = await pendingOnSection();
-    expect((await readSection(app, u.headers, courseId, sectionId)).status).toBe(204);
-    expect(await certificates(u.userId, courseId)).toHaveLength(1);
-  });
-
-  it("KONTROLL, bryteren av: workeren gir beviset, slik 2.134.0 gjør", async () => {
-    const { moduleId, courseId, sectionId, u } = await pendingOnSection();
-    await prisma.courseSectionRead.create({ data: { userId: u.userId, courseId, sectionId } });
     await fromWorker(u.userId, moduleId);
     expect(await certificates(u.userId, courseId)).toHaveLength(1);
   });
@@ -636,7 +521,6 @@ describe("#934 5a-3 bevis: «Publiser nye versjoner» med svar per kurs", () => 
 
   it("to moduler og tre kurs: hvert kurs økes én gang, ett øyeblikksbilde per kurs, og kravet heves bare der kurset fikk hovedversjon", async () => {
     const { m1, m2, a, b, c, holder, versionIds, v1, v2 } = await threeCourses();
-    await switchOn();
     const before = { a: await versionOf(a), b: await versionOf(b), c: await versionOf(c) };
 
     const preview = await request(app).get(`/api/admin/content/courses/${a}/pending-versions`).set(admin());
@@ -682,7 +566,6 @@ describe("#934 5a-3 bevis: «Publiser nye versjoner» med svar per kurs", () => 
 
   it("alle kursene svarer mindre: modulene får mindre versjon, og ingen krav heves", async () => {
     const { m1, m2, a, b, c, versionIds, v1, v2 } = await threeCourses();
-    await switchOn();
     const response = await pendingVersioned(a, { versionIds, courseVersions: { [a]: "minor", [b]: "minor", [c]: "minor" }, expectedCourseIds: [a, b, c] });
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
     expect([await numberOf(v1), await numberOf(v2)]).toEqual(["1.1", "1.1"]);
@@ -691,7 +574,6 @@ describe("#934 5a-3 bevis: «Publiser nye versjoner» med svar per kurs", () => 
 
   it("modulen får hovedversjon bare når et kurs SOM HAR DEN får hovedversjon: B hoved gir M1 2.0, men M2 står som mindre", async () => {
     const { m1, m2, a, b, c, versionIds, v1, v2 } = await threeCourses();
-    await switchOn();
     const response = await pendingVersioned(a, { versionIds, courseVersions: { [a]: "minor", [b]: "major", [c]: "minor" }, expectedCourseIds: [a, b, c] });
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
     expect([await numberOf(v1), await numberOf(v2)]).toEqual(["2.0", "1.1"]);
@@ -701,7 +583,6 @@ describe("#934 5a-3 bevis: «Publiser nye versjoner» med svar per kurs", () => 
 
   it("mangler et svar for et kurs med kursbevis: 400 med kursene, og ingenting er skrevet", async () => {
     const { m1, a, b, c, versionIds, v1 } = await threeCourses();
-    await switchOn();
     const before = await versionOf(a);
     const response = await pendingVersioned(a, { versionIds, courseVersions: { [a]: "major" }, expectedCourseIds: [a, b, c] });
     expect(response.status).toBe(400);
@@ -715,7 +596,6 @@ describe("#934 5a-3 bevis: «Publiser nye versjoner» med svar per kurs", () => 
 
   it("andre versjoner enn dialogen viste, eller feil sett av kurs: 409 og ingenting er skrevet", async () => {
     const { m1, a, b, c, versionIds, v1 } = await threeCourses();
-    await switchOn();
     const answers = { [a]: "minor", [b]: "minor", [c]: "minor" };
     const stale = await pendingVersioned(a, { versionIds: [v1], courseVersions: answers, expectedCourseIds: [a, b, c] });
     expect(stale.status).toBe(409);
@@ -732,7 +612,6 @@ describe("#934 5a-3 bevis: «Publiser nye versjoner» med svar per kurs", () => 
     await prisma.course.update({ where: { id: d }, data: { publishedAt: new Date() } });
     const dHolder = await learner();
     await prisma.courseCompletion.create({ data: { userId: dHolder.userId, courseId: d, versionMajor: 1, versionMinor: 0, moduleSnapshotJson: "[]" } });
-    await switchOn();
     const lock = holdContent();
     await lock.held;
     const publishing = pendingVersioned(a, { versionIds, courseVersions: { [a]: "minor", [b]: "minor", [c]: "minor" }, expectedCourseIds: [a, b, c] }).then((r) => r);
@@ -749,7 +628,6 @@ describe("#934 5a-3 bevis: «Publiser nye versjoner» med svar per kurs", () => 
 
   it("modulen lagt inn i et fjerde kurs etter publiseringen: kravet er den nye hovedversjonen, og kurset kommer med i neste runde", async () => {
     const { m1, a, b, c, versionIds } = await threeCourses();
-    await switchOn();
     const response = await pendingVersioned(a, { versionIds, courseVersions: { [a]: "major", [b]: "minor", [c]: "minor" }, expectedCourseIds: [a, b, c] });
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
     const d = await newCourse([m1.moduleId]);
@@ -779,7 +657,6 @@ describe("#934 5a-3 bevis: «Publiser nye versjoner» med svar per kurs", () => 
     const a = await makeCourse(true);
     const b = await makeCourse(false);
     const sv2 = await prisma.courseSectionVersion.create({ data: { sectionId: section.id, versionNo: 2, bodyMarkdown: L("Ny tekst.") }, select: { id: true } });
-    await switchOn();
     const missing = await pendingVersioned(a, { versionIds: [sv2.id], courseVersions: { [a]: "major" }, expectedCourseIds: [a] });
     expect(missing.status).toBe(409);
     const response = await pendingVersioned(a, { versionIds: [sv2.id], courseVersions: { [a]: "major", [b]: "minor" }, expectedCourseIds: [a, b] });
@@ -796,7 +673,6 @@ describe("#934 5a-3 bevis: «Publiser nye versjoner» med svar per kurs", () => 
     await prisma.user.createMany({ data });
     const users = await prisma.user.findMany({ where: { externalId: { startsWith: `a3-many-${stamp}-` } }, select: { id: true } });
     await prisma.courseCompletion.createMany({ data: users.map((user) => ({ userId: user.id, courseId: a, versionMajor: 1, versionMinor: 0, moduleSnapshotJson: "[]" })) });
-    await switchOn();
     const answers = { [a]: "major", [b]: "minor", [c]: "minor" };
     const refused = await pendingVersioned(a, { versionIds, courseVersions: answers, expectedCourseIds: [a, b, c], confirmEmailRecipients: { [b]: 500 } });
     expect(refused.status).toBe(409);
@@ -812,7 +688,6 @@ describe("#934 5a-3 bevis: «Publiser nye versjoner» med svar per kurs", () => 
 describe("#934 5a-3: modulens egen dialog", () => {
   it("mindre for modulen: mindre i alle kurs, uten spørsmål, også med kursbevis", async () => {
     const { moduleId, a, b } = await twoCoursesWithCertificates();
-    await switchOn();
     const [fromA, fromB] = [await versionOf(a), await versionOf(b)];
     const v2 = await newVersion(moduleId);
     const response = await publishVersioned(moduleId, v2, { moduleVersion: "minor" });
@@ -825,7 +700,6 @@ describe("#934 5a-3: modulens egen dialog", () => {
 
   it("mindre for modulen med «hoved» for et kurs: 400, så valget ikke forsvinner", async () => {
     const { moduleId, a } = await twoCoursesWithCertificates();
-    await switchOn();
     const v2 = await newVersion(moduleId);
     const response = await publishVersioned(moduleId, v2, { moduleVersion: "minor", courseVersions: { [a]: "major" } });
     expect(response.status).toBe(400);
@@ -835,7 +709,6 @@ describe("#934 5a-3: modulens egen dialog", () => {
 
   it("hoved for modulen uten svar for et kurs med kursbevis: 400 med kursene, og ingenting er skrevet", async () => {
     const { moduleId, a, b } = await twoCoursesWithCertificates();
-    await switchOn();
     const v2 = await newVersion(moduleId);
     const response = await publishVersioned(moduleId, v2, { moduleVersion: "major", courseVersions: { [a]: "major" }, expectedCourseIds: [a, b] });
     expect(response.status).toBe(400);
@@ -848,7 +721,6 @@ describe("#934 5a-3: modulens egen dialog", () => {
   it("feil sett av kurs, et svar for et kurs som ikke er berørt, og et felt serveren ikke kjenner: avvist, og ingenting er skrevet", async () => {
     const { moduleId, a, b } = await twoCoursesWithCertificates();
     const stranger = await newCourse([(await publishedModule()).moduleId]);
-    await switchOn();
     const v2 = await newVersion(moduleId);
     const answers = { [a]: "minor", [b]: "minor" };
     const noList = await publishVersioned(moduleId, v2, { moduleVersion: "major", courseVersions: answers });
@@ -868,7 +740,6 @@ describe("#934 5a-3: modulens egen dialog", () => {
     const { moduleId, versionId, a, b } = await twoCoursesWithCertificates();
     const draftCourse = await newCourse([moduleId], { publish: false });
     expect((await request(app).post(`/api/admin/content/courses/${b}/unpublish`).set(admin())).status).toBe(200);
-    await switchOn();
     const response = await request(app).get(`/api/admin/content/modules/${moduleId}/module-versions/${versionId}/publish-preview-versioned`).set(admin());
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
     expect(response.body.currentMajor).toBe(1);
@@ -888,7 +759,6 @@ describe("#934 5a-3: modulens egen dialog", () => {
 
   it("rolle og eierskap: en deltaker og en fagansvarlig som ikke eier modulen eller kurset, får ikke se eller publisere", async () => {
     const { moduleId, versionId, a, u } = await twoCoursesWithCertificates();
-    await switchOn();
     const smo = { "x-user-id": `a3-smo-${RUN}`, "x-user-email": `a3.smo.${RUN}@x.test`, "x-user-name": "Fagansvarlig", "x-user-roles": "SUBJECT_MATTER_OWNER", "x-locale": "nb" };
     const v2 = await newVersion(moduleId);
     for (const [headers, status] of [[u.headers, 403], [smo, 403]] as const) {
@@ -909,7 +779,6 @@ describe("2.137.0: bare kursets eier, eller en administrator, velger hovedversjo
     const user = await prisma.user.create({ data: { externalId: smo["x-user-id"], email: smo["x-user-email"], name: "Fagansvarlig" }, select: { id: true } });
     await prisma.contentOwner.create({ data: { contentType: "MODULE", contentId: setup.moduleId, userId: user.id } });
     if (options.ownsA !== false) await prisma.contentOwner.create({ data: { contentType: "COURSE", contentId: setup.a, userId: user.id } });
-    await switchOn();
     const v2 = await newVersion(setup.moduleId);
     return { ...setup, smo, v2 };
   }
@@ -1005,38 +874,6 @@ describe("2.137.0: bare kursets eier, eller en administrator, velger hovedversjo
   });
 });
 
-describe("#934 5a-3 bevis: de nye endepunktene før bryteren", () => {
-  it("alle fire svarer 409 module_versioning_not_active, og ingenting er skrevet", async () => {
-    const { moduleId, a, b } = await twoCoursesWithCertificates();
-    const v2 = await newVersion(moduleId);
-    const before = await versionOf(a);
-    const body = { moduleVersion: "major", courseVersions: { [a]: "major", [b]: "minor" }, expectedCourseIds: [a, b] };
-    for (const response of [
-      await publishVersioned(moduleId, v2, body),
-      await publishVersioned(moduleId, v2, { moduleVersion: "minor" }),
-      await request(app).get(`/api/admin/content/modules/${moduleId}/module-versions/${v2}/publish-preview-versioned`).set(admin()),
-      await pendingVersioned(a, { versionIds: [v2], courseVersions: { [a]: "major", [b]: "minor" }, expectedCourseIds: [a, b] }),
-    ]) {
-      expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(409);
-      expect(response.body.error).toBe("module_versioning_not_active");
-    }
-    expect(await numberOf(v2)).toBeNull();
-    expect(await activeVersionOf(moduleId)).not.toBe(v2);
-    expect(await versionOf(a)).toBe(before);
-    expect(await requirementOf(a, moduleId)).toBe(1);
-  });
-
-  it("sjekken etter låsen avgjør: tjenestene nekter selv, uten ruta foran", async () => {
-    const { moduleId, a, b } = await twoCoursesWithCertificates();
-    const v2 = await newVersion(moduleId);
-    await expect(publishModuleVersioned(moduleId, v2, { userId: "actor", roles: ["ADMINISTRATOR"] }, { moduleVersion: "minor" })).rejects.toMatchObject({ code: "module_versioning_not_active" });
-    await expect(
-      publishCoursePendingVersioned(a, { userId: "actor", roles: ["ADMINISTRATOR"] }, { versionIds: [v2], expectedCourseIds: [a, b] }),
-    ).rejects.toMatchObject({ code: "module_versioning_not_active" });
-    expect(await activeVersionOf(moduleId)).not.toBe(v2);
-  });
-});
-
 describe("#934 5a-3 bevis: «Publiser kurs» med en modul som har vært publisert før", () => {
   async function unpublishedWithNewDraft() {
     const { moduleId, versionId } = await publishedModule();
@@ -1050,7 +887,6 @@ describe("#934 5a-3 bevis: «Publiser kurs» med en modul som har vært publiser
   it("en modul som har vært ute uten nummer (gammel kode): også 409", async () => {
     const { moduleId, courseId } = await unpublishedWithNewDraft();
     await prisma.moduleVersion.updateMany({ where: { moduleId }, data: { versionMajor: null, versionMinor: null } });
-    await switchOn();
     const response = await publishCourse(courseId);
     expect(response.status).toBe(409);
     expect(response.body.error).toBe("course_publish_has_republished_modules");
@@ -1058,7 +894,6 @@ describe("#934 5a-3 bevis: «Publiser kurs» med en modul som har vært publiser
 
   it("avpublisert modul, nytt utkast, «Publiser kurs»: 409 med modulene, og ingenting er publisert", async () => {
     const { moduleId, v2, courseId } = await unpublishedWithNewDraft();
-    await switchOn();
     const response = await publishCourse(courseId);
     expect(response.status).toBe(409);
     expect(response.body.error).toBe("course_publish_has_republished_modules");
@@ -1069,20 +904,11 @@ describe("#934 5a-3 bevis: «Publiser kurs» med en modul som har vært publiser
     expect((await prisma.course.findUniqueOrThrow({ where: { id: courseId } })).publishedAt).toBeNull();
   });
 
-  it("KONTROLL, bryteren av: kurset og modulen publiseres, slik 2.134.0 gjør", async () => {
-    const { moduleId, v2, courseId } = await unpublishedWithNewDraft();
-    const response = await publishCourse(courseId);
-    expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
-    expect(await activeVersionOf(moduleId)).toBe(v2);
-    expect((await prisma.course.findUniqueOrThrow({ where: { id: courseId } })).publishedAt).not.toBeNull();
-  });
-
   it("en modul som aldri har vært publisert, og en seksjon, går som før med bryteren på", async () => {
     const created = await request(app).post("/api/admin/content/modules").set(admin()).send({ title: T(tag("ny modul")), certificationLevel: "basic" });
     const moduleId = created.body.module.id as string;
     const v1 = await newVersion(moduleId);
     const courseId = await newCourse([moduleId], { publish: false });
-    await switchOn();
     const response = await publishCourse(courseId);
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
     expect(await activeVersionOf(moduleId)).toBe(v1);
@@ -1093,7 +919,6 @@ describe("#934 5a-3 bevis: «Publiser kurs» med en modul som har vært publiser
 describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
   it("modulpublisering med avkrysning: 409 client_outdated, og ingenting er skrevet", async () => {
     const { moduleId, a, b, u } = await twoCoursesWithCertificates();
-    await switchOn();
     const [fromA, fromB] = [await versionOf(a), await versionOf(b)];
     const v2 = await newVersion(moduleId);
     const response = await publishOld(moduleId, v2, { supersedesEarlierPasses: true });
@@ -1111,7 +936,6 @@ describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
   for (const body of [{}, { supersedesEarlierPasses: false }]) {
     it(`modulpublisering med ${JSON.stringify(body)}: mindre i alle kurs, som i dag, og beståtten står`, async () => {
       const { moduleId, a, b, u } = await twoCoursesWithCertificates();
-      await switchOn();
       const fromA = await versionOf(a);
       const v2 = await newVersion(moduleId);
       const response = await publishOld(moduleId, v2, body);
@@ -1139,7 +963,6 @@ describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
 
   it("«Publiser nye versjoner» på det gamle endepunktet med avkrysning: 409 client_outdated, og ingenting er skrevet", async () => {
     const { moduleId, a, u, v2 } = await pendingOldContract();
-    await switchOn();
     const response = await pendingOld(a, { versionIds: [v2], supersedesEarlierPasses: true, courseVersion: "minor" });
     expect(response.status).toBe(409);
     expect(response.body.error).toBe("client_outdated");
@@ -1151,7 +974,6 @@ describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
     const { moduleId, a, b, v2 } = await pendingOldContract();
     const other = await learner();
     await prisma.courseCompletion.create({ data: { userId: other.userId, courseId: b, versionMajor: 1, versionMinor: 0, moduleSnapshotJson: "[]" } });
-    await switchOn();
     const response = await pendingOld(a, { versionIds: [v2], courseVersion: "minor" });
     expect(response.status).toBe(409);
     expect(response.body.error).toBe("client_outdated");
@@ -1163,7 +985,6 @@ describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
     const { moduleId } = await publishedModule();
     const courseId = await newCourse([moduleId]);
     const v2 = await newVersion(moduleId);
-    await switchOn();
     const response = await pendingOld(courseId, { versionIds: [v2], supersedesEarlierPasses: true });
     expect(response.status).toBe(409);
     expect(response.body.error).toBe("client_outdated");
@@ -1172,7 +993,6 @@ describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
 
   it("det gamle endepunktet, hovedversjon av kurset med en ny modul: 409 client_outdated, for valget kan ikke heve kravet per kurs", async () => {
     const { moduleId, a, u, v2 } = await pendingOldContract();
-    await switchOn();
     const response = await pendingOld(a, { versionIds: [v2], courseVersion: "major" });
     expect(response.status).toBe(409);
     expect(response.body.error).toBe("client_outdated");
@@ -1192,7 +1012,6 @@ describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
     });
     const holder = await learner();
     await prisma.courseCompletion.create({ data: { userId: holder.userId, courseId: course.id, versionMajor: 1, versionMinor: 0, moduleSnapshotJson: "[]" } });
-    await switchOn();
     const response = await pendingOld(course.id, { versionIds: [next.id], courseVersion: "major", confirmEmailRecipients: 1 });
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
     expect(await versionOf(course.id)).toBe("2.0");
@@ -1200,7 +1019,6 @@ describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
 
   it("det gamle endepunktet ellers: publisert med `courseVersion` for dette kurset, modulen blir mindre, og ingen mister en bestått", async () => {
     const { moduleId, a, b, u, v2 } = await pendingOldContract();
-    await switchOn();
     const before = await versionOf(b);
     const response = await pendingOld(a, { versionIds: [v2], courseVersion: "minor" });
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
@@ -1213,17 +1031,6 @@ describe("#934 5a-3 bevis: de gamle kontraktene etter bryteren", () => {
     expect(moduleItem(await courseDetail(u.headers, a), moduleId)?.moduleStatus).toBe("PASSED");
     expect(await statusOf(u.userId, moduleId)).toBe("ACTIVE");
   });
-
-  it("KONTROLL, bryteren av: uten svar 400 revision_answer_required, og med avkrysning går det, slik 2.134.0 gjør", async () => {
-    const { moduleId, a, u, v2 } = await pendingOldContract();
-    const missing = await pendingOld(a, { versionIds: [v2], courseVersion: "minor" });
-    expect(missing.status).toBe(400);
-    expect(missing.body.error).toBe("revision_answer_required");
-    const response = await pendingOld(a, { versionIds: [v2], courseVersion: "minor", supersedesEarlierPasses: true });
-    expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
-    expect(await numberOf(v2)).toBe("2.0");
-    expect(await statusOf(u.userId, moduleId)).toBe("SUPERSEDED");
-  });
 });
 
 describe("#934 5a-3: hull mutasjonene viste", () => {
@@ -1231,7 +1038,6 @@ describe("#934 5a-3: hull mutasjonene viste", () => {
     const { moduleId, a, b, u } = await twoCoursesWithCertificates();
     expect(u.userId).toBeTruthy();
     const withoutCertificates = await newCourse([moduleId]);
-    await switchOn();
     await majorIn(moduleId, { [a]: "major", [b]: "minor" }, [a, b, withoutCertificates]);
     expect(await requirementOf(a, moduleId)).toBe(2);
     expect(await requirementOf(withoutCertificates, moduleId)).toBe(1);
@@ -1240,7 +1046,6 @@ describe("#934 5a-3: hull mutasjonene viste", () => {
   it("kravet senkes aldri: en hovedversjon under et krav som står høyere, rører det ikke", async () => {
     const { moduleId, a, b } = await twoCoursesWithCertificates();
     await prisma.courseModuleRequirement.update({ where: { courseId_moduleId: { courseId: a, moduleId } }, data: { minModuleMajor: 7 } });
-    await switchOn();
     await majorIn(moduleId, { [a]: "major", [b]: "minor" }, [a, b]);
     expect(await requirementOf(a, moduleId)).toBe(7);
   });
@@ -1248,7 +1053,6 @@ describe("#934 5a-3: hull mutasjonene viste", () => {
   it("et kurs uten krav får det når det får hovedversjon", async () => {
     const { moduleId, a, b } = await twoCoursesWithCertificates();
     await prisma.courseModuleRequirement.delete({ where: { courseId_moduleId: { courseId: a, moduleId } } });
-    await switchOn();
     await majorIn(moduleId, { [a]: "major", [b]: "minor" }, [a, b]);
     expect(await requirementOf(a, moduleId)).toBe(2);
   });
@@ -1266,7 +1070,6 @@ describe("#934 5a-3: hull mutasjonene viste", () => {
       mcqSetVersionId: set.body.mcqSetVersion.id,
     });
     expect(version.status, JSON.stringify(version.body).slice(0, 300)).toBe(201);
-    await switchOn();
     const response = await publishVersioned(moduleId, version.body.moduleVersion.id, { moduleVersion: "minor" });
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(422);
     expect(response.body.error).toBe("publish_blocked_by_validation");
@@ -1290,7 +1093,6 @@ describe("#934 5a-3: kursrapporten", () => {
     const { moduleId, a, u } = await twoCoursesWithCertificates();
     // Tildelt, så deltakeren er med i rapporten uansett vinduet. Da er det vinduet på beståtten som avgjør tallet.
     await prisma.courseEnrollment.create({ data: { userId: u.userId, courseId: a, source: "SELF" } });
-    await switchOn();
     const within = async (dateFrom: string) => {
       const response = await request(app).get("/api/reports/courses").query({ courseId: a, dateFrom }).set(READER);
       expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
@@ -1303,7 +1105,6 @@ describe("#934 5a-3: kursrapporten", () => {
 
   it("per kurs: i A står deltakeren som «må ta ny versjon» og uten bestått modul, i B er hen fullført", async () => {
     const { moduleId, a, b, u } = await twoCoursesWithCertificates();
-    await switchOn();
     await majorIn(moduleId, { [a]: "major", [b]: "minor" }, [a, b]);
     expect((await summary(a)).moduleBreakdown.find((row) => row.moduleId === moduleId)?.passedUsers).toBe(0);
     expect((await summary(b)).moduleBreakdown.find((row) => row.moduleId === moduleId)?.passedUsers).toBe(1);
@@ -1311,53 +1112,13 @@ describe("#934 5a-3: kursrapporten", () => {
     expect((await learners(b)).find((row) => row.participantId === u.userId)).toMatchObject({ status: "COMPLETED", passedModules: 1 });
   });
 
-  it("KONTROLL, bryteren av: rapporten leser modulstatusen, slik 2.134.0 gjør. Et stryk etter bestått tar den bort fra begge kurs", async () => {
-    const { moduleId, a, b, u } = await twoCoursesWithCertificates();
-    expect((await summary(a)).moduleBreakdown.find((row) => row.moduleId === moduleId)?.passedUsers).toBe(1);
-    await takeModule(u.headers, moduleId, { pass: false });
-    for (const courseId of [a, b]) {
-      expect((await summary(courseId)).moduleBreakdown.find((row) => row.moduleId === moduleId)?.passedUsers).toBe(0);
-      expect((await learners(courseId)).find((row) => row.participantId === u.userId)?.passedModules).toBe(0);
-    }
-  });
-
   it("vinduet gjelder vedtaket som teller: en bestått utenfor perioden telles ikke med bryteren på", async () => {
     const { moduleId, b } = await twoCoursesWithCertificates();
-    await switchOn();
     const inside = await request(app).get("/api/reports/courses").query({ courseId: b, dateFrom: new Date(Date.now() - 3_600_000).toISOString() }).set(READER);
     const outside = await request(app).get("/api/reports/courses").query({ courseId: b, dateTo: new Date(Date.now() - 3_600_000).toISOString() }).set(READER);
     const passed = (body: { rows: Array<{ courseId: string; moduleBreakdown: Array<{ moduleId: string; passedUsers: number }> }> }) =>
       body.rows.find((row) => row.courseId === b)?.moduleBreakdown.find((row) => row.moduleId === moduleId)?.passedUsers;
     expect(passed(inside.body)).toBe(1);
     expect(passed(outside.body)).toBe(0);
-  });
-});
-
-describe("#934 5a-3: bryteren av, ingenting er endret", () => {
-  it("kursdetaljen og lista har samme felt som i 2.134.0", async () => {
-    const { moduleId, a, u } = await twoCoursesWithCertificates();
-    const detail = await courseDetail(u.headers, a);
-    expect(Object.keys(moduleItem(detail, moduleId) ?? {}).sort()).toEqual(["available", "courseItemId", "discussionsEnabled", "moduleId", "moduleStatus", "required", "sortOrder", "title", "type"].sort());
-    expect(detail.progress).toMatchObject({ completed: 1, total: 1, courseStatus: "COMPLETED", moduleCompleted: 1 });
-  });
-
-  it("`pending-versions` har samme felt som i 2.134.0: ingen liste over berørte kurs", async () => {
-    const { moduleId, a } = await twoCoursesWithCertificates();
-    await newVersion(moduleId);
-    const response = await request(app).get(`/api/admin/content/courses/${a}/pending-versions`).set(admin());
-    expect(response.status).toBe(200);
-    expect(Object.keys(response.body).sort()).toEqual(["course", "courseId", "items", "modulesWithPasses", "notOwnedItems", "passedTotal", "publishable"].sort());
-  });
-
-  it("en publisering med avkrysning skriver det samme som i 2.134.0: `SUPERSEDED`, e-post, spor og krav i alle kurs", async () => {
-    const { moduleId, a, b, u } = await twoCoursesWithCertificates();
-    const v2 = await newVersion(moduleId);
-    const response = await publishOld(moduleId, v2, { supersedesEarlierPasses: true });
-    expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
-    expect(response.body.moduleVersion).toMatchObject({ versionMajor: 2, versionMinor: 0 });
-    expect(await statusOf(u.userId, moduleId)).toBe("SUPERSEDED");
-    expect(await revisedMails(moduleId)).toBe(1);
-    expect(await prisma.auditEvent.count({ where: { entityId: moduleId, action: auditActions.adminContent.modulePassesSuperseded } })).toBe(1);
-    expect([await requirementOf(a, moduleId), await requirementOf(b, moduleId)]).toEqual([2, 2]);
   });
 });

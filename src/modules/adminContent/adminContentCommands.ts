@@ -19,12 +19,8 @@ import {
   type ModuleRubric,
 } from "./llmContentGenerationService.js";
 import { hashBlueprint } from "./blueprintHash.js";
-import { createCertificationRepository } from "../certification/certificationRepository.js";
-import { recipientLocale } from "../../i18n/recipientLocale.js";
-import { localizeContentText } from "../../i18n/content.js";
-import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 import { applyMinorVersionToCoursesContaining } from "../course/courseVersioning.js";
-import { clientOutdatedForVersionChoice, isModulePassPerCourseOn } from "../course/modulePassSwitch.js";
+import { clientOutdatedForVersionChoice } from "../course/modulePassSwitch.js";
 import type { ModuleVersionKind } from "./moduleVersioning.js";
 
 type CreateRubricVersionInput = {
@@ -986,21 +982,11 @@ export async function unpublishModule(moduleId: string, actorId: string) {
 }
 
 /**
- * #997: «bestått gjelder til modulen revideres» — og en revisjon er noe FORFATTEREN merker.
+ * Setter en modulversjon live. Mindre versjon, med mindre en av de nye endepunktene (`moduleVersionKind`) sier hoved.
  *
- * `supersedesEarlierPasses` er av som standard. Er den på, mister alle som har bestått modulen
- * beståttstatusen: raden settes til `SUPERSEDED` (bevart med dato og vedtak, men utenfor
- * `CERTIFICATION_PASSED_STATUSES`, så kursbevisporten slutter å telle den av seg selv), og hver av
- * dem får ett varsel.
- *
- * ⚠️ Hvorfor forfatteren og ikke koden: en ny versjon kan være en rettet skrivefeil eller en helt
- * ny oppgave, og en utledet terskel ville latt skrivefeilen ta fra folk en bestått status. Samme
- * avveining som #928 — en gjetning skal stille et spørsmål, ikke handle. Produkteier 2026-09-19,
- * `doc/DESIGN_997.md`.
- *
- * ⚠️ Statusendringen, revisjonssporet og varslene ligger i SAMME transaksjon som publiseringen.
- * Varslene går gjennom outboxen nettopp fordi de ikke skal kunne rulle tilbake publiseringen — og
- * fordi et tapt varsel ellers aldri retter seg (#1007).
+ * #997-avkrysningen (`supersedesEarlierPasses: true`) tok beståtten fra alle som hadde bestått modulen, i alle kurs. Med regelen
+ * om beståtte per kurs (#934 5a-3, på i prod siden 2026-11-06) avgjør forfatteren det per kurs i stedet, og avkrysningen gir
+ * `409 client_outdated` uten at noe er skrevet. Veien som skrev `SUPERSEDED` og sendte #997-e-posten, er fjernet (2026-11-08).
  */
 export async function publishModuleVersion(
   moduleId: string,
@@ -1011,15 +997,15 @@ export async function publishModuleVersion(
   // versjon selv. Alle andre (modulens egen side, modulimport) gir kursene modulen ligger i en mindre versjon;
   // modulens eget hoved/mindre-valg per kurs kommer i skive 5.
   // #934 skive 5a-3: `moduleVersionKind` brukes bare av de nye endepunktene (`versionedPublishService.ts`), som står for kursene
-  // selv: versjonen, kravet og e-posten per kurs. Da gjelder ingenting av #997 her.
+  // selv: versjonen, kravet og e-posten per kurs.
   options?: { supersedesEarlierPasses?: boolean; courseVersionHandledByCaller?: boolean; moduleVersionKind?: ModuleVersionKind },
 ) {
   const now = new Date();
 
   const run = async (client: ContentWriteTx) => {
-    // #934 skive 5a-3: avkrysningen sier ingenting om kursene og kan ikke oversettes trygt. Bryteren leses i denne transaksjonen,
-    // etter låsen. Så skriver ingenting `SUPERSEDED`, og ingen #997-e-post går, når den er på.
-    if (options?.supersedesEarlierPasses && (await isModulePassPerCourseOn(client))) {
+    // #934 skive 5a-3: avkrysningen sier ingenting om kursene og kan ikke oversettes trygt. Regelen om beståtte per kurs har vært på i
+    // prod siden 2026-11-06, og veien med bryteren av (#997: `SUPERSEDED`, e-post til alle som hadde bestått) er fjernet.
+    if (options?.supersedesEarlierPasses) {
       throw clientOutdatedForVersionChoice({ moduleId });
     }
     // #796: the read runs on the tx client when composing an import, so it sees the just-created module.
@@ -1030,63 +1016,12 @@ export async function publishModuleVersion(
       moduleVersionId,
       actorId,
       now,
-      // #934 skive 5a-2: speiler dagens regel. Avkrysningen gir ny hovedversjon; alt annet er mindre, også modulimporten.
-      options?.moduleVersionKind ?? (options?.supersedesEarlierPasses ? "major" : "minor"),
-      options?.moduleVersionKind ? "per_course" : "all_courses",
+      // Hovedversjon bare fra de nye endepunktene, som hever kravet per kurs selv. Alt annet er mindre, også modulimporten.
+      options?.moduleVersionKind ?? "minor",
     );
     // Et nytt forsøk på en versjon som alt er aktiv, setter ingenting live — ingen ny kursversjon (QA-porten).
     if (module.activeVersionId !== moduleVersionId && !options?.courseVersionHandledByCaller && !options?.moduleVersionKind) {
       await applyMinorVersionToCoursesContaining(client, { moduleId }, actorId);
-    }
-
-    if (options?.supersedesEarlierPasses) {
-      const certRepo = createCertificationRepository(client);
-      const passed = await certRepo.findPassedCertificationsForModule(moduleId);
-      // Tittelen hentes her, ikke fra `module` (sammendraget bærer den ikke) — og den lokaliseres
-      // per mottaker under.
-      const titleRow = await createAdminContentRepository(client).findModuleTitle(moduleId);
-      const storedTitle = titleRow?.title ?? "";
-      const storedCourseTitles = await createAdminContentRepository(client).findLiveCourseTitlesContainingModule(moduleId);
-      await certRepo.supersedeCertificationsForModule(client, moduleId, moduleVersionId);
-
-      if (passed.length > 0) {
-        await enqueueOutboxEvents(
-          passed.map((row) => {
-            const locale = recipientLocale(row.user);
-            return {
-              type: OUTBOX_EVENT_TYPES.moduleRevisedNotification,
-              payload: {
-                moduleId,
-                moduleVersionId,
-                recipientEmail: row.user.email,
-                recipientName: row.user.name ?? null,
-                // #970: tittelen velges for MOTTAKERENS språk, ikke forfatterens.
-                moduleTitle: localizeContentText(locale, storedTitle) ?? storedTitle,
-                // 2.101.0: produkteier vil ha kurset navngitt i varselet.
-                courseTitles: storedCourseTitles.map((title) => localizeContentText(locale, title) ?? title),
-                locale,
-              },
-            };
-          }),
-          client,
-        );
-      }
-
-      await recordAuditEvent(
-        {
-          entityType: auditEntityTypes.module,
-          entityId: moduleId,
-          action: auditActions.adminContent.modulePassesSuperseded,
-          actorId,
-          metadata: {
-            moduleId,
-            moduleVersionId,
-            supersededCount: passed.length,
-            notifiedCount: passed.length,
-          },
-        },
-        client,
-      );
     }
 
     await recordAuditEvent(
@@ -1344,7 +1279,7 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
       assessmentPolicyJson: assessmentPolicyCodec.serialize(newPolicy),
     });
     // #934 skive 5a-2: kalibrering endrer bare tersklene. Mindre versjon, som for kursene under.
-    const published = await repo.publishModuleVersion(input.moduleId, newVersion.id, input.actorId, now, "minor", "per_course");
+    const published = await repo.publishModuleVersion(input.moduleId, newVersion.id, input.actorId, now, "minor");
     // #934 skive 3: nye terskler er levende i kursene modulen ligger i — mindre versjon for dem.
     await applyMinorVersionToCoursesContaining(tx, { moduleId: input.moduleId }, input.actorId);
 

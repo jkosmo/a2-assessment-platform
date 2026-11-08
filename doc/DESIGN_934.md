@@ -1212,6 +1212,33 @@ Bryteren er av i alle miljøer. Da er publiseringen den samme som i 2.135.0, og 
 
 **QA-porten** (2026-11-05, Codex, samlet for de siste rettingene i 2.134.0, 5a-3 og 5b): GO. Tre mindre funn er rettet: kursdetaljen i minnet sa «ta den på nytt» etter en ny bestått, og et nytt klikk kunne startet enda et forsøk; dialogen ble stående med knappene av hvis noen andre hadde publisert alt; og moduldialogen spurte selv om ingen hadde bestått. Codex fikk ikke lest selve saken på GitHub og vurderte mot dette dokumentet.
 
+### Den gamle regelen fjernet (2026-11-08)
+
+Bryteren har vært på i prod og på stage siden 2026-11-06, og den slås aldri av igjen. Koden for veien med bryteren av er fjernet,
+og ingenting i `src/` leser bryteren lenger. Raden står, og `npm run module-credit:switch-on` står: en utrulling og en tilbakerulling
+til 2.135.0–2.145.0 (som leser raden) gir da samme regel. Slett ikke raden.
+
+**Fjernet** (bare nåbart med bryteren av, altså ikke i prod):
+- `moduleCredit.ts`: `readModuleStatusRule` (fremdrift fra `CertificationStatus`) og feltet `rule`. `findModuleProgress` leser bare `ModulePass` og kravet.
+- `routes/courses.ts`: `retakeRequired` settes når modulen står som «må ta ny versjon», uten å spørre om regelen.
+- `adminContentCommands.publishModuleVersion`: #997-veien (`SUPERSEDED`, #997-e-posten, revisjonshendelsen). Avkrysningen gir `409 client_outdated`, som før med bryteren på.
+- `adminContentRepository.publishModuleVersion`: den globale hevingen av kravet (`all_courses`, `raiseModuleRequirements`) og `findLiveCourseTitlesContainingModule`.
+- `certificationRepository.supersedeCertificationsForModule`: den eneste som skrev `SUPERSEDED` på modulstatus.
+- `coursePublishService`: `400 revision_answer_required` i det gamle `publish-pending`, og bryteren foran sjekken for moduler som har vært ute (`Publiser kurs`) og foran `affectedCourses` i `pending-versions` (feltet er alltid med).
+- `assertModuleVersioningActive` (`409 module_versioning_not_active`) i de nye endepunktene og forhåndsvisningen.
+- Tilbakefyllingen og sammenligningsrapporten (`moduleCreditBackfill.ts`, `moduleCreditComparison.ts`, `npm run module-credit:backfill` og `:compare`): tilbakefyllingen nektet å kjøre med bryteren på, og rapporten sammenlignet med den gamle regelen («Kjente mangler» nr. 52).
+
+**Står igjen, med vilje:**
+- `findPassedCertificationsForModule`: tallet til den gamle dialogen (`GET …/passed-count`, `passedCount`/`passedTotal` i `pending-versions`). Klienten bruker det bare når de nye endepunktene svarer 404 eller 409.
+- Klientens reserveveier (`admin-content-publish.js`, `admin-content-courses.js`) for 404 og `module_versioning_not_active`. Serveren svarer aldri det siste nå; veiene kan fjernes i en egen endring.
+- Leveringen av #997-e-posten i outboxen (`moduleRevisedNotification`): rader som står i køen fra før, skal fortsatt kunne sendes.
+- Lesingen av gamle `SUPERSEDED`-rader og revisjonshendelser i `numberModuleHistory`, statusrapporten per modul og innsynseksporten.
+
+**Hvordan det er vist at prod ikke endres:** hver fjernet gren var bak en sjekk som ga «av» bare når raden ikke sto på `on`. Integrasjonstestene
+kjører nå med raden på fra seeden (`prisma/seedCore.ts`), som i prod, og hele suiten er grønn før og etter fjerningen. Mutasjonen «seeden uten
+raden» ga 45 røde i `test/m2-module-pass-per-course-934-5a3.test.ts` før fjerningen, og ingen røde etter: koden leser ikke raden.
+`test/content-lock-write-guard.test.js` nekter at noe i `src/` leser bryteren eller skriver `SUPERSEDED` igjen.
+
 ### Kjente mangler (bevisst ikke rettet)
 
 Ingen av disse kan miste innhold, gi feil kursbevis, la innhold gå live uten versjonsregelen, sende feil eller dobbel

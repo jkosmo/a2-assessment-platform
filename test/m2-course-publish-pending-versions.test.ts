@@ -7,7 +7,8 @@
 // Det testen måler, og hvorfor:
 //   - Nye versjoner på LEVENDE elementer er med. Kaskaden for kurspublisering (#734) så bare
 //     elementer som aldri var publisert — det var hullet.
-//   - Revisjonssvaret kreves når noen har bestått, og gjelder alle modulene.
+//   - (2026-11-08) #997-svaret er borte: det gjaldt bare med bryteren for #934 5a-3 av, og den har vært på i prod siden
+//     2026-11-06. Avkrysningen gir 409 (test/m2-module-pass-per-course-934-5a3.test.ts, «de gamle kontraktene»).
 //   - Det forfatteren så, er det som publiseres (409 ellers).
 //   - Alt eller ingenting: et element som mangler et språk, stopper alle.
 //   - Andres elementer publiseres ikke herfra.
@@ -142,18 +143,6 @@ describe("2.101.0 — publiser alle nye versjoner i et kurs", () => {
     expect(preview.body).toMatchObject({ allPublished: true, unpublishedItems: [] });
   });
 
-  it("revisjonssvaret kreves når noen har bestått — uten det publiseres ingenting", async () => {
-    const { smo, section, tested, untested, courseId } = await scenario();
-    const res = await request(app)
-      .post(`/api/admin/content/courses/${courseId}/publish-pending`)
-      .set(smo.headers)
-      .send({ versionIds: [section.v2Id, tested.v2Id, untested.v2Id] });
-    expect(res.status, JSON.stringify(res.body)).toBe(400);
-    expect(res.body.error).toBe("revision_answer_required");
-    expect(await activeSectionVersion(section.sectionId)).toBe(section.v1Id);
-    expect(await activeModuleVersion(tested.moduleId)).toBe(tested.v1Id);
-  });
-
   it("et annet sett enn det forfatteren så, gir 409 og publiserer ingenting", async () => {
     const { smo, section, tested, courseId } = await scenario();
     const res = await request(app)
@@ -188,24 +177,6 @@ describe("2.101.0 — publiser alle nye versjoner i et kurs", () => {
     // Ingenting igjen å publisere for denne forfatteren.
     const after = await request(app).get(`/api/admin/content/courses/${courseId}/pending-versions`).set(smo.headers);
     expect(after.body.items).toEqual([]);
-  });
-
-  it("«ja, en revisjon»: ett svar gjelder alle modulene — beståtten erstattes og deltakeren varsles", async () => {
-    const { smo, section, tested, untested, courseId } = await scenario();
-    const res = await request(app)
-      .post(`/api/admin/content/courses/${courseId}/publish-pending`)
-      .set(smo.headers)
-      .send({ versionIds: [section.v2Id, tested.v2Id, untested.v2Id], supersedesEarlierPasses: true });
-    expect(res.status, JSON.stringify(res.body)).toBe(200);
-    const cert = await prisma.certificationStatus.findUniqueOrThrow({ where: { id: tested.certificationId! }, select: { status: true } });
-    expect(cert.status).toBe("SUPERSEDED");
-    const events = (await prisma.outboxEvent.findMany({ where: { type: "module_revised_notification" } }))
-      .map((row) => JSON.parse(row.payloadJson) as Record<string, unknown>)
-      .filter((payload) => payload.moduleId === tested.moduleId || payload.moduleId === untested.moduleId);
-    expect(events.map((e) => e.moduleVersionId)).toEqual([tested.v2Id]);
-    // Varselet navngir kurset beståtten gjaldt (produkteier 2026-10-25).
-    const course = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { title: true } });
-    expect(events[0]!.courseTitles).toEqual([JSON.parse(course.title).nb]);
   });
 
   it("alt eller ingenting: en seksjon som mangler et språk, stopper alle", async () => {

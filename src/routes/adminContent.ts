@@ -4,7 +4,6 @@ import { prisma } from "../db/prisma.js";
 import { localizeContentText } from "../i18n/content.js";
 import { findAffectedCourses, withVersionChoiceRights } from "../modules/course/courseVersioning.js";
 import { hasValidModulePass } from "../modules/course/moduleCredit.js";
-import { assertModuleVersioningActive } from "../modules/course/modulePassSwitch.js";
 import { publishModuleVersioned } from "../modules/course/versionedPublishService.js";
 import { z } from "zod";
 import {
@@ -1084,7 +1083,7 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
 });
 
 // #934 skive 5a-3: tallene dialogen viser før publiseringen: kursene modulen ligger i og som har vært ute, med antall kursbevis og
-// antall som får e-post. De samme funksjonene som publiseringen bruker. Før bryteren: `409 module_versioning_not_active`.
+// antall som får e-post. De samme funksjonene som publiseringen bruker.
 adminContentRouter.get("/modules/:moduleId/module-versions/:moduleVersionId/publish-preview-versioned", async (request, response) => {
   const actorId = request.context?.userId;
   if (!actorId) {
@@ -1093,7 +1092,6 @@ adminContentRouter.get("/modules/:moduleId/module-versions/:moduleVersionId/publ
   }
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
-    await assertModuleVersioningActive(prisma);
     const version = await prisma.moduleVersion.findFirst({
       where: { id: request.params.moduleVersionId, moduleId: request.params.moduleId },
       select: { id: true, versionNo: true, versionMajor: true, versionMinor: true },
@@ -1139,9 +1137,6 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
   }
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
-    // Her først, så en ny klient mot en server med bryteren av får riktig svar også for et utkast som stopper i porten under. Det
-    // som avgjør, er sjekken etter låsen i `publishModuleVersioned`.
-    await assertModuleVersioningActive(prisma);
     const validation = await evaluateModuleVersionGate(request.params.moduleId, request.params.moduleVersionId);
     if (!respondUnlessPublishable(response, validation)) return;
     const result = await publishModuleVersioned(

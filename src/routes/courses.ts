@@ -375,9 +375,8 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         courseItemId: item.id,
         title: localizeContentText(locale, item.module?.title ?? "") ?? item.module?.title ?? moduleId,
         moduleStatus,
-        // #934 skive 5a-3: «ta den på nytt» fra kurset, så modulsiden ikke leser siste vedtak og tror den er ferdig. Feltet finnes
-        // bare med den nye regelen: med bryteren av skal svaret og siden være som i 2.134.0.
-        ...(moduleProgress.rule === "per_course" && moduleStatus === "REVISED_RETAKE_REQUIRED" ? { retakeRequired: true as const } : {}),
+        // #934 skive 5a-3: «ta den på nytt» fra kurset, så modulsiden ikke leser siste vedtak og tror den er ferdig.
+        ...(moduleStatus === "REVISED_RETAKE_REQUIRED" ? { retakeRequired: true as const } : {}),
         discussionsEnabled: item.discussionsEnabled,
         available,
         required: item.required,

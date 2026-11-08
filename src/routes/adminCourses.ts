@@ -679,13 +679,9 @@ adminCoursesRouter.get("/:courseId/pending-versions", requireContentOwnership("C
       userId: request.context?.userId ?? "",
       roles: request.context?.roles ?? [],
     });
-    // #934 skive 5a-3: `affectedCourses` finnes bare når bryteren er på. Titlene lokaliseres her, som i de andre rutene.
+    // #934 skive 5a-3: `affectedCourses`. Titlene lokaliseres her, som i de andre rutene.
     const locale = requestLocale(request);
-    response.json(
-      pending.affectedCourses
-        ? { ...pending, affectedCourses: pending.affectedCourses.map((course) => ({ ...course, title: localizeContentText(locale, course.title) ?? course.title })) }
-        : pending,
-    );
+    response.json({ ...pending, affectedCourses: pending.affectedCourses.map((course) => ({ ...course, title: localizeContentText(locale, course.title) ?? course.title })) });
   } catch (error) {
     next(error);
   }
@@ -719,8 +715,8 @@ adminCoursesRouter.post("/:courseId/publish-pending", requireContentOwnership("C
   }
 });
 
-// #934 skive 5a-3: «Publiser nye versjoner» med svar per kurs. Svar for alle berørte kurs, listet i `affectedCourses` over. Før
-// bryteren: `409 module_versioning_not_active`. Agent-tokenet slipper ikke til.
+// #934 skive 5a-3: «Publiser nye versjoner» med svar per kurs. Svar for alle berørte kurs, listet i `affectedCourses` over.
+// Agent-tokenet slipper ikke til.
 adminCoursesRouter.post("/:courseId/publish-pending-versioned", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = publishPendingVersionedBodySchema.safeParse(request.body ?? {});
   if (!parsed.success) {

@@ -3,7 +3,7 @@ import { enforceAgentTokenScope } from "../../src/auth/agentTokenScope.js";
 import { publishModuleVersionedBodySchema, publishPendingVersionedBodySchema } from "../../src/modules/adminContent/adminContentSchemas.js";
 import { countChangedItems, resolveCourseVersionKind } from "../../src/modules/course/courseVersioning.js";
 import { findModuleProgress, passCountsForCourse } from "../../src/modules/course/moduleCredit.js";
-import { assertModuleVersioningActive, isModulePassPerCourseOn, MODULE_PASS_SWITCH_KEY } from "../../src/modules/course/modulePassSwitch.js";
+import { isModulePassPerCourseOn, MODULE_PASS_SWITCH_KEY } from "../../src/modules/course/modulePassSwitch.js";
 
 // #934 skive 5a-3: det som kan måles uten database. Regelen gjennom rutene står i test/m2-module-pass-per-course-934-5a3.test.ts.
 
@@ -43,82 +43,64 @@ function fakeClient(options: { switchValue?: string; statuses?: Array<{ userId: 
 const COURSES = [{ courseId: "c", moduleIds: ["m"] }];
 
 describe("#934 5a-3: bryteren", () => {
-  it("bare verdien `on` slår den på. Ingen rad, og alle andre verdier, er den gamle regelen", async () => {
+  it("bare verdien `on` er på. Bare skriptet som slår den på, leser den", async () => {
     expect(await isModulePassPerCourseOn(fakeClient({}).client)).toBe(false);
     expect(await isModulePassPerCourseOn(fakeClient({ switchValue: "off" }).client)).toBe(false);
     expect(await isModulePassPerCourseOn(fakeClient({ switchValue: "true" }).client)).toBe(false);
     expect(await isModulePassPerCourseOn(fakeClient({ switchValue: "on" }).client)).toBe(true);
   });
-
-  it("uten mellomlagring: raden leses for hvert kall", async () => {
-    const { client, calls } = fakeClient({ switchValue: "on" });
-    await isModulePassPerCourseOn(client);
-    await isModulePassPerCourseOn(client);
-    expect(calls.platformConfig).toBe(2);
-  });
-
-  it("de nye endepunktene før bryteren: 409 module_versioning_not_active", async () => {
-    await expect(assertModuleVersioningActive(fakeClient({}).client)).rejects.toMatchObject({ code: "module_versioning_not_active", httpStatus: 409 });
-    await expect(assertModuleVersioningActive(fakeClient({ switchValue: "on" }).client)).resolves.toBeUndefined();
-  });
 });
 
-describe("#934 5a-3: findModuleProgress velger regel ut fra bryteren", () => {
-  it("av: leser bare modulstatus, og ingenting av det nye", async () => {
-    const { client, calls } = fakeClient({ statuses: [{ userId: "u", moduleId: "m", status: "ACTIVE" }, { userId: "v", moduleId: "m", status: "SUPERSEDED" }, { userId: "w", moduleId: "m", status: "NOT_CERTIFIED" }] });
-    const progress = await findModuleProgress(client, { courses: COURSES });
-    expect(progress.rule).toBe("module_status");
-    expect([progress.standing("u", "c", "m"), progress.standing("v", "c", "m"), progress.standing("w", "c", "m")]).toEqual(["PASSED", "REVISED", null]);
-    expect([...progress.passedUserIds("c", "m")]).toEqual(["u"]);
-    expect(calls).toEqual({ platformConfig: 1, certificationStatus: 1, modulePass: 0, courseModuleRequirement: 0 });
-  });
-
-  it("på: leser bare beståtte og krav, og ingenting av modulstatus. Samme modul kan stå ulikt i to kurs", async () => {
+// 2026-11-08: den gamle regelen (bryteren av, `CertificationStatus`) er fjernet. `findModuleProgress` leser verken bryteren eller
+// modulstatusen, uansett hva raden sier. Det er det tellingen av kall under måler.
+describe("#934 5a-3: findModuleProgress", () => {
+  it("leser bare beståtte og krav, aldri bryteren eller modulstatus, også når raden sier av. Samme modul kan stå ulikt i to kurs", async () => {
     const pass = (userId: string, versionMajor: number | null, invalidatedAt: Date | null = null) => ({ userId, moduleId: "m", invalidatedAt, moduleVersion: { versionMajor } });
-    const { client, calls } = fakeClient({
-      switchValue: "on",
-      statuses: [{ userId: "u", moduleId: "m", status: "ACTIVE" }],
-      requirements: [{ courseId: "a", moduleId: "m", minModuleMajor: 2 }, { courseId: "b", moduleId: "m", minModuleMajor: 1 }],
-      passes: [pass("u", 1), pass("v", 2), pass("w", 2, new Date()), pass("x", null)],
-    });
-    const progress = await findModuleProgress(client, { courses: [{ courseId: "a", moduleIds: ["m"] }, { courseId: "b", moduleIds: ["m"] }] });
-    expect(progress.rule).toBe("per_course");
-    expect([progress.standing("u", "a", "m"), progress.standing("u", "b", "m")]).toEqual(["REVISED", "PASSED"]);
-    expect([progress.standing("v", "a", "m"), progress.standing("v", "b", "m")]).toEqual(["PASSED", "PASSED"]);
-    // Ugyldiggjort (#997), og en versjon uten nummer: teller aldri.
-    expect([progress.standing("w", "b", "m"), progress.standing("x", "b", "m")]).toEqual(["REVISED", "REVISED"]);
-    expect(calls).toEqual({ platformConfig: 1, certificationStatus: 0, modulePass: 1, courseModuleRequirement: 1 });
+    for (const switchValue of [undefined, "off", "on"]) {
+      const { client, calls } = fakeClient({
+        switchValue,
+        statuses: [{ userId: "u", moduleId: "m", status: "ACTIVE" }, { userId: "y", moduleId: "m", status: "ACTIVE" }],
+        requirements: [{ courseId: "a", moduleId: "m", minModuleMajor: 2 }, { courseId: "b", moduleId: "m", minModuleMajor: 1 }],
+        passes: [pass("u", 1), pass("v", 2), pass("w", 2, new Date()), pass("x", null)],
+      });
+      const progress = await findModuleProgress(client, { courses: [{ courseId: "a", moduleIds: ["m"] }, { courseId: "b", moduleIds: ["m"] }] });
+      expect([progress.standing("u", "a", "m"), progress.standing("u", "b", "m")]).toEqual(["REVISED", "PASSED"]);
+      expect([progress.standing("v", "a", "m"), progress.standing("v", "b", "m")]).toEqual(["PASSED", "PASSED"]);
+      // Ugyldiggjort (#997), og en versjon uten nummer: teller aldri.
+      expect([progress.standing("w", "b", "m"), progress.standing("x", "b", "m")]).toEqual(["REVISED", "REVISED"]);
+      // Bare modulstatus, uten ModulePass: teller ikke (den gamle regelen).
+      expect(progress.standing("y", "b", "m")).toBeNull();
+      expect(calls).toEqual({ platformConfig: 0, certificationStatus: 0, modulePass: 1, courseModuleRequirement: 1 });
+    }
   });
 
-  it("på: en bestått som teller, vinner, uansett rekkefølge på innleveringene", async () => {
+  it("en bestått som teller, vinner, uansett rekkefølge på innleveringene", async () => {
     const pass = (versionMajor: number) => ({ userId: "u", moduleId: "m", invalidatedAt: null, moduleVersion: { versionMajor } });
     for (const passes of [[pass(2), pass(1)], [pass(1), pass(2)]]) {
-      const { client } = fakeClient({ switchValue: "on", requirements: [{ courseId: "c", moduleId: "m", minModuleMajor: 2 }], passes });
+      const { client } = fakeClient({ requirements: [{ courseId: "c", moduleId: "m", minModuleMajor: 2 }], passes });
       const progress = await findModuleProgress(client, { courses: COURSES });
       expect(progress.standing("u", "c", "m")).toBe("PASSED");
       expect([...progress.passedModuleIds("u", "c")]).toEqual(["m"]);
     }
   });
 
-  it("på: mangler kravet, teller ingenting. Andre moduler i kurset enn dem leseren spør om, er ikke med", async () => {
+  it("mangler kravet, teller ingenting. Andre moduler i kurset enn dem leseren spør om, er ikke med", async () => {
     const pass = (moduleId: string) => ({ userId: "u", moduleId, invalidatedAt: null, moduleVersion: { versionMajor: 9 } });
-    const { client } = fakeClient({ switchValue: "on", requirements: [], passes: [pass("m"), pass("annen")] });
+    const { client } = fakeClient({ requirements: [], passes: [pass("m"), pass("annen")] });
     const progress = await findModuleProgress(client, { courses: COURSES });
     expect(progress.standing("u", "c", "m")).toBe("REVISED");
     expect(progress.standing("u", "c", "annen")).toBeNull();
     expect(progress.passedModuleIds("u", "c").size).toBe(0);
   });
 
-  it("ingen moduler eller ingen deltakere: ingen spørring etter rader, men regelen er lest", async () => {
-    const empty = fakeClient({ switchValue: "on" });
+  it("ingen moduler eller ingen deltakere: ingen spørringer", async () => {
+    const empty = fakeClient({});
     const none = await findModuleProgress(empty.client, { courses: [{ courseId: "c", moduleIds: [] }] });
-    expect(none.rule).toBe("per_course");
     expect(none.standing("u", "c", "m")).toBeNull();
-    expect(empty.calls.modulePass).toBe(0);
     const noUsers = fakeClient({});
     const nobody = await findModuleProgress(noUsers.client, { userIds: [], courses: COURSES });
-    expect(nobody.rule).toBe("module_status");
-    expect(noUsers.calls.certificationStatus).toBe(0);
+    expect(nobody.passedModuleIds("u", "c").size).toBe(0);
+    for (const calls of [empty.calls, noUsers.calls]) expect(calls).toEqual({ platformConfig: 0, certificationStatus: 0, modulePass: 0, courseModuleRequirement: 0 });
   });
 
   it("regelen selv: lik hovedversjon teller, lavere gjør det ikke", () => {

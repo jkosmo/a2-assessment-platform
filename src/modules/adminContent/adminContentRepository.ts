@@ -1,7 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import type { AssessmentMode } from "@prisma/client";
 import type { ContentWriteTx } from "../../db/contentLock.js";
-import { raiseModuleRequirements, resolvePublishNumber, type ModuleVersionKind } from "./moduleVersioning.js";
+import { resolvePublishNumber, type ModuleVersionKind } from "./moduleVersioning.js";
 
 type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseItem" | "contentOwner">;
 
@@ -117,17 +117,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
         where: { id: moduleId },
         select: { id: true, title: true },
       });
-    },
-
-    // 2.101.0: revisjonsvarselet navngir kurset beståtten gjaldt. Bare kurs deltakeren kan se
-    // (publisert, ikke arkivert); lagret tittel, lokaliseres per mottaker av kalleren.
-    async findLiveCourseTitlesContainingModule(moduleId: string): Promise<string[]> {
-      const rows = await client.courseItem.findMany({
-        where: { moduleId, course: { publishedAt: { not: null }, archivedAt: null } },
-        orderBy: { course: { createdAt: "asc" } },
-        select: { course: { select: { title: true } } },
-      });
-      return [...new Set(rows.map((row) => row.course.title))];
     },
 
     // #896 S3b: the stored values a partial update has to merge onto. Without reading them
@@ -685,15 +674,14 @@ export function createAdminContentWriter(client: ContentWriteTx) {
 
     // #934 skive 5a-2: det ene stedet en modulversjon settes live, og det ene stedet den får versjonsnummer. `versionKind` er
     // påkrevd, så en ny vei må si hva den er. Nummeret regnes ut før noe skrives; en avvist publisering endrer ingenting.
-    // #934 skive 5a-3: `requirements` sier hvem som hever kravet ved en hovedversjon. `all_courses` er #997-regelen, global, og
-    // kan bare nås med bryteren av. `per_course`: kalleren hever det i kursene som fikk hovedversjon (`applyCourseVersionChange`).
+    // #934 skive 5a-3: en hovedversjon hever kravet bare i kursene som fikk hovedversjon. Det gjør kalleren (`applyCourseVersionChange`).
+    // Den globale hevingen fra #997 (`all_courses`) kunne bare nås med bryteren av, og er fjernet (2026-11-08).
     async publishModuleVersion(
       moduleId: string,
       moduleVersionId: string,
       actorId: string,
       now: Date,
       versionKind: ModuleVersionKind,
-      requirements: "all_courses" | "per_course",
     ) {
       const moduleVersion = await client.moduleVersion.findUnique({
         where: { id: moduleVersionId },
@@ -734,12 +722,6 @@ export function createAdminContentWriter(client: ContentWriteTx) {
         where: { id: moduleId },
         data: { activeVersionId: moduleVersionId },
       });
-
-      // Hevet i samme transaksjon som versjonen settes live: det er ingen glipe (sannhetstabellen). En versjon som alt har
-      // nummer, kommer aldri hit som hoved; `resolvePublishNumber` har avvist den.
-      if (versionKind === "major" && requirements === "all_courses") {
-        await raiseModuleRequirements(client, moduleId, number.major);
-      }
 
       return publishedVersion;
     },
