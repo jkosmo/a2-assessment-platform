@@ -1,0 +1,578 @@
+{
+  "tre endret | nb | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er 3 nye eller endrede elementer.\n\nKursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.\n\nLogg inn på A-2 læringsplattform og åpne kurset under Mine kurs.\n\nÅpne kurset: https://plattform.example.test/participant?courseId=c1\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukker i båtverftet og får et nytt strøk maling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er 3 nye eller endrede elementer.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Åpne kurset</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "tre endret | nb | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er 3 nye eller endrede elementer.\n\nKursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.\n\nLogg inn på A-2 læringsplattform og åpne kurset under Mine kurs.\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukker i båtverftet og får et nytt strøk maling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er 3 nye eller endrede elementer.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "tre endret | nn | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er 3 nye eller endra element.\n\nKursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.\n\nLogg inn på A-2 læringsplattform og opne kurset under Mine kurs.\n\nOpne kurset: https://plattform.example.test/participant?courseId=c1\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukkar i båtverftet og får eit nytt strøk måling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er 3 nye eller endra element.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Opne kurset</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "tre endret | nn | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er 3 nye eller endra element.\n\nKursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.\n\nLogg inn på A-2 læringsplattform og opne kurset under Mine kurs.\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukkar i båtverftet og får eit nytt strøk måling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er 3 nye eller endra element.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "tre endret | en-GB | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» has a new version: version 4",
+    "plainText": "Hello!\n\nThe course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There are 3 new or changed items.\n\nThe course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.\n\nLog in to A-2 læringsplattform and open the course under My courses.\n\nOpen the course: https://plattform.example.test/participant?courseId=c1\n\nYou are getting this e-mail because you have a course certificate for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» has a new version: version 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"The boat stands on trestles in the boatyard, getting a fresh coat of paint\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hello!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There are 3 new or changed items.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to A-2 læringsplattform and open the course under My courses.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Open the course</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you have a course certificate for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "tre endret | en-GB | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» has a new version: version 4",
+    "plainText": "Hello!\n\nThe course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There are 3 new or changed items.\n\nThe course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.\n\nLog in to A-2 læringsplattform and open the course under My courses.\n\nYou are getting this e-mail because you have a course certificate for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» has a new version: version 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"The boat stands on trestles in the boatyard, getting a fresh coat of paint\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hello!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There are 3 new or changed items.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to A-2 læringsplattform and open the course under My courses.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you have a course certificate for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "ett endret | nb | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er ett nytt eller endret element.\n\nKursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.\n\nLogg inn på A-2 læringsplattform og åpne kurset under Mine kurs.\n\nÅpne kurset: https://plattform.example.test/participant?courseId=c1\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukker i båtverftet og får et nytt strøk maling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er ett nytt eller endret element.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Åpne kurset</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "ett endret | nb | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er ett nytt eller endret element.\n\nKursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.\n\nLogg inn på A-2 læringsplattform og åpne kurset under Mine kurs.\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukker i båtverftet og får et nytt strøk maling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er ett nytt eller endret element.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "ett endret | nn | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er eitt nytt eller endra element.\n\nKursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.\n\nLogg inn på A-2 læringsplattform og opne kurset under Mine kurs.\n\nOpne kurset: https://plattform.example.test/participant?courseId=c1\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukkar i båtverftet og får eit nytt strøk måling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er eitt nytt eller endra element.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Opne kurset</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "ett endret | nn | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er eitt nytt eller endra element.\n\nKursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.\n\nLogg inn på A-2 læringsplattform og opne kurset under Mine kurs.\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukkar i båtverftet og får eit nytt strøk måling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er eitt nytt eller endra element.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "ett endret | en-GB | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» has a new version: version 4",
+    "plainText": "Hello!\n\nThe course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There is one new or changed item.\n\nThe course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.\n\nLog in to A-2 læringsplattform and open the course under My courses.\n\nOpen the course: https://plattform.example.test/participant?courseId=c1\n\nYou are getting this e-mail because you have a course certificate for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» has a new version: version 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"The boat stands on trestles in the boatyard, getting a fresh coat of paint\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hello!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There is one new or changed item.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to A-2 læringsplattform and open the course under My courses.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Open the course</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you have a course certificate for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "ett endret | en-GB | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» has a new version: version 4",
+    "plainText": "Hello!\n\nThe course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There is one new or changed item.\n\nThe course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.\n\nLog in to A-2 læringsplattform and open the course under My courses.\n\nYou are getting this e-mail because you have a course certificate for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» has a new version: version 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"The boat stands on trestles in the boatyard, getting a fresh coat of paint\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hello!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There is one new or changed item.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to A-2 læringsplattform and open the course under My courses.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you have a course certificate for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "uten tall | nb | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4.\n\nKursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.\n\nLogg inn på A-2 læringsplattform og åpne kurset under Mine kurs.\n\nÅpne kurset: https://plattform.example.test/participant?courseId=c1\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukker i båtverftet og får et nytt strøk maling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Åpne kurset</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "uten tall | nb | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4.\n\nKursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.\n\nLogg inn på A-2 læringsplattform og åpne kurset under Mine kurs.\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukker i båtverftet og får et nytt strøk maling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "uten tall | nn | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4.\n\nKursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.\n\nLogg inn på A-2 læringsplattform og opne kurset under Mine kurs.\n\nOpne kurset: https://plattform.example.test/participant?courseId=c1\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukkar i båtverftet og får eit nytt strøk måling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Opne kurset</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "uten tall | nn | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4.\n\nKursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.\n\nLogg inn på A-2 læringsplattform og opne kurset under Mine kurs.\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukkar i båtverftet og får eit nytt strøk måling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "uten tall | en-GB | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» has a new version: version 4",
+    "plainText": "Hello!\n\nThe course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4.\n\nThe course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.\n\nLog in to A-2 læringsplattform and open the course under My courses.\n\nOpen the course: https://plattform.example.test/participant?courseId=c1\n\nYou are getting this e-mail because you have a course certificate for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» has a new version: version 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"The boat stands on trestles in the boatyard, getting a fresh coat of paint\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hello!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to A-2 læringsplattform and open the course under My courses.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Open the course</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you have a course certificate for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "uten tall | en-GB | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» has a new version: version 4",
+    "plainText": "Hello!\n\nThe course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4.\n\nThe course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.\n\nLog in to A-2 læringsplattform and open the course under My courses.\n\nYou are getting this e-mail because you have a course certificate for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» has a new version: version 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"The boat stands on trestles in the boatyard, getting a fresh coat of paint\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hello!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to A-2 læringsplattform and open the course under My courses.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you have a course certificate for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "fra behandleren i outboxen | nb | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er 3 nye eller endrede elementer.\n\nKursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.\n\nLogg inn på A-2 læringsplattform og åpne kurset under Mine kurs.\n\nÅpne kurset: https://plattform.example.test/participant?courseId=c1\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukker i båtverftet og får et nytt strøk maling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er 3 nye eller endrede elementer.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Åpne kurset</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "fra behandleren i outboxen | nb | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er 3 nye eller endrede elementer.\n\nKursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.\n\nLogg inn på A-2 læringsplattform og åpne kurset under Mine kurs.\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukker i båtverftet og får et nytt strøk maling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vært en tur på verftet og har fått en ny hovedversjon: versjon 4. Det er 3 nye eller endrede elementer.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har fra før, gjelder fortsatt for versjonen det ble utstedt for. Det du har gjort, teller: for å få kursbevis for versjon 4 tar du bare det som er nytt eller endret.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "fra behandleren i outboxen | nn | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er 3 nye eller endra element.\n\nKursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.\n\nLogg inn på A-2 læringsplattform og opne kurset under Mine kurs.\n\nOpne kurset: https://plattform.example.test/participant?courseId=c1\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukkar i båtverftet og får eit nytt strøk måling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er 3 nye eller endra element.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Opne kurset</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "fra behandleren i outboxen | nn | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» har fått versjon 4",
+    "plainText": "Hei!\n\nKurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er 3 nye eller endra element.\n\nKursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.\n\nLogg inn på A-2 læringsplattform og opne kurset under Mine kurs.\n\nDu får denne e-posten fordi du har kursbevis for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» har fått versjon 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"Båten står på bukkar i båtverftet og får eit nytt strøk måling\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hei!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kurset «Brannvern for alle» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon 4. Det er 3 nye eller endra element.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Kursbeviset du har frå før, gjeld framleis for versjonen det vart utferda for. Det du har gjort, tel: for å få kursbevis for versjon 4 tek du berre det som er nytt eller endra.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du har kursbevis for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "fra behandleren i outboxen | en-GB | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» has a new version: version 4",
+    "plainText": "Hello!\n\nThe course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There are 3 new or changed items.\n\nThe course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.\n\nLog in to A-2 læringsplattform and open the course under My courses.\n\nOpen the course: https://plattform.example.test/participant?courseId=c1\n\nYou are getting this e-mail because you have a course certificate for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» has a new version: version 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"The boat stands on trestles in the boatyard, getting a fresh coat of paint\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hello!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There are 3 new or changed items.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to A-2 læringsplattform and open the course under My courses.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Open the course</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you have a course certificate for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  },
+  "fra behandleren i outboxen | en-GB | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "«Brannvern for alle» has a new version: version 4",
+    "plainText": "Hello!\n\nThe course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There are 3 new or changed items.\n\nThe course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.\n\nLog in to A-2 læringsplattform and open the course under My courses.\n\nYou are getting this e-mail because you have a course certificate for «Brannvern for alle».",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>«Brannvern for alle» has a new version: version 4</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:kurs-ny-versjon\" width=\"600\" height=\"200\" alt=\"The boat stands on trestles in the boatyard, getting a fresh coat of paint\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Hello!</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course «Brannvern for alle» has been to the boatyard and now has a new major version: version 4. There are 3 new or changed items.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">The course certificate you already have still applies to the version it was issued for. What you have done still counts: to get a certificate for version 4, you only need to take what is new or changed.</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to A-2 læringsplattform and open the course under My courses.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you have a course certificate for «Brannvern for alle».</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "kurs-ny-versjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "kurs-ny-versjon",
+        "bytes": 16002,
+        "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+      }
+    ]
+  }
+}

@@ -1,0 +1,290 @@
+{
+  "nytt spørsmål | nb | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "Nytt spørsmål i Brannvern for alle",
+    "plainText": "En deltaker stilte et spørsmål: «Hvor står slukkeapparatet?».\n\nLogg inn på plattformen for å se og svare.\n\nÅpne diskusjonen: https://plattform.example.test/participant?courseId=c1&threadId=t1\n\nDu får denne e-posten fordi du eier kurset eller er administrator på plattformen.",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Nytt spørsmål i Brannvern for alle</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"To båter signaliserer til hverandre med flagg\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">En deltaker stilte et spørsmål: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på plattformen for å se og svare.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1&amp;threadId=t1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Åpne diskusjonen</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1&amp;threadId=t1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du eier kurset eller er administrator på plattformen.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  },
+  "nytt spørsmål | nb | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "Nytt spørsmål i Brannvern for alle",
+    "plainText": "En deltaker stilte et spørsmål: «Hvor står slukkeapparatet?».\n\nLogg inn på plattformen for å se og svare.\n\nDu får denne e-posten fordi du eier kurset eller er administrator på plattformen.",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Nytt spørsmål i Brannvern for alle</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"To båter signaliserer til hverandre med flagg\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">En deltaker stilte et spørsmål: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på plattformen for å se og svare.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du eier kurset eller er administrator på plattformen.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  },
+  "nytt spørsmål | nn | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "Nytt spørsmål i Brannvern for alle",
+    "plainText": "Ein deltakar stilte eit spørsmål: «Hvor står slukkeapparatet?».\n\nLogg inn på plattforma for å sjå og svare.\n\nOpne diskusjonen: https://plattform.example.test/participant?courseId=c1&threadId=t1\n\nDu får denne e-posten fordi du eig kurset eller er administrator på plattforma.",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Nytt spørsmål i Brannvern for alle</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"To båtar signaliserer til kvarandre med flagg\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Ein deltakar stilte eit spørsmål: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på plattforma for å sjå og svare.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1&amp;threadId=t1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Opne diskusjonen</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1&amp;threadId=t1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du eig kurset eller er administrator på plattforma.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  },
+  "nytt spørsmål | nn | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "Nytt spørsmål i Brannvern for alle",
+    "plainText": "Ein deltakar stilte eit spørsmål: «Hvor står slukkeapparatet?».\n\nLogg inn på plattforma for å sjå og svare.\n\nDu får denne e-posten fordi du eig kurset eller er administrator på plattforma.",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Nytt spørsmål i Brannvern for alle</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"To båtar signaliserer til kvarandre med flagg\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Ein deltakar stilte eit spørsmål: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på plattforma for å sjå og svare.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du eig kurset eller er administrator på plattforma.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  },
+  "nytt spørsmål | en-GB | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "New question in Brannvern for alle",
+    "plainText": "A participant asked a question: «Hvor står slukkeapparatet?».\n\nLog in to the platform to view and answer it.\n\nOpen the discussion: https://plattform.example.test/participant?courseId=c1&threadId=t1\n\nYou are getting this e-mail because you own the course or are an administrator of the platform.",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>New question in Brannvern for alle</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"Two boats signal to each other with flags\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">A participant asked a question: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to the platform to view and answer it.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1&amp;threadId=t1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Open the discussion</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1&amp;threadId=t1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you own the course or are an administrator of the platform.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  },
+  "nytt spørsmål | en-GB | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "New question in Brannvern for alle",
+    "plainText": "A participant asked a question: «Hvor står slukkeapparatet?».\n\nLog in to the platform to view and answer it.\n\nYou are getting this e-mail because you own the course or are an administrator of the platform.",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>New question in Brannvern for alle</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"Two boats signal to each other with flags\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">A participant asked a question: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to the platform to view and answer it.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you own the course or are an administrator of the platform.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  },
+  "nytt svar | nb | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "Nytt svar i: Hvor står slukkeapparatet?",
+    "plainText": "Det er kommet et nytt svar i en diskusjon du følger: «Hvor står slukkeapparatet?».\n\nLogg inn på plattformen for å lese det.\n\nÅpne diskusjonen: https://plattform.example.test/participant?courseId=c1&threadId=t1\n\nDu får denne e-posten fordi du følger denne diskusjonen.",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Nytt svar i: Hvor står slukkeapparatet?</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"To båter signaliserer til hverandre med flagg\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Det er kommet et nytt svar i en diskusjon du følger: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på plattformen for å lese det.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1&amp;threadId=t1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Åpne diskusjonen</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1&amp;threadId=t1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du følger denne diskusjonen.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  },
+  "nytt svar | nb | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "Nytt svar i: Hvor står slukkeapparatet?",
+    "plainText": "Det er kommet et nytt svar i en diskusjon du følger: «Hvor står slukkeapparatet?».\n\nLogg inn på plattformen for å lese det.\n\nDu får denne e-posten fordi du følger denne diskusjonen.",
+    "html": "<!DOCTYPE html>\n<html lang=\"nb\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Nytt svar i: Hvor står slukkeapparatet?</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"To båter signaliserer til hverandre med flagg\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Det er kommet et nytt svar i en diskusjon du følger: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på plattformen for å lese det.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du følger denne diskusjonen.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  },
+  "nytt svar | nn | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "Nytt svar i: Hvor står slukkeapparatet?",
+    "plainText": "Det har kome eit nytt svar i ein diskusjon du følgjer: «Hvor står slukkeapparatet?».\n\nLogg inn på plattforma for å lese det.\n\nOpne diskusjonen: https://plattform.example.test/participant?courseId=c1&threadId=t1\n\nDu får denne e-posten fordi du følgjer denne diskusjonen.",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Nytt svar i: Hvor står slukkeapparatet?</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"To båtar signaliserer til kvarandre med flagg\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Det har kome eit nytt svar i ein diskusjon du følgjer: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på plattforma for å lese det.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1&amp;threadId=t1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Opne diskusjonen</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1&amp;threadId=t1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du følgjer denne diskusjonen.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  },
+  "nytt svar | nn | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "Nytt svar i: Hvor står slukkeapparatet?",
+    "plainText": "Det har kome eit nytt svar i ein diskusjon du følgjer: «Hvor står slukkeapparatet?».\n\nLogg inn på plattforma for å lese det.\n\nDu får denne e-posten fordi du følgjer denne diskusjonen.",
+    "html": "<!DOCTYPE html>\n<html lang=\"nn\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Nytt svar i: Hvor står slukkeapparatet?</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"To båtar signaliserer til kvarandre med flagg\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Det har kome eit nytt svar i ein diskusjon du følgjer: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Logg inn på plattforma for å lese det.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">Du får denne e-posten fordi du følgjer denne diskusjonen.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  },
+  "nytt svar | en-GB | med lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "New reply in: Hvor står slukkeapparatet?",
+    "plainText": "There is a new reply in a discussion you follow: «Hvor står slukkeapparatet?».\n\nLog in to the platform to read it.\n\nOpen the discussion: https://plattform.example.test/participant?courseId=c1&threadId=t1\n\nYou are getting this e-mail because you follow this discussion.",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>New reply in: Hvor står slukkeapparatet?</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"Two boats signal to each other with flags\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">There is a new reply in a discussion you follow: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to the platform to read it.</p>\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 8px 0;\">\n<tr><td bgcolor=\"#1f4e79\" style=\"background-color:#1f4e79;border-radius:4px;\"><a href=\"https://plattform.example.test/participant?courseId=c1&amp;threadId=t1\" style=\"display:inline-block;padding:12px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;\">Open the discussion</a></td></tr>\n</table>\n<p style=\"margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;\">https://plattform.example.test/participant?courseId=c1&amp;threadId=t1</p>\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you follow this discussion.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  },
+  "nytt svar | en-GB | uten lenke": {
+    "senderAddress": "avsender@example.test",
+    "recipients": {
+      "to": [
+        {
+          "address": "kari@example.test",
+          "displayName": "Kari Nordmann"
+        }
+      ]
+    },
+    "disableUserEngagementTracking": true,
+    "subject": "New reply in: Hvor står slukkeapparatet?",
+    "plainText": "There is a new reply in a discussion you follow: «Hvor står slukkeapparatet?».\n\nLog in to the platform to read it.\n\nYou are getting this e-mail because you follow this discussion.",
+    "html": "<!DOCTYPE html>\n<html lang=\"en-GB\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>New reply in: Hvor står slukkeapparatet?</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f1ea;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#f4f1ea;\">\n<tr><td align=\"center\" style=\"padding:24px 12px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;background-color:#ffffff;\">\n<tr><td style=\"padding:0;\"><img src=\"cid:diskusjon\" width=\"600\" height=\"200\" alt=\"Two boats signal to each other with flags\" style=\"display:block;width:100%;max-width:600px;height:auto;border:0;\"></td></tr>\n<tr><td style=\"padding:24px 24px 28px 24px;\">\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">There is a new reply in a discussion you follow: «Hvor står slukkeapparatet?».</p>\n<p style=\"margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1f2933;\">Log in to the platform to read it.</p>\n\n<p style=\"margin:24px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#5f6b7a;\">You are getting this e-mail because you follow this discussion.</p>\n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+    "attachments": [
+      {
+        "name": "diskusjon.jpg",
+        "contentType": "image/jpeg",
+        "contentId": "diskusjon",
+        "bytes": 22157,
+        "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+      }
+    ]
+  }
+}

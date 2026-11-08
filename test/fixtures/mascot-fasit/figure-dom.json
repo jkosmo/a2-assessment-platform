@@ -1,0 +1,1193 @@
+{
+  "ikke påbegynt": {
+    "ns": "http://www.w3.org/1999/xhtml",
+    "tag": "div",
+    "attrs": [
+      [
+        "class",
+        "course-progress course-progress--empty"
+      ]
+    ],
+    "children": [
+      {
+        "ns": "http://www.w3.org/1999/xhtml",
+        "tag": "div",
+        "attrs": [
+          [
+            "aria-label",
+            "0 av 8 steg fullført"
+          ],
+          [
+            "aria-valuemax",
+            "100"
+          ],
+          [
+            "aria-valuemin",
+            "0"
+          ],
+          [
+            "aria-valuenow",
+            "0"
+          ],
+          [
+            "class",
+            "course-progress-bar"
+          ],
+          [
+            "role",
+            "progressbar"
+          ],
+          [
+            "title",
+            "0 av 8 steg fullført"
+          ]
+        ],
+        "children": [
+          {
+            "ns": "http://www.w3.org/1999/xhtml",
+            "tag": "div",
+            "attrs": [
+              [
+                "class",
+                "course-progress-fill"
+              ],
+              [
+                "style",
+                "width:0%"
+              ]
+            ],
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "1 av 300": {
+    "ns": "http://www.w3.org/1999/xhtml",
+    "tag": "div",
+    "attrs": [
+      [
+        "class",
+        "course-progress course-progress--boat"
+      ]
+    ],
+    "children": [
+      {
+        "ns": "http://www.w3.org/1999/xhtml",
+        "tag": "div",
+        "attrs": [
+          [
+            "aria-label",
+            "1 av 300 steg fullført"
+          ],
+          [
+            "aria-valuemax",
+            "100"
+          ],
+          [
+            "aria-valuemin",
+            "0"
+          ],
+          [
+            "aria-valuenow",
+            "0"
+          ],
+          [
+            "class",
+            "course-progress-bar"
+          ],
+          [
+            "role",
+            "progressbar"
+          ],
+          [
+            "title",
+            "1 av 300 steg fullført"
+          ]
+        ],
+        "children": [
+          {
+            "ns": "http://www.w3.org/1999/xhtml",
+            "tag": "div",
+            "attrs": [
+              [
+                "class",
+                "course-progress-fill"
+              ],
+              [
+                "style",
+                "width:0%"
+              ]
+            ],
+            "children": []
+          }
+        ]
+      },
+      {
+        "ns": "http://www.w3.org/1999/xhtml",
+        "tag": "span",
+        "attrs": [
+          [
+            "aria-hidden",
+            "true"
+          ],
+          [
+            "class",
+            "course-boat course-boat--sulten"
+          ],
+          [
+            "data-boat-mood",
+            "sulten"
+          ],
+          [
+            "style",
+            "left:clamp(0px, calc(100% - 31px), calc(100% - 48px))"
+          ]
+        ],
+        "children": [
+          {
+            "ns": "http://www.w3.org/2000/svg",
+            "tag": "svg",
+            "attrs": [
+              [
+                "class",
+                "course-boat-svg"
+              ],
+              [
+                "focusable",
+                "false"
+              ],
+              [
+                "height",
+                "34"
+              ],
+              [
+                "viewBox",
+                "0 0 60 34"
+              ],
+              [
+                "width",
+                "60"
+              ]
+            ],
+            "children": [
+              {
+                "ns": "http://www.w3.org/2000/svg",
+                "tag": "path",
+                "attrs": [
+                  [
+                    "class",
+                    "cb-stripes"
+                  ],
+                  [
+                    "d",
+                    "M37 14 L47 14"
+                  ]
+                ],
+                "children": []
+              },
+              {
+                "ns": "http://www.w3.org/2000/svg",
+                "tag": "g",
+                "attrs": [
+                  [
+                    "transform",
+                    "translate(0 1) scale(0.32)"
+                  ]
+                ],
+                "children": [
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-sail"
+                      ],
+                      [
+                        "d",
+                        "M42 6 L72 58 L42 58 Z"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-batten"
+                      ],
+                      [
+                        "d",
+                        "M42 37 L59.5 37"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-mast"
+                      ],
+                      [
+                        "d",
+                        "M40 64 L40 4"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-boom"
+                      ],
+                      [
+                        "d",
+                        "M40 58 L72 58"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-hull"
+                      ],
+                      [
+                        "d",
+                        "M6 62 L96 62 Q90 82 52 82 Q20 82 6 62 Z"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "circle",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-head"
+                      ],
+                      [
+                        "cx",
+                        "86"
+                      ],
+                      [
+                        "cy",
+                        "48"
+                      ],
+                      [
+                        "r",
+                        "10"
+                      ]
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "29 %": {
+    "ns": "http://www.w3.org/1999/xhtml",
+    "tag": "div",
+    "attrs": [
+      [
+        "class",
+        "course-progress course-progress--boat"
+      ]
+    ],
+    "children": [
+      {
+        "ns": "http://www.w3.org/1999/xhtml",
+        "tag": "div",
+        "attrs": [
+          [
+            "aria-label",
+            "29 av 100 steg fullført"
+          ],
+          [
+            "aria-valuemax",
+            "100"
+          ],
+          [
+            "aria-valuemin",
+            "0"
+          ],
+          [
+            "aria-valuenow",
+            "29"
+          ],
+          [
+            "class",
+            "course-progress-bar"
+          ],
+          [
+            "role",
+            "progressbar"
+          ],
+          [
+            "title",
+            "29 av 100 steg fullført"
+          ]
+        ],
+        "children": [
+          {
+            "ns": "http://www.w3.org/1999/xhtml",
+            "tag": "div",
+            "attrs": [
+              [
+                "class",
+                "course-progress-fill"
+              ],
+              [
+                "style",
+                "width:29%"
+              ]
+            ],
+            "children": []
+          }
+        ]
+      },
+      {
+        "ns": "http://www.w3.org/1999/xhtml",
+        "tag": "span",
+        "attrs": [
+          [
+            "aria-hidden",
+            "true"
+          ],
+          [
+            "class",
+            "course-boat course-boat--sulten"
+          ],
+          [
+            "data-boat-mood",
+            "sulten"
+          ],
+          [
+            "style",
+            "left:clamp(0px, calc(71% - 31px), calc(100% - 48px))"
+          ]
+        ],
+        "children": [
+          {
+            "ns": "http://www.w3.org/2000/svg",
+            "tag": "svg",
+            "attrs": [
+              [
+                "class",
+                "course-boat-svg"
+              ],
+              [
+                "focusable",
+                "false"
+              ],
+              [
+                "height",
+                "34"
+              ],
+              [
+                "viewBox",
+                "0 0 60 34"
+              ],
+              [
+                "width",
+                "60"
+              ]
+            ],
+            "children": [
+              {
+                "ns": "http://www.w3.org/2000/svg",
+                "tag": "path",
+                "attrs": [
+                  [
+                    "class",
+                    "cb-stripes"
+                  ],
+                  [
+                    "d",
+                    "M37 14 L47 14"
+                  ]
+                ],
+                "children": []
+              },
+              {
+                "ns": "http://www.w3.org/2000/svg",
+                "tag": "g",
+                "attrs": [
+                  [
+                    "transform",
+                    "translate(0 1) scale(0.32)"
+                  ]
+                ],
+                "children": [
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-sail"
+                      ],
+                      [
+                        "d",
+                        "M42 6 L72 58 L42 58 Z"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-batten"
+                      ],
+                      [
+                        "d",
+                        "M42 37 L59.5 37"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-mast"
+                      ],
+                      [
+                        "d",
+                        "M40 64 L40 4"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-boom"
+                      ],
+                      [
+                        "d",
+                        "M40 58 L72 58"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-hull"
+                      ],
+                      [
+                        "d",
+                        "M6 62 L96 62 Q90 82 52 82 Q20 82 6 62 Z"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "circle",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-head"
+                      ],
+                      [
+                        "cx",
+                        "86"
+                      ],
+                      [
+                        "cy",
+                        "48"
+                      ],
+                      [
+                        "r",
+                        "10"
+                      ]
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "30 %": {
+    "ns": "http://www.w3.org/1999/xhtml",
+    "tag": "div",
+    "attrs": [
+      [
+        "class",
+        "course-progress course-progress--boat"
+      ]
+    ],
+    "children": [
+      {
+        "ns": "http://www.w3.org/1999/xhtml",
+        "tag": "div",
+        "attrs": [
+          [
+            "aria-label",
+            "30 av 100 steg fullført"
+          ],
+          [
+            "aria-valuemax",
+            "100"
+          ],
+          [
+            "aria-valuemin",
+            "0"
+          ],
+          [
+            "aria-valuenow",
+            "30"
+          ],
+          [
+            "class",
+            "course-progress-bar"
+          ],
+          [
+            "role",
+            "progressbar"
+          ],
+          [
+            "title",
+            "30 av 100 steg fullført"
+          ]
+        ],
+        "children": [
+          {
+            "ns": "http://www.w3.org/1999/xhtml",
+            "tag": "div",
+            "attrs": [
+              [
+                "class",
+                "course-progress-fill"
+              ],
+              [
+                "style",
+                "width:30%"
+              ]
+            ],
+            "children": []
+          }
+        ]
+      },
+      {
+        "ns": "http://www.w3.org/1999/xhtml",
+        "tag": "span",
+        "attrs": [
+          [
+            "aria-hidden",
+            "true"
+          ],
+          [
+            "class",
+            "course-boat course-boat--mett"
+          ],
+          [
+            "data-boat-mood",
+            "mett"
+          ],
+          [
+            "style",
+            "left:clamp(0px, calc(70% - 31px), calc(100% - 56px))"
+          ]
+        ],
+        "children": [
+          {
+            "ns": "http://www.w3.org/2000/svg",
+            "tag": "svg",
+            "attrs": [
+              [
+                "class",
+                "course-boat-svg"
+              ],
+              [
+                "focusable",
+                "false"
+              ],
+              [
+                "height",
+                "34"
+              ],
+              [
+                "viewBox",
+                "0 0 60 34"
+              ],
+              [
+                "width",
+                "60"
+              ]
+            ],
+            "children": [
+              {
+                "ns": "http://www.w3.org/2000/svg",
+                "tag": "path",
+                "attrs": [
+                  [
+                    "class",
+                    "cb-stripes"
+                  ],
+                  [
+                    "d",
+                    "M35 8 L49 8 M39 14 L55 14 M35 20 L47 20"
+                  ]
+                ],
+                "children": []
+              },
+              {
+                "ns": "http://www.w3.org/2000/svg",
+                "tag": "g",
+                "attrs": [
+                  [
+                    "transform",
+                    "translate(0 1) scale(0.32)"
+                  ]
+                ],
+                "children": [
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-sail"
+                      ],
+                      [
+                        "d",
+                        "M42 6 Q90 24 74 58 L42 58 Z"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-batten"
+                      ],
+                      [
+                        "d",
+                        "M42 37 L77 37"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-mast"
+                      ],
+                      [
+                        "d",
+                        "M40 64 L40 4"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-boom"
+                      ],
+                      [
+                        "d",
+                        "M40 58 L74 58"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-hull"
+                      ],
+                      [
+                        "d",
+                        "M6 62 L96 62 Q90 82 52 82 Q20 82 6 62 Z"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "circle",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-head"
+                      ],
+                      [
+                        "cx",
+                        "86"
+                      ],
+                      [
+                        "cy",
+                        "48"
+                      ],
+                      [
+                        "r",
+                        "10"
+                      ]
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "fullført": {
+    "ns": "http://www.w3.org/1999/xhtml",
+    "tag": "div",
+    "attrs": [
+      [
+        "class",
+        "course-progress course-progress--done"
+      ]
+    ],
+    "children": [
+      {
+        "ns": "http://www.w3.org/1999/xhtml",
+        "tag": "div",
+        "attrs": [
+          [
+            "aria-label",
+            "Fullført"
+          ],
+          [
+            "aria-valuemax",
+            "100"
+          ],
+          [
+            "aria-valuemin",
+            "0"
+          ],
+          [
+            "aria-valuenow",
+            "100"
+          ],
+          [
+            "class",
+            "course-progress-bar"
+          ],
+          [
+            "role",
+            "progressbar"
+          ],
+          [
+            "title",
+            "Fullført"
+          ]
+        ],
+        "children": [
+          {
+            "ns": "http://www.w3.org/1999/xhtml",
+            "tag": "div",
+            "attrs": [
+              [
+                "class",
+                "course-progress-fill completed"
+              ],
+              [
+                "style",
+                "width:100%"
+              ]
+            ],
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "feiring": {
+    "ns": "http://www.w3.org/1999/xhtml",
+    "tag": "div",
+    "attrs": [
+      [
+        "class",
+        "course-progress course-progress--done course-progress--celebrating"
+      ]
+    ],
+    "children": [
+      {
+        "ns": "http://www.w3.org/1999/xhtml",
+        "tag": "div",
+        "attrs": [
+          [
+            "aria-label",
+            "Fullført"
+          ],
+          [
+            "aria-valuemax",
+            "100"
+          ],
+          [
+            "aria-valuemin",
+            "0"
+          ],
+          [
+            "aria-valuenow",
+            "100"
+          ],
+          [
+            "class",
+            "course-progress-bar"
+          ],
+          [
+            "role",
+            "progressbar"
+          ],
+          [
+            "title",
+            "Fullført"
+          ]
+        ],
+        "children": [
+          {
+            "ns": "http://www.w3.org/1999/xhtml",
+            "tag": "div",
+            "attrs": [
+              [
+                "class",
+                "course-progress-fill completed"
+              ],
+              [
+                "style",
+                "width:100%"
+              ]
+            ],
+            "children": []
+          }
+        ]
+      },
+      {
+        "ns": "http://www.w3.org/1999/xhtml",
+        "tag": "span",
+        "attrs": [
+          [
+            "aria-hidden",
+            "true"
+          ],
+          [
+            "class",
+            "course-boat course-boat--feirer course-boat--leaving"
+          ],
+          [
+            "data-boat-mood",
+            "feirer"
+          ],
+          [
+            "style",
+            "left: 0px;"
+          ]
+        ],
+        "children": [
+          {
+            "ns": "http://www.w3.org/2000/svg",
+            "tag": "svg",
+            "attrs": [
+              [
+                "class",
+                "course-boat-svg"
+              ],
+              [
+                "focusable",
+                "false"
+              ],
+              [
+                "height",
+                "34"
+              ],
+              [
+                "viewBox",
+                "0 0 60 34"
+              ],
+              [
+                "width",
+                "60"
+              ]
+            ],
+            "children": [
+              {
+                "ns": "http://www.w3.org/2000/svg",
+                "tag": "g",
+                "attrs": [
+                  [
+                    "transform",
+                    "translate(0 1) scale(0.32)"
+                  ]
+                ],
+                "children": [
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-sail"
+                      ],
+                      [
+                        "d",
+                        "M42 6 Q90 24 74 58 L42 58 Z"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-batten"
+                      ],
+                      [
+                        "d",
+                        "M42 37 L77 37"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-mast"
+                      ],
+                      [
+                        "d",
+                        "M40 64 L40 4"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-boom"
+                      ],
+                      [
+                        "d",
+                        "M40 58 L74 58"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "path",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-hull"
+                      ],
+                      [
+                        "d",
+                        "M6 62 L96 62 Q90 82 52 82 Q20 82 6 62 Z"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "circle",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-head"
+                      ],
+                      [
+                        "cx",
+                        "86"
+                      ],
+                      [
+                        "cy",
+                        "42"
+                      ],
+                      [
+                        "r",
+                        "10"
+                      ]
+                    ],
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "ns": "http://www.w3.org/2000/svg",
+                "tag": "g",
+                "attrs": [
+                  [
+                    "class",
+                    "course-boat-confetti"
+                  ]
+                ],
+                "children": [
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "rect",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-c cb-c1"
+                      ],
+                      [
+                        "height",
+                        "5"
+                      ],
+                      [
+                        "rx",
+                        "1"
+                      ],
+                      [
+                        "width",
+                        "5"
+                      ],
+                      [
+                        "x",
+                        "40"
+                      ],
+                      [
+                        "y",
+                        "1"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "circle",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-c cb-c2"
+                      ],
+                      [
+                        "cx",
+                        "48"
+                      ],
+                      [
+                        "cy",
+                        "10"
+                      ],
+                      [
+                        "r",
+                        "3"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "rect",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-c cb-c3"
+                      ],
+                      [
+                        "height",
+                        "5"
+                      ],
+                      [
+                        "rx",
+                        "1"
+                      ],
+                      [
+                        "width",
+                        "5"
+                      ],
+                      [
+                        "x",
+                        "56"
+                      ],
+                      [
+                        "y",
+                        "4"
+                      ]
+                    ],
+                    "children": []
+                  },
+                  {
+                    "ns": "http://www.w3.org/2000/svg",
+                    "tag": "circle",
+                    "attrs": [
+                      [
+                        "class",
+                        "cb-c cb-c4"
+                      ],
+                      [
+                        "cx",
+                        "4"
+                      ],
+                      [
+                        "cy",
+                        "16"
+                      ],
+                      [
+                        "r",
+                        "2.5"
+                      ]
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

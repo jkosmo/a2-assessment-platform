@@ -1,0 +1,47 @@
+{
+  "/static/boat/anke.jpg": {
+    "contentType": "image/jpeg",
+    "bytes": 19120,
+    "sha256": "a56cc35078f567e3c5933bc6f3b3cd43ec8dc730a327f6b5723a6e85d3b21927"
+  },
+  "/static/boat/diskusjon.jpg": {
+    "contentType": "image/jpeg",
+    "bytes": 22157,
+    "sha256": "360d91ca3f8d60644829e8a577a5034e3c73fead653ee23bed2f6fc7a1b4665c"
+  },
+  "/static/boat/frist-forfalt.jpg": {
+    "contentType": "image/jpeg",
+    "bytes": 17460,
+    "sha256": "6f7ea9608ae925253cbb19bdbab1d76021e0b7c03dd005597b8241da71b10b45"
+  },
+  "/static/boat/frist-snart.jpg": {
+    "contentType": "image/jpeg",
+    "bytes": 15263,
+    "sha256": "2716490fa8f0f8148be8376f32494c3425bfb814d402d3c9997e3ffe175abeab"
+  },
+  "/static/boat/kurs-ny-versjon.jpg": {
+    "contentType": "image/jpeg",
+    "bytes": 16002,
+    "sha256": "855edd84ffbb04bb0f0043ff246ce5aad1c3f05e7d3837d8af383e3a4c5d6135"
+  },
+  "/static/boat/kurs-tildelt.jpg": {
+    "contentType": "image/jpeg",
+    "bytes": 17203,
+    "sha256": "48f5575485f561f4d7f3f4b266770a4aeaf1d4248447ef1e6283049211c5ebb4"
+  },
+  "/static/boat/vurdering-bestatt.jpg": {
+    "contentType": "image/jpeg",
+    "bytes": 13514,
+    "sha256": "e2c084cc16ad8843d7f520e12d61759f84a298e3e20886f85e48a09015c1298e"
+  },
+  "/static/boat/vurdering-ikke-bestatt.jpg": {
+    "contentType": "image/jpeg",
+    "bytes": 16068,
+    "sha256": "2ebe1a4ad0109338bdafd2755bf58d77826b56b278f0f8dfeeaf0b94ef38f27a"
+  },
+  "/static/boat/vurdering-sensor.jpg": {
+    "contentType": "image/jpeg",
+    "bytes": 20284,
+    "sha256": "81e5294b5b56007ee7f6870e8c3e46b8a1580061b346c85ab73c14f60e003a73"
+  }
+}
