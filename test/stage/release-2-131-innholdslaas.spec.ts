@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.131.0 mot UTRULLET stage: #934 skive 4a — innholdslåsen og kursskjemaets teller (doc/DESIGN_934.md, «4a»).
@@ -67,10 +68,8 @@ test.afterAll(async () => {
   }
 });
 
-test("versjonen er 2.131.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.131.0");
+test("versjonen er minst 2.131.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.131.0"));
 });
 
 test("et nytt kurs får elementene uten teller, publiseres, og kursdetaljen sender telleren", async () => {

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.139.0 mot UTRULLET stage: rekkefølgen i kursgjennomføringsrapporten, med ekte data. Bare lesing. Fila med CSV-en er testet i
@@ -28,9 +29,7 @@ async function api(sti: string): Promise<{ status: number; json: any }> {
 const STATUS = ["COMPLETED", "NEEDS_NEW_VERSION", "IN_PROGRESS", "NOT_STARTED"];
 
 test("versjonen er minst 2.139.0", async () => {
-  const svar = await fetch(`${BASE}/version`);
-  const [major, minor] = String((await svar.json()).version).split(".").map(Number);
-  expect(major! * 1000 + minor!).toBeGreaterThanOrEqual(2139);
+  noter("versjon", await forventMinstVersjon(BASE, "2.139.0"));
 });
 
 test("deltakerne står med Fullført øverst, og nyeste aktivitet først innenfor hver status", async () => {

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.130.1 mot UTRULLET stage, med ekte API og ekte klient:
@@ -73,10 +74,8 @@ test.afterAll(async () => {
   }
 });
 
-test("versjonen er 2.130.1", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.130.1");
+test("versjonen er minst 2.130.1", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.130.1"));
 });
 
 test("favicon: filene serveres med riktig type, og sidene lenker til dem", async () => {

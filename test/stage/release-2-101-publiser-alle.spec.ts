@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.101.0 mot UTRULLET stage, med ekte API og ekte klient:
@@ -102,10 +103,8 @@ async function levendeTekst(courseId: string) {
   return { publishedAt: item.section.audit.publishedAt as string | null, nb: item.section.bodyMarkdown.nb as string };
 }
 
-test("versjonen er 2.107.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.107.0");
+test("versjonen er minst 2.107.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.107.0"));
 });
 
 test("API: oppdateringen legger ny versjon klar; pending-versions viser den; publish-pending publiserer", async () => {

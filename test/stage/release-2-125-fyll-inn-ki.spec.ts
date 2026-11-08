@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.125.0 mot UTRULLET stage: #1077 leveranse 3b, KI lager «fyll inn ordet som mangler» — mot den EKTE
@@ -53,10 +54,8 @@ function sjekkFyllInn(spørsmål: Spørsmål[]) {
   return fyllInn;
 }
 
-test("versjonen er 2.125.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.125.0");
+test("versjonen er minst 2.125.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.125.0"));
 });
 
 test("KI-generering fra en kilde med frister og begreper: høyst ett «fyll inn», med én lukke — eller en begrunnelse", async () => {

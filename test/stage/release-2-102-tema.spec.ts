@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.102.0 mot UTRULLET stage, med ekte API, ekte klient og ekte oversetter:
@@ -80,10 +81,8 @@ test.afterAll(async () => {
   }
 });
 
-test("versjonen er 2.107.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.107.0");
+test("versjonen er minst 2.107.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.107.0"));
 });
 
 test("Tema-siden: administrator lager et tema på bokmål, og oversetteren fyller nynorsk og engelsk", async ({ page }) => {

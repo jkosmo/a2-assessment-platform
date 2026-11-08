@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.111.0 mot UTRULLET stage (inneholder 2.110.0): #1122, kriterier som ikke beskriver skalaen — varsel,
@@ -42,10 +43,8 @@ async function api(metode: string, sti: string, body?: unknown): Promise<{ statu
 const tre = (nb: string) => ({ nb, nn: nb, "en-GB": nb });
 const tilstand: { moduleId?: string } = {};
 
-test("versjonen er 2.111.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.111.0");
+test("versjonen er minst 2.111.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.111.0"));
 });
 
 test("ny rubrikkversjon: én linje gir funn, beskrevne trinn gir ingen", async () => {

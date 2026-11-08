@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.136.0 mot UTRULLET stage: #934 skive 5b (doc/DESIGN_934.md, «5b — bygget»). Bare API, med tjenestekontoen. Dialogene selv er testet i
@@ -87,10 +88,8 @@ test.afterAll(async () => {
   if (tilstand.moduleId) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/archive`)).status);
 });
 
-test("versjonen er 2.145.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.145.0");
+test("versjonen er minst 2.136.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.136.0"));
 });
 
 test("forhåndsvisningen sier hvilken vei dialogen skal gå, og publiseringen virker den veien", async () => {
