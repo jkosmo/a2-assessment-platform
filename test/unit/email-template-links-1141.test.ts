@@ -29,7 +29,6 @@ import {
 import { EMAIL_ILLUSTRATIONS, EmailContainsLinkError, neutralizeAddresses, renderIllustratedEmail } from "../../src/modules/certification/illustratedEmail.js";
 import { buildEmailLink } from "../../src/modules/certification/emailLinks.js";
 import { defaultSendCourseReminder } from "../../src/modules/course/courseReminderService.js";
-import { activeMascot, mascotImagePath } from "../../src/modules/mascot/mascotPack.js";
 
 // #994: testen av varselet ved oppstart laster env.js på nytt inne i testkroppen.
 warmModuleGraph(() => import("../../src/config/env.js"));
@@ -250,14 +249,9 @@ describe("neste e-post kan ikke glemme malen", () => {
     expect(service.match(/\bsendViaAcs\(/g)).toHaveLength(2);
   });
 
-  it("alle bildene finnes i maskotpakken, er JPEG, og er under 30 KB", () => {
-    for (const { file } of Object.values(EMAIL_ILLUSTRATIONS)) {
-      const bytes = readFileSync(mascotImagePath(activeMascot(), file));
-      expect(bytes.length, file).toBeLessThan(30 * 1024);
-      expect(bytes[0], file).toBe(0xff);
-      expect(bytes[1], file).toBe(0xd8);
-    }
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 4.3): «alle bildene finnes i maskotpakken, er JPEG, og er under 30 KB» er slettet.
+  // Bildene kommer fra pakken (illustratedEmail.ts), og pakkesjekken krever JPEG, 600 × 200 og under 30 kB for hvert av dem
+  // (src/modules/mascot/mascotCheck.ts, MASCOT_IMAGE). Den kjøres i test/unit/mascot-check.test.ts.
 
   it("alle scenene har alt-tekst på tre språk", () => {
     for (const { file, alt } of Object.values(EMAIL_ILLUSTRATIONS)) {

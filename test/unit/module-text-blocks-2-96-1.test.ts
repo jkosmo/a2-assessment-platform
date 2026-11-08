@@ -66,8 +66,7 @@ describe("modulens tekst tegnes med modulvarianten", () => {
     expect(source).not.toMatch(/renderSectionMarkdown\(/);
   });
 
-  it("forhåndsvisningen i modularbeidsflaten ber tjeneren om modulvarianten", () => {
-    const source = readFileSync("public/static/admin-content-preview.js", "utf8");
-    expect(source).toContain('variant: "moduleText"');
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 4.3): «forhåndsvisningen ber tjeneren om modulvarianten» er slettet. Den lette etter
+  // teksten `variant: "moduleText"` i kilden; test/dom/admin-content-preview-markdown.dom.test.js kjører hydreringen og
+  // sjekker at kallet faktisk sender `variant: "moduleText"`.
 });

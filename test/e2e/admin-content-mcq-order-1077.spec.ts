@@ -95,19 +95,6 @@ test.describe("#1077 leveranse 2 — «sett i riktig rekkefølge» i editoren", 
     expect(translated).toBe(false);
   });
 
-  test("«Flere riktige svar» og «Sett i riktig rekkefølge» utelukker hverandre", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Cases" }],
-      moduleExports: { "module-1": moduleWith({ stem: localizedText("Order the steps"), options: STEPS, correctAnswer: STEPS[0], rationale: localizedText("Why") }) },
-    });
-    await page.goto("/admin-content/module/module-1/conversation");
-    await page.locator("#previewEditTitle").waitFor();
-    await page.locator('[data-preview-edit-multiple="0"]').check();
-    await page.locator('[data-preview-edit-order="0"]').check();
-    await expect(page.locator('[data-preview-edit-multiple="0"]')).not.toBeChecked();
-    await page.locator('[data-preview-edit-multiple="0"]').check();
-    await expect(page.locator('[data-preview-edit-order="0"]')).not.toBeChecked();
-    // Tilbake til valg av fasit, med avkrysning.
-    for (const input of await page.locator('input[name="previewEditCorrectAnswer0"]').all()) await expect(input).toHaveAttribute("type", "checkbox");
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 4.1): «"Flere riktige svar" og "Sett i riktig rekkefølge" utelukker hverandre» er slått
+  // sammen med testen av alle tre parene i admin-content-mcq-fill-1077.spec.ts.
 });

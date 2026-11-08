@@ -256,18 +256,9 @@ describe("#934 skive 4a: gamle faner avvises før første skriving", () => {
     expect((await prisma.course.findUniqueOrThrow({ where: { id: courseId } })).sortOrder).toBe(3);
   });
 
-  it("versionAware betyr ingenting lenger: uten svar avvises endringen når noen har kursbevis", async () => {
-    const { courseId, moduleId, sectionId } = await publishedCourse("overgang-borte");
-    const user = await prisma.user.create({ data: { externalId: `lock-4a-${RUN}-${seq++}`, email: `lock.4a.${RUN}.${seq++}@x.test`, name: "Bevis" }, select: { id: true } });
-    await prisma.courseCompletion.create({ data: { userId: user.id, courseId, moduleSnapshotJson: JSON.stringify([moduleId]) } });
-    const loaded = (await detail(courseId)).contentRevision;
-    const response = await request(app).put(`/api/admin/content/courses/${courseId}/items`).set(ADMIN).send({
-      items: [{ type: "MODULE", moduleId }], versionAware: true, expectedRevision: loaded,
-    });
-    expect(response.status).toBe(400);
-    expect(response.body.error).toBe("course_version_required");
-    expect(await itemIds(courseId)).toEqual([moduleId, sectionId]);
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 1.1): «versionAware betyr ingenting lenger …» er slettet. «overgangen er fjernet — uten
+  // svar avvises endringen når noen har kursbevis, med eller uten markøren» i test/m2-course-versions-934.test.ts prøver både
+  // `{}` og `{ versionAware: true }`, og sjekker 400 course_version_required og at ingenting er lagret.
 });
 
 describe("#934 skive 4a: innholdslåsen — samtidige endringer venter på hverandre", () => {

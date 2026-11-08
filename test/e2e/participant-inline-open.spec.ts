@@ -97,12 +97,13 @@ test("participant: section and module both open inline in-place; only one open a
   await expect(sectionItem.locator(".course-inline-panel")).toBeVisible();
   await expect(sectionItem.locator("#sectionReaderBody")).toContainText("Seksjonstekst");
 
-  // #924: ÉN handlingsknapp, ikke to. Den gamle «marker lest» + «gå til neste»-paret er borte, og
-  // siden neste element her er en MODUL sier knappen det: den fører til testen, ikke til «neste
-  // seksjon». (#865s formguard beholdes: knappen er auto-bred, ikke strukket over hele panelet.)
+  // #924: ÉN handlingsknapp, ikke to. Den gamle «marker lest» + «gå til neste»-paret er borte.
+  // (#865s formguard beholdes: knappen er auto-bred, ikke strukket over hele panelet.) Testgjennomgangen 2026-11 (avsnitt
+  // 4.1): knappeteksten («… og gå til testen») sjekkes i participant-section-advance.spec.ts («#924: neste element er en
+  // MODUL»), og er tatt ut her.
   const markReadBtn = sectionItem.locator("#sectionReaderMarkRead");
   await expect(sectionItem.locator(".course-inline-actions button")).toHaveCount(1);
-  await expect(markReadBtn).toHaveText("Marker seksjon lest, og gå til testen");
+  await expect(markReadBtn).toBeVisible();
   const boxA = await markReadBtn.boundingBox();
   const panelBox = await sectionItem.locator(".course-inline-panel").boundingBox();
   expect(boxA && panelBox && boxA.width < panelBox.width * 0.9).toBe(true); // not full-width

@@ -40,14 +40,12 @@ const INLINE_PATTERNS = [
 ];
 
 // Filer som med vilje skriver rollenavn uten å være en tilgangsvakt. Hver MÅ ha en grunn.
+//
+// Testgjennomgangen 2026-11 (avsnitt 5.2): `config/capabilities.ts` og `auth/authorization.ts` sto her med hele fila
+// unntatt, men ingen av dem har `roles.includes(` eller `roles.some(` (authorization.ts bruker `hasAnyRole`). Unntakene
+// dekket ingenting, men ville sluppet gjennom en innebygd sjekk i nettopp filene som avgjør tilgang. Fjernet.
 const EXCEPTIONS = {
   "auth/roleSets.ts": "definisjonen selv",
-  "config/capabilities.ts":
-    "montering: hvilke roller slipper inn på et API-prefiks. Er en DEKLARASJON av policy, ikke en "
-    + "innebygd sjekk — og settene her er med vilje grovere enn de per-rute.",
-  "auth/authorization.ts":
-    "requireAnyRole tar settet som ARGUMENT fra monteringen; den skriver ikke sitt eget. Bruker "
-    + "hasAnyRole internt.",
 };
 
 function walk(dir) {

@@ -26,7 +26,8 @@ const decisionSubmissionUpdate = vi.fn();
 // ─── manualReviewService mocks ───────────────────────────────────────────────
 
 const findManualReviewForOverride = vi.fn();
-const createOverrideDecision = vi.fn();
+// Testgjennomgangen 2026-11 (avsnitt 1.1): `createOverrideDecision` og `createResolutionDecision` er fjernet her. Funksjonene
+// ble fjernet i 2.133.0, og variablene ble ikke gitt til noen `vi.mock`. Vedtaket skrives med `assessmentDecisionCreate`.
 const resolveManualReviewGuarded = vi.fn();
 const findManualReviewById = vi.fn();
 const manualReviewSubmissionUpdate = vi.fn();
@@ -35,7 +36,6 @@ const notifyAssessmentResult = vi.fn();
 // ─── appealService mocks ──────────────────────────────────────────────────────
 
 const findAppealForResolution = vi.fn();
-const createResolutionDecision = vi.fn();
 const markAppealResolvedGuarded = vi.fn();
 const findAppealById = vi.fn();
 const appealSubmissionUpdate = vi.fn();
@@ -279,7 +279,6 @@ describe("transactional failure injection", () => {
     manualReviewCreate.mockReset();
     decisionSubmissionUpdate.mockReset();
     findManualReviewForOverride.mockReset();
-    createOverrideDecision.mockReset();
     resolveManualReviewGuarded.mockReset();
     resolveManualReviewGuarded.mockResolvedValue({ count: 1 });
     findManualReviewById.mockReset();
@@ -287,7 +286,6 @@ describe("transactional failure injection", () => {
     manualReviewSubmissionUpdate.mockReset();
     notifyAssessmentResult.mockReset().mockResolvedValue(undefined);
     findAppealForResolution.mockReset();
-    createResolutionDecision.mockReset();
     markAppealResolvedGuarded.mockReset();
     markAppealResolvedGuarded.mockResolvedValue({ count: 1 });
     findAppealById.mockReset();
@@ -353,7 +351,7 @@ describe("transactional failure injection", () => {
   // ── finalizeManualReviewOverride ──────────────────────────────────────────
 
   describe("finalizeManualReviewOverride", () => {
-    it("halts the pipeline when createOverrideDecision fails", async () => {
+    it("halts the pipeline when writing the override decision fails", async () => {
       findManualReviewForOverride.mockResolvedValue(BASE_MANUAL_REVIEW);
       assessmentDecisionCreate.mockRejectedValue(new Error("DB write failed"));
 
@@ -468,7 +466,7 @@ describe("transactional failure injection", () => {
   // ── resolveAppeal ─────────────────────────────────────────────────────────
 
   describe("resolveAppeal", () => {
-    it("halts the pipeline when createResolutionDecision fails", async () => {
+    it("halts the pipeline when writing the resolution decision fails", async () => {
       findAppealForResolution.mockResolvedValue(BASE_APPEAL);
       assessmentDecisionCreate.mockRejectedValue(new Error("DB write failed"));
 

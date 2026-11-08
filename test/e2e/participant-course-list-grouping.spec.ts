@@ -142,14 +142,9 @@ test("#939 + #1137: et fullført kurs er én grønn rad — med hel grønn linje
   const doneItem = page.locator('.course-accordion-item[data-course-id="done1"]');
   await expect(doneItem).toHaveClass(/course-accordion-item--done/);
 
-  // #939 tok bort linja på fullførte kurs. #1137 (produkteier 2026-11-02) ga den tilbake som én hel
-  // GRØNN linje, uten båt — «kun grønn linje etter at man er ferdig». Raden er fortsatt én rad.
-  await expect(doneItem.locator(".course-progress-bar")).toHaveCount(1);
-  await expect(doneItem.locator(".course-progress-fill")).toHaveClass(/completed/);
-  await expect(doneItem.locator(".course-boat")).toHaveCount(0);
-  // Det pågående har linja med sin vanlige farge. Kontrollcase: uten dette ville «grønn overalt» bestått.
-  await expect(page.locator('.course-accordion-item[data-course-id="open1"] .course-progress-bar')).toHaveCount(1);
-  await expect(page.locator('.course-accordion-item[data-course-id="open1"] .course-progress-fill')).not.toHaveClass(/completed/);
+  // #939 tok bort linja på fullførte kurs. #1137 (produkteier 2026-11-02) ga den tilbake som én hel GRØNN linje, uten båt.
+  // Testgjennomgangen 2026-11 (avsnitt 4.1): linja og båten sjekkes i course-progress-boat-1137.spec.ts («ikke påbegynt har
+  // tom linje …»), med kontrollen for et kurs i gang. Her står det som er listas eget: rad, hakemerke og lenke.
 
   // Hakemerket står SAMMEN med fargen: grønt alene kan ikke bære «fullført».
   await expect(doneItem.locator(".course-done-tick")).toHaveCount(1);
@@ -192,42 +187,9 @@ test("#939: et klikk på «Vis bevis» åpner beviset — det navigerer ikke lis
   await expect(page.locator("#courseAccordion")).not.toHaveClass(/course-accordion--focused/);
 });
 
-test("#939 funn A: bevis + status IN_PROGRESS er FULLFØRT — kurset som vokste beholder lenka", async ({ page }) => {
-  await mockBase(page);
-  // Det hverdagslige scenariet: deltakeren har bevis, så la forfatteren til én seksjon i det
-  // publiserte kurset. Beviset er permanent, men `total` vokste — så status faller til IN_PROGRESS.
-  await page.route("**/api/courses", (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        courses: [
-          course("open1", "Pågår", "IN_PROGRESS"),
-          { ...course("grown", "Kurset som vokste", "IN_PROGRESS"), progress: { completed: 5, total: 6, moduleCompleted: 1, moduleTotal: 1, sectionCompleted: 4, sectionTotal: 5, courseStatus: "IN_PROGRESS" } },
-        ],
-      }),
-    }),
-  );
-  await page.route("**/api/courses/completions", (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ completions: [{ courseId: "grown", certificateId: "cert-grown", completedAt: "2026-08-01T10:00:00.000Z", courseTitle: "Kurset som vokste" }] }),
-    }),
-  );
-
-  await loadList(page);
-
-  const grown = page.locator('.course-accordion-item[data-course-id="grown"]');
-  // ⚠️ Partisjoneringen sorterte det allerede hit. Raden MÅ være enig — ellers står kurset under
-  // «Fullført» og rendres som pågående, uten sertifikatlenke i det hele tatt.
-  await expect(grown).toHaveClass(/course-accordion-item--done/);
-  await expect(grown.locator(".course-certificate-link")).toHaveAttribute("href", "/certificate?id=cert-grown");
-  // #1137: fullført-raden har hel grønn linje og ingen båt — også når status sier IN_PROGRESS (5 av 6 steg).
-  await expect(grown.locator(".course-progress-fill")).toHaveClass(/completed/);
-  await expect(grown.locator(".course-progress-bar")).toHaveAttribute("aria-valuenow", "100");
-  await expect(grown.locator(".course-boat")).toHaveCount(0);
-});
+// Testgjennomgangen 2026-11 (avsnitt 4.1): «#939 funn A: bevis + status IN_PROGRESS er FULLFØRT — kurset som vokste beholder
+// lenka» er flyttet til «fullført med 5 av 6 steg …» i course-progress-boat-1137.spec.ts, som hadde samme scenario. Raden
+// (`--done`), lenka, den grønne linja og at båten mangler sjekkes der.
 
 test("#939 funn B: en fullført rad er ÉN rad — ingen tom stripe under", async ({ page }) => {
   await mockBase(page);

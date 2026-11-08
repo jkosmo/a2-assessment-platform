@@ -204,11 +204,7 @@ describe("certification status service", () => {
     expect(logOperationalEvent).not.toHaveBeenCalledWith("certification_downgrade_skipped", expect.anything());
   });
 
-  it("eksporterer ingen resertifiserings-API lenger (#989)", async () => {
-    const certification = await import("../../src/modules/certification/index.js");
-
-    expect(certification).not.toHaveProperty("deriveRecertificationStatus");
-    expect(certification).not.toHaveProperty("runRecertificationReminderSchedule");
-    expect(certification).not.toHaveProperty("upsertRecertificationStatusFromDecision");
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 2): «eksporterer ingen resertifiserings-API lenger (#989)» er slettet. Funksjonene
+  // kan ikke komme tilbake uten at noen skriver dem på nytt. Ruta som brukte dem gir 404, testet i
+  // test/removed-routes.test.ts.
 });

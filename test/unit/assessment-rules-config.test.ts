@@ -182,14 +182,13 @@ describe("rulesSchema — recertification er fjernet (#989)", () => {
     recertification: { validityDays: 365, dueOffsetDays: 30, dueSoonDays: 14, reminderDaysBefore: [30, 7, 1] },
   };
 
-  it("gir ingen recertification-regler ut, uansett hva som står i fila", () => {
-    expect(rulesSchema.parse(withLegacyRecertification)).not.toHaveProperty("recertification");
-  });
-
-  // Kontrollcase: en utrullet config med den gamle blokka må fortsatt PARSE. Blokka ignoreres, den
-  // avvises ikke — ellers ville en gammel fil i et miljø blitt en oppstartsfeil.
-  it("avviser ikke en gammel config-fil som fortsatt har blokka", () => {
-    expect(rulesSchema.safeParse(withLegacyRecertification).success).toBe(true);
+  // En utrullet config med den gamle blokka må fortsatt PARSE. Blokka ignoreres, den avvises ikke — ellers ville en gammel
+  // fil i et miljø blitt en oppstartsfeil. Testgjennomgangen 2026-11 (avsnitt 2): slått sammen med «gir ingen
+  // recertification-regler ut», som leste den samme fila.
+  it("leser en gammel config-fil som fortsatt har blokka, og gir ingen recertification-regler ut", () => {
+    const parsed = rulesSchema.safeParse(withLegacyRecertification);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).not.toHaveProperty("recertification");
   });
 
   // Kontrollcase: kursfrister er en ANNEN mekanisme og er urørt av #989.

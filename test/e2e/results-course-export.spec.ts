@@ -72,16 +72,14 @@ test.describe("Resultater: eksport av deltakerne i ett kurs", () => {
   });
 
   // 2.141.0 (produkteier 2026-11-07): «Kurs-deltakere» i eksportmenyen er fjernet; knappen i kursdetaljen
-  // dekker det. De fem andre valgene står. Kontrollen (fem valg, «Kurs-sammendrag» blant dem) viser at
-  // menyen faktisk ble lest.
-  test("eksportmenyen har ikke lenger «Kurs-deltakere»", async ({ page }) => {
+  // dekker det. Testgjennomgangen 2026-11 (avsnitt 2): i stedet for «finnes ikke» pluss en telling sjekkes hele
+  // innholdet i menyen, i rekkefølge. Kommer «Kurs-deltakere» tilbake, eller forsvinner et annet valg, blir den rød.
+  test("eksportmenyen har de fem valgene, og ikke «Kurs-deltakere»", async ({ page }) => {
     await mockResults(page, () => []);
     await page.goto("/results");
     await page.locator("#exportMenu > summary").click();
     const valg = page.locator("#exportMenu .row-more-menu button");
-    await expect(valg).toHaveCount(5);
-    await expect(valg.filter({ hasText: "Kurs-sammendrag" })).toHaveCount(1);
-    await expect(valg.filter({ hasText: "Kurs-deltakere" })).toHaveCount(0);
+    await expect(valg).toHaveText(["Fullføring", "Bestått-andel", "Modul-sammendrag", "Modul-deltakere", "Kurs-sammendrag"]);
   });
 
   test("fila er tabellen: samme rekkefølge, norske overskrifter, klar for Excel", async ({ page }) => {

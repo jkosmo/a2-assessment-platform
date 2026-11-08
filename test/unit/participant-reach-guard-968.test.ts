@@ -25,7 +25,15 @@ function walk(dir: string): string[] {
   });
 }
 
+const inlineRule = (line: string) => /\.activeStatus\b/.test(line) && /\.isAnonymized\b/.test(line);
 describe("#968 — vakt: ingen inline kopi av regelen", () => {
+  // Testgjennomgangen 2026-11 (avsnitt 5.3): kontrollen. Får feltene nye navn, treffer mønsteret ingenting, og vakta under
+  // er grønn uten å se. Hjelperen selv skriver regelen på én linje, så der skal mønsteret treffe.
+  it("kontroll: mønsteret treffer regelen i hjelperen selv", () => {
+    const helper = readFileSync(join(SRC, "modules", "user", "participantReach.ts"), "utf8");
+    expect(helper.split("\n").filter((line) => !line.trim().startsWith("//") && inlineRule(line)).length).toBeGreaterThan(0);
+  });
+
   it("⚠️ `.activeStatus` og `.isAnonymized` i samme uttrykk finnes bare i hjelperen", () => {
     const treff: string[] = [];
     for (const file of walk(SRC)) {
@@ -33,7 +41,7 @@ describe("#968 — vakt: ingen inline kopi av regelen", () => {
       readFileSync(file, "utf8").split("\n").forEach((line, i) => {
         const t = line.trim();
         if (t.startsWith("//") || t.startsWith("*")) return;
-        if (/\.activeStatus\b/.test(line) && /\.isAnonymized\b/.test(line)) treff.push(`${file.slice(SRC.length + 1)}:${i + 1}: ${t.slice(0, 110)}`);
+        if (inlineRule(line)) treff.push(`${file.slice(SRC.length + 1)}:${i + 1}: ${t.slice(0, 110)}`);
       });
     }
     expect(treff.join("\n"), "bruk isReachableParticipant(user)").toBe("");

@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // #934 skive 4b: e-posten om at et kurs har fått en ny hovedversjon, og den felles malen med bildet (#1139/#1141).
@@ -19,7 +18,6 @@ import { buildCourseMajorVersionEmail, deliverIllustratedEmail, sendViaAcs } fro
 import { EMAIL_ILLUSTRATIONS, EmailContainsLinkError, renderIllustratedEmail } from "../../src/modules/certification/illustratedEmail.js";
 import { countChangedItems } from "../../src/modules/course/courseVersioning.js";
 import { env } from "../../src/config/env.js";
-import { activeMascot, mascotImagePath } from "../../src/modules/mascot/mascotPack.js";
 
 const LINK = /http|www|href/i;
 const LOCALES = ["nb", "nn", "en-GB"] as const;
@@ -95,25 +93,9 @@ describe("#934 skive 4b: e-posten om ny hovedversjon", () => {
     expect(alt["en-GB"]).toMatch(/boatyard/);
   });
 
-  it("bildet i maskotpakken er en JPEG på 600 × 200 under 30 KB", () => {
-    const bytes = readFileSync(mascotImagePath(activeMascot(), EMAIL_ILLUSTRATIONS.courseNewVersion.file));
-    expect(bytes.length).toBeLessThan(30 * 1024);
-    expect([bytes[0], bytes[1], bytes[2]]).toEqual([0xff, 0xd8, 0xff]);
-    // Bredde og høyde står i SOF-segmentet (0xFFC0/0xFFC2).
-    let i = 2;
-    let size: { width: number; height: number } | null = null;
-    while (i < bytes.length - 9) {
-      if (bytes[i] !== 0xff) break;
-      const marker = bytes[i + 1];
-      const length = bytes.readUInt16BE(i + 2);
-      if (marker === 0xc0 || marker === 0xc2) {
-        size = { height: bytes.readUInt16BE(i + 5), width: bytes.readUInt16BE(i + 7) };
-        break;
-      }
-      i += 2 + length;
-    }
-    expect(size).toEqual({ width: 600, height: 200 });
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 4.3): «bildet i maskotpakken er en JPEG på 600 × 200 under 30 KB» er slettet. Pakkesjekken
+  // krever det samme for hvert e-postbilde (src/modules/mascot/mascotCheck.ts, MASCOT_IMAGE), og kjøres i
+  // test/unit/mascot-check.test.ts.
 
   it("en tittel med en adresse hindrer ikke e-posten, og adressen blir ikke en lenke", () => {
     for (const courseTitle of ["Se www.a-2.no", "https://evil.example", "<a href=x>", "Kontakt kurs@a-2.no", "KURS@A-2.NO", "Les mer på portal.a-2.no", "a-2.no/kurs", "portal.example.de", "training.example.co.uk", "docs.example.dev"]) {

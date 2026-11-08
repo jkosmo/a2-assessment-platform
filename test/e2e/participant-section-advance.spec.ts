@@ -256,9 +256,32 @@ async function mockCourseWithTrailingSection(page: Page, moduleStatus: string) {
   );
 }
 
+// Et 1 × 1 px PNG-bilde for seksjonen under.
+const TINY_PNG = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+  0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+  0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+  0x42, 0x60, 0x82,
+]);
+
+// Testgjennomgangen 2026-11 (avsnitt 4.1): participant-section-reader.spec.ts testet det samme som denne. Det den hadde i
+// tillegg står nå her: bildet i seksjonen hentes med innlogging og blir en `blob:`-adresse (#542, ikke den rå
+// /api/content-assets-stien som ville gitt 401), og leseren lukkes etter «Avslutt kurset».
 test("#929: siste element med alt annet ferdig gir «Avslutt kurset»", async ({ page }) => {
   await mockBase(page);
   await mockCourseWithTrailingSection(page, "PASSED");
+  // Seksjonen med et privat bilde. Registrert etter mocken over, så denne vinner.
+  await page.route("**/api/courses/c1/sections/s1", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ title: "Lesestoff", html: '<p>Tekst</p><img src="/api/content-assets/a1" alt="bilde">' }),
+    }),
+  );
+  await page.route("**/api/content-assets/a1", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: TINY_PNG }),
+  );
 
   let readCalled = false;
   await page.route("**/api/courses/c1/sections/s1/read", (route: Route) => {
@@ -268,6 +291,10 @@ test("#929: siste element med alt annet ferdig gir «Avslutt kurset»", async ({
 
   await openCourse(page);
   await page.locator('.course-item[data-key="ci2"] .course-module-row').click();
+
+  const img = page.locator("#sectionReaderBody img");
+  await expect(img).toHaveCount(1);
+  await expect.poll(async () => (await img.getAttribute("src")) ?? "").toMatch(/^blob:/);
 
   await expect(page.locator("#sectionReaderFinish")).toBeVisible();
   await expect(page.locator("#sectionReaderFinish")).toHaveText(/Avslutt kurset/);
@@ -280,6 +307,8 @@ test("#929: siste element med alt annet ferdig gir «Avslutt kurset»", async ({
 
   await page.locator("#sectionReaderFinish").click();
   await expect.poll(() => readCalled).toBe(true);
+  // Etter «Avslutt kurset» LUKKES leseren og kurslista lastes på nytt: deltakeren skal se resultatet av handlingen sin.
+  await expect(page.locator("#sectionReaderBody")).toHaveCount(0);
 });
 
 test("#929: gjenstår det noe, er det ingen knapp — men en forklaring", async ({ page }) => {

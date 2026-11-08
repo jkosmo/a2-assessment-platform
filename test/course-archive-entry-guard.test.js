@@ -25,12 +25,20 @@ const EXEMPT = {
   // "someFunction": "grunn",
 };
 
-/** Del fila i toppnivå-funksjoner: navn + kropp fram til neste `export async function` / EOF. */
+/**
+ * Del fila i toppnivå-funksjoner: navn + kropp fram til neste toppnivå-funksjon / EOF.
+ *
+ * ⚠️ Testgjennomgangen 2026-11 (avsnitt 5.1): før delte vakta bare på `export async function`. Da havnet den
+ * ikke-eksporterte `writeCourseItems` inne i `setCourseItems` sin kropp, og veien `updateCourse` → `writeCourseItems` ble
+ * aldri sett for seg. Vakta var grønn fordi sjekken tilfeldigvis står inne i `writeCourseItems`: flyttet man kallet til
+ * `setCourseItems`, var den fortsatt grønn, mens `updateCourse` skrev uten sjekk. Nå er hver funksjon sin egen bit.
+ */
 function topLevelFunctions(src) {
-  const re = /^export async function (\w+)\s*\(/gm;
-  const starts = [...src.matchAll(re)].map((m) => ({ name: m[1], at: m.index }));
+  const re = /^(export )?(?:async )?function (\w+)\s*\(/gm;
+  const starts = [...src.matchAll(re)].map((m) => ({ name: m[2], exported: Boolean(m[1]), at: m.index }));
   return starts.map((s, i) => ({
     name: s.name,
+    exported: s.exported,
     body: src.slice(s.at, i + 1 < starts.length ? starts[i + 1].at : src.length),
     line: src.slice(0, s.at).split("\n").length,
   }));
@@ -50,6 +58,9 @@ describe("#938/#992: alle innganger til et kurs går gjennom arkivsjekken", () =
     expect(writers.length, "fant ingen courseItem-skrivere i courseCommands.ts — leter vakta riktig sted?")
       .toBeGreaterThanOrEqual(2);
     expect(fns.map((f) => f.name)).toEqual(expect.arrayContaining(["setCourseItems", "setCourseModules"]));
+    // Og at funksjoner som ikke er eksportert, blir sett for seg (se topLevelFunctions).
+    expect(fns.filter((f) => !f.exported).length, "fant ingen ikke-eksporterte funksjoner — deler vakta fila riktig?")
+      .toBeGreaterThan(0);
   });
 
   it("hver skriver kaller assertContentUsableInCourse", () => {

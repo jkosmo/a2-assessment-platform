@@ -90,20 +90,26 @@ test.describe("#1077 leveranse 3 — «fyll inn ordet som mangler» i editoren",
     expect(translated).toBe(false);
   });
 
-  test("de tre typene utelukker hverandre", async ({ page }) => {
+  // Testgjennomgangen 2026-11 (avsnitt 4.1): slått sammen med «"Flere riktige svar" og "Sett i riktig rekkefølge" utelukker
+  // hverandre» fra admin-content-mcq-order-1077.spec.ts. Hvert av de tre parene prøves begge veier.
+  test("de tre typene utelukker hverandre, parvis og begge veier", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Cases" }],
       moduleExports: { "module-1": moduleWith({ stem: localizedText("The deadline is ___ weeks"), options: ANSWERS, correctAnswer: ANSWERS[0], rationale: localizedText("Why") }) },
     });
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
-    await page.locator('[data-preview-edit-fill="0"]').check();
-    await page.locator('[data-preview-edit-order="0"]').check();
-    await expect(page.locator('[data-preview-edit-fill="0"]')).not.toBeChecked();
-    await page.locator('[data-preview-edit-fill="0"]').check();
-    await expect(page.locator('[data-preview-edit-order="0"]')).not.toBeChecked();
-    await page.locator('[data-preview-edit-multiple="0"]').check();
-    await expect(page.locator('[data-preview-edit-fill="0"]')).not.toBeChecked();
+    const box = (type: string) => page.locator(`[data-preview-edit-${type}="0"]`);
+    for (const [a, b] of [["fill", "order"], ["multiple", "order"], ["fill", "multiple"]] as const) {
+      await box(a).check();
+      await box(b).check();
+      await expect(box(a), `${b} skal fjerne ${a}`).not.toBeChecked();
+      await box(a).check();
+      await expect(box(b), `${a} skal fjerne ${b}`).not.toBeChecked();
+    }
+    // Tilbake til valg av fasit, med avkrysning.
+    await box("multiple").check();
+    await expect(box("fill")).not.toBeChecked();
     for (const input of await page.locator('input[name="previewEditCorrectAnswer0"]').all()) await expect(input).toHaveAttribute("type", "checkbox");
   });
 });
