@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.146.0 - 2026-11-08
+
+Ryddepakke før #1142: arkiverte klasser, den gamle regelen for beståtte fjernet, og en gjennomgang av testene (`doc/test/TESTGJENNOMGANG_2026-11.md`). Første pakke etter den nye arbeidsmåten: to grener samlet, én full testrunde, én QA-runde og én utrulling.
+
+- **Arkiverte klasser** (produkteier 2026-11-08, `doc/DECISIONS.md`):
+  - Et kurs deltakeren bare har fra arkiverte klasser, vises ikke lenger i «Mine kurs», kursdetaljen, seksjonene, modulene eller diskusjonene, med mindre kurset er påbegynt eller fullført. Påbegynt betyr en lest seksjon, en levert modul, et kursbevis eller deltakelse i kursets diskusjoner.
+  - En arkivert klasse tar ikke imot nye deltakere eller kurs: `400 class_archived`. Feltene er borte på klassesiden, med en forklaring. Etter «Gjenopprett» går alt igjen.
+  - API-referansen sa at `DELETE /classes/:classId` arkiverer. Den sletter en arkivert klasse for godt, og det står nå.
+- **Den gamle regelen for beståtte er fjernet** (#934 5a-3, på i prod siden 2026-11-06): koden leser ikke lenger bryteren `module_pass_per_course`, og #997-veien (`SUPERSEDED`, e-posten «modulen er revidert») er borte. Brukerne ser ingen endring. Raden i databasen står, så en tilbakerulling til 2.135.0–2.145.0 gir samme regel. npm-skriptene `module-credit:backfill` og `module-credit:compare` er fjernet.
+- **Testene måler nå regelen prod bruker:** integrasjonstestene kjørte med bryteren av, mens prod har den på.
+- **Testgjennomgangen:**
+  - CI-jobben for e2e har vært rød siden 27.10 fordi `ubuntu-latest` ble en versjon Playwright ikke støtter. Den er låst til `ubuntu-24.04`.
+  - 21 stage-skript var døde på grunn av eksakte versjonslåser. De sjekker nå «minst versjon».
+  - Tester for fjernet funksjonalitet er slettet, og trege tester er slått sammen.
+  - Integrasjonskjøringen hopper over filene enhetskjøringen tar.
+- **Ved utrulling:** ingen migrering.
+- **Kjent mangel til #1142:** e-posten om et nytt kurs i en klasse kan gå hvis klassen arkiveres i sekundene mellom tildelingen og sendingen.
+
 ## 2.145.0 - 2026-11-08
 
 Seilbåten i «Mine kurs»: de fire oppfølgingspunktene fra QA av 2.130.1 (#1137).
