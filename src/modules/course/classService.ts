@@ -506,25 +506,34 @@ export async function getClassAssignedCourseDueDates(classIds: Set<string>, user
  *   1. en lest seksjon i kurset (en rad i `CourseSectionRead` for kurset);
  *   2. en levert modul: en innlevering på en modul som ligger i kurset, uansett status. En bestått modul har alltid en
  *      innlevering, så «bestått modul» er med her;
- *   3. et kursbevis for kurset (`CourseCompletion`), uansett versjon: fullført.
+ *   3. et kursbevis for kurset (`CourseCompletion`), uansett versjon: fullført;
+ *   4. deltakelse i kursets diskusjoner: en tråd eller et svar deltakeren har skrevet, eller en tråd hen følger.
  * Med vilje litt videre enn kursdetaljens telling: en lesing teller her også når seksjonen er endret i en senere hovedversjon,
  * og en innlevering også når modulen er arkivert. Det deltakeren har gjort i kurset, skal ikke forsvinne fra «Mine kurs».
+ *
+ * ⚠️ Punkt 4 (QA-porten 2026-11-08): svarvarslene (`notifyNewReply`) går til alle som følger tråden, uten å spørre om tilgang.
+ * Uten punkt 4 kunne en deltaker som fulgte en tråd, mistet kurset ved arkiveringen og likevel fått e-post med lenke til en
+ * side som svarer 404. Med punkt 4 beholder hen kurset, og varselet stemmer.
  */
 export async function findStartedOrCompletedCourseIds(userId: string, courseIds: string[]): Promise<Set<string>> {
   const found = new Set<string>();
   if (courseIds.length === 0) return found;
-  const [completions, reads] = await Promise.all([
+  const [completions, reads, threads, replies, follows] = await Promise.all([
     prisma.courseCompletion.findMany({ where: { userId, courseId: { in: courseIds } }, select: { courseId: true } }),
     prisma.courseSectionRead.findMany({ where: { userId, courseId: { in: courseIds } }, select: { courseId: true } }),
+    prisma.discussionThread.findMany({ where: { authorId: userId, courseId: { in: courseIds } }, select: { courseId: true } }),
+    prisma.discussionReply.findMany({ where: { authorId: userId, thread: { courseId: { in: courseIds } } }, select: { thread: { select: { courseId: true } } } }),
+    prisma.discussionSubscription.findMany({ where: { userId, thread: { courseId: { in: courseIds } } }, select: { thread: { select: { courseId: true } } } }),
   ]);
-  for (const row of [...completions, ...reads]) found.add(row.courseId);
+  for (const row of [...completions, ...reads, ...threads]) found.add(row.courseId);
+  for (const row of [...replies, ...follows]) found.add(row.thread.courseId);
   const remaining = courseIds.filter((courseId) => !found.has(courseId));
   if (remaining.length === 0) return found;
-  // Modulene i kursene gjennom døra for forfatterflatene (#958): alle elementene, også arkiverte moduler.
+  // Modulene i kursene gjennom døra for forfatterflatene (#958), i én spørring for alle kursene. Også arkiverte moduler.
   const modulesByCourse = new Map<string, string[]>();
-  for (const courseId of remaining) {
-    const items = await courseRepository.findAllCourseItems(courseId);
-    modulesByCourse.set(courseId, items.flatMap((item) => (item.itemType === "MODULE" && item.moduleId ? [item.moduleId] : [])));
+  for (const item of await courseRepository.findModuleItemsForCourses(remaining)) {
+    if (!item.moduleId) continue;
+    modulesByCourse.set(item.courseId, [...(modulesByCourse.get(item.courseId) ?? []), item.moduleId]);
   }
   const moduleIds = [...new Set([...modulesByCourse.values()].flat())];
   if (moduleIds.length === 0) return found;

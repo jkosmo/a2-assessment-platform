@@ -668,7 +668,9 @@ have nothing to do with, not about partitioning content inside a course you asse
 | `DELETE` | `/api/admin/content/courses/:courseId/enrollments/:userId` | Revoke (soft) a participant's enrollment; audited (#496/EN-2) |
 | `GET` | `/api/admin/content/classes` | List classes (cohorts) with member + assigned-course counts (#645/CL-2) |
 | `POST` | `/api/admin/content/classes` | Create a class — body `{ name, description? }` (#645/CL-2) |
-| `DELETE` | `/api/admin/content/classes/:classId` | Archive a class (soft). System classes rejected `400` (#645/CL-2) |
+| `POST` | `/api/admin/content/classes/:classId/archive` | Archive a class (soft). System classes rejected `400` (#645/CL-2, route form from #1046) |
+| `POST` | `/api/admin/content/classes/:classId/restore` | Restore an archived class |
+| `DELETE` | `/api/admin/content/classes/:classId` | ⚠️ **Deletes the class permanently**, with its members, course assignments and owners (#1046: same route form as courses and sections). Only an archived class: an active one gives `400 class_not_archived`, a system class `400 system_class_immutable`. Before #1046 this route archived; do not use it to archive |
 | `GET` | `/api/admin/content/classes/:classId/members` | List class members (#645/CL-2) — returns **name and e-mail**. **`403 content_ownership`** for a non-owner SMO, **`403 content_unowned`** on system classes (#943) |
 | `POST` | `/api/admin/content/classes/:classId/members` | Add a member — body `{ userId }` (#645/CL-2). **`400 class_archived`** (`details: { action: "add_member", classId }`) when the class is archived (2026-11-08): the class is read with its row locked in the same transaction as the write, so an archive at the same moment either waits or is seen. Restore the class first; removing a member still works |
 | `DELETE` | `/api/admin/content/classes/:classId/members/:userId` | Remove a member (#645/CL-2) |

@@ -329,6 +329,14 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
+    /** Modulene i flere kurs på én gang, også arkiverte moduler. For «påbegynt» i arkiverte klasser (`classService.ts`). */
+    findModuleItemsForCourses(courseIds: string[]) {
+      return client.courseItem.findMany({
+        where: { courseId: { in: courseIds }, itemType: "MODULE", moduleId: { not: null } },
+        select: { courseId: true, moduleId: true },
+      });
+    },
+
     // #934 skive 3: se `findSectionVersions` over.
     findSectionVersions(courseId: string): Promise<Record<string, string | null>> {
       return findSectionVersions(client, courseId);

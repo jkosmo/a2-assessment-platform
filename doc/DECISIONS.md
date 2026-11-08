@@ -1553,9 +1553,13 @@ til folk i en arkivert klasse.» Og: heller ikke tildele kurs til en arkivert kl
   seksjonene, modulgaten og diskusjonene, med mindre det er påbegynt eller fullført. Fra en aktiv klasse, som OPEN-kurs eller som
   individuell tildeling vises det som før. Regelen står ett sted: `getClassAssignedCourseDueDates` (`classService.ts`).
 - **«Påbegynt eller fullført»** er minst én av: en lest seksjon i kurset, en innlevering på en modul i kurset (uansett status; en
-  bestått krever en innlevering), eller et kursbevis for kurset (uansett versjon). Med vilje litt videre enn kursdetaljens telling:
+  bestått krever en innlevering), et kursbevis for kurset (uansett versjon), eller deltakelse i kursets diskusjoner (skrevet en
+  tråd eller et svar, eller følger en tråd). Det siste kom fra QA-porten: svarvarslene går til alle som følger tråden, og uten det
+  kunne en deltaker mistet kurset og likevel fått e-post med lenke til en side som svarer 404. Med vilje litt videre enn kursdetaljens telling:
   en lesing teller også når seksjonen er endret i en senere hovedversjon, og en innlevering også når modulen er arkivert. Det
   deltakeren har gjort, skal ikke forsvinne. (`findStartedOrCompletedCourseIds`.)
 - **Fristen** regnes som før, den tidligste over alle klassene som gir kurset, også arkiverte.
 - **En arkivert klasse tar ikke imot deltakere eller kurs:** `400 class_archived`. Å fjerne en deltaker eller et kurs går. Etter
   «Gjenopprett» går alt igjen. Påminnelsene, kullstatus og kursrapportens publikum hoppet alt over arkiverte klasser.
+- **Kjent mangel til #1142:** e-posten om et nytt kurs i klassen sendes etter transaksjonen. Arkiveres klassen i sekundene mellom
+  tildelingen og sendingen, kan e-posten gå likevel. #1142 erstatter denne e-posten med en jobb som leser regelen rett før sending.

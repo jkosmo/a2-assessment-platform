@@ -132,11 +132,45 @@ describe("«Mine kurs»: kurs fra arkiverte klasser", () => {
     expect(await sees(m.headers, m.courseId)).toEqual(visible);
   });
 
-  it("en lesing eller innlevering i et ANNET kurs gjør ikke dette påbegynt", async () => {
+  // QA-porten 2026-11-08: svarvarslene går til alle som følger tråden. Den som deltar i kursets diskusjoner, beholder kurset, så
+  // varselet aldri lenker til en side hen ikke lenger ser.
+  async function threadBySomeoneElse(courseId: string) {
+    const author = await learner();
+    return prisma.discussionThread.create({ data: { courseId, authorId: author.userId, title: tag("tråd"), bodyMarkdown: "Spørsmål." }, select: { id: true } });
+  }
+
+  it("påbegynt med en tråd deltakeren har skrevet i kursets diskusjoner: vises som før", async () => {
+    const m = await memberWithCourse();
+    await prisma.discussionThread.create({ data: { courseId: m.courseId, authorId: m.userId, title: tag("tråd"), bodyMarkdown: "Spørsmål." } });
+    expect((await archive(m.classId)).status).toBe(200);
+    expect(await sees(m.headers, m.courseId)).toEqual(visible);
+  });
+
+  it("påbegynt med et svar i en annens tråd: vises som før", async () => {
+    const m = await memberWithCourse();
+    const thread = await threadBySomeoneElse(m.courseId);
+    await prisma.discussionReply.create({ data: { threadId: thread.id, authorId: m.userId, bodyMarkdown: "Svar." } });
+    expect((await archive(m.classId)).status).toBe(200);
+    expect(await sees(m.headers, m.courseId)).toEqual(visible);
+  });
+
+  it("påbegynt ved å følge en tråd, uten å ha skrevet: vises som før", async () => {
+    const m = await memberWithCourse();
+    const thread = await threadBySomeoneElse(m.courseId);
+    await prisma.discussionSubscription.create({ data: { threadId: thread.id, userId: m.userId } });
+    expect((await archive(m.classId)).status).toBe(200);
+    expect(await sees(m.headers, m.courseId)).toEqual(visible);
+  });
+
+  it("en lesing, innlevering eller diskusjon i et ANNET kurs gjør ikke dette påbegynt", async () => {
     const m = await memberWithCourse();
     const other = await course();
     await prisma.courseSectionRead.create({ data: { userId: m.userId, courseId: other.courseId, sectionId: other.sectionId } });
     await prisma.submission.create({ data: { userId: m.userId, moduleId: other.moduleId, moduleVersionId: other.moduleVersionId, deliveryType: "text", submissionStatus: "SUBMITTED" } });
+    const otherThread = await threadBySomeoneElse(other.courseId);
+    await prisma.discussionThread.create({ data: { courseId: other.courseId, authorId: m.userId, title: tag("tråd"), bodyMarkdown: "Spørsmål." } });
+    await prisma.discussionReply.create({ data: { threadId: otherThread.id, authorId: m.userId, bodyMarkdown: "Svar." } });
+    await prisma.discussionSubscription.create({ data: { threadId: otherThread.id, userId: m.userId } });
     expect((await archive(m.classId)).status).toBe(200);
     expect(await sees(m.headers, m.courseId)).toEqual(hidden);
   });
