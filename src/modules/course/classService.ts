@@ -1,5 +1,5 @@
 import { prisma } from "../../db/prisma.js";
-import { runInTransaction } from "../../db/transaction.js";
+import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -14,6 +14,7 @@ import { addContentOwner } from "../content/contentOwnershipService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
 import { isReachableParticipant } from "../user/participantReach.js";
+import { courseRepository } from "./courseRepository.js";
 
 // #645/CL-2: class (cohort) business logic — CRUD + membership + course assignment + dynamic
 // membership evaluation. Course→class assignment is dynamic: a participant is assigned a course if
@@ -23,6 +24,30 @@ async function requireClass(classId: string) {
   const klass = await classRepository.findClassById(classId);
   if (!klass) throw new NotFoundError("Class", "class_not_found", "Class not found.");
   return klass;
+}
+
+/**
+ * Produkteier 2026-11-08: «Man bør ikke kunne legge til folk i en arkivert klasse», og heller ikke tildele kurs til den.
+ *
+ * Klassen leses i SAMME transaksjon som skrivingen, og raden låses (`FOR SHARE`). En arkivering som kommer samtidig, er en
+ * UPDATE på samme rad og venter derfor til denne transaksjonen er ferdig; en arkivering som kom først, sees her. Uten låsen
+ * kunne klassen blitt arkivert mellom sjekken og skrivingen. (Fremmednøkkelen fra medlemsraden låser bare nøkkelen, ikke
+ * `archivedAt`, så den er ikke nok.)
+ *
+ * Gjenoppretting (`restoreClass`) setter `archivedAt` tilbake til null, og da går det igjen.
+ */
+async function assertClassWritable(tx: DbTransactionClient, classId: string, action: "add_member" | "assign_course"): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ archivedAt: Date | null }>>`SELECT "archivedAt" FROM "Class" WHERE "id" = ${classId} FOR SHARE`;
+  if (rows.length === 0) throw new NotFoundError("Class", "class_not_found", "Class not found.");
+  if (rows[0].archivedAt) {
+    throw new DomainRuleError(
+      "class_archived",
+      action === "add_member"
+        ? "The class is archived. Restore it before adding participants."
+        : "The class is archived. Restore it before assigning courses.",
+      { action, classId },
+    );
+  }
 }
 
 export async function createClass(input: { name: string; description?: string | null }, actorId: string | null) {
@@ -208,6 +233,7 @@ export async function addMember(classId: string, userId: string, actorId: string
   // ⚠️ Id-en som felt: klienten skal kunne navngi HVEM som mangler uten å parse en setning.
   if (!user) throw new DomainRuleError("unknown_user", `Unknown user id: ${userId}.`, { userId });
   await runInTransaction(async (tx) => {
+    await assertClassWritable(tx, classId, "add_member");
     const repo = createClassRepository(tx);
     await repo.addMember(classId, userId, actorId);
     await recordAuditEvent(
@@ -282,6 +308,7 @@ export async function assignCourseToClass(courseId: string, classId: string, due
     throw new DomainRuleError("course_archived", "Cannot assign an archived course.");
   }
   const { created } = await runInTransaction(async (tx) => {
+    await assertClassWritable(tx, classId, "assign_course");
     const repo = createClassRepository(tx);
     const assignment = await repo.assignCourseToClass(courseId, classId, dueAt, actorId);
     await recordAuditEvent(
@@ -436,17 +463,32 @@ export async function getUserClassIds(ctx: UserMembershipContext): Promise<Set<s
 }
 
 /**
- * course id → earliest (most urgent) due date, for the courses assigned to any of `classIds`.
- * Used by the visibility filter and "my enrollments" to surface class-assigned courses dynamically.
+ * course id → earliest (most urgent) due date, for the courses `userId` has from the classes in `classIds`.
+ * ⚠️ DET ENE stedet som svarer på «hvilke kurs har deltakeren fra klasser». «Mine kurs» og `/enrollments`, kursdetaljen og
+ * direkte adresse (`findCourseForParticipant`), seksjoner, modulgaten og diskusjonene går hit.
+ *
+ * Produkteier 2026-11-08: «Kurs fra arkiverte klasser som ikke er fullført eller påbegynt bør ikke vises i Mine kurs.»
+ *   - Et kurs fra minst én AKTIV klasse er med, som før.
+ *   - Et kurs deltakeren BARE har fra arkiverte klasser, er med bare når det er påbegynt eller fullført
+ *     (`findStartedOrCompletedCourseIds`, under). Ellers er det borte, som om tildelingen ikke fantes.
+ *   - OPEN-kurs og individuell tildeling avgjøres ikke her (`filterVisibleCourseIds`), og vises som før.
+ * Fristen regnes som før: den tidligste over alle klassene som gir kurset, også arkiverte.
+ *
+ * Påminnelsene, kullstatus og kursrapporten hopper alt over arkiverte klasser (`classRepository`, `class: { archivedAt: null }`).
+ * Kursrapporten tar i tillegg med alle som har levert, lest eller fullført, og det er den samme regelen som her.
  */
-export async function getClassAssignedCourseDueDates(classIds: Set<string>): Promise<Map<string, Date | null>> {
+export async function getClassAssignedCourseDueDates(classIds: Set<string>, userId: string): Promise<Map<string, Date | null>> {
   if (classIds.size === 0) return new Map();
   const rows = await prisma.courseGroupAssignment.findMany({
     where: { classId: { in: [...classIds] } },
-    select: { courseId: true, dueAt: true },
+    select: { courseId: true, dueAt: true, class: { select: { archivedAt: true } } },
   });
+  const fromActiveClass = new Set(rows.filter((r) => r.class.archivedAt === null).map((r) => r.courseId));
+  const onlyFromArchived = [...new Set(rows.map((r) => r.courseId))].filter((courseId) => !fromActiveClass.has(courseId));
+  const keptFromArchived = await findStartedOrCompletedCourseIds(userId, onlyFromArchived);
   const map = new Map<string, Date | null>();
   for (const r of rows) {
+    if (!fromActiveClass.has(r.courseId) && !keptFromArchived.has(r.courseId)) continue;
     if (!map.has(r.courseId)) {
       map.set(r.courseId, r.dueAt);
     } else {
@@ -455,4 +497,41 @@ export async function getClassAssignedCourseDueDates(classIds: Set<string>): Pro
     }
   }
   return map;
+}
+
+/**
+ * Kursene i `courseIds` som deltakeren har påbegynt eller fullført (produkteier 2026-11-08, arkiverte klasser).
+ *
+ * «Påbegynt eller fullført» er det kursdetaljen allerede regner som fremdrift, minst én av:
+ *   1. en lest seksjon i kurset (en rad i `CourseSectionRead` for kurset);
+ *   2. en levert modul: en innlevering på en modul som ligger i kurset, uansett status. En bestått modul har alltid en
+ *      innlevering, så «bestått modul» er med her;
+ *   3. et kursbevis for kurset (`CourseCompletion`), uansett versjon: fullført.
+ * Med vilje litt videre enn kursdetaljens telling: en lesing teller her også når seksjonen er endret i en senere hovedversjon,
+ * og en innlevering også når modulen er arkivert. Det deltakeren har gjort i kurset, skal ikke forsvinne fra «Mine kurs».
+ */
+export async function findStartedOrCompletedCourseIds(userId: string, courseIds: string[]): Promise<Set<string>> {
+  const found = new Set<string>();
+  if (courseIds.length === 0) return found;
+  const [completions, reads] = await Promise.all([
+    prisma.courseCompletion.findMany({ where: { userId, courseId: { in: courseIds } }, select: { courseId: true } }),
+    prisma.courseSectionRead.findMany({ where: { userId, courseId: { in: courseIds } }, select: { courseId: true } }),
+  ]);
+  for (const row of [...completions, ...reads]) found.add(row.courseId);
+  const remaining = courseIds.filter((courseId) => !found.has(courseId));
+  if (remaining.length === 0) return found;
+  // Modulene i kursene gjennom døra for forfatterflatene (#958): alle elementene, også arkiverte moduler.
+  const modulesByCourse = new Map<string, string[]>();
+  for (const courseId of remaining) {
+    const items = await courseRepository.findAllCourseItems(courseId);
+    modulesByCourse.set(courseId, items.flatMap((item) => (item.itemType === "MODULE" && item.moduleId ? [item.moduleId] : [])));
+  }
+  const moduleIds = [...new Set([...modulesByCourse.values()].flat())];
+  if (moduleIds.length === 0) return found;
+  const submitted = await prisma.submission.findMany({ where: { userId, moduleId: { in: moduleIds } }, distinct: ["moduleId"], select: { moduleId: true } });
+  const submittedModuleIds = new Set(submitted.map((row) => row.moduleId));
+  for (const [courseId, ids] of modulesByCourse) {
+    if (ids.some((moduleId) => submittedModuleIds.has(moduleId))) found.add(courseId);
+  }
+  return found;
 }

@@ -1543,3 +1543,19 @@ Kjente mangler, godtatt fordi plattformen er intern:
 - Er modulen arkivert eller avpublisert etter at e-posten gikk, åpner lenken bare kurset, uten forklaring.
 
 Heller for få e-poster enn for mange (produkteier, 2026-11-07): mange e-poster oppfattes som mas og støy. Endres fristen på et tildelt kurs, får ikke klassen e-post. Tildeles et kurs mens det er upublisert, går det ingen e-post når det publiseres, og heller ikke om det tildeles på nytt.
+
+## Arkiverte klasser: kurs bare når de er påbegynt, og ingen nye deltakere eller kurs (2026-11-08)
+
+Produkteier: «Kurs fra arkiverte klasser som ikke er fullført eller påbegynt bør ikke vises i Mine kurs. Man bør ikke kunne legge
+til folk i en arkivert klasse.» Og: heller ikke tildele kurs til en arkivert klasse.
+
+- **Et kurs deltakeren bare har fra arkiverte klasser, er borte** fra «Mine kurs», `/enrollments`, kursdetaljen og direkte adresse,
+  seksjonene, modulgaten og diskusjonene, med mindre det er påbegynt eller fullført. Fra en aktiv klasse, som OPEN-kurs eller som
+  individuell tildeling vises det som før. Regelen står ett sted: `getClassAssignedCourseDueDates` (`classService.ts`).
+- **«Påbegynt eller fullført»** er minst én av: en lest seksjon i kurset, en innlevering på en modul i kurset (uansett status; en
+  bestått krever en innlevering), eller et kursbevis for kurset (uansett versjon). Med vilje litt videre enn kursdetaljens telling:
+  en lesing teller også når seksjonen er endret i en senere hovedversjon, og en innlevering også når modulen er arkivert. Det
+  deltakeren har gjort, skal ikke forsvinne. (`findStartedOrCompletedCourseIds`.)
+- **Fristen** regnes som før, den tidligste over alle klassene som gir kurset, også arkiverte.
+- **En arkivert klasse tar ikke imot deltakere eller kurs:** `400 class_archived`. Å fjerne en deltaker eller et kurs går. Etter
+  «Gjenopprett» går alt igjen. Påminnelsene, kullstatus og kursrapportens publikum hoppet alt over arkiverte klasser.

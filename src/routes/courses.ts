@@ -54,7 +54,7 @@ coursesRouter.get("/", async (request, response, next) => {
       roles: request.context?.roles ?? [],
       groupIds: request.context?.principal?.groupIds,
     });
-    const classCourseDue = await getClassAssignedCourseDueDates(classIds);
+    const classCourseDue = await getClassAssignedCourseDueDates(classIds, userId);
     const visibleIds = await filterVisibleCourseIds(userId, allCourses, new Set(classCourseDue.keys()));
     const courses = allCourses.filter((course) => visibleIds.has(course.id));
 
@@ -154,7 +154,7 @@ coursesRouter.get("/enrollments", async (request, response, next) => {
       roles: request.context?.roles ?? [],
       groupIds: request.context?.principal?.groupIds,
     });
-    const classCourseDue = await getClassAssignedCourseDueDates(classIds);
+    const classCourseDue = await getClassAssignedCourseDueDates(classIds, userId);
     const classEntries = await Promise.all(
       [...classCourseDue.entries()]
         .filter(([courseId]) => !seen.has(courseId))

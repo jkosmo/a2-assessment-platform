@@ -377,6 +377,10 @@ function classFormBodyHtml() {
   // #688: don't offer archived courses for assignment — they are retired and shouldn't be assigned.
   const courseOptions = st.allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.displayTitle))}</option>`).join("");
   const readOnly = Boolean(k?.isSystem);
+  // Produkteier 2026-11-08: ingen nye deltakere eller kurs i en arkivert klasse. Serveren nekter (`class_archived`); her vises ikke
+  // feltene i det hele tatt, bare hvorfor. Å fjerne en deltaker eller et kurs går fortsatt. Etter «Gjenopprett» er feltene tilbake.
+  const archived = Boolean(k?.archivedAt);
+  const archivedNote = `<p class="small" data-class-archived-note style="margin:6px 0 0">${escapeHtml(tNav("classes.archivedReadonly"))}</p>`;
   return `
     <div data-form-tab="rediger">
     <div class="detail-section">
@@ -395,15 +399,15 @@ function classFormBodyHtml() {
     <div class="detail-section" data-form-untracked>
       <h2>Deltakere (${st.members.length})</h2>
       <ul class="form-rows" id="memberChips">${memberRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noMembers"))}</li>`}</ul>
-      <div class="form-add-row">
+      ${archived ? archivedNote : `<div class="form-add-row">
         <input type="text" id="studentSearch" placeholder="${escapeHtml(tNav("classes.memberSearchPlaceholder"))}" autocomplete="off" />
       </div>
-      <ul class="search-results" id="searchResults"></ul>
+      <ul class="search-results" id="searchResults"></ul>`}
     </div>
     <div class="detail-section" data-form-untracked>
       <h2>Tildelte kurs (${st.courses.length})</h2>
       <ul class="form-rows" id="courseChips">${courseRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noCourses"))}</li>`}</ul>
-      <div class="form-add-row">
+      ${archived ? archivedNote : `<div class="form-add-row">
         <select id="courseSelect"><option value="">${escapeHtml(tNav("classes.pickCourse"))}</option>${courseOptions}</select>
         <label for="dueAtInput" style="font-size:13px;color:var(--color-meta);display:inline-flex;align-items:center;gap:6px">
           Frist (valgfri)
@@ -411,7 +415,7 @@ function classFormBodyHtml() {
         </label>
         <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(tNav("classes.assignCourse"))}</button>
       </div>
-      <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">${escapeHtml(tNav("classes.deadlineHint"))}</p>
+      <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">${escapeHtml(tNav("classes.deadlineHint"))}</p>`}
     </div>`}
     </div>
     <div data-form-tab="innstillinger" hidden>

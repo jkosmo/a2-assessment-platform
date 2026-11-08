@@ -117,7 +117,7 @@ async function loadAccessibleCourse(
       roles: access.roles,
       groupIds: access.groupIds,
     });
-    const classCourseDue = await getClassAssignedCourseDueDates(classIds);
+    const classCourseDue = await getClassAssignedCourseDueDates(classIds, access.userId);
     const visible = await filterVisibleCourseIds(
       access.userId,
       [{ id: course.id, enrollmentPolicy: course.enrollmentPolicy }],

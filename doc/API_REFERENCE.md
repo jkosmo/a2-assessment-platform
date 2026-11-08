@@ -670,10 +670,10 @@ have nothing to do with, not about partitioning content inside a course you asse
 | `POST` | `/api/admin/content/classes` | Create a class — body `{ name, description? }` (#645/CL-2) |
 | `DELETE` | `/api/admin/content/classes/:classId` | Archive a class (soft). System classes rejected `400` (#645/CL-2) |
 | `GET` | `/api/admin/content/classes/:classId/members` | List class members (#645/CL-2) — returns **name and e-mail**. **`403 content_ownership`** for a non-owner SMO, **`403 content_unowned`** on system classes (#943) |
-| `POST` | `/api/admin/content/classes/:classId/members` | Add a member — body `{ userId }` (#645/CL-2) |
+| `POST` | `/api/admin/content/classes/:classId/members` | Add a member — body `{ userId }` (#645/CL-2). **`400 class_archived`** (`details: { action: "add_member", classId }`) when the class is archived (2026-11-08): the class is read with its row locked in the same transaction as the write, so an archive at the same moment either waits or is seen. Restore the class first; removing a member still works |
 | `DELETE` | `/api/admin/content/classes/:classId/members/:userId` | Remove a member (#645/CL-2) |
 | `GET` | `/api/admin/content/classes/:classId/courses` | List courses assigned to the class (#645/CL-2). **`403 content_ownership`** for a non-owner SMO (#943). Each row carries `coursePublished` / `courseArchived` (#967) — assignments to an unreachable course are **not** hidden (a hidden row is a row nobody can remove), they are flagged so the screen can explain why nobody is progressing |
-| `POST` | `/api/admin/content/classes/:classId/courses` | Assign a course — body `{ courseId, dueAt?\|null }` (#645/CL-2) |
+| `POST` | `/api/admin/content/classes/:classId/courses` | Assign a course — body `{ courseId, dueAt?\|null }` (#645/CL-2). **`400 class_archived`** (`details: { action: "assign_course", classId }`) when the class is archived (2026-11-08), as for members |
 | `DELETE` | `/api/admin/content/classes/:classId/courses/:courseId` | Unassign a course (#645/CL-2) |
 | `GET` | `/api/admin/content/users/search?q=` | Search users by name/email (min 2 chars, capped 20) for class membership (#645/CL-3) |
 

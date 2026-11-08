@@ -341,7 +341,7 @@ export async function isCourseVisibleToUser(input: {
     roles: input.roles,
     groupIds: input.groupIds,
   });
-  const classCourseDue = await getClassAssignedCourseDueDates(classIds);
+  const classCourseDue = await getClassAssignedCourseDueDates(classIds, input.userId);
   const visible = await filterVisibleCourseIds(input.userId, [input.course], new Set(classCourseDue.keys()));
   return visible.has(input.course.id);
 }
@@ -373,7 +373,7 @@ export async function isModuleInAccessibleCourse(input: {
     roles: input.roles,
     groupIds: input.groupIds,
   });
-  const classCourseDue = await getClassAssignedCourseDueDates(classIds);
+  const classCourseDue = await getClassAssignedCourseDueDates(classIds, input.userId);
   const visible = await filterVisibleCourseIds(input.userId, courses, new Set(classCourseDue.keys()));
   return courses.some((c) => visible.has(c.id));
 }
@@ -432,7 +432,7 @@ export async function canParticipantReadSection(input: {
     roles: input.roles,
     groupIds: input.groupIds,
   });
-  const classCourseDue = await getClassAssignedCourseDueDates(classIds);
+  const classCourseDue = await getClassAssignedCourseDueDates(classIds, input.userId);
   const visible = await filterVisibleCourseIds(input.userId, courses, new Set(classCourseDue.keys()));
   return courses.some((c) => visible.has(c.id));
 }
