@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="course-boat-svg tb-figure" width="60" height="34" viewBox="0 0 60 34" focusable="false">
+  <circle class="tb-ball" cx="18" cy="18" r="12"></circle>
+  <g class="tb-confetti">
+    <rect class="tb-c" x="40" y="2" width="5" height="5"></rect>
+    <rect class="tb-c" x="52" y="10" width="5" height="5"></rect>
+  </g>
+</svg>

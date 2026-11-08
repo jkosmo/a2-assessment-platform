@@ -8,3 +8,7 @@ mascots/** eol=lf
 mascots/**/*.jpg binary
 mascots/**/*.png binary
 mascot.config.json eol=lf
+# Testpakken for et bytte (test/fixtures/mascot-swap) er en pakke som de andre.
+test/fixtures/mascot-swap/** eol=lf
+test/fixtures/mascot-swap/**/*.jpg binary
+test/fixtures/mascot-swap/**/*.png binary

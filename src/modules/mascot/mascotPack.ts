@@ -8,7 +8,8 @@
 // Pakken leses én gang, første gang noen spør, og endres bare ved en ny utrulling. Lesingen sjekker det koden trenger
 // for å lese pakken trygt: at alle humør, e-postsituasjoner, tekster og figurtilstander finnes på alle tre språk, og at
 // filene den viser til ligger inne i pakkemappa. Mangler noe, kastes en feil som lister alt som mangler, og appen
-// starter ikke. Den fulle sjekken (bildestørrelse, SVG uten skript, én sjekk over alle pakker i CI) er skive 2.
+// starter ikke. Den fulle sjekken (bildene, SVG uten skript, feiringens varighet) står i mascotCheck.ts; den kjører i
+// CI over alle pakker og ved oppstart av web og worker (index.ts).
 //
 // ⚠️ Fila importerer bare det den må, så testserveren for e2e (scripts/test/admin-content-static-server.mjs) kan lese
 // pakken på samme måte uten å laste resten av appen.
@@ -19,6 +20,13 @@ import { SUPPORTED_LOCALES, type SupportedLocale } from "../../i18n/locale.js";
 
 /** Versjonen av formatet i `mascot.json` som denne koden leser. */
 export const MASCOT_PACK_VERSION = 1;
+
+/**
+ * Hva som er lagt til i hver versjon etter den første. Når koden krever en ny nøkkel (for eksempel `moods.anker`,
+ * #1139): øk `MASCOT_PACK_VERSION`, før nøkkelen opp her, og legg den inn i seilbåten. En fork med en eldre pakke får da
+ * vite hva som er nytt, i tillegg til listen over hver nøkkel som mangler.
+ */
+const ADDED_IN_VERSION: Record<number, string[]> = {};
 
 /** Situasjonene der en e-post har et bilde øverst (#1141). Nøklene i `EMAIL_ILLUSTRATIONS`. */
 export const MASCOT_EMAIL_SITUATIONS = [
@@ -42,7 +50,7 @@ export type MascotEmailText = (typeof MASCOT_EMAIL_TEXTS)[number];
 export const MASCOT_FIGURE_STATES = ["flatt", "fullt", "feiring"] as const;
 export type MascotFigureState = (typeof MASCOT_FIGURE_STATES)[number];
 /** Tilstandene med fartsstriper bak figuren. */
-const STRIPED_FIGURE_STATES = ["flatt", "fullt"] as const;
+export const STRIPED_FIGURE_STATES = ["flatt", "fullt"] as const;
 
 /** Faviconet: adressen sidene lenker til (fast, i public/*.html) → nøkkelen i `mascot.json`. */
 export const MASCOT_FAVICON_URLS = {
@@ -84,24 +92,43 @@ export type MascotPack = {
   favicon: Record<FaviconKey, string>;
 };
 
-const PACK_ID = /^[a-z0-9][a-z0-9-]*$/;
+/** Et gyldig pakkenavn: mappenavnet i `mascots/`, og en del av bildeadressene. */
+export const PACK_ID = /^[a-z0-9][a-z0-9-]*$/;
 const IMAGE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.jpe?g$/i;
 
-class MascotPackError extends Error {
+export class MascotPackError extends Error {
   constructor(where: string, problems: string[]) {
-    super(`Maskotpakken ${where} kan ikke leses:\n  - ${problems.join("\n  - ")}`);
+    super(`Maskotpakken ${where} kan ikke brukes:\n  - ${problems.join("\n  - ")}`);
     this.name = "MascotPackError";
   }
 }
 
-/** Leser og sjekker pakken som er valgt i `mascot.config.json` under `root`. */
-export function loadMascotPack(root: string = process.cwd()): MascotPack {
-  const configPath = path.join(root, "mascot.config.json");
-  const config = readJson(configPath, "mascot.config.json") as { mascot?: unknown } | null;
+/** Navnet på pakken som er valgt i `mascot.config.json` under `root`. */
+export function selectedMascotId(root: string = process.cwd()): string {
+  const config = readJson(path.join(root, "mascot.config.json"), "mascot.config.json") as { mascot?: unknown } | null;
   const id = config?.mascot;
   if (typeof id !== "string" || !PACK_ID.test(id)) {
     throw new MascotPackError("i mascot.config.json", [`«mascot» må være navnet på en mappe i mascots/ (små bokstaver, tall og bindestrek), fant ${JSON.stringify(id)}`]);
   }
+  return id;
+}
+
+/**
+ * Leser og sjekker pakken `id` i `root/mascots/`, som standard den som er valgt i `mascot.config.json`. Kaster en feil
+ * som lister alt som mangler.
+ */
+export function loadMascotPack(root: string = process.cwd(), id: string = selectedMascotId(root)): MascotPack {
+  const { pack, problems } = readMascotPack(root, id);
+  if (problems.length > 0) throw new MascotPackError(`«${id}»`, problems);
+  return pack;
+}
+
+/**
+ * Leser pakken og samler det som mangler, uten å kaste for det. Pakken som kommer tilbake, har tomme verdier der noe
+ * mangler; den brukes bare når listen er tom. Den fulle sjekken (mascotCheck.ts) bygger videre på listen.
+ */
+export function readMascotPack(root: string, id: string): { pack: MascotPack; problems: string[]; raw: Record<string, any> } {
+  if (!PACK_ID.test(id)) throw new MascotPackError(`«${id}»`, ["navnet må være små bokstaver, tall og bindestrek"]);
   const dir = path.join(root, "mascots", id);
   const raw = (readJson(path.join(dir, "mascot.json"), `mascots/${id}/mascot.json`) ?? {}) as Record<string, any>;
   const problems: string[] = [];
@@ -138,7 +165,8 @@ export function loadMascotPack(root: string = process.cwd()): MascotPack {
     return Number(value);
   };
 
-  if (raw.version !== MASCOT_PACK_VERSION) problems.push(`version er ${JSON.stringify(raw.version)}, koden leser versjon ${MASCOT_PACK_VERSION}`);
+  const versionProblem = describeVersion(raw.version);
+  if (versionProblem) problems.push(versionProblem);
 
   const moods = {} as MascotPack["moods"];
   for (const mood of BOAT_MOODS) {
@@ -180,8 +208,26 @@ export function loadMascotPack(root: string = process.cwd()): MascotPack {
     },
     favicon,
   };
-  if (problems.length > 0) throw new MascotPackError(`«${id}»`, problems);
-  return pack;
+  return { pack, problems, raw };
+}
+
+/** Null når versjonen er den koden leser; ellers hva som er galt, og for en eldre pakke hva som er nytt siden. */
+function describeVersion(version: unknown): string | null {
+  if (version === MASCOT_PACK_VERSION) return null;
+  if (typeof version !== "number" || !Number.isInteger(version)) {
+    return `version mangler eller er ikke et heltall (fant ${JSON.stringify(version)}); koden leser versjon ${MASCOT_PACK_VERSION}`;
+  }
+  if (version > MASCOT_PACK_VERSION) {
+    return `version er ${version}, men koden leser versjon ${MASCOT_PACK_VERSION}: pakken er laget for en nyere utgave av koden`;
+  }
+  const added = Object.entries(ADDED_IN_VERSION)
+    .filter(([v]) => Number(v) > version && Number(v) <= MASCOT_PACK_VERSION)
+    .flatMap(([v, keys]) => keys.map((key) => `${key} (versjon ${v})`));
+  return (
+    `version er ${version}, men koden leser versjon ${MASCOT_PACK_VERSION}: pakken er laget for en eldre utgave av koden. ` +
+    (added.length > 0 ? `Nytt siden: ${added.join(", ")}. ` : "") +
+    `Legg inn det som mangler (listet her), se mascots/seilbat/README.md, og sett version til ${MASCOT_PACK_VERSION}`
+  );
 }
 
 function readJson(file: string, label: string): unknown {
@@ -204,6 +250,18 @@ let activePack: MascotPack | null = null;
 export function activeMascot(): MascotPack {
   activePack ??= loadMascotPack();
   return activePack;
+}
+
+/**
+ * Velger en annen pakke enn den i `mascot.config.json` for resten av prosessen. Bare for forhåndsvisningen
+ * (`npm run mascot:preview`) og testene av et bytte; appen bruker alltid valget i repoet. Må kalles før noe har lest
+ * pakken: e-postmalen og ruta tar den med seg når de lastes, og ville ellers blandet to pakker.
+ */
+export function useMascotPack(pack: MascotPack): void {
+  if (activePack && activePack !== pack) {
+    throw new Error(`Maskotpakken «${activePack.id}» er alt i bruk i denne prosessen; velg pakken før noe leser den.`);
+  }
+  activePack = pack;
 }
 
 /** Stien til et bilde i pakken (`images/`). */

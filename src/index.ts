@@ -13,6 +13,7 @@ import { OutboxDeliveryWorker } from "./modules/outbox/OutboxDeliveryWorker.js";
 import { evaluateWorkerHealth, drainInFlightTicks, type MonitorHealthSnapshot } from "./observability/workerHealth.js";
 import { prisma } from "./db/prisma.js";
 import { appVersion } from "./config/appMetadata.js";
+import { assertActiveMascotPack } from "./modules/mascot/mascotCheck.js";
 
 export function resolveProcessRoleFlags(role: string) {
   return {
@@ -107,6 +108,13 @@ void startServer().catch((error) => {
 });
 
 async function startServer() {
+  // Maskotpakken (doc/design/MASKOTPAKKE.md): lest og sjekket før noe starter, i web OG worker, så begge har sjekket
+  // den samme pakken. Er noe galt, stopper oppstarten her med listen over hva (via `.catch` over). CI har sjekket
+  // pakken før den ble rullet ut, så dette er et sikkerhetsnett.
+  const mascot = assertActiveMascotPack();
+  // eslint-disable-next-line no-console
+  console.log(`Maskotpakken «${mascot.id}» er lest og sjekket.`);
+
   if (startWeb) {
     server = app.listen(env.PORT, () => {
       // eslint-disable-next-line no-console

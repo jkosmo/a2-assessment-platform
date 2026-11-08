@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "name": {
+    "nb": "Testbåten",
+    "nn": "Testbåten",
+    "en-GB": "The test boat"
+  },
+  "moods": {
+    "ny": {
+      "image": "testbat-kurs-tildelt.jpg",
+      "line": {
+        "nb": "Testbåten er klar. Første seksjon er første testkjøring.",
+        "nn": "Testbåten er klar. Den første seksjonen er den første testkøyringa.",
+        "en-GB": "The test boat is ready. Your first section is the first test run."
+      }
+    },
+    "mett": {
+      "image": "testbat-vurdering-bestatt.jpg",
+      "line": {
+        "nb": "Testbåten går som en klokke.",
+        "nn": "Testbåten går som ei klokke.",
+        "en-GB": "The test boat runs like clockwork."
+      }
+    },
+    "sulten": {
+      "image": "testbat-flau-vind.jpg",
+      "line": {
+        "nb": "Testbåten venter på neste seksjon.",
+        "nn": "Testbåten ventar på neste seksjon.",
+        "en-GB": "The test boat is waiting for the next section."
+      }
+    },
+    "sur": {
+      "image": "testbat-frist-forfalt.jpg",
+      "line": {
+        "nb": "Testbåten har ligget stille en stund.",
+        "nn": "Testbåten har lege still ei stund.",
+        "en-GB": "The test boat has been idle for a while."
+      }
+    },
+    "dramatisk": {
+      "image": "testbat-frist-forfalt.jpg",
+      "line": {
+        "nb": "Testbåten lurer på om du har glemt den.",
+        "nn": "Testbåten lurer på om du har gløymt han.",
+        "en-GB": "The test boat wonders if you have forgotten it."
+      }
+    }
+  },
+  "emails": {
+    "courseNewVersion": {
+      "image": "testbat-kurs-ny-versjon.jpg",
+      "alt": {
+        "nb": "Testbåten står i testverkstedet",
+        "nn": "Testbåten står i testverkstaden",
+        "en-GB": "The test boat is in the test workshop"
+      }
+    },
+    "courseAssigned": {
+      "image": "testbat-kurs-tildelt.jpg",
+      "alt": {
+        "nb": "Testbåten legger fra kai",
+        "nn": "Testbåten legg frå kai",
+        "en-GB": "The test boat leaves the quay"
+      }
+    },
+    "dueSoon": {
+      "image": "testbat-frist-snart.jpg",
+      "alt": {
+        "nb": "Testbåten ser fristen i horisonten",
+        "nn": "Testbåten ser fristen langt der ute",
+        "en-GB": "The test boat sees the deadline on the horizon"
+      }
+    },
+    "overdue": {
+      "image": "testbat-frist-forfalt.jpg",
+      "alt": {
+        "nb": "Testbåten ligger stille i havna",
+        "nn": "Testbåten ligg still i hamna",
+        "en-GB": "The test boat lies still in the harbour"
+      }
+    },
+    "passed": {
+      "image": "testbat-vurdering-bestatt.jpg",
+      "alt": {
+        "nb": "Testbåten passerer mållinja",
+        "nn": "Testbåten passerer mållina",
+        "en-GB": "The test boat crosses the finish line"
+      }
+    },
+    "notPassed": {
+      "image": "testbat-vurdering-ikke-bestatt.jpg",
+      "alt": {
+        "nb": "Testbåten tar en runde til",
+        "nn": "Testbåten tek ein runde til",
+        "en-GB": "The test boat goes round once more"
+      }
+    },
+    "underReview": {
+      "image": "testbat-vurdering-sensor.jpg",
+      "alt": {
+        "nb": "Testbåten venter på en kontrollør",
+        "nn": "Testbåten ventar på ein kontrollør",
+        "en-GB": "The test boat waits for an inspector"
+      }
+    },
+    "appeal": {
+      "image": "testbat-anke.jpg",
+      "alt": {
+        "nb": "Testbåten ligger ved testkontoret",
+        "nn": "Testbåten ligg ved testkontoret",
+        "en-GB": "The test boat lies by the test office"
+      }
+    },
+    "discussion": {
+      "image": "testbat-diskusjon.jpg",
+      "alt": {
+        "nb": "To testbåter vinker til hverandre",
+        "nn": "To testbåtar vinkar til kvarandre",
+        "en-GB": "Two test boats wave to each other"
+      }
+    }
+  },
+  "emailTexts": {
+    "courseNewVersionIntro": {
+      "nb": "Kurset «{course}» har vært i testverkstedet og har fått en ny hovedversjon: versjon {major}.",
+      "nn": "Kurset «{course}» har vore i testverkstaden og har fått ein ny hovudversjon: versjon {major}.",
+      "en-GB": "The course «{course}» has been in the test workshop and now has a new major version: version {major}."
+    }
+  },
+  "figure": {
+    "direction": "fromRight",
+    "states": {
+      "flatt": "figure/flatt.svg",
+      "fullt": "figure/fullt.svg",
+      "feiring": "figure/feiring.svg"
+    },
+    "css": "figure.css",
+    "widthPx": 32,
+    "sternPx": 31,
+    "stripeReachPx": {
+      "flatt": 48,
+      "fullt": 56
+    },
+    "celebrationMs": 3000
+  },
+  "favicon": {
+    "svg": "favicon.svg",
+    "png32": "favicon-32.png",
+    "png16": "favicon-16.png",
+    "appleTouchIcon": "apple-touch-icon-180.png"
+  }
+}

@@ -18,6 +18,7 @@
 import { readFileSync } from "node:fs";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { activeMascot, mascotImagePath, MASCOT_EMAIL_SITUATIONS, type MascotEmailSituation } from "../mascot/mascotPack.js";
+import { LINK_LIKE } from "./linkLike.js";
 
 /** Et bilde i maskotpakken (`images/`), JPEG 600 × 200 under 30 KB, med alt-tekst på alle tre språk. */
 export type EmailIllustration = {
@@ -67,8 +68,7 @@ export type IllustratedEmailInput = {
   link?: EmailLink | null;
 };
 
-/** Det som ikke kan være igjen etter `neutralizeAddresses`. Sjekkes før vår egen lenke settes inn. */
-const LINK_LIKE = /https?:|www\./i;
+// Det som ikke kan være igjen etter `neutralizeAddresses` (`LINK_LIKE`, linkLike.ts). Sjekkes før vår egen lenke settes inn.
 const ANCHOR_ELEMENT = /<a\s/i;
 
 // Uten ordgrense, så de fanger alt LINK_LIKE fanger: «xhttp://…» skal gjøres ufarlig, ikke stoppe e-posten.

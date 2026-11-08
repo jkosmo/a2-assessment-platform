@@ -16,6 +16,8 @@
     "dev:local": "dotenv -e .env.postgres.local -- tsx watch src/index.ts",
     "skill:package": "node scripts/package-authoring-skill.mjs",
     "icons:vendor": "node scripts/icons/vendor-lucide.mjs",
+    "mascot:check": "tsx src/scripts/mascotCheck.ts",
+    "mascot:preview": "tsx src/scripts/mascotPreview.ts",
     "dev:seed:consent": "dotenv -e .env.postgres.local -- tsx scripts/dev/seed-mock-consent.ts",
     "maint:scrub-audit-pii": "tsx scripts/maintenance/scrub-audit-pii.ts",
     "maint:backfill-audit-chain": "tsx scripts/maintenance/backfill-audit-chain.ts",
