@@ -329,7 +329,12 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
-    /** Modulene i flere kurs på én gang, også arkiverte moduler. For «påbegynt» i arkiverte klasser (`classService.ts`). */
+    /**
+     * Modulene i flere kurs på én gang, også arkiverte moduler. For «påbegynt» i arkiverte klasser (`classService.ts`).
+     * Samme slag som `findCourseItemSectionIdsForCourses`: bare id-er, ingen tilgjengelighetsregel, og ingenting av det går til
+     * en deltaker. Svaret brukes bare til å spørre om deltakeren har levert noe. Kursets innhold leses fortsatt gjennom de to
+     * dørene (`test/course-items-accessor-guard.test.js`).
+     */
     findModuleItemsForCourses(courseIds: string[]) {
       return client.courseItem.findMany({
         where: { courseId: { in: courseIds }, itemType: "MODULE", moduleId: { not: null } },
