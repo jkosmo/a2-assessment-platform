@@ -695,13 +695,30 @@ describe("#1142 skive 3 — ingen dobbel e-post", () => {
     expect((await rows(q.ids)).map((r) => r.status)).toEqual(["sent"]);
   });
 
-  it("en rad som har stått i `sending` i over 30 minutter uten nytt forsøk, blir `uncertain` av ryddingen", async () => {
+  it("en rad som har stått i `sending` i over 30 minutter uten nytt forsøk, blir `uncertain` av ryddingen (målt fra behandlerens `sendingAt`)", async () => {
     const q = await queuedFor(1);
-    const sendingAt = new Date(Date.now() - 31 * 60_000);
-    await prisma.courseAssignmentNotice.updateMany({ where: { batchId: q.batchId }, data: { status: "sending", sendingAt } });
-    expect(await runCourseAssignmentEmailSchedule({ now: new Date(sendingAt.getTime() + 29 * 60_000), onlyCourseIds: q.ids })).toMatchObject({ uncertain: 0 });
-    expect(await runCourseAssignmentEmailSchedule({ now: new Date(), onlyCourseIds: q.ids })).toMatchObject({ uncertain: 1 });
+    // Behandleren tar radene og blir aldri ferdig (workeren stoppet midt i sendingen). Ryddingen måler fra `sendingAt`, som
+    // behandleren selv satte, ikke fra et tidspunkt testen skrev inn.
+    let finish!: () => void;
+    const never = new Promise<void>((resolve) => (finish = resolve));
+    let started!: () => void;
+    const isSending = new Promise<void>((resolve) => (started = resolve));
+    const hanging = vi.fn<CourseAssignmentDigestSend>(async () => {
+      started();
+      await never;
+      return { delivered: false, channel: "acs_email", subject: "", nextStepGuidance: "", failureReason: "timeout", ambiguous: true };
+    });
+    const delivering = deliverCourseAssignmentDigest(q.batchId, { send: hanging });
+    await isSending;
+    const [row] = await rows(q.ids);
+    expect(row!.status).toBe("sending");
+    expect(row!.sendingAt, "overgangen setter `sendingAt`").not.toBeNull();
+    expect(Math.abs(row!.sendingAt!.getTime() - Date.now())).toBeLessThan(60_000);
+    expect(await runCourseAssignmentEmailSchedule({ now: new Date(Date.now() + 29 * 60_000), onlyCourseIds: q.ids })).toMatchObject({ uncertain: 0 });
+    expect(await runCourseAssignmentEmailSchedule({ now: new Date(Date.now() + 31 * 60_000), onlyCourseIds: q.ids })).toMatchObject({ uncertain: 1 });
     expect((await rows(q.ids)).map((r) => [r.status, r.reason])).toEqual([["uncertain", "interrupted"]]);
+    finish();
+    await delivering;
   });
 });
 
