@@ -35,6 +35,7 @@ Seilbåten blir den første pakken og gir nøyaktig det brukerne ser i dag.
 | Profil, statistikk | `public/static/profile-stats.js` henter `/static/mascot/moods.json` (laget av `mascotMoodsJson`) | 5 humør: linje på nb, nn og en-GB, bilde i `images/` |
 | E-post, bildene | `src/modules/certification/illustratedEmail.ts` (`EMAIL_ILLUSTRATIONS`) | 9 situasjoner: bilde i `images/` (JPEG, 600 × 200, under 30 kB), bildetekst på tre språk |
 | E-post, teksten | `src/i18n/notificationMessages.ts` (ny hovedversjon) via `mascotEmailText` | `emailTexts.courseNewVersionIntro`: «har vært en tur på verftet» |
+| E-post, teksten (nye kurs, #1142) | `src/i18n/notificationMessages.ts` (samlet e-post om nye kurs) via `mascotEmailText` | `emailTexts.courseAssignedIntro`: «Fortøyningen er sluppet:» (pakkeversjon 2) |
 | «Mine kurs», fremdriftslinja | `public/static/course-progress-boat.js` henter `/static/mascot/figure.js` og `/static/mascot/figure.css` | `figure/*.svg` i tre tilstander (flatt seil, fullt seil, feiring med konfetti), `figure.css`, målene i `figure` (31 px til hekken, stripenes rekkevidde), retning fra høyre, 4,2 s feiring |
 | Favicon | `src/routes/mascot.ts` på de faste adressene `/static/favicon.*` | `favicon.svg` og tre PNG-er |
 | Ukentlig e-post (#1139) | ikke bygget | skal bruke humørlinjene og bildene |

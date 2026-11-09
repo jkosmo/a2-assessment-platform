@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "name": {
     "nb": "Seilbåten",
     "nn": "Seglbåten",
@@ -126,6 +126,11 @@
       "nb": "Kurset «{course}» har vært en tur på verftet og har fått en ny hovedversjon: versjon {major}.",
       "nn": "Kurset «{course}» har vore ein tur på verftet og har fått ein ny hovudversjon: versjon {major}.",
       "en-GB": "The course «{course}» has been to the boatyard and now has a new major version: version {major}."
+    },
+    "courseAssignedIntro": {
+      "nb": "Fortøyningen er sluppet:",
+      "nn": "Fortøyinga er sleppt:",
+      "en-GB": "The mooring lines are cast off:"
     }
   },
   "figure": {
