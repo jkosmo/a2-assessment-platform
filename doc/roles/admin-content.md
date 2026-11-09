@@ -114,6 +114,25 @@ Velg etter hva du er ute etter: en kopi ved siden av, eller nytt innhold i modul
 6. Lagre
 7. Klikk **Publiser** når kurset er klart for deltakere
 
+### 6. Klasser: hva medlemmene får på e-post
+
+Når du gir en klasse et kurs, eller legger noen til i en klasse som har kurs, får medlemmene en e-post om de nye kursene.
+
+**Hva de får:** én e-post med alle kursene de har fått, hvilken klasse de kommer fra, og fristen hvis du har satt en.
+E-posten har én knapp, **Åpne Mine kurs**. Der finner de kursene.
+
+**Når:** om lag et kvarter etter den siste endringen du gjør. Legger du til fem kurs etter hverandre, får medlemmene én
+e-post med alle fem, ikke fem e-poster. Du har altså et kvarter på deg til å rette opp: et kurs du fjerner fra klassen
+før e-posten går, kommer ikke med.
+
+**Tildeler du et kurs før det er publisert,** får medlemmene e-posten når du publiserer det.
+
+**Ingen e-post om:**
+- kurs medlemmet allerede har begynt på eller fullført;
+- kurs medlemmet har fått e-post om før, eller hadde fra en klasse før denne e-posten kom (2.147.0);
+- kurs i en arkivert klasse, eller i «Alle deltakere»;
+- endret frist.
+
 ## Vanlige spørsmål
 
 **Kan jeg redigere en publisert modul?**

@@ -1327,3 +1327,53 @@ Skive 2: sjekken (`src/modules/mascot/mascotCheck.ts`, `npm run mascot:check`) k
 figur slik appen serverer dem), `test/e2e/mascot-swap.spec.ts` (Profil og «Mine kurs»). En ny flate som leser pakken,
 skal inn i tabellen, i testene av et bytte og i forhåndsvisningen (`src/scripts/mascotPreview.ts`). Kravene til en
 pakke står i `mascots/seilbat/README.md`.
+
+## 30. E-post om nye kurs — mange veier inn, én jobb (#1142, 2.147.0)
+
+**Hjem:** `src/modules/course/courseAssignmentNotice.ts` (regelen, jobben, behandleren, stage-kopien) · **Plan:**
+`doc/design/PLAN_1142.md` · **Avgjørelsene:** `doc/DECISIONS.md` → «E-post om nye kurs»
+
+En deltaker som får nye kurs fra en klasse, får én samlet e-post et kvarter etter siste endring, med én lenke til «Mine
+kurs». ⚠️ **Ingen handling lager e-posten.** Hvert minutt spør jobben databasen hvem som har et kurs fra en vanlig klasse
+uten å ha en rad i `CourseAssignmentNotice`, og lager raden. Derfor gir alle veiene under e-post uten egen kode, også en
+vei ingen har tenkt på. En fiks som legger varsling inn i en av handlingene, er feil: den gir dobbel e-post.
+
+**Veiene inn** (alle gir e-post gjennom regelen `eligibleAssignmentPairs`):
+
+| Vei | Hvor |
+|---|---|
+| Nytt medlem i en klasse (UI, API, brukerfila fra klassesiden) | `classService.addMember` → `classRepository.addMember` |
+| Kurs tildelt en klasse | `assignCourseToClass` → `classRepository.assignCourseToClass` |
+| «Publiser kurs», uten og med elementene | `publishCourseChecked` / `publishCourseCascade` → `courseCommands.publishCourse` |
+| Import med `replaceExisting` av et kurs som er publisert i fila | `contentImportService.importCourseFromEnvelope` → `publishCourse` |
+| Arkivert klasse gjenopprettet (bare par uten rad: kurs publisert mens klassen var arkivert) | `classRepository.restoreClass` |
+| Person som hadde sluttet, blir aktiv igjen (Entra-synk, synk-delta, brukerfila) | `User.activeStatus`; følger av regelen |
+
+**Gir ikke e-post** (vilkårene i regelen, se kommentaren over `eligiblePairsQuery`): «Alle deltakere» og Entra-klasser,
+arkiverte klasser, upubliserte og arkiverte kurs, inaktive og anonymiserte personer, kurs personen har kursbevis for
+(hvilken som helst hovedversjon) eller har påbegynt (lest seksjon, innlevering, diskusjon — samme spor som
+`findStartedOrCompletedCourseIds`), og et par som alt har en rad, uansett status (`baseline` fra utrullingen, eller
+sendt). Endret frist, «Publiser nye versjoner», import med `updateExisting`/`createNew` og individuell innmelding gir heller
+ikke e-post. `OPEN`-kurs gir e-post når de tildeles en klasse, med vilje.
+
+**Jobben og behandleren:**
+
+| Del | Hvor | Merknad |
+|---|---|---|
+| Jobben | `runCourseAssignmentEmailSchedule`, kjørt av `CourseAssignmentEmailMonitor` i workeren hvert minutt | Rydder, lager rader (`excludeExistingNotices`, `ON CONFLICT DO NOTHING`), finner klare personer (nyeste rad 15 min, eldste 60 min), samler per person under personlåsen. Av når `PARTICIPANT_NOTIFICATION_CHANNEL=disabled` |
+| Behandleren | `deliverCourseAssignmentDigest`, outbox-typen `course_assignment_digest` (`outboxService.ts`) | Sjekker hvert kurs på nytt med regelen rett før sending; tar radene betinget `queued → sending` |
+| E-posten | `buildCourseAssignmentDigestEmail` / `sendCourseAssignmentDigest` (`participantNotificationService.ts`), tekstene i `notificationMessages.ts` | Lenken `{ page: "myCourses" }` i `emailLinks.ts` |
+| Helsesvar | `courseAssignmentEmailMonitor` i workerens helsesvar, med `lastSummary` | Verifisering etter utrulling |
+| Stage-kopi | `neutralizeEmailStateAfterProdCopy`, `npm run stage-copy:neutralize-email` med sperren i `scripts/maintenance/stageCopyGuard.ts` | Oppskriften i `doc/OPERATIONS_RUNBOOK.md` |
+
+**Vakter:**
+
+- `test/course-assignment-notice-write-guard.test.js` — tabellen skrives bare i `courseAssignmentNotice.ts`. En annen
+  skriver kunne stille ut e-posten for godt eller sende den to ganger.
+- `test/course-assignment-ways-in-guard.test.js` — alle skrivere av `ClassMember`, `CourseGroupAssignment`,
+  `Course.publishedAt`/`archivedAt` og `Class.archivedAt` i `src/` står i en liste med hvilken vei de er. En ny skriver
+  er dekket av jobben, men vakta blir rød så noen ser den.
+- `test/m2-course-assignment-rule-1142.test.ts` — regelen mot «Mine kurs» (grunnlaget) og hvert filter for seg.
+- `test/m2-course-assignment-email-1142.test.ts` — veiene inn gjennom rutene, vinduet, sjekken før sending, omstart og
+  dobbel levering. `test/m2-course-assignment-baseline-1142.test.ts` kjører den ekte migreringen.
+- `test/unit/stage-copy-guard-1142.test.ts` — stage-kopiskriptet nekter prod og krever bekreftelse.

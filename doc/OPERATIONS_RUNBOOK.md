@@ -430,6 +430,35 @@ Two caveats worth knowing before reading the output:
 Firewall access follows the same recipe as the cleanup script above — including the production
 lock dance.
 
+### Prod → stage-kopi: nøytraliser e-post som venter (#1142)
+
+En full kopi av prod tar med e-post som venter: rader i `CourseAssignmentNotice` (nye kurs) og `CourseVersionNotice` (ny
+hovedversjon), og hendelser i outboxen. Startes stage på kopien uten dette steget, kan stage sende samme e-post en gang
+til, til ekte mottakere. Tabellene skal være med i kopien (uten `CourseAssignmentNotice` ville alle i stage fått e-post om
+alle kurs).
+
+Rekkefølgen:
+
+1. Kopier og pseudonymiser databasen som før (tøm `OutboxEvent`, merk ventende `AssessmentJob` som `FAILED`).
+2. **Før stage startes på kopien**, kjør skriptet mot KOPIEN. I én transaksjon setter det ventende rader om nye kurs og
+   par prod-jobben ennå ikke hadde sett, til `baseline`, ventende rader om ny hovedversjon til `skipped`, og outbox-hendelser
+   som sender e-post og ikke er levert, til `failed` (`reason`/`lastError` = `copied_from_prod`).
+3. Start stage.
+
+```powershell
+$env:DATABASE_URL = "<adressen til KOPIEN>"
+$env:CONFIRM_STAGE_COPY = "<databasenavnet i adressen over>"
+npm run stage-copy:neutralize-email
+```
+
+eller i Git Bash: `CONFIRM_STAGE_COPY=<databasenavnet> npx dotenv -e .env.<stage-kopi> -- npm run stage-copy:neutralize-email`.
+
+⚠️ **Skriptet skal aldri kjøres mot prod**: der ville det sette ekte e-post som venter, til `baseline`, `skipped` og
+`failed`, og den ville aldri bli sendt. Sperren (`scripts/maintenance/stageCopyGuard.ts`) kjører før noe skrives: den nekter
+alltid et vertsnavn som inneholder `-prd-` eller `prod`, også med bekreftelse, og krever at `CONFIRM_STAGE_COPY` er lik
+databasenavnet i `DATABASE_URL`. Meldingen skriver aldri ut passordet eller adressen. Utskriften ved suksess er én linje
+`stage_copy_email_neutralized` med antallet i hvert steg. Kjørt to ganger gir andre runde 0 overalt.
+
 ## Seed Behavior
 
 ### Bootstrap seed

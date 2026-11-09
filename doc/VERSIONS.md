@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.147.0 - 2026-11-09
+
+Én samlet e-post når en deltaker får nye kurs fra en klasse (#1142, `doc/design/PLAN_1142.md`). Avgjørelsene står i `doc/DECISIONS.md`, flatene i `doc/FEATURE_SURFACE_MAP.md`, punkt 30.
+
+- **Hva brukerne merker:**
+  - Får en deltaker nye kurs fra en klasse, kommer **én e-post** med alle kursene, om lag **et kvarter etter siste endring**. Fem kurs tildelt etter hverandre gir én e-post, ikke fem. E-posten nevner klassen og fristen, og har én knapp: «Åpne Mine kurs».
+  - **Den gamle e-posten per kurs ved tildeling er borte.**
+  - Nytt er at også et nytt medlem i en klasse, et kurs som publiseres etter at det ble tildelt, en gjenopprettet klasse og en person som blir aktiv igjen gir e-post.
+- **Gir ikke e-post:** kurs deltakeren har påbegynt eller fullført, kurs hen har fått e-post om før eller hadde da 2.147.0 kom, kurs fra arkiverte klasser, «Alle deltakere» og Entra-klasser, endret frist, og personer som er inaktive eller anonymisert. Et kurs som fjernes fra klassen eller avpubliseres før e-posten går, tas ut av den; blir lista tom, sendes ingenting.
+- **Slik virker det:** en jobb i workeren (`CourseAssignmentEmailMonitor`) ser hvert minutt etter nye par av person og kurs, og samler dem per person når det har vært stille i et kvarter (høyst en time). Rett før sending sjekkes hvert kurs på nytt med samme regel. Ingen handling sender e-posten selv, så ingen vei inn kan glemme det.
+- **Prod → stage-kopi:** `npm run stage-copy:neutralize-email` nøytraliserer e-post som venter i en kopi av prod. Skriptet nekter alltid en database der vertsnavnet ser ut som prod, og krever `CONFIRM_STAGE_COPY` lik databasenavnet. Oppskriften står i `doc/OPERATIONS_RUNBOOK.md`.
+- **Ved utrulling:**
+  - To migreringer. Den første lager tabellen `CourseAssignmentNotice`. Den andre legger inn `baseline` for alle kurs folk har fra klasser fra før, så ingen får e-post om gamle kurs.
+  - Workerens helsesvar har `courseAssignmentEmailMonitor`, med siste runde i `lastSummary`. Sjekk at den er frisk, og at workerens versjon er 2.147.0 (`startedAt` alene kan være en omstart av den gamle).
+  - Ingen ny innstilling og ingen bryter. `PARTICIPANT_NOTIFICATION_CHANNEL=disabled` på workeren stopper denne og all annen e-post.
+  - Stage-test: `test/stage/release-2-147-nye-kurs-epost.spec.ts`, i to kjøringer (oppsett, så `STAGE_1142_RYDD=1` når e-posten er sett i Outlook).
+- **Kjente mangler:**
+  - Et kurs tildelt mens en tilbakerullet versjon (2.146.0 eller eldre) kjørte, gir dobbel e-post når det rulles fram igjen. Det samme for et kurs tildelt i minuttene under utrulling der ny worker og gammel app går samtidig.
+  - Et kurs som har vært ute, ble avpublisert og så tildelt en klasse, får `baseline`. Medlemmene får ingen e-post når det publiseres igjen.
+
 ## 2.146.0 - 2026-11-08
 
 Ryddepakke før #1142: arkiverte klasser, den gamle regelen for beståtte fjernet, og en gjennomgang av testene (`doc/test/TESTGJENNOMGANG_2026-11.md`). Første pakke etter den nye arbeidsmåten: to grener samlet, én full testrunde, én QA-runde og én utrulling.

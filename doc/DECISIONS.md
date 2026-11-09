@@ -1563,3 +1563,37 @@ til folk i en arkivert klasse.» Og: heller ikke tildele kurs til en arkivert kl
   «Gjenopprett» går alt igjen. Påminnelsene, kullstatus og kursrapportens publikum hoppet alt over arkiverte klasser.
 - **Kjent mangel til #1142:** e-posten om et nytt kurs i klassen sendes etter transaksjonen. Arkiveres klassen i sekundene mellom
   tildelingen og sendingen, kan e-posten gå likevel. #1142 erstatter denne e-posten med en jobb som leser regelen rett før sending.
+  Lukket i 2.147.0 (under).
+
+## E-post om nye kurs: én samlet e-post, laget av en jobb (#1142, 2026-11-09)
+
+Saken: en deltaker som får flere kurs på kort tid, fikk én e-post per kurs, og noen veier inn ga ingen e-post. Fra 2.147.0
+får deltakeren én e-post om alle nye kurs, et kvarter etter siste endring. Planen med begrunnelser står i
+`doc/design/PLAN_1142.md`; flatene i `doc/FEATURE_SURFACE_MAP.md`, punkt 30.
+
+- **Radene lages av en jobb i workeren, ikke av handlingene.** Hvert minutt spør jobben hvem som har et kurs fra en vanlig
+  klasse uten å ha fått beskjed om det. Da gir alle veier inn e-post — nytt medlem, tildeling, de tre publiseringsveiene,
+  gjenopprettet klasse og en person som blir aktiv igjen — også veier ingen har tenkt på, og ingen handling trenger nye
+  låser. Én rad per person og kurs: finnes raden, kommer det aldri en ny e-post om samme kurs. Et kurs tildelt mens det er
+  upublisert, gir altså e-post når det publiseres; det erstatter linja om det under «Lenker i e-post» (2026-11-07).
+- **Arkiverte klasser gir ingen e-post** (produkteier 2026-11-08). Et kurs deltakeren bare har fra en arkivert klasse, står
+  ikke i «Mine kurs» med mindre det er påbegynt, og da er det ikke nytt.
+- **Fullførte og påbegynte kurs gir ingen e-post** (produkteier 2026-11-08 og QA-porten 2026-11-09). Kursbevis for hvilken
+  som helst hovedversjon teller. Påbegynt er det samme som for arkiverte klasser: lest seksjon, innlevering eller deltakelse
+  i kursets diskusjoner. «Du har fått et nytt kurs» om noe deltakeren alt er i gang med, er feil.
+- **Et `OPEN`-kurs som tildeles en klasse, gir e-post** (2026-11-09). Tildelingen gir frist og gjør kurset til en del av
+  klassen; den gamle e-posten ble også sendt for slike kurs.
+- **Ingen nødbryter** (produkteier 2026-11-08, spørsmål 3). `PARTICIPANT_NOTIFICATION_CHANNEL=disabled` på workeren stopper
+  denne og all annen e-post, eller tilbakerulling.
+- **Én lenke, til «Mine kurs»,** ikke én per kurs: e-posten kan nevne flere kurs.
+- **Ved utrulling** får alt folk har fra før, raden `baseline`, så ingen får e-post om gamle kurs. Den gamle e-posten per kurs
+  er fjernet i samme versjon.
+- **Prod → stage-kopi:** ventende e-post i kopien nøytraliseres med `npm run stage-copy:neutralize-email` før stage startes.
+  Skriptet nekter alltid en database som ser ut som prod, og krever bekreftelse (`CONFIRM_STAGE_COPY`).
+
+Kjente mangler, godtatt fordi plattformen er intern og utrullinger skjer om kvelden:
+1. **Dobbel e-post ved utrulling og tilbakerulling.** Et kurs tildelt mens en tilbakerullet versjon (2.146.0 eller eldre)
+   kjørte, gir den gamle e-posten da og den nye når det rulles fram igjen. Det samme for et kurs tildelt i minuttene under
+   utrulling der ny worker og gammel app går samtidig.
+2. **Et kurs som har vært ute, ble avpublisert og *så* tildelt en klasse,** får `baseline` ved utrullingen. Medlemmene får
+   ingen e-post når det publiseres igjen.
