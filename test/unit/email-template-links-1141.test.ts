@@ -190,6 +190,18 @@ describe("adresser i tekst fra forfattere og deltakere", () => {
   });
 });
 
+describe("knappen i Outlook", () => {
+  // Produkteier 2026-11-09, skjermbilde fra prod: Outlook for Windows ser bort fra `padding` på `<a>`, og knappen ble bare så stor
+  // som bokstavene. Luften skal stå på cellen rundt lenken, som Outlook tegner.
+  it("luften står på cellen med knappens farge, ikke på lenken", () => {
+    const e = renderIllustratedEmail({ locale: "nb", subject: "S", paragraphs: ["Tekst."], illustration: EMAIL_ILLUSTRATIONS.appeal, link: { url: `${BASE}/participant`, label: "Åpne" } });
+    const cell = e.html.match(/<td bgcolor="#1f4e79" style="([^"]*)">\s*<a href="[^"]*" style="([^"]*)"/);
+    expect(cell, "knappecellen med lenken").not.toBeNull();
+    expect(cell![1]).toMatch(/padding:\s*12px 20px/);
+    expect(cell![2]).not.toMatch(/padding/);
+  });
+});
+
 describe("adressen til plattformen", () => {
   it.each([
     ["https://plattform.example.test", "https://plattform.example.test"],

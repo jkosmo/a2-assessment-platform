@@ -139,12 +139,17 @@ function paragraphHtml(text: string): string {
 
 const FONT = "font-family:Arial,Helvetica,sans-serif;";
 
-/** Knapp som tabell, så Outlook tegner den. Adressen står også synlig, så mottakeren kan se hvor den går. */
+/**
+ * Knapp som tabell, så Outlook tegner den. Adressen står også synlig, så mottakeren kan se hvor den går.
+ *
+ * ⚠️ Luften rundt teksten står på CELLEN, ikke på lenken. Outlook for Windows ser bort fra `padding` på `<a>`, og
+ * knappen ble da bare så stor som bokstavene (produkteier 2026-11-09, skjermbilde fra prod).
+ */
 function linkHtml(link: EmailLink): string {
   const url = escapeHtml(link.url);
   return [
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 8px 0;">',
-    `<tr><td bgcolor="#1f4e79" style="background-color:#1f4e79;border-radius:4px;"><a href="${url}" style="display:inline-block;padding:12px 20px;${FONT}font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;">${escapeHtml(link.label)}</a></td></tr>`,
+    `<tr><td bgcolor="#1f4e79" style="background-color:#1f4e79;border-radius:4px;padding:12px 20px;"><a href="${url}" style="display:inline-block;${FONT}font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;">${escapeHtml(link.label)}</a></td></tr>`,
     "</table>",
     `<p style="margin:0 0 8px 0;${FONT}font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;">${url}</p>`,
   ].join("\n");
