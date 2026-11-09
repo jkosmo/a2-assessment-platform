@@ -28,13 +28,14 @@ Alle tekster finnes på tre språk: `nb`, `nn` og `en-GB`. Ingen kan være tom.
 
 | Nøkkel | Hva |
 |---|---|
-| `version` | Versjonen av formatet. Må være den koden leser (nå `1`). Når koden krever en ny nøkkel, økes versjonen, og sjekken sier hva som mangler. |
+| `version` | Versjonen av formatet. Må være den koden leser (nå `2`). Når koden krever en ny nøkkel, økes versjonen, og sjekken sier hva som mangler. |
 | `name` | Pakkens navn, vist i forhåndsvisningen. |
 | `moods.<humør>.image` | Bildet på Profil for humøret: et filnavn i `images/`. |
 | `moods.<humør>.line` | Linja ved siden av bildet. |
 | `emails.<situasjon>.image` | Bildet øverst i e-posten: et filnavn i `images/`. Flere situasjoner og humør kan dele bilde. |
 | `emails.<situasjon>.alt` | Bildeteksten (alt-teksten) i e-posten. |
 | `emailTexts.courseNewVersionIntro` | Setningen i e-posten om en ny hovedversjon av et kurs. `{course}` blir kursets tittel, `{major}` versjonen. |
+| `emailTexts.courseAssignedIntro` | Begynnelsen av innledningen i e-posten om nye kurs. Resten følger etter et mellomrom, med liten forbokstav: «du har fått 3 nye kurs på A-2 læringsplattform.» Teksten bør derfor slutte med kolon, som «Fortøyningen er sluppet:». Kom i versjon 2. |
 | `figure.direction` | Hvilken side linja fylles fra. Bare `fromRight` er bygget. |
 | `figure.states.<tilstand>` | SVG-fila for tilstanden, for eksempel `figure/flatt.svg`. |
 | `figure.css` | Stilfila for figuren. |

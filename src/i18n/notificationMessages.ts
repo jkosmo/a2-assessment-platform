@@ -10,12 +10,12 @@ type NotificationMessage = {
 };
 
 // Compliance godkjente lenker i e-post 2026-11-06. Teksten «Logg inn på …» står: den gjelder også uten lenke.
-export type EmailLinkKind = "course" | "module" | "discussion";
+export type EmailLinkKind = "course" | "module" | "discussion" | "myCourses";
 
 const emailLinkLabels: Record<SupportedLocale, Record<EmailLinkKind, string>> = {
-  "en-GB": { course: "Open the course", module: "Open the module", discussion: "Open the discussion" },
-  nb: { course: "Åpne kurset", module: "Åpne modulen", discussion: "Åpne diskusjonen" },
-  nn: { course: "Opne kurset", module: "Opne modulen", discussion: "Opne diskusjonen" },
+  "en-GB": { course: "Open the course", module: "Open the module", discussion: "Open the discussion", myCourses: "Open My courses" },
+  nb: { course: "Åpne kurset", module: "Åpne modulen", discussion: "Åpne diskusjonen", myCourses: "Åpne Mine kurs" },
+  nn: { course: "Opne kurset", module: "Opne modulen", discussion: "Opne diskusjonen", myCourses: "Opne Mine kurs" },
 };
 
 export function getEmailLinkLabel(locale: SupportedLocale, kind: EmailLinkKind): string {
@@ -23,13 +23,16 @@ export function getEmailLinkLabel(locale: SupportedLocale, kind: EmailLinkKind):
 }
 
 // #1141: siste linje i e-posten sier hvorfor mottakeren får den.
-export type EmailReason = "submission" | "appeal" | "assignment" | "reminder" | "discussionQuestion" | "discussionReply";
+// #1142: `classMember` er for den samlede e-posten om nye kurs. «Klassen din er tildelt et kurs» (`assignment`) stemmer
+// ikke når personen selv er lagt til i en klasse, eller kurset er publisert; den fjernes med den gamle e-posten (skive 3).
+export type EmailReason = "submission" | "appeal" | "assignment" | "classMember" | "reminder" | "discussionQuestion" | "discussionReply";
 
 const emailReasons: Record<SupportedLocale, Record<EmailReason, string>> = {
   "en-GB": {
     submission: "You are getting this e-mail because you handed in an answer on A-2 læringsplattform.",
     appeal: "You are getting this e-mail because you appealed an assessment on A-2 læringsplattform.",
     assignment: "You are getting this e-mail because your class has been assigned a course.",
+    classMember: "You are getting this e-mail because you are in a class on A-2 læringsplattform.",
     reminder: "You are getting this e-mail because you have a course with a due date.",
     discussionQuestion: "You are getting this e-mail because you own the course or are an administrator of the platform.",
     discussionReply: "You are getting this e-mail because you follow this discussion.",
@@ -38,6 +41,7 @@ const emailReasons: Record<SupportedLocale, Record<EmailReason, string>> = {
     submission: "Du får denne e-posten fordi du har levert en besvarelse på A-2 læringsplattform.",
     appeal: "Du får denne e-posten fordi du har anket en vurdering på A-2 læringsplattform.",
     assignment: "Du får denne e-posten fordi klassen din er tildelt et kurs.",
+    classMember: "Du får denne e-posten fordi du er med i en klasse på A-2 læringsplattform.",
     reminder: "Du får denne e-posten fordi du har et kurs med frist.",
     discussionQuestion: "Du får denne e-posten fordi du eier kurset eller er administrator på plattformen.",
     discussionReply: "Du får denne e-posten fordi du følger denne diskusjonen.",
@@ -46,6 +50,7 @@ const emailReasons: Record<SupportedLocale, Record<EmailReason, string>> = {
     submission: "Du får denne e-posten fordi du har levert eit svar på A-2 læringsplattform.",
     appeal: "Du får denne e-posten fordi du har anka ei vurdering på A-2 læringsplattform.",
     assignment: "Du får denne e-posten fordi klassen din er tildelt eit kurs.",
+    classMember: "Du får denne e-posten fordi du er med i ein klasse på A-2 læringsplattform.",
     reminder: "Du får denne e-posten fordi du har eit kurs med frist.",
     discussionQuestion: "Du får denne e-posten fordi du eig kurset eller er administrator på plattforma.",
     discussionReply: "Du får denne e-posten fordi du følgjer denne diskusjonen.",
@@ -539,5 +544,110 @@ export function getCourseAssignmentNotificationMessage(
     subject: t.subject.replace("{course}", context.courseTitle),
     nextStepGuidance:
       t.body.replace("{class}", context.className).replace("{course}", context.courseTitle) + dueLine + t.closing,
+  };
+}
+
+// #1142: ÉN e-post når en deltaker har fått nye kurs (doc/design/PLAN_1142.md, punkt 5). Erstatter e-posten per kurs over
+// i skive 3. Ett kurs og flere kurs har hvert sitt emne og sin innledning; lista er ett avsnitt med linjeskift, som malen
+// gjør til `<br>`. Siste avsnitt sier hvor kursene ligger, så teksten virker også uten lenken fra malen.
+// Begynnelsen av innledningen («Fortøyningen er sluppet:») står i maskotpakken (`courseAssignedIntro`); resten her.
+export type CourseAssignmentDigestCourse = {
+  /** Tittelen på mottakerens språk. */
+  title: string;
+  /** Klassene personen har kurset fra. */
+  classNames: string[];
+  /** Den tidligste fristen blant klassene, eller null. */
+  dueAt: Date | null;
+};
+
+export type CourseAssignmentDigestMessage = { subject: string; paragraphs: string[] };
+
+type CourseAssignmentDigestLabels = {
+  subjectOne: string; // {course}
+  subjectMany: string; // {n}
+  greeting: string;
+  introOne: string;
+  introMany: string; // {n}
+  fromClass: string; // {class}
+  fromClasses: string; // {classes}
+  and: string;
+  due: string; // {date}
+  closing: string;
+};
+
+const courseAssignmentDigestMessages: Record<SupportedLocale, CourseAssignmentDigestLabels> = {
+  "en-GB": {
+    subjectOne: "You have a new course: «{course}»",
+    subjectMany: "You have {n} new courses",
+    greeting: "Hello!",
+    introOne: "you have a new course on A-2 læringsplattform.",
+    introMany: "you have {n} new courses on A-2 læringsplattform.",
+    fromClass: "from the class {class}",
+    fromClasses: "from the classes {classes}",
+    and: "and",
+    due: "due {date}",
+    closing: "Log in to A-2 læringsplattform and open My courses.",
+  },
+  nb: {
+    subjectOne: "Du har fått et nytt kurs: «{course}»",
+    subjectMany: "Du har fått {n} nye kurs",
+    greeting: "Hei!",
+    introOne: "du har fått et nytt kurs på A-2 læringsplattform.",
+    introMany: "du har fått {n} nye kurs på A-2 læringsplattform.",
+    fromClass: "fra klassen {class}",
+    fromClasses: "fra klassene {classes}",
+    and: "og",
+    due: "frist {date}",
+    closing: "Logg inn på A-2 læringsplattform og åpne Mine kurs.",
+  },
+  nn: {
+    subjectOne: "Du har fått eit nytt kurs: «{course}»",
+    subjectMany: "Du har fått {n} nye kurs",
+    greeting: "Hei!",
+    introOne: "du har fått eit nytt kurs på A-2 læringsplattform.",
+    introMany: "du har fått {n} nye kurs på A-2 læringsplattform.",
+    fromClass: "frå klassen {class}",
+    fromClasses: "frå klassane {classes}",
+    and: "og",
+    due: "frist {date}",
+    closing: "Logg inn på A-2 læringsplattform og opne Mine kurs.",
+  },
+};
+
+/** Tidligste frist først, kurs uten frist sist, så tittel i mottakerens alfabet. Klassene sorteres på navn. */
+export function sortCourseAssignmentDigestCourses(locale: SupportedLocale, courses: CourseAssignmentDigestCourse[]): CourseAssignmentDigestCourse[] {
+  const collator = new Intl.Collator(locale);
+  return courses
+    .map((course) => ({ ...course, classNames: [...course.classNames].sort(collator.compare) }))
+    .sort((a, b) => {
+      if (a.dueAt && b.dueAt && a.dueAt.getTime() !== b.dueAt.getTime()) return a.dueAt.getTime() - b.dueAt.getTime();
+      if (a.dueAt && !b.dueAt) return -1;
+      if (!a.dueAt && b.dueAt) return 1;
+      return collator.compare(a.title, b.title);
+    });
+}
+
+export function getCourseAssignmentDigestMessage(
+  locale: SupportedLocale,
+  courses: CourseAssignmentDigestCourse[],
+): CourseAssignmentDigestMessage {
+  // Behandleren sender aldri en tom liste (PLAN_1142 punkt 4: tom liste gir ingen e-post). Skjer det likevel, er det en feil.
+  if (courses.length === 0) throw new Error("A course assignment digest needs at least one course.");
+  const t = courseAssignmentDigestMessages[locale];
+  const sorted = sortCourseAssignmentDigestCourses(locale, courses);
+  const lines = sorted.map((course) => {
+    const parts = [`• «${course.title}»`];
+    if (course.classNames.length === 1) parts.push(` – ${t.fromClass.split("{class}").join(`«${course.classNames[0]}»`)}`);
+    if (course.classNames.length > 1) parts.push(` – ${t.fromClasses.split("{classes}").join(quotedList(course.classNames, t.and))}`);
+    if (course.dueAt) parts.push(`, ${t.due.split("{date}").join(formatDateOnly(course.dueAt, locale))}`);
+    return parts.join("");
+  });
+  const one = sorted.length === 1;
+  const n = String(sorted.length);
+  // Pakkens tekst og resten skilles av ett mellomrom her, så pakken ikke må huske et mellomrom på slutten.
+  const intro = `${mascotEmailText("courseAssignedIntro", locale).trim()} ${one ? t.introOne : t.introMany.split("{n}").join(n)}`;
+  return {
+    subject: one ? t.subjectOne.split("{course}").join(sorted[0]!.title) : t.subjectMany.split("{n}").join(n),
+    paragraphs: [t.greeting, intro, lines.join("\n"), t.closing],
   };
 }

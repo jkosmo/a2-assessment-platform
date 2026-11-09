@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "name": {
     "nb": "Testbåten",
     "nn": "Testbåten",
@@ -126,6 +126,11 @@
       "nb": "Kurset «{course}» har vært i testverkstedet og har fått en ny hovedversjon: versjon {major}.",
       "nn": "Kurset «{course}» har vore i testverkstaden og har fått ein ny hovudversjon: versjon {major}.",
       "en-GB": "The course «{course}» has been in the test workshop and now has a new major version: version {major}."
+    },
+    "courseAssignedIntro": {
+      "nb": "Testbåten har lagt fra testkaia:",
+      "nn": "Testbåten har lagt frå testkaia:",
+      "en-GB": "The test boat has left the test quay:"
     }
   },
   "figure": {

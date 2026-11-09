@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { readFasit, replaceStrings, sha256 } from "../support/mascotFasit.js";
 import { emailSituations, installEmailTestHooks, sendSituation, type EmailHarnessState } from "../support/mascotEmailSituations.js";
 import { activeMascot, loadMascotPack, MASCOT_EMAIL_SITUATIONS, mascotImagePath, type MascotPack } from "../../src/modules/mascot/mascotPack.js";
+import { buildCourseAssignmentDigestEmail } from "../../src/modules/certification/participantNotificationService.js";
 
 // Maskotpakken, skive 2 (doc/design/MASKOTPAKKE.md): et bytte endrer alle flatene i e-postene, og ingenting annet.
 //
@@ -67,6 +68,8 @@ describe("maskotpakken, skive 2: et bytte i e-postene", () => {
       for (const locale of LOCALES) expect(testbat.emails[situation].alt[locale]).not.toBe(seilbat.emails[situation].alt[locale]);
     }
     for (const locale of LOCALES) expect(intro(testbat, locale)).not.toBe(intro(seilbat, locale));
+    // #1142: setningen i den samlede e-posten om nye kurs. E-posten sendes først fra skive 3, og er ikke i fasiten ennå.
+    for (const locale of LOCALES) expect(testbat.emailTexts.courseAssignedIntro[locale]).not.toBe(seilbat.emailTexts.courseAssignedIntro[locale]);
   });
 
   it.each(Object.keys(emailSituations(h)))("%s: bildet, bildeteksten og verft-setningen er testpakkens, resten er fasiten", async (situation) => {
@@ -101,6 +104,19 @@ describe("maskotpakken, skive 2: et bytte i e-postene", () => {
       ]),
     );
     expect(reversed).toEqual(readFasit(`email/${situation}.json`));
+  });
+});
+
+// #1142 skive 2: den samlede e-posten om nye kurs er ikke koblet til noe som sender ennå, og står derfor ikke i fasiten.
+// Her vises bare at det som kommer fra pakken, er testpakkens.
+describe("#1142: e-posten om nye kurs med testpakken", () => {
+  it.each(LOCALES)("%s: setningen, bildet og bildeteksten er testpakkens", (locale) => {
+    const testbat = activeMascot();
+    const email = buildCourseAssignmentDigestEmail({ locale, courses: [{ title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: null }] });
+    expect(email.plainText).toContain(`${testbat.emailTexts.courseAssignedIntro[locale]} `);
+    expect(email.plainText).not.toContain(seilbat.emailTexts.courseAssignedIntro[locale]);
+    expect(email.html).toContain(`alt="${testbat.emails.courseAssigned.alt[locale]}"`);
+    expect(email.attachments.map((a) => a.name)).toEqual([testbat.emails.courseAssigned.image]);
   });
 });
 

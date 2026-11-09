@@ -242,16 +242,32 @@ describe("reglene, én om gangen", () => {
       delete m.emailTexts;
     });
     expect(problems).toEqual([
-      "version er 0, men koden leser versjon 1: pakken er laget for en eldre utgave av koden. Legg inn det som mangler (listet her), se mascots/seilbat/README.md, og sett version til 1",
+      "version er 0, men koden leser versjon 2: pakken er laget for en eldre utgave av koden. Nytt siden: emailTexts.courseAssignedIntro (versjon 2). Legg inn det som mangler (listet her), se mascots/seilbat/README.md, og sett version til 2",
       "emailTexts.courseNewVersionIntro.en-GB mangler",
       "emailTexts.courseNewVersionIntro.nb mangler",
       "emailTexts.courseNewVersionIntro.nn mangler",
+      "emailTexts.courseAssignedIntro.en-GB mangler",
+      "emailTexts.courseAssignedIntro.nb mangler",
+      "emailTexts.courseAssignedIntro.nn mangler",
     ]);
-    expect(problemsWith((_dir, m) => { m.version = 2; })).toEqual([
-      "version er 2, men koden leser versjon 1: pakken er laget for en nyere utgave av koden",
+    expect(problemsWith((_dir, m) => { m.version = 3; })).toEqual([
+      "version er 3, men koden leser versjon 2: pakken er laget for en nyere utgave av koden",
     ]);
     expect(problemsWith((_dir, m) => { delete m.version; })).toEqual([
-      "version mangler eller er ikke et heltall (fant undefined); koden leser versjon 1",
+      "version mangler eller er ikke et heltall (fant undefined); koden leser versjon 2",
+    ]);
+  });
+
+  it("#1142: en pakke fra versjon 1 får vite at courseAssignedIntro er ny, og hva som mangler", () => {
+    const problems = problemsWith((_dir, m) => {
+      m.version = 1;
+      delete m.emailTexts.courseAssignedIntro;
+    });
+    expect(problems).toEqual([
+      "version er 1, men koden leser versjon 2: pakken er laget for en eldre utgave av koden. Nytt siden: emailTexts.courseAssignedIntro (versjon 2). Legg inn det som mangler (listet her), se mascots/seilbat/README.md, og sett version til 2",
+      "emailTexts.courseAssignedIntro.en-GB mangler",
+      "emailTexts.courseAssignedIntro.nb mangler",
+      "emailTexts.courseAssignedIntro.nn mangler",
     ]);
   });
 });

@@ -1310,6 +1310,7 @@ Alt som hører til maskoten ligger i `mascots/<valgt>/` (valgt i `mascot.config.
 | --- | --- | --- |
 | E-post, bilde og bildetekst (web og worker) | `illustratedEmail.ts` → `EMAIL_ILLUSTRATIONS`, `mascotImagePath` | `emails.<situasjon>`, `images/` |
 | E-post, verft-setningen (ny hovedversjon) | `notificationMessages.ts` → `mascotEmailText("courseNewVersionIntro")` | `emailTexts` |
+| E-post, «Fortøyningen er sluppet:» (nye kurs, #1142; bygget i skive 2, sendes fra skive 3) | `notificationMessages.ts` → `mascotEmailText("courseAssignedIntro")` | `emailTexts` |
 | Profil, båten og linja | `profile-stats.js` → `/static/mascot/moods.json` (laget av `mascotMoodsJson`) | `moods.<humør>` |
 | «Mine kurs», figuren på linja | `course-progress-boat.js` → `/static/mascot/figure.js` (JS-modul) og `/static/mascot/figure.css` | `figure`, `figure/*.svg`, `figure.css` |
 | Favicon (faste adresser i alle `public/*.html`) | `routes/mascot.ts` | `favicon` |

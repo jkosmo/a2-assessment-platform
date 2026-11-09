@@ -8,17 +8,19 @@ import { getEmailLinkLabel, type EmailLinkKind } from "../../i18n/notificationMe
 import type { SupportedLocale } from "../../i18n/locale.js";
 import type { EmailLink } from "./illustratedEmail.js";
 
-export type EmailLinkTarget = { courseId: string } | { moduleId: string } | { courseId: string; threadId: string };
+// #1142: `{ page: "myCourses" }` er «Mine kurs» uten id: den samlede e-posten om nye kurs kan nevne flere kurs.
+export type EmailLinkTarget = { courseId: string } | { moduleId: string } | { courseId: string; threadId: string } | { page: "myCourses" };
 
-function targetQuery(target: EmailLinkTarget): string {
-  if ("moduleId" in target) return `moduleId=${encodeURIComponent(target.moduleId)}`;
-  if ("threadId" in target) return `courseId=${encodeURIComponent(target.courseId)}&threadId=${encodeURIComponent(target.threadId)}`;
-  return `courseId=${encodeURIComponent(target.courseId)}`;
+function targetPath(target: EmailLinkTarget): string {
+  if ("page" in target) return "/participant";
+  if ("moduleId" in target) return `/participant?moduleId=${encodeURIComponent(target.moduleId)}`;
+  if ("threadId" in target) return `/participant?courseId=${encodeURIComponent(target.courseId)}&threadId=${encodeURIComponent(target.threadId)}`;
+  return `/participant?courseId=${encodeURIComponent(target.courseId)}`;
 }
 
 /** Lenken til malen, eller null når lenker ikke er slått på eller id-en mangler (en rad i køen fra før lenkene). */
 export function buildEmailLink(locale: SupportedLocale, kind: EmailLinkKind, target: EmailLinkTarget | null): EmailLink | null {
   const origin = parsePublicAppOrigin(env.PUBLIC_APP_BASE_URL);
   if (!origin || !target) return null;
-  return { url: `${origin}/participant?${targetQuery(target)}`, label: getEmailLinkLabel(locale, kind) };
+  return { url: `${origin}${targetPath(target)}`, label: getEmailLinkLabel(locale, kind) };
 }

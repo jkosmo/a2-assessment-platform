@@ -19,14 +19,17 @@ import { BOAT_MOODS, type BoatMood } from "../gamification/moods.js";
 import { SUPPORTED_LOCALES, type SupportedLocale } from "../../i18n/locale.js";
 
 /** Versjonen av formatet i `mascot.json` som denne koden leser. */
-export const MASCOT_PACK_VERSION = 1;
+export const MASCOT_PACK_VERSION = 2;
 
 /**
  * Hva som er lagt til i hver versjon etter den første. Når koden krever en ny nøkkel (for eksempel `moods.anker`,
  * #1139): øk `MASCOT_PACK_VERSION`, før nøkkelen opp her, og legg den inn i seilbåten. En fork med en eldre pakke får da
  * vite hva som er nytt, i tillegg til listen over hver nøkkel som mangler.
  */
-const ADDED_IN_VERSION: Record<number, string[]> = {};
+const ADDED_IN_VERSION: Record<number, string[]> = {
+  // #1142: begynnelsen av innledningen i den samlede e-posten om nye kurs.
+  2: ["emailTexts.courseAssignedIntro"],
+};
 
 /** Situasjonene der en e-post har et bilde øverst (#1141). Nøklene i `EMAIL_ILLUSTRATIONS`. */
 export const MASCOT_EMAIL_SITUATIONS = [
@@ -42,8 +45,11 @@ export const MASCOT_EMAIL_SITUATIONS = [
 ] as const;
 export type MascotEmailSituation = (typeof MASCOT_EMAIL_SITUATIONS)[number];
 
-/** Hele setninger i e-postene som nevner maskoten. `{course}` og `{major}` fylles inn. */
-export const MASCOT_EMAIL_TEXTS = ["courseNewVersionIntro"] as const;
+/**
+ * Setninger i e-postene som nevner maskoten. `courseNewVersionIntro` er hel; `{course}` og `{major}` fylles inn.
+ * `courseAssignedIntro` (#1142) er begynnelsen av innledningen, og resten («du har fått 3 nye kurs …») følger etter.
+ */
+export const MASCOT_EMAIL_TEXTS = ["courseNewVersionIntro", "courseAssignedIntro"] as const;
 export type MascotEmailText = (typeof MASCOT_EMAIL_TEXTS)[number];
 
 /** Figurens tilstander på fremdriftslinja: flatt seil (under 30 %), fullt seil, og feiringen når kurset fullføres. */

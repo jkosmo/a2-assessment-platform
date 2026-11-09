@@ -4,9 +4,11 @@ import { env } from "../../config/env.js";
 import { ExternalCallTimeoutError, withTimeout } from "../../clients/externalCall.js";
 import { classifyAcsError, describeAcsFailure, nextAttemptDelayMs } from "./acsThrottle.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { localizeContentText } from "../../i18n/content.js";
 import {
   getAppealNotificationMessage,
   getAssessmentResultNotificationMessage,
+  getCourseAssignmentDigestMessage,
   getCourseAssignmentNotificationMessage,
   getCourseMajorVersionNotificationMessage,
   getEmailReason,
@@ -485,6 +487,32 @@ export function buildCourseMajorVersionEmail(input: Pick<CourseMajorVersionNotif
     reason: message.reason,
     illustration: EMAIL_ILLUSTRATIONS.courseNewVersion,
     link: buildEmailLink(input.locale, "course", input.courseId ? { courseId: input.courseId } : null),
+  });
+}
+
+// #1142 skive 2: ÉN e-post når en deltaker har fått nye kurs, med alle kursene i en liste (doc/design/PLAN_1142.md,
+// punkt 5). Bare selve e-posten: behandleren i outboxen som slår opp kursene og sender den, kommer i skive 3. Til da
+// sendes den gamle e-posten per kurs (`sendCourseAssignmentNotification`).
+export type CourseAssignmentDigestCourseInput = {
+  /** Tittelen slik den er lagret (JSON med språkene, eller ren tekst). Velges for mottakerens språk her. */
+  title: string;
+  /** Klassene personen har kurset fra. */
+  classNames: string[];
+  /** Den tidligste fristen blant klassene, eller null. */
+  dueAt: Date | null;
+};
+
+/** Selve e-posten, uten å sende den. Lenken går til «Mine kurs» uten id, siden e-posten kan nevne flere kurs. */
+export function buildCourseAssignmentDigestEmail(input: { locale: SupportedLocale; courses: CourseAssignmentDigestCourseInput[] }): IllustratedEmail {
+  const courses = input.courses.map((course) => ({ ...course, title: localizeContentText(input.locale, course.title) ?? course.title }));
+  const message = getCourseAssignmentDigestMessage(input.locale, courses);
+  return renderIllustratedEmail({
+    locale: input.locale,
+    subject: message.subject,
+    paragraphs: message.paragraphs,
+    reason: getEmailReason(input.locale, "classMember"),
+    illustration: EMAIL_ILLUSTRATIONS.courseAssigned,
+    link: buildEmailLink(input.locale, "myCourses", { page: "myCourses" }),
   });
 }
 
