@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 // Bare e-posten: den er ikke koblet til noe som sender før skive 3.
 //
 // Lenker er godkjent (compliance 2026-11-06), så kravet fra saken om «ingen http, www eller href» er byttet ut med:
-// nøyaktig ÉN lenke, til «Mine kurs» uten id, og ingen annen adresse i HTML eller ren tekst. Uten innstillingen
+// nøyaktig ÉN lenke, til «Mine kurs» uten id (rett til kurset når e-posten nevner bare ett), og ingen annen adresse i HTML eller ren tekst. Uten innstillingen
 // PUBLIC_APP_BASE_URL: ingen lenke og ingen href. Kurstitler og klassenavn skrives av forfattere og SMO-er, og en
 // adresse der gjøres ufarlig av malen.
 
@@ -32,11 +32,11 @@ const date = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
 // Eksempelet fra planen, i en annen rekkefølge enn den e-posten skal ha.
 const THREE: CourseAssignmentDigestCourseInput[] = [
-  { title: "Personvern i praksis", classNames: ["Nyansatte", "Avdeling Vest"], dueAt: null },
-  { title: "Etikk i rådgivning", classNames: ["Nyansatte"], dueAt: date("2027-01-15") },
-  { title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: date("2026-12-01") },
+  { courseId: "kurs-1", title: "Personvern i praksis", classNames: ["Nyansatte", "Avdeling Vest"], dueAt: null },
+  { courseId: "kurs-2", title: "Etikk i rådgivning", classNames: ["Nyansatte"], dueAt: date("2027-01-15") },
+  { courseId: "kurs-3", title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: date("2026-12-01") },
 ];
-const ONE: CourseAssignmentDigestCourseInput[] = [{ title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: date("2026-12-01") }];
+const ONE: CourseAssignmentDigestCourseInput[] = [{ courseId: "kurs-4", title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: date("2026-12-01") }];
 
 const build = (locale: Locale, courses: CourseAssignmentDigestCourseInput[] = THREE) => buildCourseAssignmentDigestEmail({ locale, courses });
 
@@ -55,6 +55,38 @@ describe("#1142 skive 2: lenken", () => {
     expect(e.subject).not.toMatch(/https?:|www\./);
   });
 
+  // Produkteier 2026-11-09: nevner e-posten bare ett kurs, går knappen rett til kurset. «Mine kurs» bare når det er flere.
+  const ONE_COURSE_LABEL: Record<Locale, string> = { nb: "Åpne kurset", nn: "Opne kurset", "en-GB": "Open the course" };
+  const ONE_COURSE_CLOSING: Record<Locale, string> = {
+    nb: "Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.",
+    nn: "Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.",
+    "en-GB": "Log in to A-2 læringsplattform and open the course under My courses.",
+  };
+  it.each(LOCALES)("%s, ett kurs: nøyaktig én lenke, rett til kurset, og avslutningen sier «kurset»", (locale) => {
+    const e = build(locale, ONE);
+    const courseUrl = `${BASE}/participant?courseId=kurs-4`;
+    expect(e.html.match(/<a\s/g)).toHaveLength(1);
+    expect(e.html).toContain(`href="${courseUrl}"`);
+    expect(e.html).toContain(`>${ONE_COURSE_LABEL[locale]}<`);
+    expect(e.plainText.match(/https?:\/\/\S+/g)).toEqual([courseUrl]);
+    expect(e.plainText).toContain(`${ONE_COURSE_CLOSING[locale]}\n\n${ONE_COURSE_LABEL[locale]}: ${courseUrl}`);
+    expect(e.plainText).not.toContain(LABEL[locale]);
+  });
+
+  it.each(LOCALES)("%s, to kurs: fortsatt «Mine kurs» uten id", (locale) => {
+    const e = build(locale, THREE.slice(0, 2));
+    expect(e.html).toContain(`href="${MY_COURSES}"`);
+    expect(e.plainText).not.toContain("courseId");
+    expect(e.plainText).not.toContain(ONE_COURSE_CLOSING[locale]);
+  });
+
+  it.each(LOCALES)("%s, ett kurs uten PUBLIC_APP_BASE_URL: ingen lenke, men teksten sier hvor kurset ligger", (locale) => {
+    mutableEnv.PUBLIC_APP_BASE_URL = undefined;
+    const e = build(locale, ONE);
+    expect(`${e.html}${e.plainText}`).not.toMatch(/https?:|<a\s|href=/i);
+    expect(e.plainText).toContain(ONE_COURSE_CLOSING[locale]);
+  });
+
   it.each(LOCALES)("%s: uten PUBLIC_APP_BASE_URL går e-posten uten lenke og uten href", (locale) => {
     mutableEnv.PUBLIC_APP_BASE_URL = undefined;
     const e = build(locale);
@@ -68,7 +100,7 @@ describe("#1142 skive 2: lenken", () => {
     const titles = ["Se www.a-2.no", "https://evil.example/logg-inn", "Kontakt kurs@a-2.no", "Les mer på portal.example.de", '<a href="x">klikk</a>'];
     const e = build(
       "nb",
-      titles.map((title, i) => ({ title, classNames: [`Klasse github.com ${i}`, "WWW.EVIL.EXAMPLE"], dueAt: null })),
+      titles.map((title, i) => ({ courseId: `kurs-url-${i}`, title, classNames: [`Klasse github.com ${i}`, "WWW.EVIL.EXAMPLE"], dueAt: null })),
     );
     expect(e.html.match(/<a\s/g)).toHaveLength(1);
     expect(new Set(e.html.match(/https?:\/\/[^\s"<]+/g))).toEqual(new Set([MY_COURSES]));
@@ -78,7 +110,7 @@ describe("#1142 skive 2: lenken", () => {
     expect(e.plainText).toContain("fra klassene «Klasse github[.]com 0» og «WWW[.]EVIL[.]EXAMPLE»");
     expect(e.html).toContain("&lt;a href=&quot;x&quot;&gt;klikk&lt;/a&gt;");
 
-    const subject = build("nb", [{ title: "Se https://evil.example", classNames: ["K"], dueAt: null }]).subject;
+    const subject = build("nb", [{ courseId: "kurs-5", title: "Se https://evil.example", classNames: ["K"], dueAt: null }]).subject;
     expect(subject).toBe("Du har fått et nytt kurs: «Se evil[.]example»");
   });
 });
@@ -171,19 +203,19 @@ describe("#1142 skive 2: teksten", () => {
   });
 
   it("to og tre klasser: alle nevnes, sortert på navn, med «og» før den siste", () => {
-    const two = build("nb", [{ title: "K", classNames: ["Nyansatte", "Avdeling Vest"], dueAt: null }]).plainText;
+    const two = build("nb", [{ courseId: "kurs-6", title: "K", classNames: ["Nyansatte", "Avdeling Vest"], dueAt: null }]).plainText;
     expect(two).toContain("• «K» – fra klassene «Avdeling Vest» og «Nyansatte»");
-    const three = build("en-GB", [{ title: "K", classNames: ["Sør", "Nord", "Midt"], dueAt: null }]).plainText;
+    const three = build("en-GB", [{ courseId: "kurs-7", title: "K", classNames: ["Sør", "Nord", "Midt"], dueAt: null }]).plainText;
     expect(three).toContain("• «K» – from the classes «Midt», «Nord» and «Sør»");
   });
 
   it("uten klasse (skal ikke skje) står kurset og fristen likevel", () => {
-    expect(build("nb", [{ title: "K", classNames: [], dueAt: date("2026-12-01") }]).plainText).toContain("• «K», frist 1. desember 2026\n");
+    expect(build("nb", [{ courseId: "kurs-8", title: "K", classNames: [], dueAt: date("2026-12-01") }]).plainText).toContain("• «K», frist 1. desember 2026\n");
   });
 
   it("tittelen velges for mottakerens språk", () => {
     const title = JSON.stringify({ nb: "Brannvern for alle", nn: "Brannvern for alle (nn)", "en-GB": "Fire safety for everyone" });
-    const courses = [{ title, classNames: ["Avdeling Vest"], dueAt: null }];
+    const courses = [{ courseId: "kurs-sprak", title, classNames: ["Avdeling Vest"], dueAt: null }];
     expect(build("nb", courses).subject).toBe("Du har fått et nytt kurs: «Brannvern for alle»");
     expect(build("nn", courses).subject).toBe("Du har fått eit nytt kurs: «Brannvern for alle (nn)»");
     expect(build("en-GB", courses).subject).toBe("You have a new course: «Fire safety for everyone»");
@@ -210,12 +242,12 @@ describe("#1142 skive 2: rekkefølgen", () => {
 
   it("tidligste frist først, kurs uten frist sist, og samme frist etter tittel", () => {
     const courses: CourseAssignmentDigestCourseInput[] = [
-      { title: "Uten frist B", classNames: ["K"], dueAt: null },
-      { title: "Bølgefysikk", classNames: ["K"], dueAt: date("2026-12-10") },
-      { title: "Uten frist A", classNames: ["K"], dueAt: null },
-      { title: "Ankring", classNames: ["K"], dueAt: date("2026-12-10") },
-      { title: "Zoologi", classNames: ["K"], dueAt: date("2026-11-20") },
-      { title: "Ytterst", classNames: ["K"], dueAt: date("2027-03-01") },
+      { courseId: "kurs-9", title: "Uten frist B", classNames: ["K"], dueAt: null },
+      { courseId: "kurs-10", title: "Bølgefysikk", classNames: ["K"], dueAt: date("2026-12-10") },
+      { courseId: "kurs-11", title: "Uten frist A", classNames: ["K"], dueAt: null },
+      { courseId: "kurs-12", title: "Ankring", classNames: ["K"], dueAt: date("2026-12-10") },
+      { courseId: "kurs-13", title: "Zoologi", classNames: ["K"], dueAt: date("2026-11-20") },
+      { courseId: "kurs-14", title: "Ytterst", classNames: ["K"], dueAt: date("2027-03-01") },
     ];
     expect(titlesInOrder("nb", courses)).toEqual(["Zoologi", "Ankring", "Bølgefysikk", "Ytterst", "Uten frist A", "Uten frist B"]);
     // Rekkefølgen inn spiller ingen rolle.
@@ -224,8 +256,8 @@ describe("#1142 skive 2: rekkefølgen", () => {
 
   it("titlene sorteres i mottakerens alfabet: Æ kommer etter Z på norsk", () => {
     const courses: CourseAssignmentDigestCourseInput[] = [
-      { title: "Ærlighet i arbeidslivet", classNames: ["K"], dueAt: null },
-      { title: "Zoologi", classNames: ["K"], dueAt: null },
+      { courseId: "kurs-15", title: "Ærlighet i arbeidslivet", classNames: ["K"], dueAt: null },
+      { courseId: "kurs-16", title: "Zoologi", classNames: ["K"], dueAt: null },
     ];
     expect(titlesInOrder("nb", courses)).toEqual(["Zoologi", "Ærlighet i arbeidslivet"]);
     expect(titlesInOrder("nn", courses)).toEqual(["Zoologi", "Ærlighet i arbeidslivet"]);

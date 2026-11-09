@@ -114,7 +114,7 @@ describe("maskotpakken, skive 2: et bytte i e-postene", () => {
 describe("#1142: e-posten om nye kurs med testpakken", () => {
   it.each(LOCALES)("%s: setningen, bildet og bildeteksten er testpakkens", (locale) => {
     const testbat = activeMascot();
-    const email = buildCourseAssignmentDigestEmail({ locale, courses: [{ title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: null }] });
+    const email = buildCourseAssignmentDigestEmail({ locale, courses: [{ courseId: "kurs-1", title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: null }] });
     expect(email.plainText).toContain(`${testbat.emailTexts.courseAssignedIntro[locale]} `);
     expect(email.plainText).not.toContain(seilbat.emailTexts.courseAssignedIntro[locale]);
     expect(email.html).toContain(`alt="${testbat.emails.courseAssigned.alt[locale]}"`);

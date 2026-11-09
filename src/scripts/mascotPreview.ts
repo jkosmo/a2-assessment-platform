@@ -137,8 +137,8 @@ async function renderEmails(): Promise<string> {
         return buildCourseAssignmentDigestEmail({
           locale,
           courses: [
-            { title: COURSE, classNames: ["Avdeling Vest"], dueAt },
-            { title: "Personvern i praksis", classNames: ["Avdeling Vest", "Nyansatte"], dueAt: null },
+            { courseId: "kurs-1", title: COURSE, classNames: ["Avdeling Vest"], dueAt },
+            { courseId: "kurs-2", title: "Personvern i praksis", classNames: ["Avdeling Vest", "Nyansatte"], dueAt: null },
           ],
         });
       case "dueSoon":

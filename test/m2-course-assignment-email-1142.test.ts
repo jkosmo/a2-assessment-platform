@@ -246,6 +246,9 @@ describe("#1142 skive 3 — veiene inn gir én samlet e-post", () => {
     await deliverCourseAssignmentDigest(await latestBatch(u.id), { send });
     expect(send).toHaveBeenCalledTimes(1);
     expect(titlesSent(send)).toEqual(sorted(courses.map((c) => c.title)));
+    // Hvert kurs har sin egen id med til e-posten (ett kurs: lenken går rett til kurset, produkteier 2026-11-09).
+    const sentPairs = send.mock.calls[0]![0].courses.map((c) => `${c.courseId}=${JSON.parse(c.title).nb}`).sort();
+    expect(sentPairs).toEqual(courses.map((c) => `${c.id}=${c.title}`).sort());
   });
 
   describe("upublisert kurs: ingen e-post ved tildeling, én når det publiseres", () => {

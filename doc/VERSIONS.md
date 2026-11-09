@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.148.0 - 2026-11-09
+
+E-posten om nye kurs (#1142): **nevner den bare ett kurs, går knappen rett til kurset** (produkteier 2026-11-09, etter stage-testen av 2.147.0).
+
+- **Hva brukerne merker:** ett nytt kurs gir knappen «Åpne kurset», som åpner kurset, og siste setning blir «Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.» Flere kurs er som før: «Åpne Mine kurs». Gjelder nynorsk og engelsk også.
+- **Slik virker det:** kurset har id-en sin med fra jobben til e-posten (`CourseAssignmentDigestCourseInput.courseId`), og lenken er den samme som i e-posten om ny hovedversjon (`/participant?courseId=…`). E-poster som ligger i køen under utrullingen, lages ved sending og får den nye knappen.
+- **Ved utrulling:** ingen migrering, ingen ny innstilling.
+
 ## 2.147.0 - 2026-11-09
 
 Én samlet e-post når en deltaker får nye kurs fra en klasse (#1142, `doc/design/PLAN_1142.md`). Avgjørelsene står i `doc/DECISIONS.md`, flatene i `doc/FEATURE_SURFACE_MAP.md`, punkt 30.

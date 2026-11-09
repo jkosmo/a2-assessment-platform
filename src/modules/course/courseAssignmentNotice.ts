@@ -485,6 +485,7 @@ async function prepareDigest(batchId: string, userId: string, queued: Array<{ id
   for (const course of courses) {
     const fromClasses = assignments.filter((a) => a.courseId === course.id);
     coursesById.set(course.id, {
+      courseId: course.id,
       title: course.title,
       classNames: [...new Set(fromClasses.map((a) => a.class.name))],
       dueAt: earliestDueAt(fromClasses.map((a) => a.dueAt)),

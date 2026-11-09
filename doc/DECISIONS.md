@@ -1585,7 +1585,9 @@ får deltakeren én e-post om alle nye kurs, et kvarter etter siste endring. Pla
   klassen; den gamle e-posten ble også sendt for slike kurs.
 - **Ingen nødbryter** (produkteier 2026-11-08, spørsmål 3). `PARTICIPANT_NOTIFICATION_CHANNEL=disabled` på workeren stopper
   denne og all annen e-post, eller tilbakerulling.
-- **Én lenke, til «Mine kurs»,** ikke én per kurs: e-posten kan nevne flere kurs.
+- **Én lenke, til «Mine kurs»,** ikke én per kurs: e-posten kan nevne flere kurs. **Nevner den bare ett kurs, går knappen
+  rett til kurset** («Åpne kurset»), og siste setning sier «åpne kurset under Mine kurs» (produkteier 2026-11-09, etter
+  stage-testen av 2.147.0; 2.148.0).
 - **Ved utrulling** får alt folk har fra før, raden `baseline`, så ingen får e-post om gamle kurs. Den gamle e-posten per kurs
   er fjernet i samme versjon.
 - **Prod → stage-kopi:** ventende e-post i kopien nøytraliseres med `npm run stage-copy:neutralize-email` før stage startes.

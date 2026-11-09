@@ -526,7 +526,10 @@ type CourseAssignmentDigestLabels = {
   fromClasses: string; // {classes}
   and: string;
   due: string; // {date}
-  closing: string;
+  /** Ett kurs: knappen går rett til kurset. */
+  closingOne: string;
+  /** Flere kurs: knappen går til «Mine kurs». */
+  closingMany: string;
 };
 
 const courseAssignmentDigestMessages: Record<SupportedLocale, CourseAssignmentDigestLabels> = {
@@ -540,7 +543,8 @@ const courseAssignmentDigestMessages: Record<SupportedLocale, CourseAssignmentDi
     fromClasses: "from the classes {classes}",
     and: "and",
     due: "due {date}",
-    closing: "Log in to A-2 læringsplattform and open My courses.",
+    closingOne: "Log in to A-2 læringsplattform and open the course under My courses.",
+    closingMany: "Log in to A-2 læringsplattform and open My courses.",
   },
   nb: {
     subjectOne: "Du har fått et nytt kurs: «{course}»",
@@ -552,7 +556,8 @@ const courseAssignmentDigestMessages: Record<SupportedLocale, CourseAssignmentDi
     fromClasses: "fra klassene {classes}",
     and: "og",
     due: "frist {date}",
-    closing: "Logg inn på A-2 læringsplattform og åpne Mine kurs.",
+    closingOne: "Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.",
+    closingMany: "Logg inn på A-2 læringsplattform og åpne Mine kurs.",
   },
   nn: {
     subjectOne: "Du har fått eit nytt kurs: «{course}»",
@@ -564,7 +569,8 @@ const courseAssignmentDigestMessages: Record<SupportedLocale, CourseAssignmentDi
     fromClasses: "frå klassane {classes}",
     and: "og",
     due: "frist {date}",
-    closing: "Logg inn på A-2 læringsplattform og opne Mine kurs.",
+    closingOne: "Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.",
+    closingMany: "Logg inn på A-2 læringsplattform og opne Mine kurs.",
   },
 };
 
@@ -602,6 +608,6 @@ export function getCourseAssignmentDigestMessage(
   const intro = `${mascotEmailText("courseAssignedIntro", locale).trim()} ${one ? t.introOne : t.introMany.split("{n}").join(n)}`;
   return {
     subject: one ? t.subjectOne.split("{course}").join(sorted[0]!.title) : t.subjectMany.split("{n}").join(n),
-    paragraphs: [t.greeting, intro, lines.join("\n"), t.closing],
+    paragraphs: [t.greeting, intro, lines.join("\n"), one ? t.closingOne : t.closingMany],
   };
 }

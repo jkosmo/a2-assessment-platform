@@ -1362,7 +1362,7 @@ ikke e-post. `OPEN`-kurs gir e-post når de tildeles en klasse, med vilje.
 |---|---|---|
 | Jobben | `runCourseAssignmentEmailSchedule`, kjørt av `CourseAssignmentEmailMonitor` i workeren hvert minutt | Rydder, lager rader (`excludeExistingNotices`, `ON CONFLICT DO NOTHING`), finner klare personer (nyeste rad 15 min, eldste 60 min), samler per person under personlåsen. Av når `PARTICIPANT_NOTIFICATION_CHANNEL=disabled` |
 | Behandleren | `deliverCourseAssignmentDigest`, outbox-typen `course_assignment_digest` (`outboxService.ts`) | Sjekker hvert kurs på nytt med regelen rett før sending; tar radene betinget `queued → sending` |
-| E-posten | `buildCourseAssignmentDigestEmail` / `sendCourseAssignmentDigest` (`participantNotificationService.ts`), tekstene i `notificationMessages.ts` | Lenken `{ page: "myCourses" }` i `emailLinks.ts` |
+| E-posten | `buildCourseAssignmentDigestEmail` / `sendCourseAssignmentDigest` (`participantNotificationService.ts`), tekstene i `notificationMessages.ts` | Lenken `{ page: "myCourses" }` i `emailLinks.ts`; ett kurs: `{ courseId }` («Åpne kurset», 2.148.0) |
 | Helsesvar | `courseAssignmentEmailMonitor` i workerens helsesvar, med `lastSummary` | Verifisering etter utrulling |
 | Stage-kopi | `neutralizeEmailStateAfterProdCopy`, `npm run stage-copy:neutralize-email` med sperren i `scripts/maintenance/stageCopyGuard.ts` | Oppskriften i `doc/OPERATIONS_RUNBOOK.md` |
 

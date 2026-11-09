@@ -119,7 +119,8 @@ Velg etter hva du er ute etter: en kopi ved siden av, eller nytt innhold i modul
 Når du gir en klasse et kurs, eller legger noen til i en klasse som har kurs, får medlemmene en e-post om de nye kursene.
 
 **Hva de får:** én e-post med alle kursene de har fått, hvilken klasse de kommer fra, og fristen hvis du har satt en.
-E-posten har én knapp, **Åpne Mine kurs**. Der finner de kursene.
+E-posten har én knapp, **Åpne Mine kurs**. Der finner de kursene. Gjelder e-posten bare ett kurs, heter knappen
+**Åpne kurset** og går rett til det.
 
 **Når:** om lag et kvarter etter den siste endringen du gjør. Legger du til fem kurs etter hverandre, får medlemmene én
 e-post med alle fem, ikke fem e-poster. Du har altså et kvarter på deg til å rette opp: et kurs du fjerner fra klassen

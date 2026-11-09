@@ -452,6 +452,8 @@ export function buildCourseMajorVersionEmail(input: Pick<CourseMajorVersionNotif
 // Erstatter e-posten per kurs ved tildeling (fjernet i skive 3). Sendes av behandleren i outboxen
 // (`deliverCourseAssignmentDigest` i courseAssignmentNotice.ts), som eier reglene for hvem og når.
 export type CourseAssignmentDigestCourseInput = {
+  /** Kursets id: lenken går rett til kurset når e-posten nevner bare ett. */
+  courseId: string;
   /** Tittelen slik den er lagret (JSON med språkene, eller ren tekst). Velges for mottakerens språk her. */
   title: string;
   /** Klassene personen har kurset fra. */
@@ -460,17 +462,23 @@ export type CourseAssignmentDigestCourseInput = {
   dueAt: Date | null;
 };
 
-/** Selve e-posten, uten å sende den. Lenken går til «Mine kurs» uten id, siden e-posten kan nevne flere kurs. */
+/**
+ * Selve e-posten, uten å sende den. Ett kurs: knappen går rett til kurset («Åpne kurset»). Flere: til «Mine kurs» uten id
+ * (produkteier 2026-11-09, etter stage-testen av 2.147.0).
+ */
 export function buildCourseAssignmentDigestEmail(input: { locale: SupportedLocale; courses: CourseAssignmentDigestCourseInput[] }): IllustratedEmail {
   const courses = input.courses.map((course) => ({ ...course, title: localizeContentText(input.locale, course.title) ?? course.title }));
   const message = getCourseAssignmentDigestMessage(input.locale, courses);
+  const only = courses.length === 1 ? courses[0]! : null;
   return renderIllustratedEmail({
     locale: input.locale,
     subject: message.subject,
     paragraphs: message.paragraphs,
     reason: getEmailReason(input.locale, "classMember"),
     illustration: EMAIL_ILLUSTRATIONS.courseAssigned,
-    link: buildEmailLink(input.locale, "myCourses", { page: "myCourses" }),
+    link: only
+      ? buildEmailLink(input.locale, "course", { courseId: only.courseId })
+      : buildEmailLink(input.locale, "myCourses", { page: "myCourses" }),
   });
 }
 

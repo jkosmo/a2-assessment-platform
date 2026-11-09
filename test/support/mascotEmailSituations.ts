@@ -88,7 +88,7 @@ export function emailSituations(h: EmailHarnessState): Record<string, Array<{ va
     ],
     courseAssigned: [
       // #1142 skive 3: den samlede e-posten om nye kurs erstattet e-posten per kurs. Fasiten for situasjonen er laget på nytt.
-      { variant: "ett kurs uten frist", send: (locale) => sendCourseAssignmentDigest({ ...recipient, batchId: "b1", userId: "u1", locale, courses: [{ title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: null }] }) },
+      { variant: "ett kurs uten frist", send: (locale) => sendCourseAssignmentDigest({ ...recipient, batchId: "b1", userId: "u1", locale, courses: [{ courseId: "kurs-1", title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: null }] }) },
       {
         variant: "tre kurs, frist og to klasser",
         send: (locale) =>
@@ -98,9 +98,9 @@ export function emailSituations(h: EmailHarnessState): Record<string, Array<{ va
             userId: "u1",
             locale,
             courses: [
-              { title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: DUE_AT },
-              { title: "Personvern i praksis", classNames: ["Nyansatte", "Avdeling Vest"], dueAt: null },
-              { title: "Etikk i rådgivning", classNames: ["Nyansatte"], dueAt: new Date("2027-01-15T00:00:00.000Z") },
+              { courseId: "kurs-2", title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: DUE_AT },
+              { courseId: "kurs-3", title: "Personvern i praksis", classNames: ["Nyansatte", "Avdeling Vest"], dueAt: null },
+              { courseId: "kurs-4", title: "Etikk i rådgivning", classNames: ["Nyansatte"], dueAt: new Date("2027-01-15T00:00:00.000Z") },
             ],
           }),
       },
