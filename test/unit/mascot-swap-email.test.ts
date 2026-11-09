@@ -68,7 +68,7 @@ describe("maskotpakken, skive 2: et bytte i e-postene", () => {
       for (const locale of LOCALES) expect(testbat.emails[situation].alt[locale]).not.toBe(seilbat.emails[situation].alt[locale]);
     }
     for (const locale of LOCALES) expect(intro(testbat, locale)).not.toBe(intro(seilbat, locale));
-    // #1142: setningen i den samlede e-posten om nye kurs. E-posten sendes først fra skive 3, og er ikke i fasiten ennå.
+    // #1142: setningen i den samlede e-posten om nye kurs (i fasiten fra skive 3).
     for (const locale of LOCALES) expect(testbat.emailTexts.courseAssignedIntro[locale]).not.toBe(seilbat.emailTexts.courseAssignedIntro[locale]);
   });
 
@@ -87,6 +87,7 @@ describe("maskotpakken, skive 2: et bytte i e-postene", () => {
         { name: testbat.emails[key].image, contentType: "image/jpeg", contentId: withoutExtension(testbat.emails[key].image), ...ownImage },
       ]);
       if (key === "courseNewVersion") expect(email.plainText, name).toContain(intro(testbat, locale));
+      if (key === "courseAssigned") expect(email.plainText, name).toContain(`${testbat.emailTexts.courseAssignedIntro[locale]} `);
     }
 
     // 2. Byttet tilbake er e-posten lik fasiten.
@@ -96,6 +97,7 @@ describe("maskotpakken, skive 2: et bytte i e-postene", () => {
       for (const locale of LOCALES) pairs.push([testbat.emails[situationKey].alt[locale], seilbat.emails[situationKey].alt[locale]]);
     }
     for (const locale of LOCALES) pairs.push([intro(testbat, locale), intro(seilbat, locale)]);
+    for (const locale of LOCALES) pairs.push([testbat.emailTexts.courseAssignedIntro[locale], seilbat.emailTexts.courseAssignedIntro[locale]]);
     const seilbatImage = imageFile(seilbat, seilbat.emails[key].image);
     const reversed = Object.fromEntries(
       Object.entries(replaceStrings(actual, pairs)).map(([name, email]: [string, Recorded]) => [
@@ -107,8 +109,8 @@ describe("maskotpakken, skive 2: et bytte i e-postene", () => {
   });
 });
 
-// #1142 skive 2: den samlede e-posten om nye kurs er ikke koblet til noe som sender ennå, og står derfor ikke i fasiten.
-// Her vises bare at det som kommer fra pakken, er testpakkens.
+// #1142: den samlede e-posten om nye kurs, bygget direkte (uten sendefunksjonen): det som kommer fra pakken, er testpakkens.
+// Sendt gjennom sendefunksjonen står den i fasiten som `courseAssigned` (skive 3), og testes over.
 describe("#1142: e-posten om nye kurs med testpakken", () => {
   it.each(LOCALES)("%s: setningen, bildet og bildeteksten er testpakkens", (locale) => {
     const testbat = activeMascot();

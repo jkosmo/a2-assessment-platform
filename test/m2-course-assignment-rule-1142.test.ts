@@ -79,8 +79,10 @@ async function addMember(classId: string, userId: string) {
   expect(response.status, JSON.stringify(response.body)).toBe(201);
 }
 
+// Uten frist: regelen ser ikke på fristen, og en frist på et upublisert kurs telles av m2-course-reminders.test.ts, som
+// teller slike rader i hele databasen (den feilet i full kjøring etter denne fila, 2026-11-09).
 async function assignCourse(classId: string, courseId: string) {
-  const response = await request(app).post(`/api/admin/content/classes/${classId}/courses`).set(adminHeaders).send({ courseId, dueAt: "2030-01-01T00:00:00.000Z" });
+  const response = await request(app).post(`/api/admin/content/classes/${classId}/courses`).set(adminHeaders).send({ courseId });
   expect(response.status, JSON.stringify(response.body)).toBe(201);
 }
 

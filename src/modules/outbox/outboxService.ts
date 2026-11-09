@@ -5,6 +5,7 @@ import { notifyAppealStatusTransition, notifyAssessmentResult, notifyAssessmentU
 import type { AppealNotificationInput, NotificationResult } from "../certification/participantNotificationService.js";
 import { checkAndIssueCourseCompletions } from "../course/index.js";
 import { deliverCourseMajorVersionNotice } from "../course/courseMajorVersionEmail.js";
+import { deliverCourseAssignmentDigest } from "../course/courseAssignmentNotice.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 
 // #795-followup: race a delivery against a wall-clock deadline so a hung handler (e.g. an ACS email call
@@ -44,6 +45,10 @@ export const OUTBOX_EVENT_TYPES = {
   // «Svaret ditt har gått til en sensor». Egen type med vilje: en gammel worker under utrulling ville lest
   // `assessment_notification` uten `passFailTotal` og sendt «ikke bestått». Den kjenner ikke denne, og lar raden stå.
   assessmentUnderReviewNotification: "assessment_under_review_notification",
+  // #1142: «du har fått nye kurs», én e-post per samling i `CourseAssignmentNotice` (courseAssignmentNotice.ts). Bare jobben i
+  // workeren legger dem inn, og ved første utrulling tidligst 15 minutter etter jobbens første runde (vinduet): da er den
+  // gamle workeren borte (doc/design/PLAN_1142.md, punkt 7).
+  courseAssignmentDigest: "course_assignment_digest",
 } as const;
 
 type AssessmentNotificationPayload = {
@@ -82,6 +87,9 @@ export type AppealNotificationPayload = AppealNotificationInput;
 /** #934 skive 4b: bare radens id. Behandleren leser resten (og sjekker det på nytt) når den sender. */
 export type CourseMajorVersionNotificationPayload = { noticeId: string };
 
+/** #1142: samlingens id. Behandleren finner radene på den og sjekker hvert kurs på nytt. `userId` står med for sporing. */
+export type CourseAssignmentDigestPayload = { batchId: string; userId: string };
+
 export type OutboxEnqueueInput = (
   | { type: typeof OUTBOX_EVENT_TYPES.assessmentNotification; payload: AssessmentNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification; payload: AssessmentUnderReviewNotificationPayload }
@@ -89,6 +97,7 @@ export type OutboxEnqueueInput = (
   | { type: typeof OUTBOX_EVENT_TYPES.appealNotification; payload: AppealNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.moduleRevisedNotification; payload: ModuleRevisedNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.courseMajorVersionNotification; payload: CourseMajorVersionNotificationPayload }
+  | { type: typeof OUTBOX_EVENT_TYPES.courseAssignmentDigest; payload: CourseAssignmentDigestPayload }
 ) & {
   // #934 skive 4b: når hendelsen tidligst kan leveres. Utelatt: med én gang. E-postene om ny hovedversjon spres
   // utover med denne (om lag 20 i minuttet).
@@ -176,13 +185,18 @@ function settleNotification(result: NotificationResult | null, what: string): vo
   throw new Error(reason);
 }
 
-/** The event types that send something to a person: a re-run after a cut-off could send it twice. */
-const SENDS_TO_A_PERSON = new Set<string>([
+/**
+ * The event types that send something to a person: a re-run after a cut-off could send it twice. #1142: also read by the
+ * prod → stage copy (`neutralizeEmailStateAfterProdCopy`), which fails the undelivered ones so stage never sends what prod
+ * has sent or will send. A new type that e-mails a person belongs here.
+ */
+export const SENDS_TO_A_PERSON: ReadonlySet<string> = new Set<string>([
   OUTBOX_EVENT_TYPES.assessmentNotification,
   OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification,
   OUTBOX_EVENT_TYPES.appealNotification,
   OUTBOX_EVENT_TYPES.moduleRevisedNotification,
   OUTBOX_EVENT_TYPES.courseMajorVersionNotification,
+  OUTBOX_EVENT_TYPES.courseAssignmentDigest,
 ]);
 
 // Deliver one event by dispatching on its type. Both handlers are idempotent (completion checks whether
@@ -256,6 +270,13 @@ export async function deliverOutboxEvent(event: { type: string; payloadJson: str
     // som kan ha gått (`uncertain`). Siste forsøk: raden blir `failed` før outboxen gir opp.
     const lastAttempt = event.attempts !== undefined && event.maxAttempts !== undefined && event.attempts + 1 >= event.maxAttempts;
     await deliverCourseMajorVersionNotice(p.noticeId, { lastAttempt });
+    return;
+  }
+  if (event.type === OUTBOX_EVENT_TYPES.courseAssignmentDigest) {
+    const p = JSON.parse(event.payloadJson) as CourseAssignmentDigestPayload;
+    // Som 4b: behandleren eier radenes tilstand, kaster ved en sikker feil og gir opp av seg selv ved en som kan ha gått.
+    const lastAttempt = event.attempts !== undefined && event.maxAttempts !== undefined && event.attempts + 1 >= event.maxAttempts;
+    await deliverCourseAssignmentDigest(p.batchId, { lastAttempt });
     return;
   }
   throw new Error(`Unknown outbox event type: ${event.type}`);

@@ -26,7 +26,7 @@ import { buildSentReminderKeySet, reminderDedupKey } from "./courseReminderDedup
 //   2. KLASSE-tildelte CourseGroupAssignment.dueAt (fase 2), ekspandert til medlemmer — MANUAL-
 //      klasser (ClassMember-rader) + system-klassen «Alle deltakere» (alle aktive deltakere).
 //      ENTRA-klasser kan ikke oppløses i en bakgrunnsjobb (ingen token/lagrede medlemskanter) og
-//      hoppes over, på samme måte som tildelings-e-posten (classService).
+//      hoppes over, på samme måte som e-posten om nye kurs (courseAssignmentNotice.ts, #1142).
 // ⚠️ #989 fjernet resertifisering av moduler. DETTE er ikke det: en kursfrist er en frist for å bli
 // FERDIG med et kurs, ikke en utløpsdato på kunnskap. Kursfrister er uendret og skal forbli det.
 // Per (bruker, kurs) beregnes ÉN effektiv frist: individuell frist vinner over klasse; ved flere

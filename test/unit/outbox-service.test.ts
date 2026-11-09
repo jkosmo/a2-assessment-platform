@@ -14,6 +14,7 @@ const notifyAppealStatusTransition = vi.fn();
 const sendModuleRevisedNotification = vi.fn();
 const checkAndIssueCourseCompletions = vi.fn();
 const deliverCourseMajorVersionNotice = vi.fn();
+const deliverCourseAssignmentDigest = vi.fn();
 
 vi.mock("../../src/db/prisma.js", () => ({
   prisma: { outboxEvent: { findFirst, updateMany }, manualReview: { findFirst: vi.fn().mockResolvedValue({ id: "review-1" }) } },
@@ -21,6 +22,7 @@ vi.mock("../../src/db/prisma.js", () => ({
 vi.mock("../../src/modules/certification/index.js", () => ({ notifyAssessmentResult, notifyAssessmentUnderReview, notifyAppealStatusTransition, sendModuleRevisedNotification }));
 vi.mock("../../src/modules/course/index.js", () => ({ checkAndIssueCourseCompletions }));
 vi.mock("../../src/modules/course/courseMajorVersionEmail.js", () => ({ deliverCourseMajorVersionNotice }));
+vi.mock("../../src/modules/course/courseAssignmentNotice.js", () => ({ deliverCourseAssignmentDigest }));
 
 // #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
 warmModuleGraph(() => import("../../src/modules/outbox/outboxService.js"));
@@ -48,6 +50,7 @@ beforeEach(() => {
   sendModuleRevisedNotification.mockReset();
   checkAndIssueCourseCompletions.mockReset();
   deliverCourseMajorVersionNotice.mockReset();
+  deliverCourseAssignmentDigest.mockReset();
   process.env.OUTBOX_DELIVERY_TIMEOUT_MS = "30"; // 30ms deadline for the test
 });
 
@@ -168,6 +171,50 @@ describe("#934 skive 4b — course_major_version_notification", () => {
     const data = await behandle();
     expect(data.status).toBe("failed");
     expect(data.attempts).toBe(5);
+  });
+});
+
+// #1142: «du har fått nye kurs». Samme form som 4b: behandleren eier radenes tilstand (courseAssignmentNotice.ts), outboxen
+// sender samlingens id og sier fra når det er siste forsøk, og et tidsavbrudd gir opp med en gang (typen sender til en person).
+describe("#1142 — course_assignment_digest", () => {
+  const rad = (attempts: number) => ({
+    id: "evt-1142",
+    type: "course_assignment_digest",
+    payloadJson: JSON.stringify({ batchId: "batch-1", userId: "u1" }),
+    attempts,
+    maxAttempts: 5,
+    availableAt: new Date(Date.now() - 1000),
+  });
+
+  it("leveres til behandleren med samlingens id; siste forsøk sies fra", async () => {
+    deliverCourseAssignmentDigest.mockResolvedValue(undefined);
+    findFirst.mockResolvedValue(rad(0));
+    expect((await behandle()).status).toBe("delivered");
+    expect(deliverCourseAssignmentDigest).toHaveBeenLastCalledWith("batch-1", { lastAttempt: false });
+    findFirst.mockResolvedValue(rad(4));
+    await behandle();
+    expect(deliverCourseAssignmentDigest).toHaveBeenLastCalledWith("batch-1", { lastAttempt: true });
+  });
+
+  it("en sikker feil fra behandleren prøves igjen", async () => {
+    deliverCourseAssignmentDigest.mockRejectedValue(new Error("not delivered: acs_400"));
+    findFirst.mockResolvedValue(rad(0));
+    const data = await behandle();
+    expect(data.status).toBe("pending");
+    expect(data.attempts).toBe(1);
+  });
+
+  it("henger sendingen, gis det opp med en gang — den kan ha gått", async () => {
+    deliverCourseAssignmentDigest.mockReturnValue(new Promise(() => {}));
+    findFirst.mockResolvedValue(rad(0));
+    const data = await behandle();
+    expect(data.status).toBe("failed");
+    expect(data.attempts).toBe(5);
+  });
+
+  it("typen står blant dem som sender til en person (stage-kopien leser lista)", async () => {
+    const { SENDS_TO_A_PERSON, OUTBOX_EVENT_TYPES } = await import("../../src/modules/outbox/outboxService.js");
+    expect(SENDS_TO_A_PERSON.has(OUTBOX_EVENT_TYPES.courseAssignmentDigest)).toBe(true);
   });
 });
 

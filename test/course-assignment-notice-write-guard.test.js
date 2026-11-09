@@ -13,14 +13,15 @@ import { describe, expect, it } from "vitest";
 // deler i én linje, uten å røre fila som eier regelen.
 //
 // Migreringene (prisma/migrations) skriver tabellen også (baseline i skive 3); de er SQL-filer og leses ikke her.
-// Skive 3 får et skript for prod → stage-kopi som skriver tabellen. Står det utenfor eierfila, skal det inn i
-// `ALLOWED` under, med begrunnelse.
+// Skriptet for prod → stage-kopi (scripts/maintenance/stage-copy-neutralize-email.ts, skive 3) kaller
+// `neutralizeEmailStateAfterProdCopy` i eierfila og skriver ikke tabellen selv, så `ALLOWED` er fortsatt tom. En ny
+// skriver utenfor eierfila skal inn der, med begrunnelse.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SCANNED = ["src", "scripts", "prisma"];
 const OWNER = "src/modules/course/courseAssignmentNotice.ts";
-/** Filer utenom eieren som får skrive tabellen, med grunnen. Tom i skive 1. */
+/** Filer utenom eieren som får skrive tabellen, med grunnen. Tom: jobben, behandleren og stage-kopien bor i eierfila. */
 const ALLOWED = new Map([]);
 
 function walk(dir) {

@@ -4,16 +4,11 @@ import { DomainRuleError, NotFoundError, ValidationError } from "../../errors/Ap
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
-import { recipientLocale } from "../../i18n/recipientLocale.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { hasAnyRole, PARTICIPANTS } from "../../auth/roleSets.js";
-import { sendCourseAssignmentNotification } from "../certification/participantNotificationService.js";
 import { classRepository, createClassRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
 import { isClassEntraLinkingEnabled } from "./classConfig.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
-import { logOperationalEvent } from "../../observability/operationalLog.js";
-import { operationalEvents } from "../../observability/operationalEvents.js";
-import { isReachableParticipant } from "../user/participantReach.js";
 import { courseRepository } from "./courseRepository.js";
 
 // #645/CL-2: class (cohort) business logic — CRUD + membership + course assignment + dynamic
@@ -296,21 +291,24 @@ export async function listClassCourseAssignments(classId: string, locale: Suppor
   }));
 }
 
+// #1142: tildelingen sender ingen e-post selv. Jobben i workeren ser det nye paret (person, kurs) i neste runde, og
+// medlemmene får én samlet e-post om nye kurs et kvarter etter siste endring (courseAssignmentNotice.ts). Den gamle e-posten
+// per kurs herfra (#684, fire-and-forget) er fjernet; jobben dekker også veiene den ikke så (nytt medlem, publisering).
 export async function assignCourseToClass(courseId: string, classId: string, dueAt: Date | null, actorId: string | null) {
-  const klass = await requireClass(classId);
+  await requireClass(classId);
   const course = await prisma.course.findUnique({
     where: { id: courseId },
-    select: { id: true, title: true, archivedAt: true, publishedAt: true },
+    select: { id: true, archivedAt: true },
   });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
   // #688: archived courses are retired and must not be assignable to a class.
   if (course.archivedAt) {
     throw new DomainRuleError("course_archived", "Cannot assign an archived course.");
   }
-  const { created } = await runInTransaction(async (tx) => {
+  await runInTransaction(async (tx) => {
     await assertClassWritable(tx, classId, "assign_course");
     const repo = createClassRepository(tx);
-    const assignment = await repo.assignCourseToClass(courseId, classId, dueAt, actorId);
+    await repo.assignCourseToClass(courseId, classId, dueAt, actorId);
     await recordAuditEvent(
       {
         entityType: auditEntityTypes.class,
@@ -321,92 +319,7 @@ export async function assignCourseToClass(courseId: string, classId: string, due
       },
       tx,
     );
-    return assignment;
   });
-
-  // Et dobbeltklikk eller en endret frist er ikke et nytt kurs. Før fikk hele klassen e-posten på nytt (QA-porten, 2.138.0).
-  if (!created) return;
-
-  // #684: email the members that their class was assigned a course. Skipped for the "Alle deltakere"
-  // system class (would email the whole org) and for ENTRA classes (no stored member rows). Fire-and-
-  // forget so the assignment is not blocked or failed by email delivery.
-  //
-  // #967: ⚠️ men ikke for et UPUBLISERT kurs. E-posten sier «Logg inn på plattformen for å starte»,
-  // og medlemmet logger inn og finner ingenting — kurset er usynlig for deltakere til det
-  // publiseres. Med #967 er påminnelsene dessuten stille, så denne e-posten ville vært det ENESTE
-  // deltakeren noensinne hørte om kurset.
-  //
-  // Tildelingen blokkeres IKKE: «tildel utkast nå, publiser senere» er en legitim arbeidsflyt, og
-  // #688 blokkerer allerede det som virkelig er feil (arkiverte kurs). Det er varselet som er
-  // feiltimet, ikke tildelingen. Undertrykkelsen logges — en e-post som aldri kom er stille.
-  if (klass.kind === "MANUAL" && !klass.isSystem) {
-    if (course.publishedAt === null) {
-      void suppressAssignmentMail(courseId, classId);
-    } else {
-      void notifyClassMembersOfCourseAssignment(classId, courseId, klass.name, course.title, dueAt);
-    }
-  }
-}
-
-async function suppressAssignmentMail(courseId: string, classId: string): Promise<void> {
-  try {
-    const members = await classRepository.listMembers(classId);
-    logOperationalEvent(
-      operationalEvents.course.assignmentMailSuppressed,
-      {
-        courseId,
-        classId,
-        recipientCount: members.filter((m) => m.user.email).length,
-        reason: "unpublished",
-      },
-      "info",
-    );
-  } catch {
-    /* en uteblitt logglinje skal aldri velte en tildeling som allerede er skrevet */
-  }
-}
-
-// #900: avstand mellom tildelings-e-poster. 0 i test (env), ellers 300 ms — sju mottakere = ~2 s.
-const ASSIGNMENT_EMAIL_SPACING_MS = process.env.NODE_ENV === "test" ? 0 : 300;
-
-async function notifyClassMembersOfCourseAssignment(
-  classId: string,
-  courseId: string,
-  className: string,
-  courseTitleJson: string,
-  dueAt: Date | null,
-): Promise<void> {
-  try {
-    const members = await classRepository.listMembers(classId);
-    const recipients = members
-      // #968: ikke e-post til en som har sluttet eller er anonymisert — samme regel som publikummet
-      // og påminnelsene. Før ble den bare filtrert på at adressen fantes.
-      .filter((m) => m.user.email && isReachableParticipant(m.user));
-    // #900: ÉN om gangen, med en pause mellom. Sju e-poster i samme sekund ble strupet av ACS
-    // 13.08.2026 — alle sju tapt. Promise.allSettled her var årsaken; sekvensielt med pause holder oss
-    // under grensen, og sendViaAcs prøver på nytt om ACS likevel struper. Kalleren venter ikke på
-    // dette (void), så tiden koster ingen.
-    for (const [index, m] of recipients.entries()) {
-      if (index > 0) await new Promise((resolve) => setTimeout(resolve, ASSIGNMENT_EMAIL_SPACING_MS));
-      // #970: mottakerens språk («sist sett»), ikke bokmål for alle. Tittelen velges for samme språk.
-      const locale = recipientLocale(m.user);
-      try {
-        await sendCourseAssignmentNotification({
-          recipientEmail: m.user.email,
-          recipientName: m.user.name,
-          courseTitle: localizeContentText(locale, courseTitleJson) ?? courseTitleJson,
-          className,
-          dueAt,
-          locale,
-          courseId,
-        });
-      } catch {
-        /* én feilet mottaker skal ikke stoppe de neste */
-      }
-    }
-  } catch {
-    /* never let notification failure surface — assignment already succeeded */
-  }
 }
 
 export async function unassignCourseFromClass(courseId: string, classId: string, actorId: string | null) {

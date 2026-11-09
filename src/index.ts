@@ -9,6 +9,7 @@ import { AuditRetentionMonitor } from "./modules/retention/AuditRetentionMonitor
 import { EntraUserSyncMonitor } from "./modules/orgSync/EntraUserSyncMonitor.js";
 import { CourseReminderMonitor } from "./modules/course/CourseReminderMonitor.js";
 import { CourseMajorEmailMonitor } from "./modules/course/CourseMajorEmailMonitor.js";
+import { CourseAssignmentEmailMonitor } from "./modules/course/CourseAssignmentEmailMonitor.js";
 import { OutboxDeliveryWorker } from "./modules/outbox/OutboxDeliveryWorker.js";
 import { evaluateWorkerHealth, drainInFlightTicks, type MonitorHealthSnapshot } from "./observability/workerHealth.js";
 import { prisma } from "./db/prisma.js";
@@ -35,6 +36,8 @@ const entraUserSyncMonitor = startWorkers ? new EntraUserSyncMonitor() : null;
 const courseReminderMonitor = startWorkers ? new CourseReminderMonitor() : null;
 // #934 skive 4b: e-post ved ny hovedversjon. Av med mindre COURSE_MAJOR_EMAIL_ENABLED=true.
 const courseMajorEmailMonitor = startWorkers ? new CourseMajorEmailMonitor() : null;
+// #1142: e-post når en deltaker får nye kurs. Går hvert minutt når varselkanalen er på; ingen egen bryter.
+const courseAssignmentEmailMonitor = startWorkers ? new CourseAssignmentEmailMonitor() : null;
 const outboxDeliveryWorker = startWorkers ? new OutboxDeliveryWorker() : null;
 
 const backgroundMonitors = [
@@ -45,6 +48,7 @@ const backgroundMonitors = [
   entraUserSyncMonitor,
   courseReminderMonitor,
   courseMajorEmailMonitor,
+  courseAssignmentEmailMonitor,
   outboxDeliveryWorker,
 ];
 
@@ -162,6 +166,7 @@ async function startServer() {
       entraUserSyncMonitor,
       courseReminderMonitor,
       courseMajorEmailMonitor,
+      courseAssignmentEmailMonitor,
       outboxDeliveryWorker,
     ];
     staggeredWorkers.forEach((worker, index) => {

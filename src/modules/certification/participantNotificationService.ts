@@ -9,7 +9,6 @@ import {
   getAppealNotificationMessage,
   getAssessmentResultNotificationMessage,
   getCourseAssignmentDigestMessage,
-  getCourseAssignmentNotificationMessage,
   getCourseMajorVersionNotificationMessage,
   getEmailReason,
   getModuleRevisedNotificationMessage,
@@ -309,47 +308,6 @@ export async function notifyAppealStatusTransition(input: AppealNotificationInpu
   return result;
 }
 
-// #684: e-post til deltakeren når klassen får tildelt et kurs. Sendes bare for publiserte kurs (classService).
-export interface CourseAssignmentNotificationInput {
-  recipientEmail: string;
-  recipientName?: string | null;
-  // #970: kurstittelen skal alt være valgt for MOTTAKERENS språk — samme språk som `locale`.
-  courseTitle: string;
-  className: string;
-  dueAt?: Date | null;
-  locale: SupportedLocale;
-  courseId: string;
-}
-
-export async function sendCourseAssignmentNotification(
-  input: CourseAssignmentNotificationInput,
-): Promise<NotificationResult> {
-  // #970: var hardkodet bokmål — den eneste e-posten uten språkparameter. Nå fra samme tabell som resten.
-  const message = getCourseAssignmentNotificationMessage(input.locale, {
-    courseTitle: input.courseTitle,
-    className: input.className,
-    dueAt: input.dueAt ?? null,
-  });
-  return deliverIllustratedEmail({
-    recipientEmail: input.recipientEmail,
-    recipientName: input.recipientName,
-    email: buildNotificationEmail({
-      locale: input.locale,
-      message,
-      reason: "assignment",
-      illustration: EMAIL_ILLUSTRATIONS.courseAssigned,
-      link: buildEmailLink(input.locale, "course", { courseId: input.courseId }),
-    }),
-    logPayload: {
-      notificationType: "class_course_assignment",
-      courseId: input.courseId,
-      courseTitle: input.courseTitle,
-      className: input.className,
-      recipient: { email: input.recipientEmail, name: input.recipientName ?? null },
-    },
-  });
-}
-
 // #997: modulen deltakeren besto er revidert, og den tidligere beståtten teller ikke lenger. Ren tekst, utenfor malen med vilje
 // (#1141): bryteren for beståtte per kurs stopper alle nye. Denne sender bare det som alt ligger i køen.
 export interface ModuleRevisedNotificationInput {
@@ -490,9 +448,9 @@ export function buildCourseMajorVersionEmail(input: Pick<CourseMajorVersionNotif
   });
 }
 
-// #1142 skive 2: ÉN e-post når en deltaker har fått nye kurs, med alle kursene i en liste (doc/design/PLAN_1142.md,
-// punkt 5). Bare selve e-posten: behandleren i outboxen som slår opp kursene og sender den, kommer i skive 3. Til da
-// sendes den gamle e-posten per kurs (`sendCourseAssignmentNotification`).
+// #1142: ÉN e-post når en deltaker har fått nye kurs, med alle kursene i en liste (doc/design/PLAN_1142.md, punkt 5).
+// Erstatter e-posten per kurs ved tildeling (fjernet i skive 3). Sendes av behandleren i outboxen
+// (`deliverCourseAssignmentDigest` i courseAssignmentNotice.ts), som eier reglene for hvem og når.
 export type CourseAssignmentDigestCourseInput = {
   /** Tittelen slik den er lagret (JSON med språkene, eller ren tekst). Velges for mottakerens språk her. */
   title: string;
@@ -513,6 +471,30 @@ export function buildCourseAssignmentDigestEmail(input: { locale: SupportedLocal
     reason: getEmailReason(input.locale, "classMember"),
     illustration: EMAIL_ILLUSTRATIONS.courseAssigned,
     link: buildEmailLink(input.locale, "myCourses", { page: "myCourses" }),
+  });
+}
+
+export interface CourseAssignmentDigestNotificationInput {
+  batchId: string;
+  userId: string;
+  recipientEmail: string;
+  recipientName?: string | null;
+  locale: SupportedLocale;
+  courses: CourseAssignmentDigestCourseInput[];
+}
+
+export async function sendCourseAssignmentDigest(input: CourseAssignmentDigestNotificationInput): Promise<NotificationResult> {
+  return deliverIllustratedEmail({
+    recipientEmail: input.recipientEmail,
+    recipientName: input.recipientName,
+    email: buildCourseAssignmentDigestEmail({ locale: input.locale, courses: input.courses }),
+    logPayload: {
+      notificationType: "course_assignment_digest",
+      batchId: input.batchId,
+      userId: input.userId,
+      courseCount: input.courses.length,
+      recipient: { email: input.recipientEmail, locale: input.locale },
+    },
   });
 }
 

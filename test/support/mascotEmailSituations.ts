@@ -5,7 +5,7 @@ import {
   notifyAssessmentResult,
   notifyAssessmentUnderReview,
   sendAppealStatusNotification,
-  sendCourseAssignmentNotification,
+  sendCourseAssignmentDigest,
   sendCourseMajorVersionNotification,
   sendDiscussionNotification,
 } from "../../src/modules/certification/participantNotificationService.js";
@@ -87,8 +87,23 @@ export function emailSituations(h: EmailHarnessState): Record<string, Array<{ va
       },
     ],
     courseAssigned: [
-      { variant: "uten frist", send: (locale) => sendCourseAssignmentNotification({ ...recipient, courseTitle: "Brannvern for alle", className: "Avdeling Vest", locale, courseId: "c1" }) },
-      { variant: "med frist", send: (locale) => sendCourseAssignmentNotification({ ...recipient, courseTitle: "Brannvern for alle", className: "Avdeling Vest", dueAt: DUE_AT, locale, courseId: "c1" }) },
+      // #1142 skive 3: den samlede e-posten om nye kurs erstattet e-posten per kurs. Fasiten for situasjonen er laget på nytt.
+      { variant: "ett kurs uten frist", send: (locale) => sendCourseAssignmentDigest({ ...recipient, batchId: "b1", userId: "u1", locale, courses: [{ title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: null }] }) },
+      {
+        variant: "tre kurs, frist og to klasser",
+        send: (locale) =>
+          sendCourseAssignmentDigest({
+            ...recipient,
+            batchId: "b1",
+            userId: "u1",
+            locale,
+            courses: [
+              { title: "Brannvern for alle", classNames: ["Avdeling Vest"], dueAt: DUE_AT },
+              { title: "Personvern i praksis", classNames: ["Nyansatte", "Avdeling Vest"], dueAt: null },
+              { title: "Etikk i rådgivning", classNames: ["Nyansatte"], dueAt: new Date("2027-01-15T00:00:00.000Z") },
+            ],
+          }),
+      },
     ],
     dueSoon: [
       { variant: "om tre dager", send: (locale) => defaultSendCourseReminder({ ...recipient, courseId: "c1", userId: "u1", courseTitle: "Brannvern for alle", locale, kind: "due_soon", dueAt: DUE_AT, daysBefore: 3 }) },

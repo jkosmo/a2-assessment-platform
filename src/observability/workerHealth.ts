@@ -36,6 +36,11 @@ export interface MonitorHealthSnapshot {
    * `intervalMs × wedgeFactor` window applies).
    */
   maxTickMs?: number;
+  /**
+   * #1142: the last cycle's summary, for a monitor whose deploy is verified by what it did (the course assignment e-mail
+   * job). Informational only — copied to the verdict, never part of the decision.
+   */
+  lastSummary?: unknown;
 }
 
 export type MonitorHealthReason = "ok" | "disabled" | "wedged" | "stalled";
@@ -49,6 +54,8 @@ export interface MonitorVerdict {
   staleMs: number | null;
   /** ms the current tick has been running; null when idle or disabled. */
   runningMs: number | null;
+  /** #1142: the snapshot's `lastSummary`, when it has one. */
+  lastSummary?: unknown;
 }
 
 export interface WorkerHealthReport {
@@ -113,6 +120,17 @@ export function evaluateWorkerHealth(
   const startMs = processStartedAt.getTime();
 
   const monitors = snapshots.map((s): MonitorVerdict => {
+    const verdict = judgeMonitor(s);
+    return s.lastSummary === undefined ? verdict : { ...verdict, lastSummary: s.lastSummary };
+  });
+
+  return {
+    healthy: monitors.every((m) => m.healthy),
+    checkedAt: now.toISOString(),
+    monitors,
+  };
+
+  function judgeMonitor(s: MonitorHealthSnapshot): MonitorVerdict {
     if (!s.enabled) {
       return { name: s.name, enabled: false, healthy: true, reason: "disabled", staleMs: null, runningMs: null };
     }
@@ -148,13 +166,7 @@ export function evaluateWorkerHealth(
     }
 
     return { name: s.name, enabled: true, healthy: true, reason: "ok", staleMs, runningMs: null };
-  });
-
-  return {
-    healthy: monitors.every((m) => m.healthy),
-    checkedAt: now.toISOString(),
-    monitors,
-  };
+  }
 }
 
 // #810: graceful shutdown must not kill an in-flight tick mid-work — a half-processed assessment job or

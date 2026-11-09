@@ -22,7 +22,7 @@ import {
   notifyAssessmentResult,
   notifyAssessmentUnderReview,
   sendAppealStatusNotification,
-  sendCourseAssignmentNotification,
+  sendCourseAssignmentDigest,
   sendCourseMajorVersionNotification,
   sendDiscussionNotification,
 } from "../../src/modules/certification/participantNotificationService.js";
@@ -63,7 +63,8 @@ const TYPES: Array<{ name: string; send: () => Promise<unknown>; file: string; u
   { name: "ikke bestått", send: () => notifyAssessmentResult({ ...assessment, passFailTotal: false }), file: "vurdering-ikke-bestatt.jpg", url: `${BASE}/participant?moduleId=modul%201`, label: "Åpne modulen", reason: "levert en besvarelse" },
   { name: "til sensor", send: () => notifyAssessmentUnderReview(assessment), file: "vurdering-sensor.jpg", url: `${BASE}/participant?moduleId=modul%201`, label: "Åpne modulen", reason: "levert en besvarelse" },
   { name: "anke", send: () => sendAppealStatusNotification(appeal), file: "anke.jpg", url: `${BASE}/participant?moduleId=m1`, label: "Åpne modulen", reason: "anket en vurdering" },
-  { name: "tildelt", send: () => sendCourseAssignmentNotification({ recipientEmail: "kari@example.test", courseTitle: "Kurs", className: "Klasse", locale: "nb", courseId: "c1" }), file: "kurs-tildelt.jpg", url: `${BASE}/participant?courseId=c1`, label: "Åpne kurset", reason: "klassen din" },
+  // #1142: den samlede e-posten om nye kurs. Lenken går til «Mine kurs» uten id, siden e-posten kan nevne flere kurs.
+  { name: "nye kurs", send: () => sendCourseAssignmentDigest({ batchId: "b1", userId: "u1", recipientEmail: "kari@example.test", locale: "nb", courses: [{ title: "Kurs", classNames: ["Klasse"], dueAt: null }, { title: "Kurs 2", classNames: ["Klasse"], dueAt: null }] }), file: "kurs-tildelt.jpg", url: `${BASE}/participant`, label: "Åpne Mine kurs", reason: "med i en klasse" },
   { name: "ny hovedversjon", send: () => sendCourseMajorVersionNotification({ noticeId: "n1", courseId: "c1", recipientEmail: "kari@example.test", courseTitle: "Kurs", versionMajor: 2, changedItemCount: 1, locale: "nb" }), file: "kurs-ny-versjon.jpg", url: `${BASE}/participant?courseId=c1`, label: "Åpne kurset", reason: "kursbevis" },
   { name: "nytt spørsmål", send: () => sendDiscussionNotification({ ...discussion, notificationType: "discussion_question_created" }), file: "diskusjon.jpg", url: `${BASE}/participant?courseId=c1&threadId=t1`, label: "Åpne diskusjonen", reason: "eier kurset" },
   { name: "nytt svar", send: () => sendDiscussionNotification({ ...discussion, notificationType: "discussion_reply_created" }), file: "diskusjon.jpg", url: `${BASE}/participant?courseId=c1&threadId=t1`, label: "Åpne diskusjonen", reason: "følger denne diskusjonen" },

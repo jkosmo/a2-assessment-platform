@@ -18,6 +18,7 @@ import { app } from "../src/app.js";
 import { env } from "../src/config/env.js";
 import { prisma } from "../src/db/prisma.js";
 import { deliverOutboxEvent, OUTBOX_EVENT_TYPES } from "../src/modules/outbox/outboxService.js";
+import { runCourseAssignmentEmailSchedule } from "../src/modules/course/courseAssignmentNotice.js";
 import { findModuleIdByTitle, seenModuleVersionId } from "./support/participantFlow.js";
 
 const BASE = "https://plattform.example.test";
@@ -217,33 +218,51 @@ describe("e-post gjennom rutene", () => {
     for (const mail of mails) expectOwnLink(mail, `${BASE}/participant?moduleId=${moduleId}`, "anke.jpg");
   });
 
-  it("klassetildeling: medlemmet får lenke til kurset", async () => {
+  // #1142 skive 3: tildelingen sender ingenting selv. Jobben i workeren lager raden, samler den et kvarter senere, og
+  // behandleren i outboxen sender én e-post med lenke til «Mine kurs» (uten id: e-posten kan nevne flere kurs).
+  async function runEmailJob(courseId: string) {
+    const t0 = new Date(Date.now() - 60 * 60_000);
+    await runCourseAssignmentEmailSchedule({ now: t0, onlyCourseIds: [courseId] });
+    await runCourseAssignmentEmailSchedule({ now: new Date(t0.getTime() + 16 * 60_000), onlyCourseIds: [courseId] });
+    const rows = await prisma.courseAssignmentNotice.findMany({ where: { courseId, batchId: { not: null } }, select: { batchId: true } });
+    const events = await prisma.outboxEvent.findMany({ where: { type: OUTBOX_EVENT_TYPES.courseAssignmentDigest } });
+    const batchIds = new Set(rows.map((r) => r.batchId));
+    for (const event of events) {
+      if (batchIds.has((JSON.parse(event.payloadJson) as { batchId: string }).batchId)) await deliverOutboxEvent({ type: event.type, payloadJson: event.payloadJson, attempts: 0, maxAttempts: 5 });
+    }
+  }
+
+  it("klassetildeling: ingen e-post fra handlingen; jobben sender én, med lenke til «Mine kurs»", async () => {
     const course = await prisma.course.create({
       data: { title: JSON.stringify({ "en-GB": `Kurs ${tag}`, nb: `Kurs ${tag}`, nn: `Kurs ${tag}` }), enrollmentPolicy: "RESTRICTED", publishedAt: new Date() },
       select: { id: true },
     });
     courseIds.push(course.id);
     const email = `${tag}-medlem@company.com`;
-    const member = await prisma.user.create({ data: { externalId: `${tag}-medlem`, name: "Medlem", email }, select: { id: true } });
+    const member = await prisma.user.create({ data: { externalId: `${tag}-medlem`, name: "Medlem", email, preferredLocale: "nb" }, select: { id: true } });
     const klass = await request(app).post("/api/admin/content/classes").set(admin).send({ name: `Klasse ${tag}` });
     expect(klass.status).toBe(201);
     const classId = klass.body.class.id as string;
     expect((await request(app).post(`/api/admin/content/classes/${classId}/members`).set(admin).send({ userId: member.id })).status).toBe(201);
     expect((await request(app).post(`/api/admin/content/classes/${classId}/courses`).set(admin).send({ courseId: course.id })).status).toBe(201);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(mailsTo(email), "handlingen sender ingenting").toHaveLength(0);
 
-    await vi.waitFor(() => expect(mailsTo(email)).toHaveLength(1), { timeout: 5000 });
-    expectOwnLink(mailsTo(email)[0], `${BASE}/participant?courseId=${course.id}`, "kurs-tildelt.jpg");
+    await runEmailJob(course.id);
+    expect(mailsTo(email)).toHaveLength(1);
+    expectOwnLink(mailsTo(email)[0], `${BASE}/participant`, "kurs-tildelt.jpg");
+    expect(mailsTo(email)[0].content.subject).toBe(`Du har fått et nytt kurs: «Kurs ${tag}»`);
 
     // Samme tildeling på nytt med ny frist: fristen oppdateres, og ingen får e-posten om nytt kurs igjen.
     const dueAt = "2030-01-01T00:00:00.000Z";
     expect((await request(app).post(`/api/admin/content/classes/${classId}/courses`).set(admin).send({ courseId: course.id, dueAt })).status).toBe(201);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await runEmailJob(course.id);
     expect(mailsTo(email)).toHaveLength(1);
     const assignment = await prisma.courseGroupAssignment.findUniqueOrThrow({ where: { courseId_classId: { courseId: course.id, classId } } });
     expect(assignment.dueAt?.toISOString()).toBe(dueAt);
   });
 
-  it("dobbeltklikk på «Tildel kurs»: én e-post", async () => {
+  it("dobbeltklikk på «Tildel kurs»: én tildeling, én rad, én e-post", async () => {
     const course = await prisma.course.create({
       data: { title: JSON.stringify({ "en-GB": `Kurs2 ${tag}`, nb: `Kurs2 ${tag}`, nn: `Kurs2 ${tag}` }), enrollmentPolicy: "RESTRICTED", publishedAt: new Date() },
       select: { id: true },
@@ -258,8 +277,9 @@ describe("e-post gjennom rutene", () => {
     const assign = () => request(app).post(`/api/admin/content/classes/${classId}/courses`).set(admin).send({ courseId: course.id });
     const [first, second] = await Promise.all([assign(), assign()]);
     expect([first.status, second.status]).toEqual([201, 201]);
-    await vi.waitFor(() => expect(mailsTo(email)).toHaveLength(1), { timeout: 5000 });
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await prisma.courseGroupAssignment.count({ where: { courseId: course.id, classId } })).toBe(1);
+    await runEmailJob(course.id);
+    expect(await prisma.courseAssignmentNotice.count({ where: { courseId: course.id } })).toBe(1);
     expect(mailsTo(email)).toHaveLength(1);
   });
 

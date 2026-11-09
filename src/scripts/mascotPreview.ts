@@ -116,7 +116,7 @@ function packFileAsDataUrl(selected: MascotPack, url: string): string {
 // ── E-postene ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 async function renderEmails(): Promise<string> {
-  const { buildCourseMajorVersionEmail, buildNotificationEmail } = await import("../modules/certification/participantNotificationService.js");
+  const { buildCourseAssignmentDigestEmail, buildCourseMajorVersionEmail, buildNotificationEmail } = await import("../modules/certification/participantNotificationService.js");
   const messages = await import("../i18n/notificationMessages.js");
   const { buildEmailLink } = await import("../modules/certification/emailLinks.js");
   const { EMAIL_ILLUSTRATIONS } = await import("../modules/certification/illustratedEmail.js");
@@ -133,7 +133,14 @@ async function renderEmails(): Promise<string> {
       case "courseNewVersion":
         return buildCourseMajorVersionEmail({ locale, courseTitle: COURSE, versionMajor: 4, changedItemCount: 3, courseId: "c1" });
       case "courseAssigned":
-        return buildNotificationEmail({ ...common, message: messages.getCourseAssignmentNotificationMessage(locale, { courseTitle: COURSE, className: "Avdeling Vest", dueAt }), reason: "assignment", link: courseLink });
+        // #1142: den samlede e-posten om nye kurs, med to kurs (det viser lista, klassene og fristen).
+        return buildCourseAssignmentDigestEmail({
+          locale,
+          courses: [
+            { title: COURSE, classNames: ["Avdeling Vest"], dueAt },
+            { title: "Personvern i praksis", classNames: ["Avdeling Vest", "Nyansatte"], dueAt: null },
+          ],
+        });
       case "dueSoon":
         return buildNotificationEmail({ ...common, message: messages.getCourseReminderNotificationMessage(locale, "due_soon", { courseTitle: COURSE, dueAt, daysBefore: 3 }), reason: "reminder", link: courseLink });
       case "overdue":

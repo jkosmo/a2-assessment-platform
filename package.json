@@ -26,6 +26,7 @@
     "maint:report-partial-translations": "tsx scripts/maintenance/collapse-duplicated-titles.ts --report",
     "maint:repair-unreadable-svg-assets": "tsx scripts/maintenance/repair-unreadable-svg-assets.ts",
     "module-credit:switch-on": "tsx scripts/maintenance/switch-on-module-pass.ts",
+    "stage-copy:neutralize-email": "tsx scripts/maintenance/stage-copy-neutralize-email.ts",
     "complexity": "tsx scripts/complexity/report.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node scripts/runtime/startup.mjs",

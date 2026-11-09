@@ -23,15 +23,14 @@ export function getEmailLinkLabel(locale: SupportedLocale, kind: EmailLinkKind):
 }
 
 // #1141: siste linje i e-posten sier hvorfor mottakeren får den.
-// #1142: `classMember` er for den samlede e-posten om nye kurs. «Klassen din er tildelt et kurs» (`assignment`) stemmer
-// ikke når personen selv er lagt til i en klasse, eller kurset er publisert; den fjernes med den gamle e-posten (skive 3).
-export type EmailReason = "submission" | "appeal" | "assignment" | "classMember" | "reminder" | "discussionQuestion" | "discussionReply";
+// #1142: `classMember` er for den samlede e-posten om nye kurs. «Klassen din er tildelt et kurs» (`assignment`) stemte
+// ikke når personen selv er lagt til i en klasse, eller kurset er publisert; den ble fjernet med den gamle e-posten (skive 3).
+export type EmailReason = "submission" | "appeal" | "classMember" | "reminder" | "discussionQuestion" | "discussionReply";
 
 const emailReasons: Record<SupportedLocale, Record<EmailReason, string>> = {
   "en-GB": {
     submission: "You are getting this e-mail because you handed in an answer on A-2 læringsplattform.",
     appeal: "You are getting this e-mail because you appealed an assessment on A-2 læringsplattform.",
-    assignment: "You are getting this e-mail because your class has been assigned a course.",
     classMember: "You are getting this e-mail because you are in a class on A-2 læringsplattform.",
     reminder: "You are getting this e-mail because you have a course with a due date.",
     discussionQuestion: "You are getting this e-mail because you own the course or are an administrator of the platform.",
@@ -40,7 +39,6 @@ const emailReasons: Record<SupportedLocale, Record<EmailReason, string>> = {
   nb: {
     submission: "Du får denne e-posten fordi du har levert en besvarelse på A-2 læringsplattform.",
     appeal: "Du får denne e-posten fordi du har anket en vurdering på A-2 læringsplattform.",
-    assignment: "Du får denne e-posten fordi klassen din er tildelt et kurs.",
     classMember: "Du får denne e-posten fordi du er med i en klasse på A-2 læringsplattform.",
     reminder: "Du får denne e-posten fordi du har et kurs med frist.",
     discussionQuestion: "Du får denne e-posten fordi du eier kurset eller er administrator på plattformen.",
@@ -49,7 +47,6 @@ const emailReasons: Record<SupportedLocale, Record<EmailReason, string>> = {
   nn: {
     submission: "Du får denne e-posten fordi du har levert eit svar på A-2 læringsplattform.",
     appeal: "Du får denne e-posten fordi du har anka ei vurdering på A-2 læringsplattform.",
-    assignment: "Du får denne e-posten fordi klassen din er tildelt eit kurs.",
     classMember: "Du får denne e-posten fordi du er med i ein klasse på A-2 læringsplattform.",
     reminder: "Du får denne e-posten fordi du har eit kurs med frist.",
     discussionQuestion: "Du får denne e-posten fordi du eig kurset eller er administrator på plattforma.",
@@ -373,36 +370,6 @@ export function getCourseReminderNotificationMessage(
   };
 }
 
-// #970: klassetildeling av kurs. Var hardkodet bokmål i participantNotificationService — den eneste
-// e-posten uten språkparameter. Samme form som påminnelsene.
-type CourseAssignmentLabels = {
-  subject: string; // {course}
-  body: string; // {class} {course}
-  dueLine: string; // {date}
-  closing: string;
-};
-
-const courseAssignmentMessages: Record<SupportedLocale, CourseAssignmentLabels> = {
-  "en-GB": {
-    subject: "New course assigned: {course}",
-    body: "Hello!\n\nYour class «{class}» has been assigned the course «{course}».",
-    dueLine: "\nDue: {date}.",
-    closing: "\n\nLog in to the platform to get started.",
-  },
-  nb: {
-    subject: "Nytt kurs tildelt: {course}",
-    body: "Hei!\n\nKlassen din «{class}» har blitt tildelt kurset «{course}».",
-    dueLine: "\nFrist: {date}.",
-    closing: "\n\nLogg inn på plattformen for å starte.",
-  },
-  nn: {
-    subject: "Nytt kurs tildelt: {course}",
-    body: "Hei!\n\nKlassen din «{class}» har fått tildelt kurset «{course}».",
-    dueLine: "\nFrist: {date}.",
-    closing: "\n\nLogg inn på plattforma for å starte.",
-  },
-};
-
 // #997: modulen du besto er revidert. Ett varsel per deltaker per revisjon — ikke en kalender
 // (det var maset #989 fjernet). Går som ren tekst uten bilde og lenke (sendModuleRevisedNotification).
 //
@@ -534,21 +501,8 @@ export function getCourseMajorVersionNotificationMessage(
   };
 }
 
-export function getCourseAssignmentNotificationMessage(
-  locale: SupportedLocale,
-  context: { courseTitle: string; className: string; dueAt?: Date | null },
-): NotificationMessage {
-  const t = courseAssignmentMessages[locale];
-  const dueLine = context.dueAt ? t.dueLine.replace("{date}", formatDateOnly(context.dueAt, locale)) : "";
-  return {
-    subject: t.subject.replace("{course}", context.courseTitle),
-    nextStepGuidance:
-      t.body.replace("{class}", context.className).replace("{course}", context.courseTitle) + dueLine + t.closing,
-  };
-}
-
-// #1142: ÉN e-post når en deltaker har fått nye kurs (doc/design/PLAN_1142.md, punkt 5). Erstatter e-posten per kurs over
-// i skive 3. Ett kurs og flere kurs har hvert sitt emne og sin innledning; lista er ett avsnitt med linjeskift, som malen
+// #1142: ÉN e-post når en deltaker har fått nye kurs (doc/design/PLAN_1142.md, punkt 5). Erstattet e-posten per kurs ved
+// tildeling i skive 3. Ett kurs og flere kurs har hvert sitt emne og sin innledning; lista er ett avsnitt med linjeskift, som malen
 // gjør til `<br>`. Siste avsnitt sier hvor kursene ligger, så teksten virker også uten lenken fra malen.
 // Begynnelsen av innledningen («Fortøyningen er sluppet:») står i maskotpakken (`courseAssignedIntro`); resten her.
 export type CourseAssignmentDigestCourse = {
