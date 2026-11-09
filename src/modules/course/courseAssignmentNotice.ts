@@ -7,7 +7,7 @@
 //   2. JOBBEN i workeren (`runCourseAssignmentEmailSchedule`, kjørt av `CourseAssignmentEmailMonitor` hvert minutt når
 //      varselkanalen ikke er `disabled`). Fire steg per runde (planen, punkt 4):
 //        - rydder: `sending` i over 30 min → `uncertain`; `queued` i over 2 timer → tilbake til `waiting` (hendelsen er borte);
-//        - lager rader: `INSERT … SELECT` fra regelen, `waiting`, `ON CONFLICT DO NOTHING`. Radene lages av jobben, ikke av
+//        - lager rader: `INSERT … SELECT` fra regelen for par uten rad, `waiting`, `ON CONFLICT DO NOTHING`. Radene lages av jobben, ikke av
 //          handlingene: da gir alle veier inn e-post, også de ingen har tenkt på, og ingen handling trenger nye låser;
 //        - finner personer som er klare: den NYESTE ventende raden er minst 15 min gammel, eller den ELDSTE minst 60 min
 //          (sikkerhetsnettet). Høyst 20 samlinger per runde;
@@ -126,12 +126,22 @@ const NOW_UTC = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
  * tester filtrene for seg, ett vilkår om gangen.
  *
  * `onlyCourseIds` avgrenser til noen kurs uten å avgrense personen: jobbens runde i testene, som deler database med andre.
+ *
+ * `excludeExistingNotices` tar ut par som alt har en rad, uansett status. Det er ikke et vilkår for «hvem har kurset», bare
+ * en innsnevring for den som LAGER rader (jobben og stage-kopien): etter `baseline` har nesten alle par en rad, og uten den
+ * ville regelen regnes ut for alle hvert minutt, bare for at `ON CONFLICT` skulle kaste svaret (QA-porten 2026-11-09).
+ * `ON CONFLICT DO NOTHING` står igjen for kappløp. Sjekken før sending og samlingen bruker det IKKE: der finnes raden alltid.
  */
-function eligiblePairsQuery(scope?: CourseAssignmentRuleScope, onlyCourseIds?: string[]): Prisma.Sql {
+type EligiblePairsOptions = { scope?: CourseAssignmentRuleScope; onlyCourseIds?: string[]; excludeExistingNotices?: boolean };
+
+function eligiblePairsQuery({ scope, onlyCourseIds, excludeExistingNotices }: EligiblePairsOptions = {}): Prisma.Sql {
   const scoped = scope
     ? Prisma.sql`AND cm."userId" = ${scope.userId} AND cga."courseId" = ANY(${scope.courseIds}::text[])`
     : Prisma.empty;
   const onlyCourses = onlyCourseIds ? Prisma.sql`AND cga."courseId" = ANY(${onlyCourseIds}::text[])` : Prisma.empty;
+  const withoutNotice = excludeExistingNotices
+    ? Prisma.sql`AND NOT EXISTS (SELECT 1 FROM "CourseAssignmentNotice" n WHERE n."userId" = cm."userId" AND n."courseId" = cga."courseId")`
+    : Prisma.empty;
   return Prisma.sql`
     SELECT DISTINCT cm."userId" AS "userId", cga."courseId" AS "courseId"
     FROM "ClassMember" cm
@@ -154,21 +164,27 @@ function eligiblePairsQuery(scope?: CourseAssignmentRuleScope, onlyCourseIds?: s
                              OR EXISTS (SELECT 1 FROM "DiscussionSubscription" ds WHERE ds."threadId" = t.id AND ds."userId" = cm."userId")))
     ${scoped}
     ${onlyCourses}
+    ${withoutNotice}
   `;
 }
 
 /**
- * Parene (person, kurs) som regelen sier ja til nå. Med `scope`: bare for den personen og de kursene. Uten: alle — det er
- * jobbens spørsmål («hvem har nå et kurs, og ingen rad»).
+ * Parene (person, kurs) som regelen sier ja til nå. Med `scope`: bare for den personen og de kursene. Uten: alle.
+ * `excludeExistingNotices`: bare par uten rad — jobbens spørsmål («hvem har nå et kurs, og ingen rad»). Se `eligiblePairsQuery`.
  */
-export async function eligibleAssignmentPairs(client: CourseAssignmentRuleClient, scope?: CourseAssignmentRuleScope): Promise<EligibleAssignmentPair[]> {
+export async function eligibleAssignmentPairs(
+  client: CourseAssignmentRuleClient,
+  scope?: CourseAssignmentRuleScope,
+  options?: { excludeExistingNotices?: boolean },
+): Promise<EligibleAssignmentPair[]> {
   if (scope && scope.courseIds.length === 0) return [];
-  return client.$queryRaw<EligibleAssignmentPair[]>(eligiblePairsQuery(scope));
+  return client.$queryRaw<EligibleAssignmentPair[]>(eligiblePairsQuery({ scope, excludeExistingNotices: options?.excludeExistingNotices }));
 }
 
 /**
  * Lager en rad for hvert par regelen sier ja til, og som ikke har en rad fra før. Brukt av jobben (`waiting`) og av
- * stage-kopien (`baseline`). Gir tilbake hvor mange som ble laget.
+ * stage-kopien (`baseline`). Gir tilbake hvor mange som ble laget. Regelen tar ut par som alt har en rad
+ * (`excludeExistingNotices`), så den ikke regnes ut for alle par hvert minutt; `ON CONFLICT` tar kappløpene.
  */
 function insertRowsFromRule(
   client: Pick<DbTransactionClient, "$executeRaw">,
@@ -177,7 +193,7 @@ function insertRowsFromRule(
   return client.$executeRaw`
     INSERT INTO "CourseAssignmentNotice" ("id", "userId", "courseId", "status", "reason", "createdAt", "updatedAt")
     SELECT gen_random_uuid()::text, p."userId", p."courseId", ${input.status}::text, ${input.reason}::text, ${utc(input.at)}, ${utc(input.at)}
-    FROM (${eligiblePairsQuery(undefined, input.onlyCourseIds)}) p
+    FROM (${eligiblePairsQuery({ onlyCourseIds: input.onlyCourseIds, excludeExistingNotices: true })}) p
     ON CONFLICT ("userId", "courseId") DO NOTHING
   `;
 }

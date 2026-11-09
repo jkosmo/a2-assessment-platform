@@ -339,6 +339,27 @@ describe("(b) filtrene for seg: hvert vilkår tar paret ut, og kontrollen viser 
     expect(await rule(m.userId, [m.courseId])).toEqual([]);
   });
 
+  // QA-porten 2026-11-09: jobben skal ikke regne gjennom par som alt har en rad. Valget er en innsnevring for den som lager
+  // rader; uten valget (sjekken før sending, samlingen) gir paret fortsatt treff, for der finnes raden alltid.
+  it("`excludeExistingNotices`: et par med en rad gir ikke treff, uansett status. Uten valget gir det treff", async () => {
+    const m = await memberWithCourse();
+    const without = await learner();
+    await addMember(m.classId, without.userId);
+    const exclude = { excludeExistingNotices: true };
+    const scope = (userId: string) => ({ userId, courseIds: [m.courseId] });
+    expect((await eligibleAssignmentPairs(prisma, scope(m.userId), exclude)).map((p) => p.courseId), "uten rad: med valget").toEqual([m.courseId]);
+
+    for (const status of ["baseline", "waiting", "queued", "sending", "sent", "uncertain", "failed"]) {
+      await prisma.courseAssignmentNotice.deleteMany({ where: { userId: m.userId, courseId: m.courseId } });
+      await prisma.courseAssignmentNotice.create({ data: { userId: m.userId, courseId: m.courseId, status } });
+      expect(await eligibleAssignmentPairs(prisma, scope(m.userId), exclude), `rad i ${status}: med valget`).toEqual([]);
+      expect(await rule(m.userId, [m.courseId]), `rad i ${status}: uten valget`).toEqual([m.courseId]);
+    }
+    // En rad for en annen person tar ikke ut dette paret.
+    expect((await eligibleAssignmentPairs(prisma, scope(without.userId), exclude)).map((p) => p.courseId), "annen person").toEqual([m.courseId]);
+    await prisma.courseAssignmentNotice.deleteMany({ where: { courseId: m.courseId } });
+  });
+
   it("avgrensningen: bare den personen og de kursene", async () => {
     const m = await memberWithCourse();
     const other = await learner();
