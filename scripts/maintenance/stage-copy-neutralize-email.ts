@@ -9,20 +9,34 @@
  * Selve skrivingen bor i `neutralizeEmailStateAfterProdCopy` (courseAssignmentNotice.ts), den eneste fila som skriver
  * `CourseAssignmentNotice`; testen er test/m2-stage-copy-neutralize-email-1142.test.ts.
  *
- * Kjører mot DATABASE_URL i miljøet, så velg miljøet med vilje (aldri prod):
- *   dotenv -e .env.<stage-kopi> -- npm run stage-copy:neutralize-email
+ * ⚠️ Mot prod ville skriptet slette ekte e-post for godt. Sperren (`checkStageCopyTarget`, stageCopyGuard.ts) kjører FØR noe
+ * skrives: den nekter alltid et vertsnavn som ser ut som prod, og krever at CONFIRM_STAGE_COPY er lik databasenavnet i
+ * DATABASE_URL:
+ *   CONFIRM_STAGE_COPY=<databasenavnet> dotenv -e .env.<stage-kopi> -- npm run stage-copy:neutralize-email
+ * Oppskriften står i doc/OPERATIONS_RUNBOOK.md («Prod → stage-kopi»).
  */
-import { prisma } from "../../src/db/prisma.js";
-import { neutralizeEmailStateAfterProdCopy } from "../../src/modules/course/courseAssignmentNotice.js";
+import { checkStageCopyTarget } from "./stageCopyGuard.js";
 
 async function main() {
-  const summary = await neutralizeEmailStateAfterProdCopy();
-  console.log(JSON.stringify({ event: "stage_copy_email_neutralized", ...summary }));
+  const guard = checkStageCopyTarget(process.env.DATABASE_URL, process.env.CONFIRM_STAGE_COPY);
+  if (!guard.ok) {
+    console.error(JSON.stringify({ event: "stage_copy_email_neutralize_refused", reason: guard.reason, message: guard.message }));
+    process.exitCode = 1;
+    return;
+  }
+
+  // Først etter sperren: databasen og koden som skriver.
+  const { prisma } = await import("../../src/db/prisma.js");
+  const { neutralizeEmailStateAfterProdCopy } = await import("../../src/modules/course/courseAssignmentNotice.js");
+  try {
+    const summary = await neutralizeEmailStateAfterProdCopy();
+    console.log(JSON.stringify({ event: "stage_copy_email_neutralized", database: guard.databaseName, ...summary }));
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
-main()
-  .catch((error) => {
-    console.error("stage_copy_email_neutralize_failed", error);
-    process.exitCode = 1;
-  })
-  .finally(() => prisma.$disconnect());
+main().catch((error) => {
+  console.error("stage_copy_email_neutralize_failed", error);
+  process.exitCode = 1;
+});
