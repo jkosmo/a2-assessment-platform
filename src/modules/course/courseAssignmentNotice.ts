@@ -32,11 +32,20 @@ export type EligibleAssignmentPair = { userId: string; courseId: string };
  *   5. kurset er ikke arkivert (arkivering avpubliserer også, men regelen skal ikke hvile på det);
  *   6. personen er aktiv, og
  *   7. ikke anonymisert (#968, de samme feltene som `isReachableParticipant`);
- *   8. personen har ikke kursbevis for kurset, for noen hovedversjon (produkteier 2026-11-08, spørsmål 1).
+ *   8. personen har ikke kursbevis for kurset, for noen hovedversjon (produkteier 2026-11-08, spørsmål 1);
+ *   9. personen har ikke påbegynt kurset: ingen lest seksjon i kurset, ingen innlevering på en modul i kurset, og ingen tråd,
+ *      intet svar og ingen følging i kursets diskusjoner. Det er «påbegynt» fra skive 0 (`findStartedOrCompletedCourseIds`
+ *      i `classService.ts`), og testen sammenligner de to. «Du har fått et nytt kurs» om et kurs hen er i gang med, er feil
+ *      av samme grunn som for et fullført kurs (QA-porten 2026-11-09: en klasse arkivert før vinduet og gjenopprettet etter,
+ *      ville ellers gitt e-post om et kurs deltakeren aldri mistet).
  *
  * Vilkår 1–5 er grunnlaget «Mine kurs» bruker for kurs fra klasser (`getUserClassIds` → `getClassAssignedCourseDueDates`
- * → `filterVisibleCourseIds`), avgrenset til vanlige klasser som ikke er arkivert. Vilkår 6–8 gjør e-postregelen med
- * vilje strengere. Testen (test/m2-course-assignment-rule-1142.test.ts) sammenligner grunnlaget med «Mine kurs» og
+ * → `filterVisibleCourseIds`), avgrenset til vanlige klasser som ikke er arkivert. Vilkår 6–9 gjør e-postregelen med
+ * vilje strengere.
+ *
+ * `enrollmentPolicy` er med vilje IKKE et vilkår: et `OPEN`-kurs som tildeles en klasse, gir e-post. Tildelingen gir
+ * kurset en frist og gjør det til en del av klassen; den gamle e-posten per kurs ble også sendt for slike kurs. Har
+ * personen alt begynt på det på egen hånd, tar vilkår 9 det ut. Testen (test/m2-course-assignment-rule-1142.test.ts) sammenligner grunnlaget med «Mine kurs» og
  * tester filtrene for seg, ett vilkår om gangen.
  */
 function eligiblePairsQuery(scope?: CourseAssignmentRuleScope): Prisma.Sql {
@@ -53,6 +62,16 @@ function eligiblePairsQuery(scope?: CourseAssignmentRuleScope): Prisma.Sql {
     JOIN "User" u                    ON u.id = cm."userId" AND u."activeStatus" = true AND u."isAnonymized" = false
     WHERE NOT EXISTS (SELECT 1 FROM "CourseCompletion" cc
                       WHERE cc."userId" = cm."userId" AND cc."courseId" = cga."courseId")
+      AND NOT EXISTS (SELECT 1 FROM "CourseSectionRead" r
+                      WHERE r."userId" = cm."userId" AND r."courseId" = cga."courseId")
+      AND NOT EXISTS (SELECT 1 FROM "Submission" s
+                      JOIN "CourseItem" ci ON ci."moduleId" = s."moduleId" AND ci."itemType" = 'MODULE'
+                      WHERE s."userId" = cm."userId" AND ci."courseId" = cga."courseId")
+      AND NOT EXISTS (SELECT 1 FROM "DiscussionThread" t
+                      WHERE t."courseId" = cga."courseId"
+                        AND (t."authorId" = cm."userId"
+                             OR EXISTS (SELECT 1 FROM "DiscussionReply" dr WHERE dr."threadId" = t.id AND dr."authorId" = cm."userId")
+                             OR EXISTS (SELECT 1 FROM "DiscussionSubscription" ds WHERE ds."threadId" = t.id AND ds."userId" = cm."userId")))
     ${scoped}
   `;
 }

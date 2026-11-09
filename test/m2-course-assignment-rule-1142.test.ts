@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { eligibleAssignmentPairs } from "../src/modules/course/courseAssignmentNotice.js";
-import { getClassAssignedCourseDueDates, getUserClassIds } from "../src/modules/course/classService.js";
+import { findStartedOrCompletedCourseIds, getClassAssignedCourseDueDates, getUserClassIds } from "../src/modules/course/classService.js";
 import { filterVisibleCourseIds } from "../src/modules/course/enrollmentService.js";
 import { courseRepository } from "../src/modules/course/courseRepository.js";
 import { SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "../src/modules/course/classRepository.js";
@@ -65,7 +65,7 @@ async function course(options: { published?: boolean; versionMajor?: number } = 
     },
     select: { id: true },
   });
-  return { courseId: created.id, sectionId: section.id };
+  return { courseId: created.id, sectionId: section.id, moduleId: module.id, moduleVersionId: moduleVersion.id };
 }
 
 async function newClass() {
@@ -168,20 +168,85 @@ describe("(a) kursgrunnlaget: regelen gir det «Mine kurs» viser fra vanlige kl
 });
 
 describe("(b) filtrene for seg: hvert vilkår tar paret ut, og kontrollen viser at paret ellers er med", () => {
-  it("arkivert klasse: ingen par, også når kurset er påbegynt og står i «Mine kurs». Gjenopprettet klasse gir paret (vei 5)", async () => {
+  // Ikke påbegynt her: et påbegynt kurs er tatt ut av vilkår 9, og da ville testen ikke målt vilkåret om arkivert klasse.
+  it("arkivert klasse: ingen par, og kurset er borte fra «Mine kurs». Gjenopprettet klasse gir paret (vei 5)", async () => {
     const c = await course();
     const u = await learner();
     const classId = await newClass();
     await addMember(classId, u.userId);
     await assignCourse(classId, c.courseId);
-    await prisma.courseSectionRead.create({ data: { userId: u.userId, courseId: c.courseId, sectionId: c.sectionId } });
+    expect(await rule(u.userId, [c.courseId]), "kontroll: aktiv klasse").toEqual([c.courseId]);
     await archiveClass(classId);
 
-    expect(await myCourses(u.userId, [c.courseId]), "påbegynt: står i «Mine kurs»").toEqual([c.courseId]);
-    expect(await myCoursesRoute(u.headers, [c.courseId])).toEqual([c.courseId]);
+    expect(await myCourses(u.userId, [c.courseId])).toEqual([]);
     expect(await rule(u.userId, [c.courseId])).toEqual([]);
 
     await restoreClass(classId);
+    expect(await rule(u.userId, [c.courseId])).toEqual([c.courseId]);
+  });
+
+  // Vilkår 9 (QA-porten 2026-11-09). Sammenligning, ikke etterligning: for hvert spor sjekkes regelen mot
+  // `findStartedOrCompletedCourseIds`, som avgjør «påbegynt» for «Mine kurs» (skive 0). De to skal alltid være enige.
+  describe("påbegynt kurs: ingen par, og regelen er enig med «påbegynt» i «Mine kurs»", () => {
+    async function threadBy(courseId: string, authorId: string) {
+      return prisma.discussionThread.create({ data: { courseId, authorId, title: tag("tråd"), bodyMarkdown: "Spørsmål." }, select: { id: true } });
+    }
+    const spor: Array<[string, (c: Awaited<ReturnType<typeof course>>, userId: string) => Promise<unknown>]> = [
+      ["lest seksjon", (c, userId) => prisma.courseSectionRead.create({ data: { userId, courseId: c.courseId, sectionId: c.sectionId } })],
+      ["innlevering uten vedtak", (c, userId) => prisma.submission.create({ data: { userId, moduleId: c.moduleId, moduleVersionId: c.moduleVersionId, deliveryType: "text", submissionStatus: "SUBMITTED" } })],
+      ["egen tråd", (c, userId) => threadBy(c.courseId, userId)],
+      ["svar i en annens tråd", async (c, userId) => {
+        const other = await learner();
+        const thread = await threadBy(c.courseId, other.userId);
+        return prisma.discussionReply.create({ data: { threadId: thread.id, authorId: userId, bodyMarkdown: "Svar." } });
+      }],
+      ["følger en annens tråd", async (c, userId) => {
+        const other = await learner();
+        const thread = await threadBy(c.courseId, other.userId);
+        return prisma.discussionSubscription.create({ data: { threadId: thread.id, userId } });
+      }],
+    ];
+
+    for (const [navn, påbegynn] of spor) {
+      it(`${navn}: ingen par. Det samme i et ANNET kurs tar ikke dette ut`, async () => {
+        const c = await course();
+        const other = await course();
+        const u = await learner();
+        const classId = await newClass();
+        await addMember(classId, u.userId);
+        await assignCourse(classId, c.courseId);
+        await påbegynn(other, u.userId);
+        expect(await rule(u.userId, [c.courseId]), "kontroll: påbegynt et annet kurs").toEqual([c.courseId]);
+        expect([...(await findStartedOrCompletedCourseIds(u.userId, [c.courseId]))]).toEqual([]);
+
+        await påbegynn(c, u.userId);
+        expect([...(await findStartedOrCompletedCourseIds(u.userId, [c.courseId]))], "«Mine kurs» regner det som påbegynt").toEqual([c.courseId]);
+        expect(await rule(u.userId, [c.courseId])).toEqual([]);
+      });
+    }
+
+    it("QA-porten: tildelt, påbegynt, klassen arkivert og gjenopprettet — ingen par, så ingen e-post om et kurs hen aldri mistet", async () => {
+      const c = await course();
+      const u = await learner();
+      const classId = await newClass();
+      await addMember(classId, u.userId);
+      await assignCourse(classId, c.courseId);
+      await prisma.courseSectionRead.create({ data: { userId: u.userId, courseId: c.courseId, sectionId: c.sectionId } });
+      await archiveClass(classId);
+      expect(await myCourses(u.userId, [c.courseId]), "påbegynt: står fortsatt i «Mine kurs»").toEqual([c.courseId]);
+      await restoreClass(classId);
+      expect(await rule(u.userId, [c.courseId])).toEqual([]);
+    });
+  });
+
+  it("OPEN-kurs tildelt en klasse: paret er med (tildelingen gir frist; ikke et vilkår med vilje)", async () => {
+    const c = await course();
+    await prisma.course.update({ where: { id: c.courseId }, data: { enrollmentPolicy: "OPEN" } });
+    const u = await learner();
+    const classId = await newClass();
+    await addMember(classId, u.userId);
+    expect(await rule(u.userId, [c.courseId]), "uten tildeling: ingen par").toEqual([]);
+    await assignCourse(classId, c.courseId);
     expect(await rule(u.userId, [c.courseId])).toEqual([c.courseId]);
   });
 
