@@ -9,6 +9,11 @@ import { vent } from "./pace.js";
 // Stage-testkontoen (`npm run stage:auth:service`) stiller spørsmålet i diskusjonen, for en eier får ikke e-post om sitt eget.
 //
 // Kurset blir stående publisert til e-postene er sett. Etterpå: MANUELL_EPOST=1 RYDD=1 arkiverer det testen laget.
+//
+// Fra 2.147.0 (#1142) kommer e-posten om nye kurs samlet, om lag et kvarter etter tildelingen, og et kurs deltakeren alt har
+// begynt på, tas ut. Testen leverer i hovedkurset med en gang, så det er påbegynt når e-posten samles. Derfor tildeles også
+// et eget kurs testen aldri starter («E-posttest nytt kurs …»): e-posten «Du har fått et nytt kurs» skal nevne bare det.
+// ⚠️ Rydd ikke før den er kommet: ryddingen tar kurset ut, og da sendes den aldri.
 // ⚠️ Tokenene skal ALDRI logges.
 
 const { auth, reason } = readAuth();
@@ -122,11 +127,22 @@ test("sender en e-post av hver type til kontoen som er logget inn", async () => 
   const publisert = await api("POST", `/api/admin/content/courses/${kursId}/publish`);
   expect(publisert.status, publisert.tekst.slice(0, 300)).toBe(200);
 
+  // #1142: et kurs med en egen modul som testen aldri leverer i, så det ikke er påbegynt når e-posten om nye kurs samles.
+  // Modulen kan ikke deles med hovedkurset: en innlevering på en modul gjør alle kurs med modulen påbegynt.
+  const urørt = await flervalgsmodul("nytt kurs");
+  const nyttKurs = await api("POST", "/api/admin/content/courses", { title: L(`E-posttest nytt kurs ${stempel}`), certificationLevel: "basic" });
+  expect(nyttKurs.status, nyttKurs.tekst.slice(0, 300)).toBe(201);
+  const nyttKursId = nyttKurs.json.course.id as string;
+  const nyttSatt = await api("PUT", `/api/admin/content/courses/${nyttKursId}/items`, { items: [{ type: "MODULE", moduleId: urørt }] });
+  expect(nyttSatt.status, nyttSatt.tekst.slice(0, 300)).toBe(204);
+  const nyttPublisert = await api("POST", `/api/admin/content/courses/${nyttKursId}/publish`);
+  expect(nyttPublisert.status, nyttPublisert.tekst.slice(0, 300)).toBe(200);
+
   const klasse = await api("POST", "/api/admin/content/classes", { name: `E-posttest ${stempel}` });
   expect(klasse.status, klasse.tekst.slice(0, 300)).toBe(201);
   const classId = klasse.json.class.id as string;
   fs.mkdirSync(path.dirname(LAGER), { recursive: true });
-  fs.writeFileSync(LAGER, JSON.stringify({ kursId, classId, moduler: [bestått, strøket, sensor] }));
+  fs.writeFileSync(LAGER, JSON.stringify({ kursId, nyttKursId, classId, moduler: [bestått, strøket, sensor, urørt] }));
 
   // /api/me har ikke database-ID-en; brukersøket har den.
   const funnet = await api("GET", `/api/admin/content/users/search?q=${encodeURIComponent(meg.json.user.email)}`);
@@ -136,6 +152,9 @@ test("sender en e-post av hver type til kontoen som er logget inn", async () => 
   expect(medlem.status, medlem.tekst.slice(0, 300)).toBe(201);
   const tildelt = await api("POST", `/api/admin/content/classes/${classId}/courses`, { courseId: kursId });
   expect(tildelt.status, tildelt.tekst.slice(0, 300)).toBe(201);
+  const nyttTildelt = await api("POST", `/api/admin/content/classes/${classId}/courses`, { courseId: nyttKursId });
+  expect(nyttTildelt.status, nyttTildelt.tekst.slice(0, 300)).toBe(201);
+  console.log(`to kurs tildelt ${new Date().toTimeString().slice(0, 5)}. E-posten om nye kurs kommer om lag et kvarter etter, med bare «E-posttest nytt kurs».`);
 
   await leverFlervalg(bestått, "Riktig");
   const strykId = await leverFlervalg(strøket, "Galt");
@@ -198,9 +217,11 @@ async function tilSensor(sensor: string) {
 
 test("rydder: arkiverer det testen laget, når e-postene er sett", async () => {
   test.skip(process.env.RYDD !== "1", "bare med RYDD=1");
-  const { kursId, classId, moduler } = JSON.parse(fs.readFileSync(LAGER, "utf8")) as { kursId: string; classId: string; moduler: string[] };
-  await api("POST", `/api/admin/content/courses/${kursId}/unpublish`);
-  expect((await api("POST", `/api/admin/content/courses/${kursId}/archive`)).status).toBe(200);
+  const { kursId, nyttKursId, classId, moduler } = JSON.parse(fs.readFileSync(LAGER, "utf8")) as { kursId: string; nyttKursId?: string; classId: string; moduler: string[] };
+  for (const id of [kursId, nyttKursId].filter((id): id is string => Boolean(id))) {
+    await api("POST", `/api/admin/content/courses/${id}/unpublish`);
+    expect((await api("POST", `/api/admin/content/courses/${id}/archive`)).status).toBe(200);
+  }
   for (const moduleId of moduler) expect((await api("POST", `/api/admin/content/modules/${moduleId}/archive`)).status).toBe(200);
   console.log(`klassen ${classId} står igjen, den har ingen arkivering her.`);
 });
