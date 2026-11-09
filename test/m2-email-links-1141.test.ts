@@ -219,7 +219,7 @@ describe("e-post gjennom rutene", () => {
   });
 
   // #1142 skive 3: tildelingen sender ingenting selv. Jobben i workeren lager raden, samler den et kvarter senere, og
-  // behandleren i outboxen sender én e-post med lenke til «Mine kurs» (uten id: e-posten kan nevne flere kurs).
+  // behandleren i outboxen sender én e-post. Flere kurs: lenke til «Mine kurs» uten id. Ett kurs: rett til kurset (2.148.0).
   async function runEmailJob(courseId: string) {
     const t0 = new Date(Date.now() - 60 * 60_000);
     await runCourseAssignmentEmailSchedule({ now: t0, onlyCourseIds: [courseId] });
@@ -232,7 +232,7 @@ describe("e-post gjennom rutene", () => {
     }
   }
 
-  it("klassetildeling: ingen e-post fra handlingen; jobben sender én, med lenke til «Mine kurs»", async () => {
+  it("klassetildeling av ett kurs: ingen e-post fra handlingen; jobben sender én, med lenke rett til kurset", async () => {
     const course = await prisma.course.create({
       data: { title: JSON.stringify({ "en-GB": `Kurs ${tag}`, nb: `Kurs ${tag}`, nn: `Kurs ${tag}` }), enrollmentPolicy: "RESTRICTED", publishedAt: new Date() },
       select: { id: true },
@@ -250,7 +250,7 @@ describe("e-post gjennom rutene", () => {
 
     await runEmailJob(course.id);
     expect(mailsTo(email)).toHaveLength(1);
-    expectOwnLink(mailsTo(email)[0], `${BASE}/participant`, "kurs-tildelt.jpg");
+    expectOwnLink(mailsTo(email)[0], `${BASE}/participant?courseId=${course.id}`, "kurs-tildelt.jpg");
     expect(mailsTo(email)[0].content.subject).toBe(`Du har fått et nytt kurs: «Kurs ${tag}»`);
 
     // Samme tildeling på nytt med ny frist: fristen oppdateres, og ingen får e-posten om nytt kurs igjen.
