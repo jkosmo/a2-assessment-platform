@@ -455,8 +455,10 @@ eller i Git Bash: `CONFIRM_STAGE_COPY=<databasenavnet> npx dotenv -e .env.<stage
 
 ⚠️ **Skriptet skal aldri kjøres mot prod**: der ville det sette ekte e-post som venter, til `baseline`, `skipped` og
 `failed`, og den ville aldri bli sendt. Sperren (`scripts/maintenance/stageCopyGuard.ts`) kjører før noe skrives: den nekter
-alltid et vertsnavn som inneholder `-prd-` eller `prod`, også med bekreftelse, og krever at `CONFIRM_STAGE_COPY` er lik
-databasenavnet i `DATABASE_URL`. Meldingen skriver aldri ut passordet eller adressen. Utskriften ved suksess er én linje
+alltid et vertsnavn som inneholder `-prd-` eller `prod`, også med bekreftelse, krever at vertsnavnet viser stage-serveren
+(`-stg-`), og krever at `CONFIRM_STAGE_COPY` er lik databasenavnet i `DATABASE_URL`. Kjør det derfor mot kopien på
+stage-serveren etter gjenopprettingen, ikke mot en lokal kopi: tunnel, IP-adresse og alias nektes, fordi de kunne pekt mot
+prod uten å vise det. Meldingen skriver aldri ut passordet eller adressen. Utskriften ved suksess er én linje
 `stage_copy_email_neutralized` med antallet i hvert steg. Kjørt to ganger gir andre runde 0 overalt.
 
 ## Seed Behavior

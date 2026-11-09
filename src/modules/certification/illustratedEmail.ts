@@ -142,14 +142,17 @@ const FONT = "font-family:Arial,Helvetica,sans-serif;";
 /**
  * Knapp som tabell, så Outlook tegner den. Adressen står også synlig, så mottakeren kan se hvor den går.
  *
- * ⚠️ Luften rundt teksten står på CELLEN, ikke på lenken. Outlook for Windows ser bort fra `padding` på `<a>`, og
- * knappen ble da bare så stor som bokstavene (produkteier 2026-11-09, skjermbilde fra prod).
+ * ⚠️ Luften rundt teksten står to steder (produkteier 2026-11-09, skjermbilde fra prod; QA-porten runde 2):
+ *   - på LENKEN (`padding`), så hele den blå flaten er klikkbar i e-postprogrammer som tegner den;
+ *   - på CELLEN som `mso-padding-alt`, som bare Outlook for Windows leser. Outlook ser bort fra `padding` på `<a>`, og uten
+ *     dette ble knappen bare så stor som bokstavene. I Outlook er det da bare teksten som er klikkbar; det er prisen uten VML.
+ * Luft som vanlig `padding` på cellen ville gitt dobbel luft i alle andre programmer, og en død blå flate rundt lenken.
  */
 function linkHtml(link: EmailLink): string {
   const url = escapeHtml(link.url);
   return [
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 8px 0;">',
-    `<tr><td bgcolor="#1f4e79" style="background-color:#1f4e79;border-radius:4px;padding:12px 20px;"><a href="${url}" style="display:inline-block;${FONT}font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;">${escapeHtml(link.label)}</a></td></tr>`,
+    `<tr><td bgcolor="#1f4e79" style="background-color:#1f4e79;border-radius:4px;mso-padding-alt:12px 20px;"><a href="${url}" style="display:inline-block;padding:12px 20px;${FONT}font-size:16px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;">${escapeHtml(link.label)}</a></td></tr>`,
     "</table>",
     `<p style="margin:0 0 8px 0;${FONT}font-size:13px;line-height:20px;color:#5f6b7a;word-break:break-all;">${url}</p>`,
   ].join("\n");

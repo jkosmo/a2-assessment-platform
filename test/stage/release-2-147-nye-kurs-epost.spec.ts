@@ -121,6 +121,10 @@ test.describe("oppsett (uten STAGE_1142_RYDD)", () => {
 
     // Ut: fullførte, påbegynte («Mine kurs» sier IN_PROGRESS eller COMPLETED), og kurs kontoen alt har fra en klasse — de
     // har en rad fra før (`baseline` eller `sent`), og gir aldri e-post igjen.
+    // ⚠️ Kjent begrensning (QA-porten runde 2): API-et viser ikke rader i `CourseAssignmentNotice` eller deltakelse i diskusjoner.
+    // Et kurs kontoen har hatt fra en klasse ETTER 2.147.0 og så mistet, eller har skrevet i, kan velges og gir da ingen e-post.
+    // Første kjøring etter utrullingen er trygg (ingen rader før 2.147.0 utenom `baseline` for det kontoen har nå). Kommer det
+    // ingen e-post ved en senere kjøring: se `kandidater` i rapporten og velg andre kurs.
     const fullført = new Set(((await api("GET", "/api/courses/completions")).json.completions as Array<{ courseId: string }> ?? []).map((c) => c.courseId));
     const mine = (await api("GET", "/api/courses")).json.courses as Array<{ id: string; progress: { courseStatus: string } }> ?? [];
     const påbegynt = new Set(mine.filter((k) => k.progress?.courseStatus !== "NOT_STARTED").map((k) => k.id));

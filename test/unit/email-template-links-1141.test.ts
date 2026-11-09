@@ -192,13 +192,14 @@ describe("adresser i tekst fra forfattere og deltakere", () => {
 
 describe("knappen i Outlook", () => {
   // Produkteier 2026-11-09, skjermbilde fra prod: Outlook for Windows ser bort fra `padding` på `<a>`, og knappen ble bare så stor
-  // som bokstavene. Luften skal stå på cellen rundt lenken, som Outlook tegner.
-  it("luften står på cellen med knappens farge, ikke på lenken", () => {
+  // som bokstavene. QA-porten runde 2: med luften bare på cellen ble den blå flaten rundt teksten død i alle andre programmer.
+  it("luften står på lenken (hele flaten klikkbar), og som mso-padding-alt på cellen for Outlook — aldri som vanlig padding på cellen", () => {
     const e = renderIllustratedEmail({ locale: "nb", subject: "S", paragraphs: ["Tekst."], illustration: EMAIL_ILLUSTRATIONS.appeal, link: { url: `${BASE}/participant`, label: "Åpne" } });
     const cell = e.html.match(/<td bgcolor="#1f4e79" style="([^"]*)">\s*<a href="[^"]*" style="([^"]*)"/);
     expect(cell, "knappecellen med lenken").not.toBeNull();
-    expect(cell![1]).toMatch(/padding:\s*12px 20px/);
-    expect(cell![2]).not.toMatch(/padding/);
+    expect(cell![1]).toMatch(/mso-padding-alt:\s*12px 20px/);
+    expect(cell![1].replace(/mso-padding-alt:[^;]*;?/, "")).not.toMatch(/padding/);
+    expect(cell![2]).toMatch(/padding:\s*12px 20px/);
   });
 });
 

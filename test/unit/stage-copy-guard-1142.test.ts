@@ -55,7 +55,19 @@ describe("#1142 — sperren for stage-kopiskriptet", () => {
 
   it("stage-mønster med riktig bekreftelse: godtas", () => {
     expect(checkStageCopyTarget(url(STAGE_HOST), "a2_stage_copy")).toEqual({ ok: true, databaseName: "a2_stage_copy" });
-    expect(checkStageCopyTarget(url("127.0.0.1", "a2_kopi"), " a2_kopi ")).toEqual({ ok: true, databaseName: "a2_kopi" });
+    expect(checkStageCopyTarget(url(STAGE_HOST, "a2_kopi"), " a2_kopi ")).toEqual({ ok: true, databaseName: "a2_kopi" });
+  });
+
+  // QA-porten runde 2: en tunnel eller et alias til prod har ingen prod-mønstre, og databasenavnet er likt i begge miljøene.
+  it("tunnel, IP-adresse eller alias uten stage-mønster: nektes, også med riktig bekreftelse", () => {
+    for (const host of ["127.0.0.1", "localhost", "10.1.2.3", "db.eksempel.test", "eksempel-pg.postgres.database.azure.com"]) {
+      const databaseUrl = url(host, "a2assessment");
+      const result = checkStageCopyTarget(databaseUrl, "a2assessment");
+      expect(result.ok, host).toBe(false);
+      if (result.ok) continue;
+      expect(result.reason, host).toBe("not_stage_host");
+      expectNoSecrets(result.message, databaseUrl);
+    }
   });
 
   it("uten DATABASE_URL, med en adresse som ikke kan leses, eller uten databasenavn: nektes uten å skrive ut adressen", () => {

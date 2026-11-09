@@ -2,7 +2,7 @@
  * #1142: sperren for `npm run stage-copy:neutralize-email` (QA-porten 2026-11-09). Skriptet setter ventende e-post til
  * terminale tilstander. Kjøres det ved en feil mot prod, forsvinner ekte e-post for godt. Derfor, FØR noe skrives:
  *   1. vertsnavnet i DATABASE_URL må ikke se ut som prod (inneholder «-prd-» eller «prod»). Nektes alltid, også med
- *      bekreftelse;
+ *      bekreftelse. Og det må vise stage-serveren («-stg-»): tunnel, IP-adresse og alias nektes (QA-porten runde 2);
  *   2. CONFIRM_STAGE_COPY må være lik databasenavnet i DATABASE_URL, så den som kjører, har sett hvilken database det gjelder.
  * Meldingene skriver aldri ut passordet eller hele adressen. Ren funksjon uten database, så den testes som enhetstest
  * (test/unit/stage-copy-guard-1142.test.ts). Repoet er offentlig: bare mønsteret står her, ingen ekte vertsnavn.
@@ -11,9 +11,12 @@
 /** Deler av vertsnavnet som betyr prod. Sammenlignes uten hensyn til store og små bokstaver. */
 export const PROD_HOST_PATTERNS = ["-prd-", "prod"] as const;
 
+/** Deler av vertsnavnet som viser stage-serveren (navneregelen i infra/azure/main.bicep). Ett av dem MÅ være med. */
+export const STAGE_HOST_PATTERNS = ["-stg-"] as const;
+
 export type StageCopyGuardResult =
   | { ok: true; databaseName: string }
-  | { ok: false; reason: "missing_database_url" | "unreadable_database_url" | "missing_database_name" | "prod_host" | "missing_confirmation" | "wrong_confirmation"; message: string };
+  | { ok: false; reason: "missing_database_url" | "unreadable_database_url" | "missing_database_name" | "prod_host" | "not_stage_host" | "missing_confirmation" | "wrong_confirmation"; message: string };
 
 export function checkStageCopyTarget(databaseUrl: string | undefined, confirmation: string | undefined): StageCopyGuardResult {
   if (!databaseUrl?.trim()) {
@@ -33,6 +36,15 @@ export function checkStageCopyTarget(databaseUrl: string | undefined, confirmati
       ok: false,
       reason: "prod_host",
       message: `Vertsnavnet i DATABASE_URL ser ut som prod (inneholder ${PROD_HOST_PATTERNS.map((p) => `«${p}»`).join(" eller ")}). Skriptet kjøres aldri mot prod, heller ikke med bekreftelse. Avbrutt uten å skrive noe.`,
+    };
+  }
+  // QA-porten runde 2: å nekte prod-navn er ikke nok. En tunnel (127.0.0.1), en IP-adresse eller et alias til prod har ingen av
+  // mønstrene, og databasenavnet er det samme i begge miljøene. Vertsnavnet må derfor POSITIVT vise stage-serveren.
+  if (!STAGE_HOST_PATTERNS.some((pattern) => host.includes(pattern))) {
+    return {
+      ok: false,
+      reason: "not_stage_host",
+      message: `Vertsnavnet i DATABASE_URL viser ikke stage-serveren (skal inneholde ${STAGE_HOST_PATTERNS.map((p) => `«${p}»`).join(" eller ")}). Tunnel, IP-adresse og alias godtas ikke. Avbrutt uten å skrive noe.`,
     };
   }
 
