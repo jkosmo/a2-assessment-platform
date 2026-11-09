@@ -118,6 +118,8 @@ model User {
   agentAuthoringTokens          AgentAuthoringToken[]    @relation("AgentAuthoringTokens")
   contentOwnerships             ContentOwner[]           @relation("ContentOwnerships")
   courseVersionNotices          CourseVersionNotice[]
+  // #1142: e-posten om nye kurs, én rad per person og kurs.
+  courseAssignmentNotices       CourseAssignmentNotice[]
   // #934 skive 5a-2: beståtte per innlevering.
   modulePasses                  ModulePass[]
 }
@@ -744,6 +746,8 @@ model Course {
   versions           CourseVersion[]
   // #934 skive 4b: e-posten om ny hovedversjon, én rad per person og versjon.
   versionNotices     CourseVersionNotice[]
+  // #1142: e-posten om nye kurs, én rad per person og kurs.
+  assignmentNotices  CourseAssignmentNotice[]
   sectionReads       CourseSectionRead[]
   enrollments        CourseEnrollment[]
   groupAssignments   CourseGroupAssignment[]
@@ -855,6 +859,37 @@ model CourseVersionNotice {
 
   @@unique([courseId, versionMajor, userId])
   @@index([status, createdAt])
+}
+
+// #1142: én rad per person og kurs — e-posten om nye kurs fra en klasse (doc/design/PLAN_1142.md). Raden betyr
+// «denne personen er varslet, eller skal varsles, om dette kurset». Finnes raden, kommer det aldri en ny e-post om
+// samme kurs. Radene lages av en jobb i workeren fra regelen `eligibleAssignmentPairs`
+// (`src/modules/course/courseAssignmentNotice.ts`), aldri av handlingene, og skrives bare der (vakt:
+// test/course-assignment-notice-write-guard.test.js).
+//
+// status: "baseline" (hadde kurset da #1142 kom; sendes aldri) | "waiting" | "queued" (med i en samlet e-post,
+//         `batchId`) | "sending" | "sent" | "uncertain" (avbrutt underveis; sendes ikke på nytt) | "failed"
+model CourseAssignmentNotice {
+  id        String    @id @default(cuid())
+  userId    String
+  courseId  String
+  // baseline | waiting | queued | sending | sent | uncertain | failed
+  status    String    @default("waiting")
+  // Satt når raden er med i en samlet e-post (status queued og videre). Behandleren i outboxen finner radene på den.
+  batchId   String?
+  reason    String?
+  queuedAt  DateTime?
+  // Settes eksplisitt ved overgangen til `sending`. Ryddingen måler på denne, ikke på `updatedAt` (Codex runde 1 nr. 3).
+  sendingAt DateTime?
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([status, userId, createdAt])
+  @@index([batchId])
 }
 
 // #496/EN-1: assignment of a course to a participant (individual, department, or self-enrollment),
