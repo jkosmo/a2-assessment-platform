@@ -443,8 +443,9 @@ Kilden er et Excel-ark med navn og kryss per kurs. Ingen database-tilgang trengs
 3. **Prøvekjøring:** `node scripts/maintenance/registerExternalCompletions.mjs --auth <fil> --input <inndata> --report <rapport>`.
    Rapporten har per kurs `people` (navn → e-post → utfall) og `unresolved` (navn uten eksakt treff, med kandidater). Skriptet
    nekter filer inne i repoet.
-4. **Produkteier godkjenner** rapporten: e-postene i `people`, og hva som skal gjøres med `unresolved` (rett navnet i inndata og kjør
-   prøvekjøringen på nytt).
+4. **Produkteier godkjenner** rapporten: e-postene i `people`, og hva som skal gjøres med `unresolved`. Rett navnet i inndata, eller
+   bytt det ut med personens e-postadresse (en verdi med `@` matches eksakt på e-post; brukes når to kontoer har samme navn), og kjør
+   prøvekjøringen på nytt.
 5. **Skriving, om kvelden og først når app og worker kjører 2.149.0 eller nyere:**
    `node scripts/maintenance/registerExternalCompletions.mjs --auth <fil> --write --approved <godkjent rapport> --report <resultat>`.
    Bare `would_create` sendes; plattformen sjekker alt på nytt. `busy`/`not_processed` → kjør samme kommando igjen (idempotent).

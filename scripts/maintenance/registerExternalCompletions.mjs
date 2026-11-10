@@ -55,6 +55,11 @@ export function normalizeName(value) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Kurstittelen som den står, med mellomrom normalisert (ikke store/små bokstaver: titlene skal være like). */
+export function normalizeTitle(value) {
+  return String(value ?? "").normalize("NFC").replace(/\s+/g, " ").trim();
+}
+
 /** Utløpet som millisekunder: et tall i ms eller sekunder, eller en datotekst. `null` når det ikke kan leses. */
 export function expiresAtMs(value) {
   if (value === undefined || value === null || value === "") return null;
@@ -98,7 +103,8 @@ function client(auth) {
 async function resolveCourses(call, inputCourses) {
   const all = (await call("GET", "/api/admin/content/courses")).courses ?? [];
   return inputCourses.map((input) => {
-    const sameTitle = all.filter((c) => (c.displayTitle ?? "").trim() === input.courseTitle.trim());
+    // Mellomrom normaliseres: den arkiverte kopien av Modul 5 har to mellomrom etter kolon (prøvekjøringen på stage 2026-11-10).
+    const sameTitle = all.filter((c) => normalizeTitle(c.displayTitle) === normalizeTitle(input.courseTitle));
     const live = sameTitle.filter((c) => c.publishedAt && !c.archivedAt);
     if (live.length !== 1) fail(`kurset «${input.courseTitle}»: ${live.length} publiserte, ikke arkiverte kurs med den tittelen (ventet 1)`);
     // Andre kurs med samme tittel (f.eks. en arkivert kopi): et bevis der betyr også at personen har tatt kurset. Endepunktet tar
@@ -110,14 +116,16 @@ async function resolveCourses(call, inputCourses) {
   });
 }
 
-async function resolvePeople(call, names) {
+export async function resolvePeople(call, names) {
   const matched = new Map(); // normalisert navn → { name, userId, email }
   const unresolved = [];
   for (const raw of names) {
     const wanted = normalizeName(raw);
     if (matched.has(wanted) || unresolved.some((u) => normalizeName(u.name) === wanted)) continue;
     const found = (await call("GET", `/api/admin/content/users/search?q=${encodeURIComponent(String(raw).trim())}`)).users ?? [];
-    const exact = found.filter((u) => normalizeName(u.name) === wanted);
+    // En e-postadresse i stedet for navnet (satt av produkteier ved godkjenningen, når navnet er tvetydig) matches eksakt på e-post.
+    const byEmail = String(raw).includes("@");
+    const exact = found.filter((u) => (byEmail ? String(u.email ?? "").toLowerCase() === String(raw).trim().toLowerCase() : normalizeName(u.name) === wanted));
     if (exact.length === 1) {
       matched.set(wanted, { name: String(raw).trim(), userId: exact[0].id, email: exact[0].email });
       continue;
