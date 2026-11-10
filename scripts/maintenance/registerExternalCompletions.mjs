@@ -100,17 +100,25 @@ function client(auth) {
   };
 }
 
-async function resolveCourses(call, inputCourses) {
+export async function resolveCourses(call, inputCourses) {
   const all = (await call("GET", "/api/admin/content/courses")).courses ?? [];
   return inputCourses.map((input) => {
     // Mellomrom normaliseres: den arkiverte kopien av Modul 5 har to mellomrom etter kolon (prøvekjøringen på stage 2026-11-10).
     const sameTitle = all.filter((c) => normalizeTitle(c.displayTitle) === normalizeTitle(input.courseTitle));
     const live = sameTitle.filter((c) => c.publishedAt && !c.archivedAt);
     if (live.length !== 1) fail(`kurset «${input.courseTitle}»: ${live.length} publiserte, ikke arkiverte kurs med den tittelen (ventet 1)`);
-    // Andre kurs med samme tittel (f.eks. en arkivert kopi): et bevis der betyr også at personen har tatt kurset. Endepunktet tar
-    // høyst fem; flere avbryter i stedet for å kutte i stillhet. Rapporten viser hvor mange som ble funnet, så en kopi med litt
-    // annen tittel kan oppdages ved godkjenningen.
-    const related = sameTitle.filter((c) => c.id !== live[0].id).map((c) => c.id);
+    // `relatedTitles`: gamle titler på samme kurs. I prod het kursene «… Repetisjon Modul N …» og ble omdøpt til «Repetisjon
+    // Kurs N …», mens den arkiverte kopien av Modul 5 beholdt det gamle navnet (prøvekjøringen i prod 2026-11-10). En tittel
+    // der som ikke finnes, avbryter: da er inndata feil, og en kopi kunne blitt oversett i stillhet.
+    const oldTitles = (input.relatedTitles ?? []).map(normalizeTitle);
+    for (const title of input.relatedTitles ?? []) {
+      if (!all.some((c) => normalizeTitle(c.displayTitle) === normalizeTitle(title))) fail(`kurset «${input.courseTitle}»: fant ingen kurs med den gamle tittelen «${title}»`);
+    }
+    const byOldTitle = all.filter((c) => oldTitles.includes(normalizeTitle(c.displayTitle)));
+    // Andre kurs med samme eller gammel tittel (f.eks. en arkivert kopi): et bevis der betyr også at personen har tatt kurset.
+    // Endepunktet tar høyst fem; flere avbryter i stedet for å kutte i stillhet. Rapporten viser hvor mange som ble funnet, så
+    // en kopi med litt annen tittel kan oppdages ved godkjenningen.
+    const related = [...new Set([...sameTitle, ...byOldTitle].filter((c) => c.id !== live[0].id).map((c) => c.id))];
     if (related.length > 5) fail(`kurset «${input.courseTitle}»: ${related.length} andre kurs med samme tittel (høyst 5)`);
     return { ...input, courseId: live[0].id, relatedCourseIds: related };
   });
@@ -132,13 +140,21 @@ export async function resolvePeople(call, names) {
     }
     // Ingen eller flere eksakte: vis kandidater fra søk på etternavnet, så produkteier kan avgjøre.
     let candidates = exact;
-    if (exact.length === 0) {
+    let exactAmongCandidates = [];
+    if (exact.length === 0 && !byEmail) {
       const last = String(raw).trim().split(/\s+/).pop();
       if (last && last.length >= 2) candidates = (await call("GET", `/api/admin/content/users/search?q=${encodeURIComponent(last)}`)).users ?? [];
+      // Søket er delstreng på navnet slik det er lagret, så «Fred Anda» finner ikke «Fred  Anda» (to mellomrom, prøvekjøringen
+      // i prod 2026-11-10). Etternavnsøket finner kontoen; samme eksakte regel (mellomrom normalisert) avgjør.
+      exactAmongCandidates = candidates.filter((u) => normalizeName(u.name) === wanted);
+      if (exactAmongCandidates.length === 1) {
+        matched.set(wanted, { name: String(raw).trim(), userId: exactAmongCandidates[0].id, email: exactAmongCandidates[0].email });
+        continue;
+      }
     }
     unresolved.push({
       name: String(raw).trim(),
-      reason: exact.length > 1 ? "flere_med_samme_navn" : "ingen_med_eksakt_navn",
+      reason: exact.length > 1 || exactAmongCandidates.length > 1 ? "flere_med_samme_navn" : "ingen_med_eksakt_navn",
       candidates: candidates.slice(0, 10).map((u) => ({ name: u.name, email: u.email })),
     });
   }

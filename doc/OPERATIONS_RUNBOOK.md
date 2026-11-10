@@ -436,7 +436,9 @@ Kilden er et Excel-ark med navn og kryss per kurs. Ingen database-tilgang trengs
 `POST /api/admin/platform/course-completions/external` med en ADMINISTRATOR-innlogging. Bakgrunn: `doc/DECISIONS.md`.
 
 1. **Lag inndata utenfor repoet** (navn er personopplysninger):
-   `{ "courses": [ { "courseTitle": "<tittel nøyaktig som på plattformen>", "reference": "<arket, kolonnen>", "names": [...] } ] }`.
+   `{ "courses": [ { "courseTitle": "<tittel nøyaktig som på plattformen>", "relatedTitles": ["<gammel tittel>"], "reference": "<arket, kolonnen>", "names": [...] } ] }`.
+   `relatedTitles` er valgfri: gamle titler på samme kurs, f.eks. en arkivert kopi som beholdt navnet da kurset ble omdøpt. Et
+   kursbevis der regnes som at personen har tatt kurset. En gammel tittel som ikke finnes, avbryter kjøringen.
    Referansen lagres på beviset og i revisjonen: bare bokstaver, tall og `.,:()_-`, ingen navn.
 2. **Logg inn** som administrator mot miljøet, til en fil utenfor repoet med `{ baseUrl, accessToken, expiresOn }` (tokenet utløper
    etter ~1 time). Ikke skriv ut tokenet.

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error — skriptet er ren JavaScript uten typer.
-import { normalizeName, normalizeTitle, expiresAtMs, write, resolvePeople } from "../../scripts/maintenance/registerExternalCompletions.mjs";
+import { normalizeName, normalizeTitle, expiresAtMs, write, resolvePeople, resolveCourses } from "../../scripts/maintenance/registerExternalCompletions.mjs";
 
 describe("#1145: oppslaget av personer", () => {
   // Brukersøket er delstreng og tar med begge kontoene med samme navn (som på stage 2026-11-10).
@@ -27,10 +27,62 @@ describe("#1145: oppslaget av personer", () => {
     expect(matched).toEqual([{ name: "kari@a-2.example", userId: "u-jobb", email: "kari@a-2.example" }]);
   });
 
+  it("to mellomrom i navnet på plattformen: søket bommer, etternavnsøket finner kontoen (prøvekjøringen i prod 2026-11-10)", async () => {
+    const spaced = [{ id: "u-fred", name: "Fred  Anda", email: "fred@a-2.example" }, { id: "u-frode", name: "Frode Anda", email: "frode@a-2.example" }];
+    const search = vi.fn(async (_method: string, route: string) => {
+      const q = decodeURIComponent(route.split("q=")[1] ?? "").toLowerCase();
+      return { users: spaced.filter((u) => u.name.toLowerCase().includes(q)) };
+    });
+    const { matched, unresolved } = await resolvePeople(search, ["Fred Anda"]);
+    expect(unresolved).toEqual([]);
+    expect(matched).toEqual([{ name: "Fred Anda", userId: "u-fred", email: "fred@a-2.example" }]);
+  });
+
+  it("etternavnsøket med to eksakte treff: fortsatt uavklart", async () => {
+    const twins = [{ id: "a", name: "Fred  Anda", email: "a@x" }, { id: "b", name: "Fred Anda ", email: "b@x" }];
+    // Første søk («Fred Anda») treffer bare den uten dobbelt mellomrom; etternavnsøket begge. Ingen av dem skal velges.
+    const search = vi.fn(async (_method: string, route: string) => {
+      const q = decodeURIComponent(route.split("q=")[1] ?? "").toLowerCase();
+      return { users: q === "anda" ? twins : [] };
+    });
+    const { matched, unresolved } = await resolvePeople(search, ["Fred Anda"]);
+    expect(matched).toEqual([]);
+    expect(unresolved[0]).toMatchObject({ name: "Fred Anda", reason: "flere_med_samme_navn" });
+  });
+
   it("delstreng er ikke treff: «Anne Berg» blir ikke «Anne Bergersen»", async () => {
     const { matched, unresolved } = await resolvePeople(call, ["Anne Berg"]);
     expect(matched).toEqual([]);
     expect(unresolved[0]).toMatchObject({ name: "Anne Berg", reason: "ingen_med_eksakt_navn" });
+  });
+});
+
+describe("#1145: gamle titler (`relatedTitles`, prøvekjøringen i prod 2026-11-10)", () => {
+  // I prod ble «… Repetisjon Modul 5 …» omdøpt til «Repetisjon Kurs 5 …»; den arkiverte kopien beholdt det gamle navnet.
+  const courses = [
+    { id: "ny", displayTitle: "Repetisjon Kurs 5 – Work i ChatGPT", publishedAt: "2026-11-01", archivedAt: null },
+    { id: "gammel", displayTitle: "Videregående generativ KI:  Repetisjon Modul 5 – Work i ChatGPT", publishedAt: null, archivedAt: "2026-11-01" },
+    { id: "annen", displayTitle: "Repetisjon Kurs 4 – Rapportskriving", publishedAt: "2026-11-01", archivedAt: null },
+  ];
+  const call = vi.fn(async () => ({ courses }));
+
+  it("en arkivert kopi med gammel tittel regnes som samme kurs; uten `relatedTitles` blir den ikke sett", async () => {
+    const [withOld] = await resolveCourses(call, [{ courseTitle: "Repetisjon Kurs 5 – Work i ChatGPT", relatedTitles: ["Videregående generativ KI: Repetisjon Modul 5 – Work i ChatGPT"], names: [] }]);
+    expect(withOld).toMatchObject({ courseId: "ny", relatedCourseIds: ["gammel"] });
+    const [without] = await resolveCourses(call, [{ courseTitle: "Repetisjon Kurs 5 – Work i ChatGPT", names: [] }]);
+    expect(without.relatedCourseIds).toEqual([]);
+  });
+
+  it("en gammel tittel som ikke finnes, avbryter i stedet for å bli oversett", async () => {
+    const exit = vi.spyOn(process, "exit").mockImplementation(((code: number) => { throw new Error(`exit ${code}`); }) as never);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(resolveCourses(call, [{ courseTitle: "Repetisjon Kurs 5 – Work i ChatGPT", relatedTitles: ["Repetisjon Modul 5 – skrivefeil"], names: [] }])).rejects.toThrow("exit 1");
+      expect(error.mock.calls[0]![0]).toMatch(/gamle tittelen/);
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
   });
 });
 
