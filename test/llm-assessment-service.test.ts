@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { evaluatePracticalWithAzureOpenAi } from "../src/modules/assessment/llmAssessmentService.js";
+import { evaluatePracticalWithAzureOpenAi, generateModelAnswerWithAzureOpenAi } from "../src/modules/assessment/llmAssessmentService.js";
 
 const originalFetch = global.fetch;
 
@@ -373,5 +373,75 @@ describe("llmAssessmentService azure_openai adapter", () => {
     const [, secondInit] = fetchMock.mock.calls[1] as [string, RequestInit];
     const secondPayload = JSON.parse(String(secondInit.body)) as Record<string, unknown>;
     expect(secondPayload.max_tokens).toBe(1200);
+  });
+});
+
+// #1147: KI-svaret til likhetssjekken (#475) valgte alltid `max_tokens` med `auto`, og modellen i prod avviser den. Sjekken
+// feilet ved hver innlevering fra minst 2026-10-14. Mocken under oppfører seg som modellen i prod.
+describe("#1147: KI-svaret til likhetssjekken har samme reserve som vurderingen", () => {
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  const reject = (param: string, message: string) =>
+    new Response(JSON.stringify({ error: { message, type: "invalid_request_error", param, code: "unsupported_parameter" } }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    });
+  const answer = (content: string) =>
+    new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200, headers: { "content-type": "application/json" } });
+
+  /** Som modellen i prod: avviser `max_tokens`, og (valgfritt) en temperatur som ikke er standard. */
+  const prodLikeModel = (options: { rejectsTemperature?: boolean } = {}) =>
+    vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      if ("max_tokens" in body) {
+        return reject("max_tokens", "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.");
+      }
+      if (options.rejectsTemperature && "temperature" in body) {
+        return reject("temperature", "Unsupported value: 'temperature' does not support 0 with this model.");
+      }
+      return answer("Et modellsvar.");
+    });
+
+  const input = { moduleTaskText: "Skriv om møtearbeid.", responseLocale: "nb" as const };
+
+  it("`auto` mot en modell som avviser `max_tokens`: svaret kommer, sendt med `max_completion_tokens`", async () => {
+    const fetchMock = prodLikeModel();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    await expect(generateModelAnswerWithAzureOpenAi(input, { ...baseConfig, tokenLimitParameter: "auto" })).resolves.toBe("Et modellsvar.");
+    const last = JSON.parse(String((fetchMock.mock.calls.at(-1) as [string, RequestInit])[1].body)) as Record<string, unknown>;
+    expect(last.max_completion_tokens).toBe(1200);
+    expect(last.max_tokens).toBeUndefined();
+  });
+
+  it("avvist temperatur: prøves på nytt uten temperatur", async () => {
+    const fetchMock = prodLikeModel({ rejectsTemperature: true });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    await expect(generateModelAnswerWithAzureOpenAi(input, { ...baseConfig, tokenLimitParameter: "auto" })).resolves.toBe("Et modellsvar.");
+    const last = JSON.parse(String((fetchMock.mock.calls.at(-1) as [string, RequestInit])[1].body)) as Record<string, unknown>;
+    expect(last.temperature).toBeUndefined();
+  });
+
+  it("`max_tokens` valgt med vilje: ingen reserve, og feilen sier at det var KI-svaret", async () => {
+    const fetchMock = prodLikeModel();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    await expect(generateModelAnswerWithAzureOpenAi(input, { ...baseConfig, tokenLimitParameter: "max_tokens" })).rejects.toThrow(
+      "Azure OpenAI model-answer request failed (400: Unsupported parameter: 'max_tokens'",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("vurderingen bruker samme reserve: avvist temperatur prøves uten", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      if ("temperature" in body) return reject("temperature", "Unsupported value: 'temperature' does not support 0 with this model.");
+      return answer(JSON.stringify(validPayload));
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const result = await evaluatePracticalWithAzureOpenAi(baseInput, baseConfig);
+    expect(result.module_id).toBe("module-1");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

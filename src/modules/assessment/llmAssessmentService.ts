@@ -189,85 +189,33 @@ export async function evaluatePracticalWithAzureOpenAi(
 ): Promise<LlmStructuredAssessment> {
   const timeoutController = new AbortController();
   const timeout = setTimeout(() => timeoutController.abort(), config.timeoutMs);
-  const tokenParameterSequence = resolveTokenParameterSequence(config.tokenLimitParameter);
-  let lastProviderError: Error | null = null;
 
   try {
-    for (let index = 0; index < tokenParameterSequence.length; index += 1) {
-      const tokenParameter = tokenParameterSequence[index];
+    const responseBody = await postChatCompletionWithFallback(
+      config,
+      (tokenParameter, includeTemperature) => buildAzureOpenAiRequestBody(input, config, tokenParameter, includeTemperature),
+      timeoutController.signal,
+      { retryLabel: "[#603] Azure OpenAI assessment", failureLabel: "Azure OpenAI request failed" },
+    );
 
-      for (const includeTemperature of [true, false]) {
-        // #603: retry transient 429 (TPM-quota) / 5xx with Retry-After-aware backoff — same policy
-        // as the authoring client. Non-retryable statuses (incl. the 400-class unsupported-param /
-        // unsupported-temperature signals) return on the first attempt so the fallback loop below
-        // still drives them. The overall timeout signal bounds total time across retries.
-        const response = await fetchAzureOpenAiWithRetry(
-          buildAzureOpenAiCompletionsUrl(config),
+    const assistantContent = extractAssistantContent(responseBody);
+    const parsedStructuredPayload = parseStructuredPayload(assistantContent);
+    const parsedAssessment = llmResponseCodec.parse(parsedStructuredPayload);
+
+    // #1135: trinnet modellen valgte setter poenget; så regnes kriteriets egen skala om til 0–4 her,
+    // ikke av modellen.
+    return practicalFromRubricScores(
+      normalizeRubricScoresToContract(
+        scoresFromChosenSteps(
           {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "api-key": config.apiKey,
-            },
-            body: JSON.stringify(buildAzureOpenAiRequestBody(input, config, tokenParameter, includeTemperature)),
-            signal: timeoutController.signal,
+            ...parsedAssessment,
+            red_flags: normalizeRedFlags(parsedAssessment.red_flags),
           },
-          {
-            onRetry: ({ status, waitMs, attempt, maxAttempts }) =>
-              console.warn(
-                `[#603] Azure OpenAI assessment ${status} — retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts}).`,
-              ),
-          },
-        );
-
-        const rawBody = await response.text();
-        const responseBody = parseJsonBody(rawBody);
-
-        if (!response.ok) {
-          if (
-            config.tokenLimitParameter === "auto" &&
-            index < tokenParameterSequence.length - 1 &&
-            isUnsupportedTokenParameterError(responseBody, tokenParameter)
-          ) {
-            break;
-          }
-
-          if (includeTemperature && isUnsupportedTemperatureError(responseBody)) {
-            continue;
-          }
-
-          const providerMessage = extractProviderErrorMessage(responseBody);
-          lastProviderError = new Error(
-            `Azure OpenAI request failed (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`,
-          );
-          throw lastProviderError;
-        }
-
-        const assistantContent = extractAssistantContent(responseBody);
-        const parsedStructuredPayload = parseStructuredPayload(assistantContent);
-        const parsedAssessment = llmResponseCodec.parse(parsedStructuredPayload);
-
-        // #1135: trinnet modellen valgte setter poenget; så regnes kriteriets egen skala om til 0–4 her,
-        // ikke av modellen.
-        return practicalFromRubricScores(
-          normalizeRubricScoresToContract(
-            scoresFromChosenSteps(
-              {
-                ...parsedAssessment,
-                red_flags: normalizeRedFlags(parsedAssessment.red_flags),
-              },
-              input.rubricCriteria,
-            ),
-            input.rubricCriteria,
-          ),
-          input.rubricCriteriaIds,
-        );
-      }
-    }
-
-    throw (
-      lastProviderError ??
-      new Error("Azure OpenAI request failed for all configured token parameter strategies.")
+          input.rubricCriteria,
+        ),
+        input.rubricCriteria,
+      ),
+      input.rubricCriteriaIds,
     );
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -313,7 +261,8 @@ function buildStubModelAnswer(input: ModelAnswerContext): string {
   return task ? `Model answer addressing: ${task}` : "Model answer.";
 }
 
-async function generateModelAnswerWithAzureOpenAi(
+// Eksportert for testen av reserven (#1147).
+export async function generateModelAnswerWithAzureOpenAi(
   input: ModelAnswerContext,
   config: AzureOpenAiRuntimeConfig,
 ): Promise<string> {
@@ -334,33 +283,18 @@ async function generateModelAnswerWithAzureOpenAi(
           (input.moduleGuidanceText ? `\n\nGuidance:\n${input.moduleGuidanceText}` : ""),
       },
     ];
-    const tokenParameter = config.tokenLimitParameter === "auto" ? "max_tokens" : config.tokenLimitParameter;
-    const body: Record<string, unknown> = { messages, [tokenParameter]: config.maxTokens };
-    if (Number.isFinite(config.temperature)) body.temperature = config.temperature;
-
-    const response = await fetchAzureOpenAiWithRetry(
-      buildAzureOpenAiCompletionsUrl(config),
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", "api-key": config.apiKey },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      },
-      {
-        onRetry: ({ status, waitMs, attempt, maxAttempts }) =>
-          console.warn(
-            `[#475] Azure OpenAI model-answer ${status} — retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts}).`,
-          ),
-      },
+    // #1147: samme reserve som vurderingen. Med `auto` valgte denne alltid `max_tokens`, som modellen i prod avviser —
+    // likhetssjekken feilet ved hver innlevering fra minst 2026-10-14.
+    const responseBody = await postChatCompletionWithFallback(
+      config,
+      (tokenParameter, includeTemperature) => ({
+        messages,
+        [tokenParameter]: config.maxTokens,
+        ...(includeTemperature && Number.isFinite(config.temperature) && { temperature: config.temperature }),
+      }),
+      controller.signal,
+      { retryLabel: "[#475] Azure OpenAI model-answer", failureLabel: "Azure OpenAI model-answer request failed" },
     );
-    const rawBody = await response.text();
-    const responseBody = parseJsonBody(rawBody);
-    if (!response.ok) {
-      const providerMessage = extractProviderErrorMessage(responseBody);
-      throw new Error(
-        `Azure OpenAI model-answer request failed (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`,
-      );
-    }
     return extractAssistantContent(responseBody) ?? "";
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -478,6 +412,59 @@ function buildAzureOpenAiCompletionsUrl(config: AzureOpenAiRuntimeConfig): strin
   const encodedDeployment = encodeURIComponent(config.deployment.trim());
   const encodedApiVersion = encodeURIComponent(config.apiVersion.trim());
   return `${trimmedEndpoint}/openai/deployments/${encodedDeployment}/chat/completions?api-version=${encodedApiVersion}`;
+}
+
+type TokenParameter = "max_tokens" | "max_completion_tokens";
+
+/**
+ * #1147: ett kall mot chat/completions med reserven alle kall skal ha. Med `auto` prøves `max_completion_tokens` først og
+ * `max_tokens` etter; en avvist temperatur prøves på nytt uten. Gir tilbake svarkroppen (JSON) når kallet lykkes, og kaster
+ * `<failureLabel> (<status>: <melding>).` ellers.
+ *
+ * #603: forbigående 429 (TPM-kvote) og 5xx prøves på nytt med Retry-After. Statuser som ikke prøves på nytt (blant dem
+ * 400-svarene om parameter og temperatur) kommer tilbake på første forsøk, så løkka her styrer dem. Tidsavbruddet i
+ * `signal` gjelder hele kallet, på tvers av forsøkene.
+ */
+async function postChatCompletionWithFallback(
+  config: AzureOpenAiRuntimeConfig,
+  buildBody: (tokenParameter: TokenParameter, includeTemperature: boolean) => Record<string, unknown>,
+  signal: AbortSignal,
+  labels: { retryLabel: string; failureLabel: string },
+): Promise<unknown> {
+  const tokenParameterSequence = resolveTokenParameterSequence(config.tokenLimitParameter);
+  for (let index = 0; index < tokenParameterSequence.length; index += 1) {
+    const tokenParameter = tokenParameterSequence[index]!;
+    for (const includeTemperature of [true, false]) {
+      const response = await fetchAzureOpenAiWithRetry(
+        buildAzureOpenAiCompletionsUrl(config),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "api-key": config.apiKey },
+          body: JSON.stringify(buildBody(tokenParameter, includeTemperature)),
+          signal,
+        },
+        {
+          onRetry: ({ status, waitMs, attempt, maxAttempts }) =>
+            console.warn(`${labels.retryLabel} ${status} — retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts}).`),
+        },
+      );
+      const responseBody = parseJsonBody(await response.text());
+      if (response.ok) return responseBody;
+
+      if (
+        config.tokenLimitParameter === "auto" &&
+        index < tokenParameterSequence.length - 1 &&
+        isUnsupportedTokenParameterError(responseBody, tokenParameter)
+      ) {
+        break;
+      }
+      if (includeTemperature && isUnsupportedTemperatureError(responseBody)) continue;
+
+      const providerMessage = extractProviderErrorMessage(responseBody);
+      throw new Error(`${labels.failureLabel} (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`);
+    }
+  }
+  throw new Error(`${labels.failureLabel} for all configured token parameter strategies.`);
 }
 
 function buildAzureOpenAiRequestBody(

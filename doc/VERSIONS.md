@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.150.0 - 2026-11-10
+
+Innholdslikhetssjekken (#475) virker igjen i prod (#1147).
+
+- **Hva brukerne merker:** ingenting direkte. Sjekken står i skyggemodus. Fra nå lagres likhetsverdien igjen, og «Vurderingskvalitet»
+  får nye tall fra prod.
+- **Feilen:** KI-svaret sjekken sammenligner med, valgte alltid `max_tokens` når innstillingen var `auto`. Modellen i prod avviser
+  den. Sjekken hoppet over hver innlevering fra minst 2026-10-14, med «draft generation failed» i loggen.
+- **Slik virker det:** vurderingen og KI-svaret bruker nå samme kall med samme reserve (`postChatCompletionWithFallback`). Med `auto`
+  prøves `max_completion_tokens` først og `max_tokens` etter, og en avvist temperatur prøves på nytt uten.
+- **Ved utrulling:** ingen migrering, ingen ny innstilling.
+
 ## 2.149.0 - 2026-11-10
 
 Kursbevis for kurs tatt utenfor plattformen (#1145, `doc/design/PLAN_1145.md`). Avgjørelsene står i `doc/DECISIONS.md`.
