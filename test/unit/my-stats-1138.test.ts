@@ -167,14 +167,26 @@ describe("ukene i statistikken", () => {
     const stats = build(sources({
       reads: [read("s-gammel", "2026-05-01T08:00:00Z"), read("s-ny", "2026-10-20T08:00:00Z"), read("s-utenfor", "2026-10-13T08:00:00Z")],
       completions: [
-        { userId: "u", courseId: "c1", completedAt: new Date("2026-11-10T08:00:00Z") },
-        { userId: "u", courseId: "c2", completedAt: new Date("2026-03-01T08:00:00Z") },
+        { userId: "u", courseId: "c1", completedAt: new Date("2026-11-10T08:00:00Z"), source: "platform" },
+        { userId: "u", courseId: "c2", completedAt: new Date("2026-03-01T08:00:00Z"), source: "platform" },
       ],
     }), { "s-ny": 600, "s-utenfor": 600 });
     // Fire siste uker: fra mandag 19. oktober.
     expect(stats.recent).toEqual({ weeks: 4, sectionsRead: 1, modulesPassed: 0, coursesCompleted: 1, readingMinutes: 3 });
     expect(stats.totals).toEqual({ coursesCompleted: 2, modulesPassed: 0, sectionsRead: 3 });
     expect(stats.weeks[11]!.coursesCompleted).toBe(1);
+  });
+
+  it("#1145: et bevis registrert for et kurs tatt utenfor plattformen telles i totalen, men ikke i ukene eller humøret", () => {
+    const stats = build(sources({
+      reads: [read("s1", "2026-10-01T08:00:00Z")],
+      completions: [{ userId: "u", courseId: "c-ute", completedAt: new Date("2026-11-10T08:00:00Z"), source: "external" }],
+    }));
+    expect(stats.totals.coursesCompleted).toBe(1);
+    expect(stats.weeks.every((week) => week.coursesCompleted === 0)).toBe(true);
+    expect(stats.recent.coursesCompleted).toBe(0);
+    // Siste aktivitet er lesingen 1. oktober, ikke registreringen.
+    expect(stats.lastActivityAt).toBe("2026-10-01T08:00:00.000Z");
   });
 
   it("humøret følger siste hendelse av alle typer, også en innlevering", () => {

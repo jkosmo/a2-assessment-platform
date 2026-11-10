@@ -4266,7 +4266,9 @@ function renderParticipantCourseAccordion() {
     if (!isCourseCompleted(course)) continue;
     if (!celebratedCompletedCourses.has(course.id)) {
       celebratedCompletedCourses.add(course.id);
-      if (courseAccordionInitialized) newlyCompletedIds.push(course.id);
+      // #1145: et kurs registrert som tatt utenfor plattformen feires ikke: deltakeren gjorde ingenting her nå.
+      const registeredOutside = participantCompletions[course.id]?.source === "external";
+      if (courseAccordionInitialized && !registeredOutside) newlyCompletedIds.push(course.id);
     }
   }
   if (newlyCompletedIds.length > 0) {

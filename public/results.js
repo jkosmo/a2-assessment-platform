@@ -667,13 +667,20 @@ function exportCourseLearners() {
       row.participantName,
       row.participantEmail,
       row.participantDepartment,
-      formatStatus(row.status),
+      learnerStatusText(row),
       tf("results.courses.detail.ofTotal", { done: row.completedModules, total: row.totalModules }),
       tf("results.courses.detail.ofTotal", { done: row.readSections ?? 0, total: row.totalSections ?? 0 }),
       typeof row.score === "number" ? formatScore(row.score) : "",
       spreadsheetDateTime(row.latestActivityAt),
     ]),
   );
+}
+
+// #1145: et kursbevis registrert av administrator for et kurs tatt utenfor plattformen merkes ved statusen (ingen dato,
+// ingen aktivitet).
+function learnerStatusText(row) {
+  const status = formatStatus(row.status);
+  return row.completionSource === "external" ? `${status} (${t("results.courses.detail.takenOutside")})` : status;
 }
 
 function renderCourseLearners(rows, courseTitle = "") {
@@ -690,7 +697,7 @@ function renderCourseLearners(rows, courseTitle = "") {
       <td>${escapeHtmlR(row.participantName ?? "—")}</td>
       <td>${escapeHtmlR(row.participantEmail)}</td>
       <td>${escapeHtmlR(row.participantDepartment ?? "—")}</td>
-      <td>${escapeHtmlR(formatStatus(row.status))}</td>
+      <td>${escapeHtmlR(learnerStatusText(row))}</td>
       <td>${escapeHtmlR(`${row.completedModules}/${row.totalModules}`)}</td>
       <td>${escapeHtmlR(`${row.readSections ?? 0}/${row.totalSections ?? 0}`)}</td>
       <td>${escapeHtmlR(formatScore(row.score))}</td>

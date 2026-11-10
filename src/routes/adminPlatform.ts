@@ -23,6 +23,7 @@ import { DEFAULT_CONSENT_BODY } from "../config/consent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
+import { registerExternalCompletions } from "../modules/course/externalCompletionService.js";
 
 const adminPlatformRouter = Router();
 
@@ -213,6 +214,45 @@ adminPlatformRouter.post("/failed-assessments/:submissionId/retry", async (reque
       metadata: { submissionId: submission.id, source: "admin_failed_assessment_retry" },
     });
     response.status(202).json({ queued: true, jobId: job.id });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── POST /api/admin/platform/course-completions/external (#1145) ─────────────────
+//
+// Kursbevis for et kurs tatt utenfor plattformen (doc/design/PLAN_1145.md). Bare administrator (`admin_platform`); agent-token
+// slipper ikke inn her (hvitelista i agentTokenScope.ts). Prøvekjøring er standard: uten `dryRun: false` skrives ingenting.
+// `reference` lagres på beviset og i revisjonen, og skal ikke inneholde personopplysninger: bare bokstaver, tall og enkle tegn.
+const externalCompletionSchema = z.object({
+  courseId: z.string().min(1).max(64),
+  userIds: z.array(z.string().min(1).max(64)).min(1).max(200),
+  relatedCourseIds: z.array(z.string().min(1).max(64)).max(5).optional(),
+  reference: z.string().trim().min(3).max(120).regex(/^[\p{L}\p{N} .,:()_-]+$/u),
+  dryRun: z.boolean().default(true),
+});
+
+adminPlatformRouter.post("/course-completions/external", async (request, response, next) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const parsed = externalCompletionSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const result = await registerExternalCompletions({
+      actorId,
+      courseId: parsed.data.courseId,
+      userIds: [...new Set(parsed.data.userIds)],
+      relatedCourseIds: parsed.data.relatedCourseIds,
+      reference: parsed.data.reference,
+      dryRun: parsed.data.dryRun,
+    });
+    response.json({ dryRun: parsed.data.dryRun, ...result });
   } catch (error) {
     next(error);
   }

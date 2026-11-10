@@ -1599,3 +1599,27 @@ Kjente mangler, godtatt fordi plattformen er intern og utrullinger skjer om kvel
    utrulling der ny worker og gammel app går samtidig.
 2. **Et kurs som har vært ute, ble avpublisert og *så* tildelt en klasse,** får `baseline` ved utrullingen. Medlemmene får
    ingen e-post når det publiseres igjen.
+
+## Kursbevis for kurs tatt utenfor plattformen (#1145, 2026-11-09/10)
+
+Produkteier: en del deltakere har tatt repetisjonskursene utenfor plattformen (Excel-arket «Kurs og sertifisering»). De skal ha
+kursbevis på plattformen. Plan og gjennomgang: `doc/design/PLAN_1145.md`.
+
+- **Merket, ikke forkledd.** Beviset får `source = "external"` og vises som «Tatt utenfor plattformen» der et bevis vises (profilen,
+  kursbeviset som «Status», kursrapporten ved statusen og i fila). Det har **ingen dato**: API-et sender `completedAt: null`.
+- **Datoen står åpen** (produkteier). `completedAt` i databasen er registreringen, fordi feltet ikke kan være tomt uten å røre
+  alle lesere. Det vises aldri som fullføringsdato. I kursrapporten telles beviset som fullført **uavhengig av datovinduet**, så
+  det ikke faller inn eller ut av en periode etter når det ble registrert.
+- **Ingen aktivitet.** Et registrert bevis teller ikke i «Aktivitet», i ukene på profilen eller i båtens humør. Totalen «kurs
+  fullført» på profilen teller det, så den sier det samme som «Beståtte kurs».
+- **Bare administrator**, gjennom ett endepunkt med prøvekjøring som standard og revisjon per bevis. Ingen flate i admin: jobben
+  gjøres noen få ganger med skriptet `scripts/maintenance/registerExternalCompletions.mjs` (driftsboka).
+- **Navn matches bare eksakt.** Brukersøket er delstreng; skriptet godtar bare likt navn og legger resten på en liste.
+  Produkteier godkjenner navn → e-post før skrivingen, og skrivingen bruker de godkjente id-ene uten nytt søk.
+- **Et ekte bevis går foran.** Fullfører deltakeren senere på plattformen, blir det registrerte beviset et vanlig bevis (samme
+  `certificateId`, dato og snapshot fra målingen). Har deltakeren allerede bevis for kurset (også en eldre hovedversjon) eller for
+  et kurs med samme tittel, registreres ingenting.
+- **Modul 6 og 7 håndteres ikke** (produkteier): på plattformen er det de vanlige kursene, ikke repetisjonskurs.
+
+Kjente mangler: neste repetisjon regnes fra registreringen; ruller man tilbake etter første skriving i prod, viser gammel kode
+registrerte bevis som aktivitet.

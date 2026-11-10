@@ -45,6 +45,8 @@ type CourseLearnerRow = {
   score: number | null;
   latestActivityAt: string | null;
   completedAt: string | null;
+  /** #1145: hvor beviset kom fra; `external` har ingen dato (`completedAt` er null). Null når deltakeren ikke har bevis. */
+  completionSource: "platform" | "external" | null;
   certificateId: string | null;
   /** #934: hovedversjonen til deltakerens nyeste eldre bevis, når hen ikke har bevis for den nåværende. */
   earlierCertificateVersion: number | null;
@@ -364,7 +366,8 @@ export async function getCourseLearnerReport(
     } else if (!current.earlier || completion.versionMajor > current.earlier.versionMajor) {
       current.earlier = completion;
     }
-    if (!current.latestActivityAt || completion.completedAt > current.latestActivityAt) {
+    // #1145: et registrert bevis (tatt utenfor plattformen) er ingen aktivitet og har ingen kjent dato.
+    if (completion.source !== "external" && (!current.latestActivityAt || completion.completedAt > current.latestActivityAt)) {
       current.latestActivityAt = completion.completedAt;
     }
     learners.set(completion.userId, current);
@@ -431,7 +434,10 @@ export async function getCourseLearnerReport(
     // `hasStarted` teller nå også lesing: en deltaker som bare har lest, men ikke levert, er i gang
     // — ikke «ikke startet».
     const hasStarted = learner.latestByModule.size > 0 || readSections > 0 || Boolean(learner.completion) || Boolean(learner.earlier);
-    const completedModules = learner.completion ? moduleIds.length : passedModules;
+    // #1145: et bevis fra plattformen betyr at alt var oppfylt. Et registrert bevis (tatt utenfor) måler ingenting: raden viser
+    // det som faktisk er bestått og lest.
+    const measuredCompletion = Boolean(learner.completion) && learner.completion!.source !== "external";
+    const completedModules = measuredCompletion ? moduleIds.length : passedModules;
     const computed = computeCourseStatus(
       passedModules + readSections,
       moduleIds.length + requiredSectionIds.length,
@@ -460,11 +466,13 @@ export async function getCourseLearnerReport(
       totalModules: moduleIds.length,
       // #966: seksjonene vises fordi de nå AVGJØR statusen. Uten dem ville raden kunne si
       // «4/4 moduler» ved siden av «Pågår», og rapportleseren hadde ingen måte å se hvorfor.
-      readSections: learner.completion ? requiredSectionIds.length : readSections,
+      readSections: measuredCompletion ? requiredSectionIds.length : readSections,
       totalSections: requiredSectionIds.length,
       score: scores.length > 0 ? round2(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
       latestActivityAt: latestActivityAt?.toISOString() ?? null,
-      completedAt: learner.completion?.completedAt.toISOString() ?? null,
+      completedAt: measuredCompletion ? learner.completion!.completedAt.toISOString() : null,
+      // #1145: `external` = registrert av administrator for et kurs tatt utenfor plattformen (ingen dato); null uten bevis.
+      completionSource: (learner.completion ? (learner.completion.source === "external" ? "external" : "platform") : null) as CourseLearnerRow["completionSource"],
       certificateId: learner.completion?.certificateId ?? null,
       earlierCertificateVersion: learner.completion ? null : (learner.earlier?.versionMajor ?? null),
     };

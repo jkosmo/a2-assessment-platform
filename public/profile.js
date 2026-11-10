@@ -383,7 +383,9 @@ function renderCourses(body) {
     }
     row.appendChild(titleTd);
 
-    row.appendChild(cell("profile.courses.table.completedAt", formatDate(course.completedAt), "profile-nowrap"));
+    // #1145: et kurs tatt utenfor plattformen har ingen kjent dato; det står hvorfor, ikke en dato.
+    const completedText = course.source === "external" ? t("profile.courses.takenOutside") : formatDate(course.completedAt);
+    row.appendChild(cell("profile.courses.table.completedAt", completedText, "profile-nowrap"));
 
     // #1045: nivået er en NØKKEL («basic»), ikke tekst. Profilen viste den rå. Delt hjelper,
     // så alle flatene sier det samme ordet for samme nivå.

@@ -114,6 +114,8 @@ export const auditActions = {
     // #762: destruktiv opprydding — slett kurs + dets eksklusivt-eide moduler/seksjoner.
     cascadeDeleted: "course_cascade_deleted",
     completionIssued: "course_completion_issued",
+    // #1145: administrator registrerte et kurs tatt utenfor plattformen som fullført.
+    completionRegisteredExternal: "course_completion_registered_external",
     // #934 skive 3: kursets versjon økte (mindre eller hoved), med fra/til og hva forfatteren ba om.
     versionChanged: "course_version_changed",
     // #497: automatiske frist-påminnelser (frist nærmer seg / forfalt) fra bakgrunnsjobben.
@@ -431,6 +433,15 @@ export type AuditMetadataByAction = {
     userId: string;
     courseId: string;
     certificateId: string;
+    // #1145: satt når et registrert bevis (tatt utenfor plattformen) ble et vanlig; samme `certificateId` har da to hendelser.
+    upgradedFrom?: "external";
+  }>;
+  [auditActions.course.completionRegisteredExternal]: EventMetadata<{
+    userId: string;
+    courseId: string;
+    certificateId: string;
+    versionMajor: number;
+    reference: string;
   }>;
   [auditActions.course.versionChanged]: EventMetadata<{
     courseId: string;

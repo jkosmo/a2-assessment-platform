@@ -118,7 +118,10 @@ export function buildMyStats(input: {
     if (!known || at > known.at) latestPass.set(submission.moduleId, { at, totalScore: submission.decisions[0]?.totalScore ?? null });
   }
 
+  // #1145: ukene teller bare bevis utstedt av plattformen; et registrert bevis (tatt utenfor) har ingen kjent dato. Totalen under
+  // teller alle, så profilen sier det samme som «Beståtte kurs».
   for (const completion of sources.completions) {
+    if (completion.source === "external") continue;
     const week = weekOf(completion.completedAt);
     if (week !== null) courses[week]! += 1;
   }

@@ -74,6 +74,7 @@ const extraTranslations = {
     "results.courses.detail.export": "Export this list (CSV)",
     "results.courses.detail.ofTotal": "{done} of {total}",
     "results.courses.detail.status": "Course status",
+    "results.courses.detail.takenOutside": "Taken outside the platform",
     "results.courses.detail.completedModules": "Completed modules",
 
     "results.courses.detail.readSections": "Sections read",
@@ -168,6 +169,7 @@ const extraTranslations = {
     "results.courses.detail.export": "Eksporter denne listen (CSV)",
     "results.courses.detail.ofTotal": "{done} av {total}",
     "results.courses.detail.status": "Kursstatus",
+    "results.courses.detail.takenOutside": "Tatt utenfor plattformen",
     "results.courses.detail.completedModules": "Fullførte moduler",
 
     "results.courses.detail.readSections": "Leste seksjoner",
@@ -262,6 +264,7 @@ const extraTranslations = {
     "results.courses.detail.export": "Eksporter denne lista (CSV)",
     "results.courses.detail.ofTotal": "{done} av {total}",
     "results.courses.detail.status": "Kursstatus",
+    "results.courses.detail.takenOutside": "Teke utanfor plattforma",
     "results.courses.detail.completedModules": "Fullførte modular",
 
     "results.courses.detail.readSections": "Lesne seksjonar",

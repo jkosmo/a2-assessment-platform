@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.149.0 - 2026-11-10
+
+Kursbevis for kurs tatt utenfor plattformen (#1145, `doc/design/PLAN_1145.md`). Avgjørelsene står i `doc/DECISIONS.md`.
+
+- **Hva brukerne merker:**
+  - Administrator kan registrere at noen har tatt et kurs utenfor plattformen. Deltakeren får kursbevis, merket «Tatt utenfor
+    plattformen» i stedet for dato: i «Beståtte kurs» på profilen, på kursbeviset («Status») og i kursrapporten (ved statusen,
+    også i fila).
+  - Et registrert bevis er ingen aktivitet: det teller ikke i «Aktivitet», i ukene på profilen eller i båtens humør, og det
+    feires ikke med konfetti. Totalen «kurs fullført» teller det.
+  - Fullfører deltakeren kurset på plattformen senere, blir beviset et vanlig bevis med dato (samme lenke).
+  - Kursrapporten viser moduler og seksjoner som faktisk er målt, og teller et registrert bevis som fullført i alle datovinduer.
+  - Innsynet («Mine data») tar nå med kursbevisene.
+- **Slik virker det:** `POST /api/admin/platform/course-completions/external` (bare administrator, prøvekjøring som standard,
+  én låst transaksjon og én revisjonshendelse per person), og skriptet `scripts/maintenance/registerExternalCompletions.mjs`
+  med prøvekjøring, eksakt navnematch og godkjenning før skriving (driftsboka, «Kursbevis for kurs tatt utenfor plattformen»).
+- **Ved utrulling:** én migrering (kolonnene `source`, `registeredById`, `externalReference` på `CourseCompletion`, med
+  standard `platform`). Ingen ny innstilling. Ingenting registreres før app og worker kjører 2.149.0.
+- **Kjente mangler:** neste repetisjon regnes fra registreringen; en tilbakerulling etter første registrering viser registrerte
+  bevis som aktivitet.
+
 ## 2.148.0 - 2026-11-09
 
 E-posten om nye kurs (#1142): **nevner den bare ett kurs, går knappen rett til kurset** (produkteier 2026-11-09, etter stage-testen av 2.147.0).

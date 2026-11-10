@@ -7,8 +7,9 @@ import { runContentReadForLearner, type LearnerContentTx } from "../../db/conten
 
 type CourseRepo = ReturnType<typeof createCourseRepository>;
 
-// #934 skive 5a-1: det som står i kursbeviset, målt i ett øyeblikk.
-type CompletionGate = { moduleIds: string[]; requiredSectionIds: string[] };
+// #934 skive 5a-1: det som står i kursbeviset, målt i ett øyeblikk. #1145: `upgradeCompletionId` når det for denne hovedversjonen
+// bare finnes et bevis registrert for et kurs tatt utenfor plattformen; det oppgraderes i stedet for at et nytt lages.
+type CompletionGate = { moduleIds: string[]; requiredSectionIds: string[]; upgradeCompletionId?: string };
 
 /**
  * Is a new certificate due for this course? Certification requires BOTH: all modules passed AND all
@@ -91,6 +92,8 @@ async function findCompletionToIssue(
   // #934: ett bevis per hovedversjon. Har deltakeren bevis for en eldre hovedversjon, står det —
   // og et nytt utstedes for denne når kravet er oppfylt (produkteier 2026-11-01).
   const existing = await repo.findCourseCompletion(userId, course.id, course.versionMajor);
+  // #1145: et registrert bevis (tatt utenfor plattformen) blokkerer ikke et ekte: kravet er nå målt, og beviset oppgraderes.
+  if (existing && existing.source === "external") return { moduleIds, requiredSectionIds, upgradeCompletionId: existing.id };
   if (existing) return null;
 
   return { moduleIds, requiredSectionIds };
@@ -107,6 +110,28 @@ async function evaluateCourseCompletionLocked(locked: LearnerContentTx, userId: 
   if (!course) return;
   const gate = await findCompletionToIssue(repo, userId, course);
   if (!gate) return;
+
+  if (gate.upgradeCompletionId) {
+    const upgraded = await repo.upgradeExternalCourseCompletion(locked, {
+      completionId: gate.upgradeCompletionId,
+      version: { major: course.versionMajor, minor: course.versionMinor },
+      moduleSnapshotJson: JSON.stringify(gate.moduleIds),
+      sectionSnapshotJson: JSON.stringify(gate.requiredSectionIds),
+    });
+    if (upgraded.count === 0) return;
+    const row = await repo.findCourseCompletion(userId, course.id, course.versionMajor);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: course.id,
+        action: auditActions.course.completionIssued,
+        actorId: userId,
+        metadata: { userId, courseId: course.id, certificateId: row?.certificateId ?? "", upgradedFrom: "external" },
+      },
+      locked,
+    );
+    return;
+  }
 
   // #933: begge halvdelene av regelen lagres nå. `requiredSectionIds` er nettopp «seksjonene kurset
   // inneholdt på det tidspunkt» — den lista gaten akkurat målte mot, ikke en ny utledning.

@@ -144,6 +144,14 @@ meRouter.get("/data", async (request, response, next) => {
           modulePasses: {
             select: { moduleId: true, moduleVersionId: true, submissionId: true, passedAt: true, invalidatedAt: true },
           },
+          // #1145: kursbevisene, også de registrert av administrator for kurs tatt utenfor plattformen (ny kilde for
+          // opplysninger om personen). For `external` er `completedAt` tidspunktet for registreringen, ikke for kurset.
+          courseCompletions: {
+            select: {
+              courseId: true, certificateId: true, versionMajor: true, versionMinor: true,
+              completedAt: true, source: true, externalReference: true,
+            },
+          },
         },
       }),
       prisma.submission.findMany({

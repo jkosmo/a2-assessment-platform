@@ -257,7 +257,8 @@ function participantWhere(_now: Date) {
     OR: [
       { courseSectionReads: { some: {} } },
       { submissions: { some: {} } },
-      { courseCompletions: { some: {} } },
+      // #1145: et bevis registrert for et kurs tatt utenfor plattformen er ikke aktivitet her.
+      { courseCompletions: { some: { source: "platform" } } },
     ],
   };
 }
@@ -315,9 +316,10 @@ export async function loadActivitySources(userIds: string[], now: Date) {
       where: { userId: { in: userIds }, submittedAt: { lte: now } },
       select: { userId: true, moduleId: true, submittedAt: true, submissionStatus: true, decisions: LATEST_DECISION },
     }),
+    // #1145: alle bevis hentes (totalen «kurs fullført» teller dem), men bare `platform` blir hendelser (`activityEventsFrom`).
     prisma.courseCompletion.findMany({
       where: { userId: { in: userIds }, completedAt: { lte: now } },
-      select: { userId: true, courseId: true, completedAt: true },
+      select: { userId: true, courseId: true, completedAt: true, source: true },
     }),
   ]);
   return { reads: distinctReads(reads), submissions, completions };
@@ -334,7 +336,11 @@ export function activityEventsFrom(sources: ActivitySources, now: Date): Activit
       const at = passedAt(s);
       return at && at <= now ? [{ userId: s.userId, at, type: "passed" as const }] : [];
     }),
-    ...sources.completions.map((c) => ({ userId: c.userId, at: c.completedAt, type: "completed" as const })),
+    // #1145: et registrert bevis (tatt utenfor plattformen) har ingen kjent dato og er ingen aktivitet: ikke i «Aktivitet»,
+    // ikke i ukene på profilen, ikke i båtens humør.
+    ...sources.completions
+      .filter((c) => c.source !== "external")
+      .map((c) => ({ userId: c.userId, at: c.completedAt, type: "completed" as const })),
   ];
 }
 
@@ -404,7 +410,8 @@ export async function getActivityRecent(userId: string, locale: SupportedLocale,
       select: { submissionStatus: true, module: { select: { title: true } }, decisions: LATEST_DECISION },
     }),
     prisma.courseCompletion.findMany({
-      where: { userId },
+      // #1145: bare bevis utstedt av plattformen er aktivitet.
+      where: { userId, source: "platform" },
       orderBy: { completedAt: "desc" },
       take: limit,
       select: { completedAt: true, course: { select: { title: true } } },

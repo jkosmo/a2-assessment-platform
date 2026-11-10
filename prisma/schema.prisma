@@ -800,6 +800,15 @@ model CourseCompletion {
   // hovedversjon per deltaker. Eksisterende bevis er 1.0, som kursene de ble utstedt for.
   versionMajor        Int      @default(1)
   versionMinor        Int      @default(0)
+  // #1145: `platform` = utstedt av plattformen (kravet målt); `external` = registrert av administrator for et kurs tatt utenfor
+  // plattformen (doc/design/PLAN_1145.md). Et `external`-bevis har ingen kjent dato: `completedAt` er registreringen og vises
+  // aldri som fullføringsdato, og det teller ikke som aktivitet. `source` er det ENESTE skillet — ikke `registeredById`, som
+  // står igjen når beviset senere oppgraderes til `platform`.
+  source              String   @default("platform")
+  // Administratoren som registrerte (ingen fremmednøkkel: revisjonen har aktøren, og raden skal stå om kontoen slettes).
+  registeredById      String?
+  // Hvor registreringen kom fra, uten personopplysninger (f.eks. «Kurs og sertifisering.xlsx, Modul 2»).
+  externalReference   String?
   user                User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   course              Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
 

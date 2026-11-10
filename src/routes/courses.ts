@@ -190,7 +190,10 @@ coursesRouter.get("/completions", async (request, response, next) => {
     const items = completions.map((cc) => ({
       courseId: cc.courseId,
       certificateId: cc.certificateId,
-      completedAt: cc.completedAt.toISOString(),
+      // #1145: et bevis registrert for et kurs tatt utenfor plattformen har ingen kjent dato. `null` (gamle klienter viser «—»),
+      // og `source` sier hvorfor.
+      completedAt: cc.source === "external" ? null : cc.completedAt.toISOString(),
+      source: cc.source,
       courseTitle: localizeContentText(locale, cc.course.title) ?? cc.course.title,
       // #1027: sertifiseringsnivået sendes lokalisert, som tittelen på linja over. Det sto som
       // rå JSON, og hver klient tolket det selv — samme mønster #1022 rettet for modultittelen.
@@ -240,7 +243,9 @@ coursesRouter.get("/completions/:certificateId", async (request, response, next)
       courseId: completion.courseId,
       courseTitle: localizeContentText(locale, completion.course.title) ?? completion.course.title,
       certificationLevel: localizeContentText(locale, completion.course.certificationLevel) ?? completion.course.certificationLevel,
-      completedAt: completion.completedAt.toISOString(),
+      // #1145: som i lista over: ingen dato for et kurs tatt utenfor plattformen.
+      completedAt: completion.source === "external" ? null : completion.completedAt.toISOString(),
+      source: completion.source,
       participantName: completion.user.name,
       moduleCount,
       // #934: versjonen beviset ble utstedt for, og om den fortsatt er kursets nåværende hovedversjon.

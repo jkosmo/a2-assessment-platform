@@ -69,7 +69,13 @@ function showState(messageKey) {
 function renderCertificate(data) {
   document.getElementById("certName").textContent = data.participantName ?? "-";
   document.getElementById("certCourse").textContent = data.courseTitle ?? data.courseId ?? "-";
-  document.getElementById("certCompletedAt").textContent = formatDate(data.completedAt);
+  // #1145: et kurs tatt utenfor plattformen har ingen kjent dato. Da står «Status: Tatt utenfor plattformen», ikke
+  // «Fullført: Tatt utenfor plattformen».
+  const outside = data.source === "external";
+  const completedLabel = document.getElementById("certCompletedAtLabel");
+  completedLabel.textContent = t(outside ? "certificate.status" : "certificate.completedAt");
+  completedLabel.setAttribute("data-i18n", outside ? "certificate.status" : "certificate.completedAt");
+  document.getElementById("certCompletedAt").textContent = outside ? t("certificate.takenOutside") : formatDate(data.completedAt);
   // ⚠️ #1046: linja sto med «Certification level: -» når nivået manglet, mens modultallet rett
   // under skjules helt i samme tilfelle. To ulike svar på samme spørsmål, i samme fil — og på et
   // dokument som skrives ut og arkiveres.

@@ -430,6 +430,26 @@ Two caveats worth knowing before reading the output:
 Firewall access follows the same recipe as the cleanup script above — including the production
 lock dance.
 
+### Kursbevis for kurs tatt utenfor plattformen (#1145)
+
+Kilden er et Excel-ark med navn og kryss per kurs. Ingen database-tilgang trengs: alt går gjennom
+`POST /api/admin/platform/course-completions/external` med en ADMINISTRATOR-innlogging. Bakgrunn: `doc/DECISIONS.md`.
+
+1. **Lag inndata utenfor repoet** (navn er personopplysninger):
+   `{ "courses": [ { "courseTitle": "<tittel nøyaktig som på plattformen>", "reference": "<arket, kolonnen>", "names": [...] } ] }`.
+   Referansen lagres på beviset og i revisjonen: bare bokstaver, tall og `.,:()_-`, ingen navn.
+2. **Logg inn** som administrator mot miljøet, til en fil utenfor repoet med `{ baseUrl, accessToken, expiresOn }` (tokenet utløper
+   etter ~1 time). Ikke skriv ut tokenet.
+3. **Prøvekjøring:** `node scripts/maintenance/registerExternalCompletions.mjs --auth <fil> --input <inndata> --report <rapport>`.
+   Rapporten har per kurs `people` (navn → e-post → utfall) og `unresolved` (navn uten eksakt treff, med kandidater). Skriptet
+   nekter filer inne i repoet.
+4. **Produkteier godkjenner** rapporten: e-postene i `people`, og hva som skal gjøres med `unresolved` (rett navnet i inndata og kjør
+   prøvekjøringen på nytt).
+5. **Skriving, om kvelden og først når app og worker kjører 2.149.0 eller nyere:**
+   `node scripts/maintenance/registerExternalCompletions.mjs --auth <fil> --write --approved <godkjent rapport> --report <resultat>`.
+   Bare `would_create` sendes; plattformen sjekker alt på nytt. `busy` → kjør samme kommando igjen (idempotent).
+6. Slett inndata og rapporter når jobben er ferdig.
+
 ### Prod → stage-kopi: nøytraliser e-post som venter (#1142)
 
 En full kopi av prod tar med e-post som venter: rader i `CourseAssignmentNotice` (nye kurs) og `CourseVersionNotice` (ny

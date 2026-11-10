@@ -23,10 +23,17 @@ function buildCompletionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo"
   return {
     ...(filters.dateFrom || filters.dateTo
       ? {
-          completedAt: {
-            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
-            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
-          },
+          // #1145: et bevis registrert for et kurs tatt utenfor plattformen har ingen kjent dato; `completedAt` er registreringen.
+          // Det telles som fullført uavhengig av perioden, i stedet for å falle inn eller ut etter når det ble registrert.
+          OR: [
+            {
+              completedAt: {
+                ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+                ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+              },
+            },
+            { source: "external" },
+          ],
         }
       : {}),
     ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
@@ -125,6 +132,46 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
     ) {
       return locked.courseCompletion.create({
         data: { userId, courseId, versionMajor: version.major, versionMinor: version.minor, moduleSnapshotJson, sectionSnapshotJson },
+      });
+    },
+
+    // #1145: et kurs tatt utenfor plattformen, registrert av administrator (doc/design/PLAN_1145.md). Ingen moduler eller
+    // seksjoner ble målt: begge snapshotene er `"[]"` — IKKE `null`, som betyr «utstedt før 2.23.0» (contentLifecycle.ts).
+    createExternalCourseCompletion(
+      locked: LearnerContentTx,
+      input: { userId: string; courseId: string; version: { major: number; minor: number }; registeredById: string; externalReference: string },
+    ) {
+      return locked.courseCompletion.create({
+        data: {
+          userId: input.userId,
+          courseId: input.courseId,
+          versionMajor: input.version.major,
+          versionMinor: input.version.minor,
+          moduleSnapshotJson: "[]",
+          sectionSnapshotJson: "[]",
+          source: "external",
+          registeredById: input.registeredById,
+          externalReference: input.externalReference,
+        },
+      });
+    },
+
+    // #1145: deltakeren oppfylte kravet på plattformen etter at et `external`-bevis for samme hovedversjon var registrert. Beviset
+    // blir et vanlig bevis med målt dato og snapshot; `certificateId` beholdes, så lenker virker. Bare en rad som FORTSATT er
+    // `external` oppdateres (to samtidige oppgraderinger: den andre treffer ingenting). `registeredById` står igjen for sporbarhet.
+    upgradeExternalCourseCompletion(
+      locked: LearnerContentTx,
+      input: { completionId: string; version: { major: number; minor: number }; moduleSnapshotJson: string; sectionSnapshotJson: string },
+    ) {
+      return locked.courseCompletion.updateMany({
+        where: { id: input.completionId, source: "external" },
+        data: {
+          source: "platform",
+          completedAt: new Date(),
+          versionMinor: input.version.minor,
+          moduleSnapshotJson: input.moduleSnapshotJson,
+          sectionSnapshotJson: input.sectionSnapshotJson,
+        },
       });
     },
 
@@ -598,6 +645,8 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           certificateId: true,
           // #934: rapporten skiller bevis for kursets nåværende hovedversjon fra eldre.
           versionMajor: true,
+          // #1145: et registrert bevis (tatt utenfor plattformen) har ingen dato og er ingen aktivitet.
+          source: true,
           user: {
             select: {
               id: true,
