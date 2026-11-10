@@ -1351,9 +1351,10 @@ vei ingen har tenkt på. En fiks som legger varsling inn i en av handlingene, er
 
 **Gir ikke e-post** (vilkårene i regelen, se kommentaren over `eligiblePairsQuery`): «Alle deltakere» og Entra-klasser,
 arkiverte klasser, upubliserte og arkiverte kurs, inaktive og anonymiserte personer, kurs personen har kursbevis for
-(hvilken som helst hovedversjon) eller har påbegynt (lest seksjon, innlevering, diskusjon — samme spor som
-`findStartedOrCompletedCourseIds`), og et par som alt har en rad, uansett status (`baseline` fra utrullingen, eller
-sendt). Endret frist, «Publiser nye versjoner», import med `updateExisting`/`createNew` og individuell innmelding gir heller
+(kursets hovedversjon eller nyere; på en eldre hovedversjon bare når kurset kom til etter den nye, #1146) eller har
+påbegynt uten kursbevis (lest seksjon, innlevering, diskusjon — samme spor som `findStartedOrCompletedCourseIds`), og et
+par som alt er varslet, så lenge personen har hatt kurset hele tiden. **Fjernet og lagt inn igjen** (kurs eller medlem)
+gir én ny e-post (#1146, steg 2b); kurset fra en annen klasse i mellomtiden gir ingen. Endret frist, «Publiser nye versjoner», import med `updateExisting`/`createNew` og individuell innmelding gir heller
 ikke e-post. `OPEN`-kurs gir e-post når de tildeles en klasse, med vilje.
 
 **Jobben og behandleren:**

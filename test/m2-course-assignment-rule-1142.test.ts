@@ -323,11 +323,17 @@ describe("(b) filtrene for seg: hvert vilkår tar paret ut, og kontrollen viser 
     expect(await rule(m.userId, [m.courseId])).toEqual([]);
   });
 
-  it("kursbevis for en eldre hovedversjon: ingen par (hvilken som helst hovedversjon teller, spørsmål 1)", async () => {
+  // #1146 (produkteier 2026-11-10; planreview B1): kursbevis på en eldre hovedversjon tar ikke lenger ut paret for godt. Paret er
+  // med bare når veien til kurset åpnet etter den nye hovedversjonen (`CourseVersion.publishedAt`).
+  it("kursbevis for en eldre hovedversjon: ingen par når veien er eldre enn hovedversjonen; paret når kurset legges til etter (#1146)", async () => {
     const m = await memberWithCourse({ versionMajor: 2 });
     await prisma.courseCompletion.create({ data: { userId: m.userId, courseId: m.courseId, moduleSnapshotJson: "[]", versionMajor: 1 } });
+    await prisma.courseVersion.create({ data: { courseId: m.courseId, versionMajor: 2, publishedAt: new Date(), sectionVersionsJson: "{}" } });
     expect(await myCourses(m.userId, [m.courseId])).toEqual([m.courseId]);
-    expect(await rule(m.userId, [m.courseId])).toEqual([]);
+    expect(await rule(m.userId, [m.courseId]), "veien er eldre enn v2").toEqual([]);
+    await prisma.courseGroupAssignment.deleteMany({ where: { classId: m.classId, courseId: m.courseId } });
+    await assignCourse(m.classId, m.courseId);
+    expect(await rule(m.userId, [m.courseId]), "kurset lagt til etter v2").toEqual([m.courseId]);
   });
 
   it("kursbevis for nåværende hovedversjon: ingen par. Et bevis for et ANNET kurs tar ikke dette ut", async () => {

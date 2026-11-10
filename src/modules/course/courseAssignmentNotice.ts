@@ -242,33 +242,19 @@ const SETTLED_STATUSES = [
  * #1146, steg 2b: personen har fått kurset på nytt. Alle åpne veier til kurset er nyere enn `settledAt` (kurset eller
  * medlemskapet er fjernet og lagt inn igjen etter forrige varsel): raden blir `waiting` igjen, og vinduet starter nå.
  *
- * - Bare rader i sluttstatus med `settledAt`. `waiting`, `queued` og `sending` røres aldri, så jobben, samlingen og behandleren
- *   endrer aldri de samme radene. To workere samtidig: `status IN (…)` gjør at bare den første setter raden tilbake.
+ * - Bare rader i sluttstatus. `waiting`, `queued` og `sending` røres aldri, så jobben, samlingen og behandleren endrer aldri de
+ *   samme radene. To workere samtidig: `status IN (…)` gjør at bare den første setter raden tilbake.
+ * - En rad i sluttstatus uten `settledAt` er sendt av en eldre worker (overlappen under utrulling, eller etter en
+ *   tilbakerulling til 2.150.0): den leses med `sendingAt`, ellers `updatedAt`, som migreringen fyller ut (QA-porten #1146
+ *   nr. 2). Ellers ville feilen #1146 retter, levd videre for de parene.
  * - `settledAt` blir NULL, og settes igjen ved neste `sending` (databasens klokke), etter veien. Raden kan ikke gå i ring.
  * - Sammenligningen bruker bare ekte tider: veiene (Prisma) og `settledAt` (databasen). Jobbens `now`, som testene stiller,
  *   brukes bare til vinduet (punkt 9 R1).
  * - Avgrenset først til par der minst én vei er nyere enn `settledAt` (punkt 9 R4); bare for dem regnes regelen og `MIN` ut.
  * - Tellingen før utrulling bruker `readdedPairsQuery` (punkt 9 R6).
  */
-export function readdedPairsQuery(onlyCourseIds?: string[], options?: SettledPathsOptions): Prisma.Sql {
-  return settledPathsQuery("readded", onlyCourseIds, options);
-}
-
-type SettledPathsOptions = {
-  /**
-   * Hvordan `settledAt` leses for en rad med aliaset. Standard: kolonnen. Tellingen i prod FØR migreringen (kolonnen finnes
-   * ikke ennå) sender migreringens utfylling, `COALESCE("sendingAt", "updatedAt")`, så tallet produkteier godkjenner, kommer
-   * fra den samme spørringen (planreview R6).
-   */
-  settledAt?: (alias: "n" | "n2") => Prisma.Sql;
-};
-
-/**
- * Rader i sluttstatus der minst én åpen vei er nyere enn `settledAt`. `readded`: ALLE veier er nyere (personen fikk kurset på
- * nytt). `absorbed`: minst én vei er eldre (personen hadde kurset hele tiden; en ny vei kom til).
- */
-function settledPathsQuery(kind: "readded" | "absorbed", onlyCourseIds?: string[], options?: SettledPathsOptions): Prisma.Sql {
-  const settled = options?.settledAt ?? ((alias: "n" | "n2") => Prisma.raw(`${alias}."settledAt"`));
+export function readdedPairsQuery(onlyCourseIds?: string[], options?: SettledAtOptions): Prisma.Sql {
+  const settled = options?.settledAt ?? settledAtOf;
   const candidates = Prisma.sql`
     SELECT DISTINCT n2."userId", n2."courseId"
     FROM "CourseAssignmentNotice" n2
@@ -278,32 +264,57 @@ function settledPathsQuery(kind: "readded" | "absorbed", onlyCourseIds?: string[
       AND GREATEST(cm2."addedAt", cga2."createdAt") > ${settled("n2")}
   `;
   return Prisma.sql`
-    SELECT n.id, n."userId", n."courseId", p."arrivedAt", p."lastPathAt"
+    SELECT n.id, n."userId", n."courseId", p."arrivedAt"
     FROM "CourseAssignmentNotice" n
     JOIN (${eligiblePairsQuery({ onlyCourseIds, onlyPairs: candidates })}) p ON p."userId" = n."userId" AND p."courseId" = n."courseId"
-    WHERE n.status = ANY(${SETTLED_STATUSES}::text[]) AND ${settled("n")} IS NOT NULL AND ${kind === "readded"
-      ? Prisma.sql`p."arrivedAt" > ${settled("n")}`
-      : Prisma.sql`p."arrivedAt" <= ${settled("n")} AND p."lastPathAt" > ${settled("n")}`}
+    WHERE n.status = ANY(${SETTLED_STATUSES}::text[]) AND ${settled("n")} IS NOT NULL AND p."arrivedAt" > ${settled("n")}
   `;
 }
+
+type SettledAtOptions = {
+  /**
+   * Hvordan `settledAt` leses for en rad med aliaset. Standard: `settledAtOf`. Tellingen i prod FØR migreringen (kolonnen
+   * finnes ikke ennå) sender migreringens utfylling, `COALESCE("sendingAt", "updatedAt")`, så tallet produkteier godkjenner,
+   * kommer fra den samme spørringen (planreview R6).
+   */
+  settledAt?: (alias: "n" | "n2") => Prisma.Sql;
+};
+
+/** `settledAt` for en rad i sluttstatus; uten (sendt av en eldre worker): som migreringen fyller den ut. */
+const settledAtOf = (alias: "n" | "n2") => Prisma.raw(`COALESCE(${alias}."settledAt", ${alias}."sendingAt", ${alias}."updatedAt")`);
 
 async function resetReaddedRows(now: Date, onlyCourseIds?: string[]): Promise<Array<{ userId: string; courseId: string }>> {
   // Først: en ny vei mens en gammel står (kurset lagt til klasse B mens personen har det fra A). Personen hadde kurset hele
   // tiden; den nye veien regnes som kjent (`settledAt` flyttes fram til den). Uten dette ga «fjern A» senere e-post om et kurs
   // som aldri forsvant (svar 2; integrasjonstesten fant det 2026-11-10). Kommer B til og forsvinner A mellom to runder, ser
   // jobben bare B og sender e-post (kjent, punkt 9).
+  //
+  // Bare veiene teller her (vilkår 1–3: vanlig klasse, ikke arkivert, medlemskap og tildeling), ikke resten av regelen. En
+  // person med kursbevis på en eldre hovedversjon, som er inaktiv, eller et kurs som er avpublisert, har fortsatt kurset
+  // gjennom A; uten dette ville «fjern A» senere gitt e-post (QA-porten #1146 nr. 1).
+  const onlyCourses = onlyCourseIds ? Prisma.sql`AND n."courseId" = ANY(${onlyCourseIds}::text[])` : Prisma.empty;
   await prisma.$executeRaw`
     UPDATE "CourseAssignmentNotice" n
     SET "settledAt" = a."lastPathAt", "updatedAt" = ${NOW_UTC}
-    FROM (${settledPathsQuery("absorbed", onlyCourseIds)}) a
-    WHERE n.id = a.id AND n.status = ANY(${SETTLED_STATUSES}::text[]) AND n."settledAt" < a."lastPathAt"
+    FROM (
+      SELECT n3.id, MAX(GREATEST(cm."addedAt", cga."createdAt")) AS "lastPathAt"
+      FROM "CourseAssignmentNotice" n3
+      JOIN "ClassMember" cm            ON cm."userId" = n3."userId"
+      JOIN "Class" c                   ON c.id = cm."classId" AND c.kind = 'MANUAL' AND c."isSystem" = false AND c."archivedAt" IS NULL
+      JOIN "CourseGroupAssignment" cga ON cga."classId" = c.id AND cga."courseId" = n3."courseId"
+      WHERE n3.status = ANY(${SETTLED_STATUSES}::text[]) AND ${Prisma.raw(`COALESCE(n3."settledAt", n3."sendingAt", n3."updatedAt")`)} IS NOT NULL
+      GROUP BY n3.id
+      HAVING MIN(GREATEST(cm."addedAt", cga."createdAt")) <= MIN(${Prisma.raw(`COALESCE(n3."settledAt", n3."sendingAt", n3."updatedAt")`)})
+         AND MAX(GREATEST(cm."addedAt", cga."createdAt")) >  MIN(${Prisma.raw(`COALESCE(n3."settledAt", n3."sendingAt", n3."updatedAt")`)})
+    ) a
+    WHERE n.id = a.id AND n.status = ANY(${SETTLED_STATUSES}::text[]) ${onlyCourses}
   `;
   return prisma.$queryRaw<Array<{ userId: string; courseId: string }>>`
     UPDATE "CourseAssignmentNotice" n
     SET status = ${ASSIGNMENT_NOTICE_STATUS.waiting}, reason = ${READDED_REASON}, "createdAt" = ${utc(now)}, "updatedAt" = ${utc(now)},
         "settledAt" = NULL, "batchId" = NULL, "queuedAt" = NULL, "sendingAt" = NULL, "sentAt" = NULL
     FROM (${readdedPairsQuery(onlyCourseIds)}) r
-    WHERE n.id = r.id AND n.status = ANY(${SETTLED_STATUSES}::text[]) AND n."settledAt" < r."arrivedAt"
+    WHERE n.id = r.id AND n.status = ANY(${SETTLED_STATUSES}::text[]) AND ${settledAtOf("n")} < r."arrivedAt"
     RETURNING n."userId", n."courseId"
   `;
 }

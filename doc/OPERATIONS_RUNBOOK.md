@@ -468,10 +468,12 @@ alle kurs).
 Rekkefølgen:
 
 1. Kopier og pseudonymiser databasen som før (tøm `OutboxEvent`, merk ventende `AssessmentJob` som `FAILED`).
-2. **Før stage startes på kopien**, kjør skriptet mot KOPIEN. I én transaksjon setter det ventende rader om nye kurs og
+2. **Kjør migreringene mot KOPIEN** (`npx prisma migrate deploy` med `DATABASE_URL` mot kopien). Prod ligger ofte bak stage,
+   og skriptet bruker kolonner fra stage-versjonen (fra 2.151.0 `settledAt`). Uten migreringene krasjer det.
+3. **Før stage startes på kopien**, kjør skriptet mot KOPIEN. I én transaksjon setter det ventende rader om nye kurs og
    par prod-jobben ennå ikke hadde sett, til `baseline`, ventende rader om ny hovedversjon til `skipped`, og outbox-hendelser
    som sender e-post og ikke er levert, til `failed` (`reason`/`lastError` = `copied_from_prod`).
-3. Start stage.
+4. Start stage.
 
 ```powershell
 $env:DATABASE_URL = "<adressen til KOPIEN>"

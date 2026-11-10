@@ -886,7 +886,7 @@ describe("#1146 — et kurs som legges til igjen, gir e-post", () => {
     expect(await job(s.t(30), [s.c.id])).toMatchObject({ reset: 1 });
   });
 
-  it("`baseline` (hadde kurset før #1142) og kurset lagt inn igjen: én e-post. `baseline` uten `settledAt` (gamle testdata) røres ikke", async () => {
+  it("`baseline` (hadde kurset før #1142) og kurset lagt inn igjen: én e-post. Uten `settledAt` (sendt av en eldre worker) leses `updatedAt`: også én", async () => {
     const c = await course();
     const withSettled = await person();
     const withoutSettled = await person();
@@ -900,8 +900,61 @@ describe("#1146 — et kurs som legges til igjen, gir e-post", () => {
     expect(await job(t(0), [c.id])).toMatchObject({ created: 0, reset: 0 });
     await unassign(classId, c.id);
     await assign(classId, c.id);
-    expect(await job(t(1), [c.id])).toMatchObject({ reset: 1 });
-    expect((await rows([c.id])).find((r) => r.userId === withSettled.id)?.status).toBe("waiting");
+    expect(await job(t(1), [c.id])).toMatchObject({ reset: 2 });
+    expect((await rows([c.id])).map((r) => r.status)).toEqual(["waiting", "waiting"]);
+  });
+
+  it("QA-porten nr. 1: kursbevis på v1, kurset fra A siden før v2, lagt til B etter v2, så A fjernet: ingen e-post (kurset forsvant aldri)", async () => {
+    const t = clock();
+    const c = await course();
+    const u = await person();
+    const a = await newClass();
+    const b = await newClass();
+    await addMember(a, u.id);
+    await addMember(b, u.id);
+    await assign(a, c.id);
+    await prisma.courseAssignmentNotice.create({ data: { userId: u.id, courseId: c.id, status: "sent", settledAt: new Date() } });
+    await prisma.courseCompletion.create({ data: { userId: u.id, courseId: c.id, versionMajor: 1, moduleSnapshotJson: "[]" } });
+    await prisma.courseVersion.create({ data: { courseId: c.id, versionMajor: 2, publishedAt: new Date(), sectionVersionsJson: "{}" } });
+    await prisma.course.update({ where: { id: c.id }, data: { versionMajor: 2 } });
+    await assign(b, c.id);
+    expect(await job(t(0), [c.id])).toMatchObject({ reset: 0 });
+    await unassign(a, c.id);
+    expect(await job(t(1), [c.id])).toMatchObject({ reset: 0, created: 0 });
+  });
+
+  it("QA-porten nr. 1: inaktiv mens kurset kom fra en klasse til, og så den første fjernet: ingen e-post", async () => {
+    const s = await sentOnce();
+    await prisma.user.update({ where: { id: s.u.id }, data: { activeStatus: false } });
+    const b = await newClass();
+    await addMember(b, s.u.id);
+    await assign(b, s.c.id);
+    expect(await job(s.t(30), [s.c.id])).toMatchObject({ reset: 0 });
+    await prisma.user.update({ where: { id: s.u.id }, data: { activeStatus: true } });
+    await unassign(s.classId, s.c.id);
+    expect(await job(s.t(31), [s.c.id])).toMatchObject({ reset: 0 });
+  });
+
+  it("`uncertain` fra ryddingen (sto i `sending`) beholder `settledAt`, og settes tilbake bare når kurset legges inn igjen", async () => {
+    const t = clock();
+    const c = await course();
+    const u = await person();
+    const classId = await newClass();
+    await addMember(classId, u.id);
+    await assign(classId, c.id);
+    await job(t(0), [c.id]);
+    await job(t(16), [c.id]);
+    // Sendingen startet nå (etter veiene) og ble avbrutt. Ryddingen kjører med en klokke en time fram, så raden har stått i
+    // `sending` i over 30 minutter.
+    const sendingStarted = new Date();
+    await prisma.courseAssignmentNotice.updateMany({ where: { userId: u.id, courseId: c.id }, data: { status: "sending", sendingAt: sendingStarted, settledAt: sendingStarted } });
+    const later = new Date(Date.now() + 60 * 60_000);
+    expect(await runCourseAssignmentEmailSchedule({ now: later, onlyCourseIds: [c.id] })).toMatchObject({ uncertain: 1, reset: 0 });
+    expect((await rows([c.id]))[0]).toMatchObject({ status: "uncertain" });
+    expect((await rows([c.id]))[0]!.settledAt?.toISOString()).toBe(sendingStarted.toISOString());
+    await unassign(classId, c.id);
+    await assign(classId, c.id);
+    expect(await runCourseAssignmentEmailSchedule({ now: later, onlyCourseIds: [c.id] })).toMatchObject({ reset: 1 });
   });
 
   it("kurset avpublisert eller klassen arkivert når det legges inn igjen: ingen tilbakestilling før det er publisert igjen", async () => {
