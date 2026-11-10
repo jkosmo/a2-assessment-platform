@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.151.0 - 2026-11-10
+
+E-post når et kurs legges til en klasse, også om det har ligget der før (#1146, `doc/design/PLAN_1146.md`). Avgjørelsene står i
+`doc/DECISIONS.md` under #1142.
+
+- **Hva brukerne merker:**
+  - Et kurs som fjernes fra en klasse og legges inn igjen, gir medlemmene e-post, med fristen. Det samme gjør et medlem som fjernes
+    og legges til igjen. Før ga det ingen e-post.
+  - Har deltakeren kurset fra en annen klasse, går det ingen e-post. En ny frist gir heller ingen.
+  - Den som har kursbevis på en eldre hovedversjon, får e-post når kurset legges til etter den nye hovedversjonen.
+- **Slik virker det:** kolonnen `settledAt` på `CourseAssignmentNotice` sier når personen sist ble varslet. Jobbens nye steg 2b setter
+  raden tilbake til `waiting` når alle åpne veier til kurset er nyere. Driftshendelsen heter `course_assignment_notice_reset`.
+- **Ved utrulling:**
+  - Én migrering. Den legger til `settledAt` og fyller den ut, og gir `baseline` til par med kursbevis uten rad.
+  - Ingen ny innstilling.
+  - Første runde i jobben sender e-post om kurs som er lagt inn igjen siden #1142 kom i prod (produkteier 2026-11-10). Antallet
+    telles på forhånd med `npm run maint:count-readded-assignment-notices` (driftsboka).
+- **Kjente mangler:**
+  - Legges kurset til klasse B og fjernes fra A mellom to runder i jobben (ett minutt), går det e-post.
+  - Den som har kursbevis på en eldre hovedversjon og alt har begynt på den nye, får likevel e-post.
+
 ## 2.150.0 - 2026-11-10
 
 Innholdslikhetssjekken (#475) virker igjen i prod (#1147).

@@ -487,7 +487,15 @@ alltid et vertsnavn som inneholder `-prd-` eller `prod`, også med bekreftelse, 
 (`-stg-`), og krever at `CONFIRM_STAGE_COPY` er lik databasenavnet i `DATABASE_URL`. Kjør det derfor mot kopien på
 stage-serveren etter gjenopprettingen, ikke mot en lokal kopi: tunnel, IP-adresse og alias nektes, fordi de kunne pekt mot
 prod uten å vise det. Meldingen skriver aldri ut passordet eller adressen. Utskriften ved suksess er én linje
-`stage_copy_email_neutralized` med antallet i hvert steg. Kjørt to ganger gir andre runde 0 overalt.
+`stage_copy_email_neutralized` med antallet i hvert steg. Kjørt to ganger gir andre runde 0 overalt, bortsett fra
+`settledNow` (#1146), som setter `settledAt` = nå på alle rader i sluttstatus hver gang.
+
+### Kurs lagt inn igjen: hvor mange får e-post (#1146)
+
+`npm run maint:count-readded-assignment-notices` teller hvor mange som får e-post om et kurs som er lagt inn igjen, første
+gang jobben går etter utrullingen av 2.151.0. Skriptet bruker samme spørring som jobben, bare leser (`READ ONLY`), og skriver
+ut kurs og antall, ingen navn. Før migreringen regner det `settledAt` som migreringen gjør det. Etter migreringen:
+`-- --after-migration`. Kjør det mot prod før utrulling, og vis tallet til produkteier (`doc/design/PLAN_1146.md`, punkt 6).
 
 ## Seed Behavior
 
