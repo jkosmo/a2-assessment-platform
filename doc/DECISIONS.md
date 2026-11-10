@@ -1621,5 +1621,6 @@ kursbevis på plattformen. Plan og gjennomgang: `doc/design/PLAN_1145.md`.
   et kurs med samme tittel, registreres ingenting.
 - **Modul 6 og 7 håndteres ikke** (produkteier): på plattformen er det de vanlige kursene, ikke repetisjonskurs.
 
-Kjente mangler: neste repetisjon regnes fra registreringen; ruller man tilbake etter første skriving i prod, viser gammel kode
-registrerte bevis som aktivitet.
+Kjente mangler: neste repetisjon regnes fra registreringen. Ruller man tilbake etter første skriving i prod, viser gammel kode
+registrerte bevis **med registreringsdagen som fullføringsdato** (profilen, kursbeviset, rapporten) og som aktivitet. Etter første
+registrering i prod rettes feil derfor framover, med en ny versjon, ikke ved tilbakerulling.

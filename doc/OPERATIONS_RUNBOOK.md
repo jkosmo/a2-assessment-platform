@@ -447,8 +447,13 @@ Kilden er et Excel-ark med navn og kryss per kurs. Ingen database-tilgang trengs
    prøvekjøringen på nytt).
 5. **Skriving, om kvelden og først når app og worker kjører 2.149.0 eller nyere:**
    `node scripts/maintenance/registerExternalCompletions.mjs --auth <fil> --write --approved <godkjent rapport> --report <resultat>`.
-   Bare `would_create` sendes; plattformen sjekker alt på nytt. `busy` → kjør samme kommando igjen (idempotent).
+   Bare `would_create` sendes; plattformen sjekker alt på nytt. `busy`/`not_processed` → kjør samme kommando igjen (idempotent).
+   Skriptet nekter når den godkjente rapporten og innloggingen gjelder ulike miljøer (stage har prods id-er med andre navn). Avbrytes
+   det midt i, skrives rapporten over det som ble gjort (`incomplete`).
 6. Slett inndata og rapporter når jobben er ferdig.
+
+⚠️ Etter første registrering i prod: ikke rull tilbake til en versjon før 2.149.0. Gammel kode viser registrerte bevis med
+registreringsdagen som fullføringsdato. Rett framover.
 
 ### Prod → stage-kopi: nøytraliser e-post som venter (#1142)
 

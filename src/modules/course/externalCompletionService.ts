@@ -22,7 +22,10 @@ export type ExternalCompletionOutcome =
   | "exists_related_course"
   | "not_reachable"
   | "unknown_user"
-  | "busy";
+  | "busy"
+  | "course_not_published"
+  | "not_processed"
+  | "error";
 
 export type ExternalCompletionResult = { userId: string; outcome: ExternalCompletionOutcome; certificateId?: string };
 
@@ -55,16 +58,31 @@ export async function registerExternalCompletions(input: RegisterExternalComplet
     throw new ExternalCompletionCourseError("course_not_published", "Only a published, non-archived course can be registered.");
   }
 
+  // Hver person får et utfall, også når noe går galt underveis: det som alt er skrevet, står, og kalleren skal vite hvem det gjelder.
+  //   - `content_busy`: noen skriver innhold. Alle de neste ville ventet sine sekunder på samme lås (og kallet kunne gått ut på tid),
+  //     så resten blir `busy` med én gang, som i reconcileCourseCompletionsForUser. Kjør på nytt; kallet er idempotent.
+  //   - kurset ble avpublisert eller arkivert underveis: denne blir `course_not_published`, resten `not_processed`.
+  //   - en annen feil: `error` for den personen, og resten fortsetter.
   const results: ExternalCompletionResult[] = [];
+  let stop: ExternalCompletionOutcome | null = null;
   for (const userId of input.userIds) {
+    if (stop) {
+      results.push({ userId, outcome: stop });
+      continue;
+    }
     try {
       results.push(await registerOne(input, userId));
     } catch (error) {
       if (error instanceof AppError && error.code === "content_busy") {
         results.push({ userId, outcome: "busy" });
-        continue;
+        stop = "busy";
+      } else if (error instanceof ExternalCompletionCourseError) {
+        results.push({ userId, outcome: "course_not_published" });
+        stop = "not_processed";
+      } else {
+        console.warn(`[external-completion] registrering feilet for ${userId} på ${input.courseId}:`, error);
+        results.push({ userId, outcome: "error" });
       }
-      throw error;
     }
   }
   return { course: { id: course.id, versionMajor: course.versionMajor, versionMinor: course.versionMinor }, results };

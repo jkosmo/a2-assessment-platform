@@ -20,8 +20,8 @@ Kursbevis for kurs tatt utenfor plattformen (#1145, `doc/design/PLAN_1145.md`). 
   med prøvekjøring, eksakt navnematch og godkjenning før skriving (driftsboka, «Kursbevis for kurs tatt utenfor plattformen»).
 - **Ved utrulling:** én migrering (kolonnene `source`, `registeredById`, `externalReference` på `CourseCompletion`, med
   standard `platform`). Ingen ny innstilling. Ingenting registreres før app og worker kjører 2.149.0.
-- **Kjente mangler:** neste repetisjon regnes fra registreringen; en tilbakerulling etter første registrering viser registrerte
-  bevis som aktivitet.
+- **Kjente mangler:** neste repetisjon regnes fra registreringen. En tilbakerulling etter første registrering viser registrerte
+  bevis med registreringsdagen som dato og som aktivitet: rett framover i stedet.
 
 ## 2.148.0 - 2026-11-09
 

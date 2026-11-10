@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PAUSE_MS = 600; // under grensen på 120 kall i minuttet per bruker (rateLimiting.ts)
+let partial = null; // skrivingens rapport så langt, så en feil midt i ikke skjuler hvem som fikk bevis
 const CHUNK = 200; // endepunktets tak per kall
 
 function arg(name) {
@@ -54,6 +55,22 @@ export function normalizeName(value) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Utløpet som millisekunder: et tall i ms eller sekunder, eller en datotekst. `null` når det ikke kan leses. */
+export function expiresAtMs(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value === "number") return value < 1e12 ? value * 1000 : value;
+  const parsed = Date.parse(String(value));
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/** `Retry-After` i millisekunder: sekunder eller en HTTP-dato; 10 s når det ikke kan leses. */
+function retryAfterMs(header) {
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const at = Date.parse(String(header ?? ""));
+  return Number.isNaN(at) ? 10_000 : Math.max(1000, at - Date.now());
+}
+
 function client(auth) {
   const base = String(auth.baseUrl).replace(/\/+$/, "");
   return async function call(method, route, body) {
@@ -65,13 +82,14 @@ function client(auth) {
         body: body ? JSON.stringify(body) : undefined,
       });
       if (response.status === 429 && attempt < 5) {
-        const wait = Number(response.headers.get("retry-after") ?? "10") * 1000;
+        const wait = retryAfterMs(response.headers.get("retry-after"));
         console.log(`[eksterne-bevis] 429, venter ${Math.round(wait / 1000)} s`);
         await sleep(wait);
         continue;
       }
       const json = await response.json().catch(() => ({}));
-      if (!response.ok) fail(`${method} ${route}: ${response.status} ${JSON.stringify(json).slice(0, 300)}`);
+      // Kaster (ikke `fail`), så hovedløkka kan skrive det som er gjort før den avslutter.
+      if (!response.ok) throw new Error(`${method} ${route}: ${response.status} ${JSON.stringify(json).slice(0, 300)}`);
       return json;
     }
   };
@@ -83,9 +101,12 @@ async function resolveCourses(call, inputCourses) {
     const sameTitle = all.filter((c) => (c.displayTitle ?? "").trim() === input.courseTitle.trim());
     const live = sameTitle.filter((c) => c.publishedAt && !c.archivedAt);
     if (live.length !== 1) fail(`kurset «${input.courseTitle}»: ${live.length} publiserte, ikke arkiverte kurs med den tittelen (ventet 1)`);
-    // Andre kurs med samme tittel (f.eks. en arkivert kopi): et bevis der betyr også at personen har tatt kurset.
+    // Andre kurs med samme tittel (f.eks. en arkivert kopi): et bevis der betyr også at personen har tatt kurset. Endepunktet tar
+    // høyst fem; flere avbryter i stedet for å kutte i stillhet. Rapporten viser hvor mange som ble funnet, så en kopi med litt
+    // annen tittel kan oppdages ved godkjenningen.
     const related = sameTitle.filter((c) => c.id !== live[0].id).map((c) => c.id);
-    return { ...input, courseId: live[0].id, relatedCourseIds: related.slice(0, 5) };
+    if (related.length > 5) fail(`kurset «${input.courseTitle}»: ${related.length} andre kurs med samme tittel (høyst 5)`);
+    return { ...input, courseId: live[0].id, relatedCourseIds: related };
   });
 }
 
@@ -145,12 +166,24 @@ async function dryRun(call, input) {
   return report;
 }
 
-async function write(call, approved) {
-  if (approved.mode !== "dry-run") fail("--approved må være rapporten fra en prøvekjøring");
+const sameBase = (a, b) => Boolean(a) && String(a).replace(/\/+$/, "") === String(b ?? "").replace(/\/+$/, "");
+
+export async function write(call, approved, auth) {
+  if (approved.mode !== "dry-run") throw new Error("--approved må være rapporten fra en prøvekjøring");
+  // ⚠️ Stage er en kopi av prod med de samme id-ene og andre navn. En prøvekjøring godkjent mot stage og skrevet mot prod ville gitt
+  // bevis til de virkelige personene bak stage-navnene. Rapporten og innloggingen må gjelde samme miljø.
+  if (!sameBase(approved.baseUrl, auth.baseUrl)) {
+    throw new Error(`den godkjente rapporten gjelder ${approved.baseUrl}, innloggingen ${auth.baseUrl}. Kjør prøvekjøringen mot samme miljø.`);
+  }
+  console.log(`[eksterne-bevis] skriver mot ${auth.baseUrl}, fra prøvekjøringen ${approved.createdAt}`);
   const result = { mode: "write", createdAt: new Date().toISOString(), basedOn: approved.createdAt, courses: [] };
+  partial = result;
   for (const course of approved.courses ?? []) {
     const toCreate = (course.people ?? []).filter((p) => p.outcome === "would_create");
     const outcomes = new Map();
+    // Kurset står i rapporten før kallet, så en feil midt i viser hvilket kurs som ikke ble ferdig.
+    const entry = { courseTitle: course.courseTitle, courseId: course.courseId, people: [] };
+    result.courses.push(entry);
     for (let i = 0; i < toCreate.length; i += CHUNK) {
       const chunk = toCreate.slice(i, i + CHUNK);
       const response = await call("POST", "/api/admin/platform/course-completions/external", {
@@ -161,12 +194,9 @@ async function write(call, approved) {
         dryRun: false,
       });
       for (const r of response.results ?? []) outcomes.set(r.userId, r.outcome);
+      entry.people = toCreate.map((p) => ({ name: p.name, email: p.email, userId: p.userId, outcome: outcomes.get(p.userId) ?? "ikke_sendt" }));
     }
-    result.courses.push({
-      courseTitle: course.courseTitle,
-      courseId: course.courseId,
-      people: toCreate.map((p) => ({ name: p.name, email: p.email, userId: p.userId, outcome: outcomes.get(p.userId) ?? "ukjent" })),
-    });
+    entry.people = toCreate.map((p) => ({ name: p.name, email: p.email, userId: p.userId, outcome: outcomes.get(p.userId) ?? "ikke_sendt" }));
   }
   return result;
 }
@@ -175,7 +205,9 @@ function summarize(report) {
   for (const course of report.courses) {
     const counts = {};
     for (const p of course.people) counts[p.outcome] = (counts[p.outcome] ?? 0) + 1;
-    const extra = course.unresolved ? `, uavklart ${course.unresolved.length}` : "";
+    const extra = course.unresolved
+      ? `, uavklart ${course.unresolved.length}, andre kurs med samme tittel ${(course.relatedCourseIds ?? []).length}`
+      : "";
     console.log(`[eksterne-bevis] ${course.courseTitle}: ${Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(", ") || "ingen"}${extra}`);
   }
 }
@@ -185,15 +217,26 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const reportFile = outsideRepo(arg("report"), "report");
   const auth = JSON.parse(fs.readFileSync(authFile, "utf8"));
   if (!auth.accessToken || !auth.baseUrl) fail("innloggingsfila mangler accessToken eller baseUrl");
-  if (auth.expiresOn && auth.expiresOn < Date.now()) fail("innloggingen er utløpt; logg inn på nytt");
+  if (expiresAtMs(auth.expiresOn) !== null && expiresAtMs(auth.expiresOn) < Date.now()) fail("innloggingen er utløpt; logg inn på nytt");
   const call = client(auth);
   let report;
-  if (flag("write")) {
-    const approved = JSON.parse(fs.readFileSync(outsideRepo(arg("approved"), "approved"), "utf8"));
-    report = await write(call, approved);
-  } else {
-    const input = JSON.parse(fs.readFileSync(outsideRepo(arg("input"), "input"), "utf8"));
-    report = await dryRun(call, input);
+  try {
+    if (flag("write")) {
+      const approved = JSON.parse(fs.readFileSync(outsideRepo(arg("approved"), "approved"), "utf8"));
+      report = await write(call, approved, auth);
+    } else {
+      const input = JSON.parse(fs.readFileSync(outsideRepo(arg("input"), "input"), "utf8"));
+      report = await dryRun(call, input);
+    }
+  } catch (error) {
+    // Det som alt er skrevet, står i databasen. Rapporten over det skrives før skriptet avslutter; ny kjøring gir `exists`.
+    if (partial) {
+      partial.baseUrl = auth.baseUrl;
+      partial.incomplete = String(error?.message ?? error).slice(0, 500);
+      fs.writeFileSync(reportFile, `${JSON.stringify(partial, null, 2)}\n`);
+      console.error(`[eksterne-bevis] avbrutt; det som ble gjort, står i ${reportFile}`);
+    }
+    fail(String(error?.message ?? error));
   }
   report.baseUrl = auth.baseUrl;
   fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);

@@ -163,7 +163,7 @@ describe("#1145: hvor et registrert bevis vises", () => {
     const data = await request(app).get("/api/me/data").set(u.headers);
     expect(data.status).toBe(200);
     expect(data.body.profile.courseCompletions).toEqual([
-      expect.objectContaining({ courseId: c.courseId, source: "external", externalReference: REF }),
+      expect.objectContaining({ courseId: c.courseId, source: "external", externalReference: REF, completedAt: null, registeredAt: expect.any(String) }),
     ]);
   });
 

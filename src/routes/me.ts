@@ -201,9 +201,21 @@ meRouter.get("/data", async (request, response, next) => {
       }),
     ]);
 
+    // #1145: som i de andre rutene: et bevis for et kurs tatt utenfor plattformen har ingen fullføringsdato. Tidspunktet som er
+    // lagret, er registreringen, og står som det.
+    const profile = user
+      ? {
+          ...user,
+          courseCompletions: user.courseCompletions.map(({ completedAt, ...completion }) =>
+            completion.source === "external"
+              ? { ...completion, completedAt: null, registeredAt: completedAt }
+              : { ...completion, completedAt }),
+        }
+      : user;
+
     response.json({
       exportedAt: new Date().toISOString(),
-      profile: user,
+      profile,
       submissions,
       appeals,
       consentHistory: consents,
