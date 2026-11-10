@@ -54,7 +54,11 @@ export type CourseAssignmentRuleClient = Pick<DbTransactionClient, "$queryRaw">;
 /** Regelen for én person og noen kurs: rett før sending, og når jobben samler en persons rader (skive 3). */
 export type CourseAssignmentRuleScope = { userId: string; courseIds: string[] };
 
-export type EligibleAssignmentPair = { userId: string; courseId: string };
+/**
+ * #1146: `arrivedAt` er når den eldste åpne veien til kurset åpnet (personen har hatt kurset sammenhengende siden da), og
+ * `lastPathAt` når den nyeste åpnet.
+ */
+export type EligibleAssignmentPair = { userId: string; courseId: string; arrivedAt: Date; lastPathAt: Date };
 
 export const ASSIGNMENT_NOTICE_STATUS = {
   /** Personen hadde kurset da #1142 kom (migreringen), eller raden kom fra en kopi av prod. Sendes aldri. */
@@ -109,8 +113,11 @@ const NOW_UTC = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
  *   5. kurset er ikke arkivert (arkivering avpubliserer også, men regelen skal ikke hvile på det);
  *   6. personen er aktiv, og
  *   7. ikke anonymisert (#968, de samme feltene som `isReachableParticipant`);
- *   8. personen har ikke kursbevis for kurset, for noen hovedversjon (produkteier 2026-11-08, spørsmål 1);
- *   9. personen har ikke påbegynt kurset: ingen lest seksjon i kurset, ingen innlevering på en modul i kurset, og ingen tråd,
+ *   8. personen har ikke kursbevis på kursets hovedversjon eller nyere (#1146, produkteier 2026-11-10; før: for noen
+ *      hovedversjon). Med kursbevis på en ELDRE hovedversjon er personen bare med når alle åpne veier til kurset (klasse,
+ *      medlemskap, tildeling) åpnet etter at kurset fikk sin hovedversjon (`CourseVersion.publishedAt`). Ellers ville en ny
+ *      hovedversjon gitt e-post om «nytt kurs» i tillegg til e-posten fra #934, uten at noen la kurset til (planreview B1);
+ *   9. (gjelder bare den uten kursbevis) personen har ikke påbegynt kurset: ingen lest seksjon i kurset, ingen innlevering på en modul i kurset, og ingen tråd,
  *      intet svar og ingen følging i kursets diskusjoner. Det er «påbegynt» fra skive 0 (`findStartedOrCompletedCourseIds`
  *      i `classService.ts`), og testen sammenligner de to. «Du har fått et nytt kurs» om et kurs hen er i gang med, er feil
  *      av samme grunn som for et fullført kurs (QA-porten 2026-11-09: en klasse arkivert før vinduet og gjenopprettet etter,
@@ -132,9 +139,18 @@ const NOW_UTC = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
  * ville regelen regnes ut for alle hvert minutt, bare for at `ON CONFLICT` skulle kaste svaret (QA-porten 2026-11-09).
  * `ON CONFLICT DO NOTHING` står igjen for kappløp. Sjekken før sending og samlingen bruker det IKKE: der finnes raden alltid.
  */
-type EligiblePairsOptions = { scope?: CourseAssignmentRuleScope; onlyCourseIds?: string[]; excludeExistingNotices?: boolean };
+type EligiblePairsOptions = {
+  scope?: CourseAssignmentRuleScope;
+  onlyCourseIds?: string[];
+  excludeExistingNotices?: boolean;
+  /** #1146: bare par fra denne spørringen (`userId`, `courseId`). Steg 2b avgrenser med den før regelen regnes ut (punkt 9 R4). */
+  onlyPairs?: Prisma.Sql;
+};
 
-function eligiblePairsQuery({ scope, onlyCourseIds, excludeExistingNotices }: EligiblePairsOptions = {}): Prisma.Sql {
+/** Når en vei til kurset åpnet: den siste av medlemskapet og tildelingen (#1146, punkt 3). */
+const PATH_OPENED_AT = Prisma.sql`GREATEST(cm."addedAt", cga."createdAt")`;
+
+function eligiblePairsQuery({ scope, onlyCourseIds, excludeExistingNotices, onlyPairs }: EligiblePairsOptions = {}): Prisma.Sql {
   const scoped = scope
     ? Prisma.sql`AND cm."userId" = ${scope.userId} AND cga."courseId" = ANY(${scope.courseIds}::text[])`
     : Prisma.empty;
@@ -142,29 +158,43 @@ function eligiblePairsQuery({ scope, onlyCourseIds, excludeExistingNotices }: El
   const withoutNotice = excludeExistingNotices
     ? Prisma.sql`AND NOT EXISTS (SELECT 1 FROM "CourseAssignmentNotice" n WHERE n."userId" = cm."userId" AND n."courseId" = cga."courseId")`
     : Prisma.empty;
+  const pairFilter = onlyPairs
+    ? Prisma.sql`JOIN (${onlyPairs}) op ON op."userId" = cm."userId" AND op."courseId" = cga."courseId"`
+    : Prisma.empty;
+  // Vilkår 8 tar ut kursbevis på kursets hovedversjon eller nyere. Det som er igjen av `cc`, er et kursbevis på en ELDRE
+  // hovedversjon (#1146).
+  const hasOlderCertificate = Prisma.sql`EXISTS (SELECT 1 FROM "CourseCompletion" cc
+                                                 WHERE cc."userId" = cm."userId" AND cc."courseId" = cga."courseId")`;
   return Prisma.sql`
-    SELECT DISTINCT cm."userId" AS "userId", cga."courseId" AS "courseId"
+    SELECT cm."userId" AS "userId", cga."courseId" AS "courseId", MIN(${PATH_OPENED_AT}) AS "arrivedAt",
+           MAX(${PATH_OPENED_AT}) AS "lastPathAt"
     FROM "ClassMember" cm
     JOIN "Class" c                   ON c.id = cm."classId" AND c.kind = 'MANUAL' AND c."isSystem" = false
                                         AND c."archivedAt" IS NULL
     JOIN "CourseGroupAssignment" cga ON cga."classId" = c.id
     JOIN "Course" co                 ON co.id = cga."courseId" AND co."publishedAt" IS NOT NULL AND co."archivedAt" IS NULL
     JOIN "User" u                    ON u.id = cm."userId" AND u."activeStatus" = true AND u."isAnonymized" = false
+    ${pairFilter}
     WHERE NOT EXISTS (SELECT 1 FROM "CourseCompletion" cc
-                      WHERE cc."userId" = cm."userId" AND cc."courseId" = cga."courseId")
-      AND NOT EXISTS (SELECT 1 FROM "CourseSectionRead" r
-                      WHERE r."userId" = cm."userId" AND r."courseId" = cga."courseId")
-      AND NOT EXISTS (SELECT 1 FROM "Submission" s
-                      JOIN "CourseItem" ci ON ci."moduleId" = s."moduleId" AND ci."itemType" = 'MODULE'
-                      WHERE s."userId" = cm."userId" AND ci."courseId" = cga."courseId")
-      AND NOT EXISTS (SELECT 1 FROM "DiscussionThread" t
-                      WHERE t."courseId" = cga."courseId"
-                        AND (t."authorId" = cm."userId"
-                             OR EXISTS (SELECT 1 FROM "DiscussionReply" dr WHERE dr."threadId" = t.id AND dr."authorId" = cm."userId")
-                             OR EXISTS (SELECT 1 FROM "DiscussionSubscription" ds WHERE ds."threadId" = t.id AND ds."userId" = cm."userId")))
+                      WHERE cc."userId" = cm."userId" AND cc."courseId" = cga."courseId" AND cc."versionMajor" >= co."versionMajor")
+      AND (${hasOlderCertificate} OR (
+            NOT EXISTS (SELECT 1 FROM "CourseSectionRead" r
+                        WHERE r."userId" = cm."userId" AND r."courseId" = cga."courseId")
+        AND NOT EXISTS (SELECT 1 FROM "Submission" s
+                        JOIN "CourseItem" ci ON ci."moduleId" = s."moduleId" AND ci."itemType" = 'MODULE'
+                        WHERE s."userId" = cm."userId" AND ci."courseId" = cga."courseId")
+        AND NOT EXISTS (SELECT 1 FROM "DiscussionThread" t
+                        WHERE t."courseId" = cga."courseId"
+                          AND (t."authorId" = cm."userId"
+                               OR EXISTS (SELECT 1 FROM "DiscussionReply" dr WHERE dr."threadId" = t.id AND dr."authorId" = cm."userId")
+                               OR EXISTS (SELECT 1 FROM "DiscussionSubscription" ds WHERE ds."threadId" = t.id AND ds."userId" = cm."userId")))))
     ${scoped}
     ${onlyCourses}
     ${withoutNotice}
+    GROUP BY cm."userId", cga."courseId", co."versionMajor"
+    HAVING NOT ${hasOlderCertificate}
+        OR MIN(${PATH_OPENED_AT}) > (SELECT cv."publishedAt" FROM "CourseVersion" cv
+                                     WHERE cv."courseId" = cga."courseId" AND cv."versionMajor" = co."versionMajor")
   `;
 }
 
@@ -190,13 +220,95 @@ function insertRowsFromRule(
   client: Pick<DbTransactionClient, "$executeRaw">,
   input: { status: string; reason: string | null; at: Date; onlyCourseIds?: string[] },
 ): Promise<number> {
+  // #1146: en `baseline`-rad regnes som varslet nå (databasens klokke, som `settledAt` ellers). En ventende rad er ikke avgjort.
+  const settledAt = input.status === ASSIGNMENT_NOTICE_STATUS.baseline ? NOW_UTC : Prisma.sql`NULL`;
   return client.$executeRaw`
-    INSERT INTO "CourseAssignmentNotice" ("id", "userId", "courseId", "status", "reason", "createdAt", "updatedAt")
-    SELECT gen_random_uuid()::text, p."userId", p."courseId", ${input.status}::text, ${input.reason}::text, ${utc(input.at)}, ${utc(input.at)}
+    INSERT INTO "CourseAssignmentNotice" ("id", "userId", "courseId", "status", "reason", "createdAt", "updatedAt", "settledAt")
+    SELECT gen_random_uuid()::text, p."userId", p."courseId", ${input.status}::text, ${input.reason}::text, ${utc(input.at)}, ${utc(input.at)}, ${settledAt}
     FROM (${eligiblePairsQuery({ onlyCourseIds: input.onlyCourseIds, excludeExistingNotices: true })}) p
     ON CONFLICT ("userId", "courseId") DO NOTHING
   `;
 }
+
+/** Statusene der en rad er avgjort: personen er varslet, eller regnet som varslet. Steg 2b ser bare på disse. */
+const SETTLED_STATUSES = [
+  ASSIGNMENT_NOTICE_STATUS.baseline,
+  ASSIGNMENT_NOTICE_STATUS.sent,
+  ASSIGNMENT_NOTICE_STATUS.uncertain,
+  ASSIGNMENT_NOTICE_STATUS.failed,
+];
+
+/**
+ * #1146, steg 2b: personen har fått kurset på nytt. Alle åpne veier til kurset er nyere enn `settledAt` (kurset eller
+ * medlemskapet er fjernet og lagt inn igjen etter forrige varsel): raden blir `waiting` igjen, og vinduet starter nå.
+ *
+ * - Bare rader i sluttstatus med `settledAt`. `waiting`, `queued` og `sending` røres aldri, så jobben, samlingen og behandleren
+ *   endrer aldri de samme radene. To workere samtidig: `status IN (…)` gjør at bare den første setter raden tilbake.
+ * - `settledAt` blir NULL, og settes igjen ved neste `sending` (databasens klokke), etter veien. Raden kan ikke gå i ring.
+ * - Sammenligningen bruker bare ekte tider: veiene (Prisma) og `settledAt` (databasen). Jobbens `now`, som testene stiller,
+ *   brukes bare til vinduet (punkt 9 R1).
+ * - Avgrenset først til par der minst én vei er nyere enn `settledAt` (punkt 9 R4); bare for dem regnes regelen og `MIN` ut.
+ * - Tellingen før utrulling bruker `readdedPairsQuery` (punkt 9 R6).
+ */
+export function readdedPairsQuery(onlyCourseIds?: string[], options?: SettledPathsOptions): Prisma.Sql {
+  return settledPathsQuery("readded", onlyCourseIds, options);
+}
+
+type SettledPathsOptions = {
+  /**
+   * Hvordan `settledAt` leses for en rad med aliaset. Standard: kolonnen. Tellingen i prod FØR migreringen (kolonnen finnes
+   * ikke ennå) sender migreringens utfylling, `COALESCE("sendingAt", "updatedAt")`, så tallet produkteier godkjenner, kommer
+   * fra den samme spørringen (planreview R6).
+   */
+  settledAt?: (alias: "n" | "n2") => Prisma.Sql;
+};
+
+/**
+ * Rader i sluttstatus der minst én åpen vei er nyere enn `settledAt`. `readded`: ALLE veier er nyere (personen fikk kurset på
+ * nytt). `absorbed`: minst én vei er eldre (personen hadde kurset hele tiden; en ny vei kom til).
+ */
+function settledPathsQuery(kind: "readded" | "absorbed", onlyCourseIds?: string[], options?: SettledPathsOptions): Prisma.Sql {
+  const settled = options?.settledAt ?? ((alias: "n" | "n2") => Prisma.raw(`${alias}."settledAt"`));
+  const candidates = Prisma.sql`
+    SELECT DISTINCT n2."userId", n2."courseId"
+    FROM "CourseAssignmentNotice" n2
+    JOIN "ClassMember" cm2           ON cm2."userId" = n2."userId"
+    JOIN "CourseGroupAssignment" cga2 ON cga2."classId" = cm2."classId" AND cga2."courseId" = n2."courseId"
+    WHERE n2.status = ANY(${SETTLED_STATUSES}::text[]) AND ${settled("n2")} IS NOT NULL
+      AND GREATEST(cm2."addedAt", cga2."createdAt") > ${settled("n2")}
+  `;
+  return Prisma.sql`
+    SELECT n.id, n."userId", n."courseId", p."arrivedAt", p."lastPathAt"
+    FROM "CourseAssignmentNotice" n
+    JOIN (${eligiblePairsQuery({ onlyCourseIds, onlyPairs: candidates })}) p ON p."userId" = n."userId" AND p."courseId" = n."courseId"
+    WHERE n.status = ANY(${SETTLED_STATUSES}::text[]) AND ${settled("n")} IS NOT NULL AND ${kind === "readded"
+      ? Prisma.sql`p."arrivedAt" > ${settled("n")}`
+      : Prisma.sql`p."arrivedAt" <= ${settled("n")} AND p."lastPathAt" > ${settled("n")}`}
+  `;
+}
+
+async function resetReaddedRows(now: Date, onlyCourseIds?: string[]): Promise<Array<{ userId: string; courseId: string }>> {
+  // Først: en ny vei mens en gammel står (kurset lagt til klasse B mens personen har det fra A). Personen hadde kurset hele
+  // tiden; den nye veien regnes som kjent (`settledAt` flyttes fram til den). Uten dette ga «fjern A» senere e-post om et kurs
+  // som aldri forsvant (svar 2; integrasjonstesten fant det 2026-11-10). Kommer B til og forsvinner A mellom to runder, ser
+  // jobben bare B og sender e-post (kjent, punkt 9).
+  await prisma.$executeRaw`
+    UPDATE "CourseAssignmentNotice" n
+    SET "settledAt" = a."lastPathAt", "updatedAt" = ${NOW_UTC}
+    FROM (${settledPathsQuery("absorbed", onlyCourseIds)}) a
+    WHERE n.id = a.id AND n.status = ANY(${SETTLED_STATUSES}::text[]) AND n."settledAt" < a."lastPathAt"
+  `;
+  return prisma.$queryRaw<Array<{ userId: string; courseId: string }>>`
+    UPDATE "CourseAssignmentNotice" n
+    SET status = ${ASSIGNMENT_NOTICE_STATUS.waiting}, reason = ${READDED_REASON}, "createdAt" = ${utc(now)}, "updatedAt" = ${utc(now)},
+        "settledAt" = NULL, "batchId" = NULL, "queuedAt" = NULL, "sendingAt" = NULL, "sentAt" = NULL
+    FROM (${readdedPairsQuery(onlyCourseIds)}) r
+    WHERE n.id = r.id AND n.status = ANY(${SETTLED_STATUSES}::text[]) AND n."settledAt" < r."arrivedAt"
+    RETURNING n."userId", n."courseId"
+  `;
+}
+
+const READDED_REASON = "re_added";
 
 const courseFilter = (onlyCourseIds?: string[]) =>
   onlyCourseIds ? Prisma.sql`AND "courseId" = ANY(${onlyCourseIds}::text[])` : Prisma.empty;
@@ -215,6 +327,8 @@ export type CourseAssignmentEmailScheduleSummary = {
   asOf: string;
   /** Nye rader (`waiting`) fra regelen. */
   created: number;
+  /** #1146: rader i sluttstatus satt tilbake til `waiting` fordi personen har fått kurset på nytt. */
+  reset: number;
   /** Rader som sto i `sending` i over 30 min og ble `uncertain`. */
   uncertain: number;
   /** Rader som sto i `queued` i over 2 timer og ble lagt tilbake til `waiting`. */
@@ -235,7 +349,7 @@ export async function runCourseAssignmentEmailSchedule(input?: { now?: Date; onl
   const now = input?.now ?? new Date();
   const onlyCourseIds = input?.onlyCourseIds;
   const scope = onlyCourseIds ? { courseId: { in: onlyCourseIds } } : {};
-  const summary: CourseAssignmentEmailScheduleSummary = { asOf: now.toISOString(), created: 0, uncertain: 0, requeued: 0, queued: 0, removed: 0, deferred: 0 };
+  const summary: CourseAssignmentEmailScheduleSummary = { asOf: now.toISOString(), created: 0, reset: 0, uncertain: 0, requeued: 0, queued: 0, removed: 0, deferred: 0 };
 
   // 1. Rydding. Prisma setter `updatedAt` selv her.
   const stuckSending = await prisma.courseAssignmentNotice.updateMany({
@@ -251,6 +365,13 @@ export async function runCourseAssignmentEmailSchedule(input?: { now?: Date; onl
 
   // 2. Nye rader fra regelen. `createdAt` er tidspunktet jobben så paret første gang.
   summary.created = await insertRowsFromRule(prisma, { status: ASSIGNMENT_NOTICE_STATUS.waiting, reason: null, at: now, onlyCourseIds });
+
+  // 2b (#1146). Kurs personen har fått på nytt: raden blir `waiting` igjen.
+  const reset = await resetReaddedRows(now, onlyCourseIds);
+  summary.reset = reset.length;
+  for (const [userId, courseIds] of groupCourseIdsByUser(reset)) {
+    logOperationalEvent(operationalEvents.course.assignmentNoticeReset, { userId, courseIds, count: courseIds.length });
+  }
 
   // 3. Personer som er klare, eldst først.
   const ready = await prisma.$queryRaw<Array<{ userId: string }>>`
@@ -333,6 +454,12 @@ export async function collectPersonDigest(
   return { batchId: result.batchId, courseIds: result.courseIds, removed: result.removed.length };
 }
 
+function groupCourseIdsByUser(rows: Array<{ userId: string; courseId: string }>): Map<string, string[]> {
+  const byUser = new Map<string, string[]>();
+  for (const row of rows) byUser.set(row.userId, [...(byUser.get(row.userId) ?? []), row.courseId]);
+  return byUser;
+}
+
 function logRemoved(stage: "collect" | "deliver", userId: string, courseIds: string[]) {
   logOperationalEvent(operationalEvents.course.assignmentNoticeRemoved, { stage, userId, courseIds, count: courseIds.length });
 }
@@ -386,10 +513,11 @@ export async function deliverCourseAssignmentDigest(
   const { user, keepIds, coursesById } = prepared;
 
   // 7. Betinget overgang rett før sendingen. To forsøk på samme samling: bare ett får radene tilbake. E-posten lages av
-  // radene som kom tilbake. ⚠️ Rå SQL: `sendingAt` og `updatedAt` settes her.
+  // radene som kom tilbake. ⚠️ Rå SQL: `sendingAt` og `updatedAt` settes her. #1146: `settledAt` også — fra nå regnes personen
+  // som varslet; `sent`, `uncertain` og `failed` beholder tidspunktet. Går raden tilbake uten at e-posten gikk, blir den NULL.
   const claimed = await prisma.$queryRaw<Array<{ id: string; courseId: string }>>`
     UPDATE "CourseAssignmentNotice"
-    SET status = ${ASSIGNMENT_NOTICE_STATUS.sending}, "sendingAt" = ${NOW_UTC}, "updatedAt" = ${NOW_UTC}
+    SET status = ${ASSIGNMENT_NOTICE_STATUS.sending}, "sendingAt" = ${NOW_UTC}, "settledAt" = ${NOW_UTC}, "updatedAt" = ${NOW_UTC}
     WHERE "batchId" = ${batchId} AND status = ${ASSIGNMENT_NOTICE_STATUS.queued} AND id = ANY(${keepIds}::text[])
     RETURNING id, "courseId"
   `;
@@ -418,6 +546,7 @@ export async function deliverCourseAssignmentDigest(
     await setBatchStatus(batchId, ASSIGNMENT_NOTICE_STATUS.sending, {
       status: options?.lastAttempt ? ASSIGNMENT_NOTICE_STATUS.failed : ASSIGNMENT_NOTICE_STATUS.queued,
       sendingAt: null,
+      ...(options?.lastAttempt ? {} : { settledAt: null }),
       reason: reason.slice(0, 500),
     });
     throw error;
@@ -434,6 +563,7 @@ export async function deliverCourseAssignmentDigest(
       batchId: null,
       queuedAt: null,
       sendingAt: null,
+      settledAt: null,
       reason: "channel_disabled",
     });
     return;
@@ -447,6 +577,7 @@ export async function deliverCourseAssignmentDigest(
   await setBatchStatus(batchId, ASSIGNMENT_NOTICE_STATUS.sending, {
     status: options?.lastAttempt ? ASSIGNMENT_NOTICE_STATUS.failed : ASSIGNMENT_NOTICE_STATUS.queued,
     sendingAt: null,
+    ...(options?.lastAttempt ? {} : { settledAt: null }),
     reason,
   });
   throw new DigestNotDeliveredError(`course assignment digest not delivered: ${reason}`);
@@ -505,7 +636,7 @@ function earliestDueAt(dueDates: Array<Date | null>): Date | null {
 function setBatchStatus(
   batchId: string,
   from: string,
-  data: { status: string; reason?: string | null; batchId?: null; queuedAt?: null; sendingAt?: null; sentAt?: Date },
+  data: { status: string; reason?: string | null; batchId?: null; queuedAt?: null; sendingAt?: null; settledAt?: null; sentAt?: Date },
 ) {
   return prisma.courseAssignmentNotice.updateMany({ where: { batchId, status: from }, data });
 }
@@ -513,6 +644,8 @@ function setBatchStatus(
 export type StageCopyNeutralizeSummary = {
   /** Steg 1: rader i `waiting`, `queued` og `sending` som ble `baseline`. */
   pendingToBaseline: number;
+  /** #1146: rader i sluttstatus (også de fra steg 1) som fikk `settledAt` = nå, så stage ikke setter tilbake det prod gjør. */
+  settledNow: number;
   /** Steg 2: par prod-jobben ennå ikke hadde sett, som fikk `baseline`. */
   unseenPairsToBaseline: number;
   /** Steg 3: `CourseVersionNotice` (4b) i `waiting`, `queued` og `sending` som ble `skipped`. */
@@ -541,8 +674,14 @@ export async function neutralizeEmailStateAfterProdCopy(): Promise<StageCopyNeut
       const now = new Date();
       const pendingToBaseline = await tx.$executeRaw`
         UPDATE "CourseAssignmentNotice"
-        SET status = ${ASSIGNMENT_NOTICE_STATUS.baseline}, reason = ${COPIED_FROM_PROD}, "updatedAt" = ${utc(now)}
+        SET status = ${ASSIGNMENT_NOTICE_STATUS.baseline}, reason = ${COPIED_FROM_PROD}, "updatedAt" = ${utc(now)}, "settledAt" = ${NOW_UTC}
         WHERE status IN (${ASSIGNMENT_NOTICE_STATUS.waiting}, ${ASSIGNMENT_NOTICE_STATUS.queued}, ${ASSIGNMENT_NOTICE_STATUS.sending})
+      `;
+      // #1146 (planreview R5): et kurs lagt inn igjen like før kopien ble tatt, settes tilbake av prod-jobben. Uten dette ville
+      // stage-jobben satt den tilbake også, og sendt sin egen e-post.
+      const settledNow = await tx.$executeRaw`
+        UPDATE "CourseAssignmentNotice" SET "settledAt" = ${NOW_UTC}
+        WHERE status IN (${ASSIGNMENT_NOTICE_STATUS.sent}, ${ASSIGNMENT_NOTICE_STATUS.uncertain}, ${ASSIGNMENT_NOTICE_STATUS.failed}, ${ASSIGNMENT_NOTICE_STATUS.baseline})
       `;
       const unseenPairsToBaseline = await insertRowsFromRule(tx, { status: ASSIGNMENT_NOTICE_STATUS.baseline, reason: COPIED_FROM_PROD, at: now });
       const skipped = await tx.courseVersionNotice.updateMany({
@@ -553,7 +692,7 @@ export async function neutralizeEmailStateAfterProdCopy(): Promise<StageCopyNeut
         where: { status: "pending", type: { in: [...SENDS_TO_A_PERSON] } },
         data: { status: "failed", lastError: COPIED_FROM_PROD, lockedBy: null, lockedAt: null },
       });
-      return { pendingToBaseline, unseenPairsToBaseline, majorVersionNoticesSkipped: skipped.count, outboxEventsFailed: failed.count };
+      return { pendingToBaseline, settledNow, unseenPairsToBaseline, majorVersionNoticesSkipped: skipped.count, outboxEventsFailed: failed.count };
     },
     { timeout: 60_000 },
   );

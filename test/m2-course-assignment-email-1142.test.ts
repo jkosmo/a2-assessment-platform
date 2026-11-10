@@ -420,7 +420,8 @@ describe("#1142 skive 3 — det som ikke gjelder lenger, tas ut", () => {
     expect(await eventsFor(anonymized.id)).toEqual([]);
   });
 
-  it("fjernet og lagt til igjen ETTER sending: ingen ny e-post. Fjernet FØR sending og lagt til igjen: én e-post", async () => {
+  // #1146 (produkteier 2026-11-10, svar 1): fjernet og lagt til igjen ETTER sending gir nå én ny e-post (før: ingen).
+  it("fjernet og lagt til igjen ETTER sending: én ny e-post (#1146). Fjernet FØR sending og lagt til igjen: én e-post", async () => {
     const t = clock();
     const c = await course();
     const afterSend = await person();
@@ -437,17 +438,19 @@ describe("#1142 skive 3 — det som ikke gjelder lenger, tas ut", () => {
     await removeMember(classId, afterSend.id);
     await addMember(classId, afterSend.id);
     await addMember(classId, beforeSend.id);
-    expect(await job(t(20), [c.id])).toMatchObject({ created: 1 });
+    expect(await job(t(20), [c.id])).toMatchObject({ created: 1, reset: 1 });
     await removeMember(classId, beforeSend.id);
-    expect(await job(t(36), [c.id])).toMatchObject({ queued: 0, removed: 1 });
+    // Den tilbakestilte raden (vinduet fra t(20)) samles; den som ble fjernet før sending, slettes.
+    expect(await job(t(36), [c.id])).toMatchObject({ queued: 1, removed: 1 });
+    await deliverCourseAssignmentDigest(await latestBatch(afterSend.id), { send });
     await addMember(classId, beforeSend.id);
-    expect(await job(t(37), [c.id])).toMatchObject({ created: 1 });
+    expect(await job(t(37), [c.id])).toMatchObject({ created: 1, reset: 0 });
     expect(await job(t(53), [c.id])).toMatchObject({ queued: 1 });
     await deliverCourseAssignmentDigest(await latestBatch(beforeSend.id), { send });
-    expect(await job(t(120), [c.id])).toMatchObject({ created: 0, queued: 0 });
+    expect(await job(t(120), [c.id])).toMatchObject({ created: 0, reset: 0, queued: 0 });
 
-    expect(send).toHaveBeenCalledTimes(2);
-    expect(send.mock.calls.map(([input]) => input.userId)).toEqual([afterSend.id, beforeSend.id]);
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(send.mock.calls.map(([input]) => input.userId)).toEqual([afterSend.id, afterSend.id, beforeSend.id]);
     expect((await rows([c.id])).map((r) => r.status)).toEqual(["sent", "sent"]);
   });
 
@@ -691,7 +694,8 @@ describe("#1142 skive 3 — ingen dobbel e-post", () => {
     expect((await rows(q.ids)).map((r) => r.status)).toEqual(["sending"]);
     finish();
     await expect(delivering).rejects.toThrow(/not delivered: acs_400/);
-    expect((await rows(q.ids)).map((r) => [r.status, r.reason])).toEqual([["queued", "acs_400"]]);
+    // #1146: e-posten gikk ikke, så personen er ikke varslet: `settledAt` er tom igjen (som for alle rader som venter).
+    expect((await rows(q.ids)).map((r) => [r.status, r.reason, r.settledAt])).toEqual([["queued", "acs_400", null]]);
     const send = okSend();
     await deliverCourseAssignmentDigest(q.batchId, { send });
     expect(send).toHaveBeenCalledTimes(1);
@@ -792,5 +796,245 @@ describe("#1142 skive 3 — utfallet av sendingen", () => {
     const [mail] = mailsTo(q.u.email);
     expect(mail.content.subject).toMatch(/^You have a new course: «/);
     expect((await rows(q.ids)).map((r) => r.status)).toEqual(["sent"]);
+  });
+});
+
+// #1146 (doc/design/PLAN_1146.md): kurset kommer tilbake. Personen får e-post igjen når ALLE åpne veier til kurset (klasse,
+// medlemskap, tildeling) er nyere enn `settledAt`, tidspunktet hen sist ble varslet. Veiene har ekte tid (rutene), og
+// `settledAt` settes av databasen; jobbens klokke (tolv timer tilbake) styrer bare vinduet (planreview R1).
+describe("#1146 — et kurs som legges til igjen, gir e-post", () => {
+  /** Ett medlem, ett kurs, sendt. Gir tilbake det testen trenger for å fjerne og legge til igjen. */
+  async function sentOnce() {
+    const t = clock();
+    const c = await course();
+    const u = await person();
+    const classId = await newClass();
+    await addMember(classId, u.id);
+    await assign(classId, c.id);
+    await job(t(0), [c.id]);
+    expect(await job(t(16), [c.id])).toMatchObject({ queued: 1 });
+    const send = okSend();
+    await deliverCourseAssignmentDigest(await latestBatch(u.id), { send });
+    expect(send).toHaveBeenCalledTimes(1);
+    return { t, c, u, classId, send };
+  }
+
+  it("kurset fjernet og lagt inn igjen med frist etter sending: én ny e-post med fristen; en runde til gir ingen (ingen løkke)", async () => {
+    const s = await sentOnce();
+    await unassign(s.classId, s.c.id);
+    await assign(s.classId, s.c.id, "2026-12-31T12:00:00.000Z");
+    expect(await job(s.t(30), [s.c.id])).toMatchObject({ reset: 1, created: 0 });
+    const [row] = await rows([s.c.id]);
+    expect(row).toMatchObject({ status: "waiting", reason: "re_added", settledAt: null, batchId: null, sentAt: null });
+    expect(await job(s.t(46), [s.c.id])).toMatchObject({ queued: 1 });
+    await deliverCourseAssignmentDigest(await latestBatch(s.u.id), { send: s.send });
+    expect(s.send).toHaveBeenCalledTimes(2);
+    expect(s.send.mock.calls[1]![0].courses[0]!.dueAt?.toISOString()).toBe("2026-12-31T12:00:00.000Z");
+    expect(await job(s.t(120), [s.c.id])).toMatchObject({ reset: 0, created: 0, queued: 0 });
+    expect(await job(s.t(240), [s.c.id])).toMatchObject({ reset: 0 });
+  });
+
+  it("ny frist på en tildeling som står: ingen e-post", async () => {
+    const s = await sentOnce();
+    await assign(s.classId, s.c.id, "2027-01-15T12:00:00.000Z");
+    expect(await job(s.t(30), [s.c.id])).toMatchObject({ reset: 0, created: 0 });
+  });
+
+  it("planreview B2: fjernet og lagt inn igjen INNENFOR vinduet (før sending), og medlem flyttet fra A til B innenfor vinduet: én e-post, også etter flere runder", async () => {
+    const t = clock();
+    const c = await course();
+    const readded = await person();
+    const moved = await person();
+    const a = await newClass();
+    const b = await newClass();
+    await addMember(a, readded.id);
+    await addMember(a, moved.id);
+    await assign(a, c.id);
+    await assign(b, c.id);
+    await job(t(0), [c.id]);
+    // Innenfor vinduet: tildelingen fjernes og legges inn igjen (ny `createdAt`), og den ene flyttes fra A til B.
+    await unassign(a, c.id);
+    await assign(a, c.id, "2026-12-31T12:00:00.000Z");
+    await removeMember(a, moved.id);
+    await addMember(b, moved.id);
+    expect(await job(t(16), [c.id])).toMatchObject({ queued: 2, reset: 0 });
+    const send = okSend();
+    await deliverCourseAssignmentDigest(await latestBatch(readded.id), { send });
+    await deliverCourseAssignmentDigest(await latestBatch(moved.id), { send });
+    expect(send).toHaveBeenCalledTimes(2);
+    for (const at of [30, 60, 240]) expect(await job(t(at), [c.id])).toMatchObject({ reset: 0, created: 0, queued: 0 });
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("svar 2: kurset lagt til klasse B mens personen har det fra A gir ingen e-post; fjern A mens B står: ingen; fjern B og legg til A igjen: én", async () => {
+    const s = await sentOnce();
+    const b = await newClass();
+    await addMember(b, s.u.id);
+    await assign(b, s.c.id);
+    expect(await job(s.t(30), [s.c.id])).toMatchObject({ reset: 0 });
+    await unassign(s.classId, s.c.id);
+    expect(await job(s.t(31), [s.c.id])).toMatchObject({ reset: 0 });
+    await unassign(b, s.c.id);
+    await assign(s.classId, s.c.id);
+    expect(await job(s.t(32), [s.c.id])).toMatchObject({ reset: 1 });
+  });
+
+  it("svar 1: medlem fjernet fra klassen og lagt til igjen etter sending gir én e-post", async () => {
+    const s = await sentOnce();
+    await removeMember(s.classId, s.u.id);
+    await addMember(s.classId, s.u.id);
+    expect(await job(s.t(30), [s.c.id])).toMatchObject({ reset: 1 });
+  });
+
+  it("`baseline` (hadde kurset før #1142) og kurset lagt inn igjen: én e-post. `baseline` uten `settledAt` (gamle testdata) røres ikke", async () => {
+    const c = await course();
+    const withSettled = await person();
+    const withoutSettled = await person();
+    const classId = await newClass();
+    await addMember(classId, withSettled.id);
+    await addMember(classId, withoutSettled.id);
+    await assign(classId, c.id);
+    await prisma.courseAssignmentNotice.create({ data: { userId: withSettled.id, courseId: c.id, status: "baseline", reason: "before_1142", settledAt: new Date() } });
+    await prisma.courseAssignmentNotice.create({ data: { userId: withoutSettled.id, courseId: c.id, status: "baseline", reason: "before_1142" } });
+    const t = clock();
+    expect(await job(t(0), [c.id])).toMatchObject({ created: 0, reset: 0 });
+    await unassign(classId, c.id);
+    await assign(classId, c.id);
+    expect(await job(t(1), [c.id])).toMatchObject({ reset: 1 });
+    expect((await rows([c.id])).find((r) => r.userId === withSettled.id)?.status).toBe("waiting");
+  });
+
+  it("kurset avpublisert eller klassen arkivert når det legges inn igjen: ingen tilbakestilling før det er publisert igjen", async () => {
+    const s = await sentOnce();
+    await unassign(s.classId, s.c.id);
+    await assign(s.classId, s.c.id);
+    await unpublish(s.c.id);
+    expect(await job(s.t(30), [s.c.id])).toMatchObject({ reset: 0 });
+    await publish(s.c.id);
+    expect(await job(s.t(31), [s.c.id])).toMatchObject({ reset: 1 });
+  });
+
+  it("rader i `waiting`, `queued` og `sending` røres ikke, selv om kurset legges inn igjen", async () => {
+    const t = clock();
+    const c = await course();
+    const users = [await person(), await person(), await person()];
+    const classId = await newClass();
+    for (const u of users) await addMember(classId, u.id);
+    await assign(classId, c.id);
+    await job(t(0), [c.id]);
+    const [w, q, s] = users;
+    await prisma.courseAssignmentNotice.updateMany({ where: { userId: q!.id, courseId: c.id }, data: { status: "queued", batchId: `b-${RUN}-${seq++}`, queuedAt: new Date() } });
+    await prisma.courseAssignmentNotice.updateMany({ where: { userId: s!.id, courseId: c.id }, data: { status: "sending", batchId: `b-${RUN}-${seq++}`, sendingAt: new Date(), settledAt: new Date(Date.now() - 60_000) } });
+    await unassign(classId, c.id);
+    await assign(classId, c.id);
+    expect(await job(t(1), [c.id])).toMatchObject({ reset: 0 });
+    const byUser = new Map((await rows([c.id])).map((r) => [r.userId, r.status]));
+    expect([byUser.get(w!.id), byUser.get(q!.id), byUser.get(s!.id)]).toEqual(["waiting", "queued", "sending"]);
+  });
+
+  it("`failed` (`contains_link`) settes tilbake én gang når kurset legges inn igjen, og går ikke i ring", async () => {
+    const t = clock();
+    const c = await course();
+    const u = await person();
+    const classId = await newClass();
+    await addMember(classId, u.id);
+    await assign(classId, c.id);
+    await job(t(0), [c.id]);
+    await job(t(16), [c.id]);
+    const linky = vi.fn<CourseAssignmentDigestSend>(async () => { throw new EmailContainsLinkError("lenke"); });
+    await deliverCourseAssignmentDigest(await latestBatch(u.id), { send: linky });
+    expect((await rows([c.id]))[0]).toMatchObject({ status: "failed", reason: "contains_link" });
+    await unassign(classId, c.id);
+    await assign(classId, c.id);
+    expect(await job(t(30), [c.id])).toMatchObject({ reset: 1 });
+    await job(t(46), [c.id]);
+    await deliverCourseAssignmentDigest(await latestBatch(u.id), { send: linky });
+    for (const at of [60, 120]) expect(await job(t(at), [c.id])).toMatchObject({ reset: 0, queued: 0 });
+    expect(linky).toHaveBeenCalledTimes(2);
+  });
+
+  it("to runder samtidig (to workere): raden settes tilbake én gang", async () => {
+    const s = await sentOnce();
+    await unassign(s.classId, s.c.id);
+    await assign(s.classId, s.c.id);
+    const [first, second] = await Promise.all([job(s.t(30), [s.c.id]), job(s.t(30), [s.c.id])]);
+    expect(first.reset + second.reset).toBe(1);
+  });
+
+  describe("kursbevis og hovedversjon (vilkår 8 og 9, planreview B1)", () => {
+    /** Kurset får hovedversjon 2 NÅ: raden i `CourseVersion` og `versionMajor` på kurset, som `courseVersioning.ts` gjør. */
+    async function newMajor(courseId: string) {
+      await prisma.courseVersion.create({ data: { courseId, versionMajor: 2, publishedAt: new Date(), sectionVersionsJson: "{}" } });
+      await prisma.course.update({ where: { id: courseId }, data: { versionMajor: 2 } });
+    }
+    const certificate = (userId: string, courseId: string, versionMajor: number) =>
+      prisma.courseCompletion.create({ data: { userId, courseId, versionMajor, moduleSnapshotJson: "[]" } });
+
+    it("kursbevis på v1 og i klassen fra før, så v2: ingen rad (bare e-posten fra #934)", async () => {
+      const t = clock();
+      const c = await course();
+      const u = await person();
+      const classId = await newClass();
+      await addMember(classId, u.id);
+      await assign(classId, c.id);
+      await certificate(u.id, c.id, 1);
+      await newMajor(c.id);
+      expect(await job(t(0), [c.id])).toMatchObject({ created: 0, reset: 0 });
+    });
+
+    it("kursbevis på v1, og kurset lagt til klassen etter v2: e-post, også om hen har lest i kurset", async () => {
+      const t = clock();
+      const c = await course();
+      const u = await person();
+      const classId = await newClass();
+      await addMember(classId, u.id);
+      await certificate(u.id, c.id, 1);
+      const section = await prisma.courseItem.findFirstOrThrow({ where: { courseId: c.id, itemType: "SECTION" }, select: { sectionId: true } });
+      await prisma.courseSectionRead.create({ data: { userId: u.id, courseId: c.id, sectionId: section.sectionId! } });
+      await newMajor(c.id);
+      await assign(classId, c.id);
+      expect(await job(t(0), [c.id])).toMatchObject({ created: 1 });
+    });
+
+    it("kursbevis på kursets hovedversjon: ingen rad, heller ikke når kurset legges til etter v2", async () => {
+      const t = clock();
+      const c = await course();
+      const u = await person();
+      const classId = await newClass();
+      await addMember(classId, u.id);
+      await newMajor(c.id);
+      await certificate(u.id, c.id, 2);
+      await assign(classId, c.id);
+      expect(await job(t(0), [c.id])).toMatchObject({ created: 0 });
+    });
+
+    it("kursbevis på v1, klassen arkivert før v2 og gjenopprettet etter: ingen e-post (veien er gammel)", async () => {
+      const t = clock();
+      const c = await course();
+      const u = await person();
+      const classId = await newClass();
+      await addMember(classId, u.id);
+      await assign(classId, c.id);
+      await certificate(u.id, c.id, 1);
+      await prisma.class.update({ where: { id: classId }, data: { archivedAt: new Date() } });
+      await newMajor(c.id);
+      await prisma.class.update({ where: { id: classId }, data: { archivedAt: null } });
+      expect(await job(t(0), [c.id])).toMatchObject({ created: 0 });
+    });
+
+    it("påbegynt uten kursbevis: ingen rad, også når kurset legges inn igjen", async () => {
+      const t = clock();
+      const c = await course();
+      const u = await person();
+      const classId = await newClass();
+      await addMember(classId, u.id);
+      const section = await prisma.courseItem.findFirstOrThrow({ where: { courseId: c.id, itemType: "SECTION" }, select: { sectionId: true } });
+      await prisma.courseSectionRead.create({ data: { userId: u.id, courseId: c.id, sectionId: section.sectionId! } });
+      await assign(classId, c.id);
+      expect(await job(t(0), [c.id])).toMatchObject({ created: 0 });
+      await unassign(classId, c.id);
+      await assign(classId, c.id);
+      expect(await job(t(1), [c.id])).toMatchObject({ created: 0, reset: 0 });
+    });
   });
 });

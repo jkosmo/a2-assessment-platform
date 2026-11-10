@@ -16,6 +16,8 @@ export const operationalEvents = {
     // #1142: en ventende rad om et nytt kurs ble slettet fordi regelen ikke lenger sa ja (avpublisert, ikke lenger tildelt,
     // fjernet fra klassen, sluttet, påbegynt, …). `stage` sier om det var jobben som samlet, eller behandleren rett før sending.
     assignmentNoticeRemoved: "course_assignment_notice_removed",
+    // #1146: personen har fått kurset på nytt (fjernet og lagt inn igjen etter forrige varsel). Raden ble `waiting` igjen.
+    assignmentNoticeReset: "course_assignment_notice_reset",
   },
   audit: {
     // #1000: tilgangsloggen for et revisjonsspor kunne ikke skrives. Skjer typisk mens
@@ -87,6 +89,11 @@ export type OperationalEventName = NestedValue<typeof operationalEvents>;
 export type OperationalEventMetadataByName = {
   [operationalEvents.course.assignmentNoticeRemoved]: EventMetadata<{
     stage: "collect" | "deliver";
+    userId: string;
+    courseIds: string[];
+    count: number;
+  }>;
+  [operationalEvents.course.assignmentNoticeReset]: EventMetadata<{
     userId: string;
     courseIds: string[];
     count: number;

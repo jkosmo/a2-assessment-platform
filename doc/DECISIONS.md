@@ -1579,7 +1579,7 @@ får deltakeren én e-post om alle nye kurs, et kvarter etter siste endring. Pla
 - **Arkiverte klasser gir ingen e-post** (produkteier 2026-11-08). Et kurs deltakeren bare har fra en arkivert klasse, står
   ikke i «Mine kurs» med mindre det er påbegynt, og da er det ikke nytt.
 - **Fullførte og påbegynte kurs gir ingen e-post** (produkteier 2026-11-08 og QA-porten 2026-11-09). Kursbevis for hvilken
-  som helst hovedversjon teller. Påbegynt er det samme som for arkiverte klasser: lest seksjon, innlevering eller deltakelse
+  som helst hovedversjon teller (endret i #1146, under). Påbegynt er det samme som for arkiverte klasser: lest seksjon, innlevering eller deltakelse
   i kursets diskusjoner. «Du har fått et nytt kurs» om noe deltakeren alt er i gang med, er feil.
 - **Et `OPEN`-kurs som tildeles en klasse, gir e-post** (2026-11-09). Tildelingen gir frist og gjør kurset til en del av
   klassen; den gamle e-posten ble også sendt for slike kurs.
@@ -1599,6 +1599,16 @@ Kjente mangler, godtatt fordi plattformen er intern og utrullinger skjer om kvel
    utrulling der ny worker og gammel app går samtidig.
 2. **Et kurs som har vært ute, ble avpublisert og *så* tildelt en klasse,** får `baseline` ved utrullingen. Medlemmene får
    ingen e-post når det publiseres igjen.
+
+**Endret i #1146 (produkteier 2026-11-10, `doc/design/PLAN_1146.md`):**
+- **Et kurs som legges til en klasse, gir e-post, også om det har ligget der før.** Det samme gjelder et medlem som fjernes og
+  legges til igjen. Kjennetegnet er at alle åpne veier til kurset (klasse, medlemskap, tildeling) er nyere enn forrige varsel
+  (`settledAt`). Linja over, «finnes raden, kommer det aldri en ny e-post om samme kurs», gjelder ikke lenger.
+- **Har personen kurset fra en annen klasse,** går det ingen e-post når kurset legges til en klasse til. Kurset forsvant aldri.
+- **En ny frist er fortsatt ikke et nytt kurs.**
+- **Kursbevis på kursets hovedversjon** gir fortsatt ingen e-post. **Kursbevis på en eldre hovedversjon** gir e-post, men bare
+  når kurset er lagt til (eller medlemmet lagt inn) etter den nye hovedversjonen. Ellers ville hver ny hovedversjon gitt
+  «nytt kurs» i tillegg til e-posten fra #934. Påbegynt teller bare for den som ikke har kursbevis.
 
 ## Kursbevis for kurs tatt utenfor plattformen (#1145, 2026-11-09/10)
 

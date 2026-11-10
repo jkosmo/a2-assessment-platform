@@ -56,7 +56,9 @@ describe("#1142 skive 3 — prod → stage-kopi: det som venter i prod, sendes a
         { userId: waiting.id, courseId: course.id, status: "waiting", createdAt },
         { userId: queued.id, courseId: course.id, status: "queued", batchId, queuedAt: createdAt, createdAt },
         { userId: sending.id, courseId: course.id, status: "sending", batchId: `${batchId}-s`, queuedAt: createdAt, sendingAt: new Date(), createdAt },
-        { userId: alreadySent.id, courseId: course.id, status: "sent", batchId: `${batchId}-x`, sentAt: createdAt, createdAt },
+        // #1146 (planreview R5): varslet for tre timer siden, og tildelingen over er nyere — som et kurs lagt inn igjen like
+        // før kopien ble tatt. Prod-jobben setter raden tilbake; stage skal ikke.
+        { userId: alreadySent.id, courseId: course.id, status: "sent", batchId: `${batchId}-x`, sentAt: createdAt, settledAt: createdAt, createdAt },
       ],
     });
     await enqueueOutboxEvents([{ type: OUTBOX_EVENT_TYPES.courseAssignmentDigest, payload: { batchId, userId: queued.id } }]);
@@ -89,7 +91,9 @@ describe("#1142 skive 3 — prod → stage-kopi: det som venter i prod, sendes a
 
     // Etterpå: verken jobben, 4b-jobben eller behandlerne sender noe, heller ikke lenge etter.
     const later = new Date(Date.now() + 3 * 60 * 60_000);
-    expect(await runCourseAssignmentEmailSchedule({ now: later, onlyCourseIds: [course.id] })).toMatchObject({ created: 0, queued: 0, requeued: 0 });
+    expect(summary.settledNow).toBeGreaterThanOrEqual(5);
+    expect(rows.every((r) => r.settledAt !== null), "alle rader regnes som varslet nå").toBe(true);
+    expect(await runCourseAssignmentEmailSchedule({ now: later, onlyCourseIds: [course.id] })).toMatchObject({ created: 0, reset: 0, queued: 0, requeued: 0 });
     expect(await runCourseMajorEmailSchedule({ now: later, onlyCourseIds: [course.id] })).toMatchObject({ queued: 0 });
     const send = vi.fn<CourseAssignmentDigestSend>(async () => ({ delivered: true, channel: "log", subject: "", nextStepGuidance: "" }));
     for (const id of [batchId, `${batchId}-s`]) await deliverCourseAssignmentDigest(id, { send });
