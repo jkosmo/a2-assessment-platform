@@ -499,6 +499,28 @@ gang jobben går etter utrullingen av 2.151.0. Skriptet bruker samme spørring s
 ut kurs og antall, ingen navn. Før migreringen regner det `settledAt` som migreringen gjør det. Etter migreringen:
 `-- --after-migration`. Kjør det mot prod før utrulling, og vis tallet til produkteier (`doc/design/PLAN_1146.md`, punkt 6).
 
+### Den ukentlige e-posten fra båten (#1139)
+
+Planen: `doc/design/PLAN_1139.md`. To innstillinger på WORKEREN, i Bicep og i GitHub-miljøet (`doc/AZURE_ENVIRONMENTS.md`):
+`WEEKLY_EMAIL_ENABLED` (av som standard) og `WEEKLY_EMAIL_RECIPIENTS` (tom = ingen, `*` = alle, ellers adresser skilt med komma).
+
+**Slå den på:**
+1. Rull ut. Vent til appen OG workeren viser samme nye versjon på `/version` (sammenlign workerens `startedAt`).
+2. Sett `WEEKLY_EMAIL_RECIPIENTS` til produkteiers adresse og `WEEKLY_EMAIL_ENABLED=true` i GitHub-miljøet, og kjør en
+   infrastrukturutrulling (eller sett dem på workeren og start den på nytt). Første mandag: bare produkteier får den.
+3. Når produkteier har godkjent e-posten: `WEEKLY_EMAIL_RECIPIENTS=*`. **Stage beholder lista for godt.**
+
+**Kontroll:** `weeklyDigestMonitor` i workerens helsesvar, med `lastSummary` (`weekKey`, `inWindow`, `queued`,
+`nothingOutstanding`, `notReached`). Første 15 minutter etter oppstart står det `startup_grace`. Jobben lager rader mandag
+07:00–12:00 Oslo; utsendingen spres med høyst 5 i timen (sendekvoten er 10 i timen for hele abonnementet), så 60 mottakere er
+ute i løpet av mandagen. En rad som ikke er sendt før tirsdag 17:00 Oslo, hoppes over (`too_late`).
+
+**Nødstopp:** `WEEKLY_EMAIL_ENABLED=false` på workeren. Behandleren hopper da over det som står i kø (`disabled`).
+`PARTICIPANT_NOTIFICATION_CHANNEL=disabled` stopper all e-post.
+
+**Prod → stage-kopi:** `npm run stage-copy:neutralize-email` gjør også ventende ukentlige e-poster `skipped` og lager
+`skipped`-rader for uka for alle nåbare (`weeklyDigestsPendingSkipped`, `weeklyDigestsWeekSkipped` i utskriften).
+
 ## Seed Behavior
 
 ### Bootstrap seed

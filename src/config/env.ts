@@ -126,6 +126,16 @@ const envSchema = z.object({
   // Hvor ofte jobben ser etter rader som venter. Hver runde legger høyst 20 i outboxen, med tre sekunders mellomrom
   // (om lag 20 i minuttet, så Azure ikke struper, #900).
   COURSE_MAJOR_EMAIL_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+  // #1139 (doc/design/PLAN_1139.md, punkt 9 og 12.1): den ukentlige e-posten fra båten. Av som standard; slås på først når app
+  // og worker viser samme nye versjon. Står på WORKEREN (jobben og behandleren), i Bicep, så en infrastrukturutrulling ikke visker
+  // den. Behandleren sjekker den også rett før sending (nødstopp, 12.8).
+  WEEKLY_EMAIL_ENABLED: z
+    .string()
+    .transform((value) => value.toLowerCase() === "true")
+    .default("false"),
+  // Hvem som får den: e-postadresser skilt med komma, `*` for alle. Tom eller manglende = INGEN (lista stenger, 12.1). Adressene
+  // trimmes og sammenlignes uten store/små bokstaver mot `User.email`, i jobben og i behandleren. Stage beholder lista for godt.
+  WEEKLY_EMAIL_RECIPIENTS: z.string().default(""),
   // #497-incident: ms mellom oppstart av hver bakgrunns-monitor i worker-rollen, slik at deres
   // første DB-spørring ikke treffer samtidig (unngår connection-pool-storm ved oppstart). 0 = ingen
   // spredning (start alle samtidig).

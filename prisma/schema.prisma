@@ -91,6 +91,7 @@ model User {
   // #1139: den ukentlige e-posten fra båten. På som standard; slås av med bryteren på profilen (`PUT /api/me/preferences`, det
   // ENESTE stedet som skriver feltet). Arbeidsgiver ser det ikke: ingen admin-rute eller rapport leser det.
   weeklyEmailEnabled            Boolean                  @default(true)
+  weeklyDigests                 WeeklyDigest[]
   lastLoginAt                   DateTime?
   isAnonymized                  Boolean                  @default(false)
   anonymizedAt                  DateTime?
@@ -1205,4 +1206,28 @@ enum ContentOwnerType {
   SECTION
   CLASS
   MODULE
+}
+
+// #1139 skive 3 (doc/design/PLAN_1139.md, punkt 4, 6-8 og 12): én rad per person og uke for den ukentlige e-posten. Raden og
+// hendelsen i utboksen lages i samme transaksjon, betinget (`ON CONFLICT ("userId","weekKey") DO NOTHING RETURNING`), så det
+// aldri går to e-poster samme uke, heller ikke etter en omstart eller med to workere. Bare weeklyDigest-modulen og
+// nøytraliseringen av en prod-kopi skriver tabellen; ingen admin-rute eller rapport leser den (arbeidsgiver ser ikke hvem som
+// får, åpner eller melder seg av). Rader eldre enn 12 uker slettes av jobben.
+model WeeklyDigest {
+  id        String    @id @default(cuid())
+  userId    String
+  // Mandagen i uka e-posten gjelder, i Oslo: `YYYY-MM-DD`.
+  weekKey   String
+  // queued | sending | sent | skipped | uncertain | failed
+  status    String
+  reason    String?
+  queuedAt  DateTime?
+  sendingAt DateTime?
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekKey])
+  @@index([status, weekKey])
 }

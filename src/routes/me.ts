@@ -163,8 +163,9 @@ meRouter.get("/data", async (request, response, next) => {
         select: {
           id: true, name: true, email: true, department: true, manager: true,
           activeStatus: true, lastLoginAt: true, createdAt: true, isAnonymized: true,
-          // #1139: bryteren for den ukentlige e-posten.
+          // #1139: bryteren for den ukentlige e-posten, og ukene den er sendt, hoppet over eller feilet (12.10).
           weeklyEmailEnabled: true,
+          weeklyDigests: { orderBy: { weekKey: "desc" }, select: { weekKey: true, status: true, reason: true, sentAt: true } },
           roleAssignments: {
             select: { appRole: true, validFrom: true, validTo: true, createdAt: true, createdBy: true },
           },

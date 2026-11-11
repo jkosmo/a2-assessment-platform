@@ -66,7 +66,18 @@ describe("#1142 skive 3 — prod → stage-kopi: det som venter i prod, sendes a
     await prisma.courseVersionNotice.create({ data: { courseId: course.id, versionMajor: 2, userId: waiting.id, status: "waiting" } });
     await prisma.courseVersionNotice.create({ data: { courseId: course.id, versionMajor: 2, userId: alreadySent.id, status: "sent" } });
 
+    // #1139 (PLAN_1139 12.5): en ukentlig e-post i kø i prod, med hendelse.
+    const weekly = await prisma.weeklyDigest.create({ data: { userId: queued.id, weekKey: "2026-11-16", status: "queued" }, select: { id: true } });
+    await enqueueOutboxEvents([{ type: OUTBOX_EVENT_TYPES.weeklyDigest, payload: { digestId: weekly.id } }]);
+
     const summary = await neutralizeEmailStateAfterProdCopy();
+    expect(summary.weeklyDigestsPendingSkipped).toBeGreaterThanOrEqual(1);
+    expect((await prisma.weeklyDigest.findUniqueOrThrow({ where: { id: weekly.id } })).status).toBe("skipped");
+    // Uka kopien ble tatt: alle nåbare uten rad har en `skipped`-rad, så stage ikke sender den ukentlige e-posten i dag.
+    const thisWeek = (await import("../src/modules/weeklyDigest/weeklyDigestContent.js")).weeklyDigestWeekKey(new Date());
+    expect(await prisma.weeklyDigest.findUnique({ where: { userId_weekKey: { userId: unseen.id, weekKey: thisWeek } } })).toMatchObject({ status: "skipped", reason: "copied_from_prod" });
+    const weeklyEvents = (await prisma.outboxEvent.findMany({ where: { type: OUTBOX_EVENT_TYPES.weeklyDigest } })).filter((e) => e.payloadJson.includes(weekly.id));
+    expect(weeklyEvents.map((e) => e.status)).toEqual(["failed"]);
     expect(summary.pendingToBaseline).toBeGreaterThanOrEqual(3);
     expect(summary.unseenPairsToBaseline).toBeGreaterThanOrEqual(1);
     expect(summary.majorVersionNoticesSkipped).toBeGreaterThanOrEqual(1);
@@ -91,7 +102,9 @@ describe("#1142 skive 3 — prod → stage-kopi: det som venter i prod, sendes a
 
     // Etterpå: verken jobben, 4b-jobben eller behandlerne sender noe, heller ikke lenge etter.
     const later = new Date(Date.now() + 3 * 60 * 60_000);
-    expect(summary.settledNow).toBeGreaterThanOrEqual(5);
+    // Tre ventende som ble `baseline`, og den sendte. Paret ingen hadde sett, lages etter (med `settledAt` = nå, sjekket under).
+    // Tallet teller hele databasen, så andre testers rader kan komme i tillegg.
+    expect(summary.settledNow).toBeGreaterThanOrEqual(4);
     expect(rows.every((r) => r.settledAt !== null), "alle rader regnes som varslet nå").toBe(true);
     expect(await runCourseAssignmentEmailSchedule({ now: later, onlyCourseIds: [course.id] })).toMatchObject({ created: 0, reset: 0, queued: 0, requeued: 0 });
     expect(await runCourseMajorEmailSchedule({ now: later, onlyCourseIds: [course.id] })).toMatchObject({ queued: 0 });

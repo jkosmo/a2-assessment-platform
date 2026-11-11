@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.152.0 - 2026-11-11
+
+Den ukentlige e-posten fra båten (#1139, `doc/design/PLAN_1139.md`), og fullførte kurs mer kompakt i «Mine kurs».
+
+- **Hva brukerne merker:**
+  - **«Mine kurs»:** fullførte kurs i hvert tema står i ett grønt kort med tette rader og én felles grønn linje («Fullført · N»).
+    På telefon står bare «Vis bevis». Kurs i gang og ikke startet er uendret (produkteier 2026-11-11).
+  - **Profilen:** ny bryter «Ukentlig e-post fra båten», på som standard.
+  - **E-posten** (når den slås på): mandag, til dem som har noe utestående. Båten i humøret fra forrige uke øverst, så frister som
+    har gått ut, frister innen to uker, kurs i gang med steg igjen og tildelte kurs som ikke er påbegynt. Én knapp, «Åpne Mine
+    kurs». Siste linje forklarer avmeldingen.
+- **Slik virker det:** framdriften i «Mine kurs» er flyttet til én funksjon (`getMyCoursesProgress`) som e-posten også bruker.
+  Jobben `WeeklyDigestMonitor` (workeren, hvert 5. minutt, mandag 07–12 Oslo) og utboks-typen `weekly_digest`. Én rad per person og
+  uke i `WeeklyDigest`. Maskotpakken er versjon 3 (alt-tekst per humør).
+- **Ved utrulling:** to migreringer (kolonnen `User.weeklyEmailEnabled`, tabellen `WeeklyDigest`), begge ren utvidelse. To nye
+  innstillinger på workeren, `WEEKLY_EMAIL_ENABLED` (av) og `WEEKLY_EMAIL_RECIPIENTS` (tom = ingen). Ingen e-post går før de er
+  satt; se driftsboka, «Den ukentlige e-posten fra båten».
+- **Kjente mangler:** workeren ser bare roller lagret i databasen, ikke Entra-grupper (kurs fra «Alle deltakere» mangler for den som
+  aldri har logget inn). Anker for den som har meldt seg av, venter på bildet fra Codex.
+
 ## 2.151.0 - 2026-11-10
 
 E-post når et kurs legges til en klasse, også om det har ligget der før (#1146, `doc/design/PLAN_1146.md`). Avgjørelsene står i

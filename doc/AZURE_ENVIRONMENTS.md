@@ -152,6 +152,15 @@ deploy rewrites the worker's app settings and removes them):
 - `COURSE_MAJOR_EMAIL_INTERVAL_MS` (optional, default `60000`) — how often the job runs; each run queues at most 20
   e-mails, three seconds apart.
 
+Worker settings for the weekly e-mail from the boat (#1139, `doc/design/PLAN_1139.md`). They ARE in the Bicep template and come
+from the GitHub Environment variables of the same name, so an infra deploy keeps them:
+- `WEEKLY_EMAIL_ENABLED` (`true` | `false`, default `false`) — the job (Monday 07:00–12:00 Oslo) and the outbox handler. Turn it on
+  only after the web app AND the worker both report the new version on `/version`. Turning it off is the emergency stop: the
+  handler skips what is queued (`disabled`). Needs `PARTICIPANT_NOTIFICATION_CHANNEL` to be on.
+- `WEEKLY_EMAIL_RECIPIENTS` (default empty) — who gets it: e-mail addresses separated by commas, or `*` for everyone. Empty
+  means NOBODY. Matched without case against `User.email`. Stage keeps a list for good; prod starts with the product owner only.
+  The pace is at most 5 e-mails an hour (the ACS quota on the Azure-managed domain is 10 an hour for the whole subscription).
+
 Do not set these manually in GitHub Environment variables:
 - `PROCESS_ROLE` - injected separately for web and worker apps
 - `PORT` - provided by App Service

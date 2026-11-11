@@ -6,6 +6,7 @@ import type { AppealNotificationInput, NotificationResult } from "../certificati
 import { checkAndIssueCourseCompletions } from "../course/index.js";
 import { deliverCourseMajorVersionNotice } from "../course/courseMajorVersionEmail.js";
 import { deliverCourseAssignmentDigest } from "../course/courseAssignmentNotice.js";
+import { deliverWeeklyDigest } from "../weeklyDigest/weeklyDigestJob.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 
 // #795-followup: race a delivery against a wall-clock deadline so a hung handler (e.g. an ACS email call
@@ -49,6 +50,10 @@ export const OUTBOX_EVENT_TYPES = {
   // workeren legger dem inn, og ved første utrulling tidligst 15 minutter etter jobbens første runde (vinduet): da er den
   // gamle workeren borte (doc/design/PLAN_1142.md, punkt 7).
   courseAssignmentDigest: "course_assignment_digest",
+  // #1139: den ukentlige e-posten, én hendelse per rad i `WeeklyDigest` (weeklyDigestJob.ts). Bare jobben i workeren legger dem
+  // inn, og bare med WEEKLY_EMAIL_ENABLED=true, som slås på når app og worker viser samme versjon: en gammel worker møter aldri
+  // typen. Tilbakerulling: den gamle workeren kjenner den ikke, utboksen gir opp, ingen dobbel e-post (PLAN_1139 punkt 9).
+  weeklyDigest: "weekly_digest",
 } as const;
 
 type AssessmentNotificationPayload = {
@@ -90,6 +95,9 @@ export type CourseMajorVersionNotificationPayload = { noticeId: string };
 /** #1142: samlingens id. Behandleren finner radene på den og sjekker hvert kurs på nytt. `userId` står med for sporing. */
 export type CourseAssignmentDigestPayload = { batchId: string; userId: string };
 
+/** #1139: radens id i `WeeklyDigest`. Behandleren leser resten og sjekker alt på nytt rett før sending. */
+export type WeeklyDigestPayload = { digestId: string };
+
 export type OutboxEnqueueInput = (
   | { type: typeof OUTBOX_EVENT_TYPES.assessmentNotification; payload: AssessmentNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification; payload: AssessmentUnderReviewNotificationPayload }
@@ -98,6 +106,7 @@ export type OutboxEnqueueInput = (
   | { type: typeof OUTBOX_EVENT_TYPES.moduleRevisedNotification; payload: ModuleRevisedNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.courseMajorVersionNotification; payload: CourseMajorVersionNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.courseAssignmentDigest; payload: CourseAssignmentDigestPayload }
+  | { type: typeof OUTBOX_EVENT_TYPES.weeklyDigest; payload: WeeklyDigestPayload }
 ) & {
   // #934 skive 4b: når hendelsen tidligst kan leveres. Utelatt: med én gang. E-postene om ny hovedversjon spres
   // utover med denne (om lag 20 i minuttet).
@@ -197,6 +206,7 @@ export const SENDS_TO_A_PERSON: ReadonlySet<string> = new Set<string>([
   OUTBOX_EVENT_TYPES.moduleRevisedNotification,
   OUTBOX_EVENT_TYPES.courseMajorVersionNotification,
   OUTBOX_EVENT_TYPES.courseAssignmentDigest,
+  OUTBOX_EVENT_TYPES.weeklyDigest,
 ]);
 
 // Deliver one event by dispatching on its type. Both handlers are idempotent (completion checks whether
@@ -277,6 +287,13 @@ export async function deliverOutboxEvent(event: { type: string; payloadJson: str
     // Som 4b: behandleren eier radenes tilstand, kaster ved en sikker feil og gir opp av seg selv ved en som kan ha gått.
     const lastAttempt = event.attempts !== undefined && event.maxAttempts !== undefined && event.attempts + 1 >= event.maxAttempts;
     await deliverCourseAssignmentDigest(p.batchId, { lastAttempt });
+    return;
+  }
+  if (event.type === OUTBOX_EVENT_TYPES.weeklyDigest) {
+    const p = JSON.parse(event.payloadJson) as WeeklyDigestPayload;
+    // Som #1142: behandleren eier radens tilstand, kaster ved en sikker feil og gir opp av seg selv ved en som kan ha gått.
+    const lastAttempt = event.attempts !== undefined && event.maxAttempts !== undefined && event.attempts + 1 >= event.maxAttempts;
+    await deliverWeeklyDigest(p.digestId, { lastAttempt });
     return;
   }
   throw new Error(`Unknown outbox event type: ${event.type}`);

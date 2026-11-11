@@ -81,6 +81,7 @@ export default defineConfig({
       "test/course-assignment-notice-write-guard.test.js",
       // #1142 skive 1: nekter en ny skriver av medlemskap, tildelinger og publisering uten at den er tatt stilling til.
       "test/course-assignment-ways-in-guard.test.js",
+      "test/weekly-digest-write-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

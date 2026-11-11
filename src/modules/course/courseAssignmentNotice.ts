@@ -47,6 +47,7 @@ import {
 } from "../certification/participantNotificationService.js";
 import { EmailContainsLinkError } from "../certification/illustratedEmail.js";
 import { COURSE_MAJOR_EMAIL_PER_RUN, COURSE_MAJOR_EMAIL_SPACING_MS } from "./courseMajorVersionEmail.js";
+import { neutralizeWeeklyDigestAfterProdCopy } from "../weeklyDigest/weeklyDigestJob.js";
 
 /** Det regelen trenger av en klient: `prisma` eller en transaksjon. */
 export type CourseAssignmentRuleClient = Pick<DbTransactionClient, "$queryRaw">;
@@ -663,6 +664,10 @@ export type StageCopyNeutralizeSummary = {
   majorVersionNoticesSkipped: number;
   /** Steg 4: outbox-hendelser som sender e-post og ikke var levert, satt `failed`. */
   outboxEventsFailed: number;
+  /** #1139: ukentlige e-poster i `queued` og `sending` som ble `skipped`. */
+  weeklyDigestsPendingSkipped: number;
+  /** #1139: `skipped`-rader laget for uka, for nåbare uten rad. */
+  weeklyDigestsWeekSkipped: number;
 };
 
 const COPIED_FROM_PROD = "copied_from_prod";
@@ -703,7 +708,17 @@ export async function neutralizeEmailStateAfterProdCopy(): Promise<StageCopyNeut
         where: { status: "pending", type: { in: [...SENDS_TO_A_PERSON] } },
         data: { status: "failed", lastError: COPIED_FROM_PROD, lockedBy: null, lockedAt: null },
       });
-      return { pendingToBaseline, settledNow, unseenPairsToBaseline, majorVersionNoticesSkipped: skipped.count, outboxEventsFailed: failed.count };
+      // #1139 (PLAN_1139 12.5): den ukentlige e-posten. Ventende rader → `skipped`, og `skipped` for uka for alle nåbare uten rad.
+      const weekly = await neutralizeWeeklyDigestAfterProdCopy(tx, now);
+      return {
+        pendingToBaseline,
+        settledNow,
+        unseenPairsToBaseline,
+        majorVersionNoticesSkipped: skipped.count,
+        outboxEventsFailed: failed.count,
+        weeklyDigestsPendingSkipped: weekly.pendingSkipped,
+        weeklyDigestsWeekSkipped: weekly.weekSkipped,
+      };
     },
     { timeout: 60_000 },
   );
