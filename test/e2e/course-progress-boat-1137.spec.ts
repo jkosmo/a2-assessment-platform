@@ -79,12 +79,15 @@ test.describe("#1137 seilbåten på fremdriftslinja", () => {
     // Kontrollcase (fra participant-course-list-grouping.spec.ts): uten dette ville «grønn overalt» bestått sjekken under.
     await expect(item(page, "cRun").locator(".course-progress-fill")).not.toHaveClass(/completed/);
 
-    // Fullført: hel grønn linje (opphever #939s «ingen linje»), ingen båt.
+    // Fullført: hel grønn linje (opphever #939s «ingen linje»), ingen båt. 2.152.0: i kortet for fullførte står én felles grønn
+    // linje; kursets egen (fortsatt grønn og hel, for feiringen og for kurset åpnet alene) er skjult.
     const doneFill = item(page, "cDone").locator(".course-progress-fill");
     await expect(doneFill).toHaveClass(/completed/);
     await expect(doneFill).toHaveAttribute("style", /width:100%/);
     await expect(item(page, "cDone").locator(".course-boat")).toHaveCount(0);
     await expect(item(page, "cDone").locator(".course-progress-bar")).toHaveAttribute("aria-valuenow", "100");
+    await expect(item(page, "cDone").locator(".course-progress-bar")).toBeHidden();
+    await expect(page.locator(".course-done-group-bar")).toBeVisible();
   });
 
   test("linja fylles fra høyre, og båten står lenger til venstre jo lenger deltakeren har kommet", async ({ page }) => {

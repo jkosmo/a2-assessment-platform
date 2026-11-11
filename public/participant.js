@@ -4151,18 +4151,28 @@ window.addEventListener("popstate", (event) => {
 document.getElementById("courseBackBtn")?.addEventListener("click", () => unfocusCourse());
 
 // 2.102.0: pågående først, så fullførte bak en navngitt grense (#936) — i hele lista, og i hvert tema.
+// 2.152.0 (produkteier 2026-11-11, PLAN_1139 punkt 13): de fullførte står i ETT grønt kort med tette rader og én felles grønn
+// linje nederst (`.course-done-group-bar`). Kursets egen linje står fortsatt i hvert kort, skjult i gruppen; den vises mens
+// båten feirer (`course-progress--celebrating`) og når kurset er åpent alene.
 function appendCourseGroup(container, ongoing, done, appendCourse) {
-  for (const course of ongoing) appendCourse(course);
+  for (const course of ongoing) appendCourse(container, course);
   if (done.length === 0) return;
   // Grensen vises bare når det FINNES noe på begge sider. En «Fullført»-overskrift over hele
   // lista til en deltaker som har fullført alt sier ingenting.
   if (ongoing.length > 0) {
     const divider = document.createElement("div");
     divider.className = "course-group-divider";
-    divider.textContent = t("courses.list.completedGroup");
+    divider.textContent = `${t("courses.list.completedGroup")} · ${done.length}`;
     container.appendChild(divider);
   }
-  for (const course of done) appendCourse(course);
+  const group = document.createElement("div");
+  group.className = "course-done-group";
+  for (const course of done) appendCourse(group, course);
+  const bar = document.createElement("div");
+  bar.className = "course-done-group-bar";
+  bar.setAttribute("aria-hidden", "true");
+  group.appendChild(bar);
+  container.appendChild(group);
 }
 
 // 2.102.0: valget mellom tema og alfabetisk huskes i nettleseren. Lagringen kan mangle (privat
@@ -4226,8 +4236,8 @@ function renderParticipantCourseAccordion() {
   const themed = hasAnyTheme(participantCourses);
   if (themed) container.appendChild(buildCourseViewToggle());
   const placed = new Set();
-  const appendCourse = (course) => {
-    container.appendChild(buildCourseAccordionItem(course, { copy: placed.has(course.id) }));
+  const appendCourse = (target, course) => {
+    target.appendChild(buildCourseAccordionItem(course, { copy: placed.has(course.id) }));
     placed.add(course.id);
   };
   if (themed && courseListView === "theme") {
@@ -4524,7 +4534,7 @@ function buildCourseAccordionItem(course, options = {}) {
             <span class="sr-only">${escapeHtmlP(t("courses.status.completed"))}</span>
           </span>
         </button>
-        ${completion ? `<a class="course-certificate-link" href="/certificate?id=${encodeURIComponent(completion.certificateId)}" target="_blank" rel="noopener">${escapeHtmlP(t("courses.certificate.short"))} · ${escapeHtmlP(t("courses.certificate.view"))}</a>` : ""}
+        ${completion ? `<a class="course-certificate-link" href="/certificate?id=${encodeURIComponent(completion.certificateId)}" target="_blank" rel="noopener"><span class="course-certificate-link-kind">${escapeHtmlP(t("courses.certificate.short"))} · </span>${escapeHtmlP(t("courses.certificate.view"))}</a>` : ""}
         <span class="course-accordion-chevron" aria-hidden="true">&#8250;</span>
       </div>
       ${progressHtml}

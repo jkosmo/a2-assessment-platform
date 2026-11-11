@@ -190,6 +190,25 @@
       /* Sertifikat-ID-en er med vilje UTE av lista — 25 tegn maskintekst midt i en rad et menneske
          skal skumme. Den hører hjemme på bevissiden, som lenka går til. */
       .course-done-row .course-accordion-chevron { margin-left: 0; }
+      /* 2.152.0 (produkteier 2026-11-11, PLAN_1139 punkt 13): de fullførte i ETT grønt kort, tette rader, én felles grønn
+         linje nederst. Kursets egen linje står i kortet, skjult; den vises mens båten feirer, og når kurset er åpent alene.
+         Radhøyde 32 px (36 px på telefon): produkteier godtok under 44 px, radene ligger tett og hele bredden er trykkflate. */
+      .course-done-group { display: grid; border: 1px solid #b8d9c6; border-radius: var(--radius-card); background: #f4fbf7; overflow: hidden; }
+      .course-done-group > .course-accordion-item--done { border: 0; border-radius: 0; border-bottom: 1px solid #e3f1e8; }
+      .course-done-group .course-done-row .course-accordion-header { min-height: 32px; padding-top: 2px; padding-bottom: 2px; font-size: 14px; line-height: 1.3; }
+      .course-done-group > .course-accordion-item--done > .course-progress:not(.course-progress--celebrating) { display: none; }
+      .course-done-group-bar { height: 6px; border-radius: 999px; background: var(--color-success, #1f7a4d); margin: 8px var(--space-2) 10px; }
+      @media (max-width: 600px) {
+        .course-done-group .course-done-row .course-accordion-header { min-height: 36px; }
+        .course-done-group .course-certificate-link-kind { display: none; }
+      }
+      /* Ett kurs åpent alene: gruppen viker, og et åpent fullført kurs ser ut som før (eget kort, egen grønn linje). */
+      .course-accordion--focused .course-done-group:not(:has(.is-focused)) { display: none; }
+      .course-accordion--focused .course-done-group { border: 0; background: transparent; }
+      .course-accordion--focused .course-done-group-bar { display: none; }
+      .course-accordion--focused .course-done-group > .course-accordion-item--done.is-focused { border: 1px solid #b8d9c6; border-radius: var(--radius-card); }
+      .course-accordion--focused .course-done-group > .course-accordion-item--done.is-focused > .course-progress { display: block; }
+      .course-accordion--focused .course-done-group .course-done-row .course-accordion-header { min-height: 0; padding: var(--space-1) var(--space-2); font-size: 14px; line-height: normal; }
       /* Grensen mellom pågående og fullførte kurs. Navngitt, ikke bare en strek: en strek alene
          sier at noe skiller, ikke HVA. */
       .course-group-divider { display: flex; align-items: center; gap: var(--space-1); margin: var(--space-2) 0 var(--space-1); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--color-meta); font-weight: 700; }

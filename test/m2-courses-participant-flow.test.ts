@@ -3,6 +3,8 @@ import { withRevision } from "./support/courseRevision.js";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { recordFixturePass } from "./support/modulePassFixture.js";
+import { getMyCoursesProgress } from "../src/modules/course/index.js";
+import { sortCoursesForParticipant } from "../src/modules/course/courseOrdering.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -204,6 +206,19 @@ describe("Participant courses API", () => {
         moduleStatus: "PASSED",
       }),
     ]);
+  });
+
+  // #1139 skive 0: framdriften er flyttet ut av ruta til `getMyCoursesProgress`, som den ukentlige e-posten skal bruke. Ruta og
+  // funksjonen skal si nøyaktig det samme, også for en deltaker med kurs i gang, beståtte moduler og kurs fra mange tester.
+  it("#1139: `getMyCoursesProgress` gir det samme som «Mine kurs»-ruta, kurs for kurs", async () => {
+    const participant = await prisma.user.findUniqueOrThrow({ where: { externalId: "participant-1" }, select: { id: true } });
+    const route = await request(app).get("/api/courses").set({ ...participantHeaders, "x-locale": "nb" });
+    expect(route.status).toBe(200);
+    const { items, classCourseDue } = await getMyCoursesProgress({ userId: participant.id, roles: ["PARTICIPANT"], locale: "nb" });
+    expect(items.length, "deltakeren har kurs i lista").toBeGreaterThan(0);
+    expect(items.some((item) => item.progress.courseStatus === "IN_PROGRESS"), "minst ett kurs i gang").toBe(true);
+    expect(JSON.parse(JSON.stringify(sortCoursesForParticipant(items, "nb")))).toEqual(route.body.courses);
+    expect(classCourseDue).toBeInstanceOf(Map);
   });
 });
 

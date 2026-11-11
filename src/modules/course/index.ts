@@ -106,6 +106,9 @@ export type {
   CourseEnrollmentView,
 } from "./enrollmentService.js";
 export { computeCourseStatus } from "./courseQueries.js";
+// #1139 skive 0: framdriften i «Mine kurs», felles for ruta og den ukentlige e-posten.
+export { getMyCoursesProgress } from "./myCoursesProgress.js";
+export type { MyCoursesProgress, MyCoursesProgressInput } from "./myCoursesProgress.js";
 export type {
   CourseStatus,
   CourseListItem,

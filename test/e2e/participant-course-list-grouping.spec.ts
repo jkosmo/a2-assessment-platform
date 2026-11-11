@@ -94,11 +94,93 @@ test("#936: fullførte kurs havner nederst, bak en navngitt grense — og rekkef
   await expect(titles.nth(1)).toHaveText("Gamma ikke startet");
   await expect(titles.nth(2)).toHaveText("Alfa fullført");
 
-  // Grensen er NAVNGITT. En strek alene sier at noe skiller, ikke hva.
+  // Grensen er NAVNGITT. En strek alene sier at noe skiller, ikke hva. 2.152.0: med antallet.
   const divider = page.locator(".course-group-divider");
   await expect(divider).toHaveCount(1);
-  await expect(divider).toHaveText("Fullført");
+  await expect(divider).toHaveText("Fullført · 1");
 });
+
+// 2.152.0 (produkteier 2026-11-11, doc/design/PLAN_1139.md punkt 13): de fullførte står i ETT grønt kort med tette rader og én
+// felles grønn linje nederst. Kursets egen linje er skjult i kortet, og vises igjen når kurset er åpent alene.
+async function fiveDone(page: Page) {
+  await mockBase(page);
+  const titles = ["Kost ved bruk av KI-modeller i A-2", "Repetisjon Kurs 1 – Møtearbeid", "Repetisjon Kurs 2 – Tilbudsarbeid", "Repetisjon Kurs 3 – Prosjektplanlegging", "Informasjonssikkerhetsopplæringsprogrammetsrepetisjonskurs"];
+  await page.route("**/api/courses", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ courses: [course("open1", "Pågår", "IN_PROGRESS"), ...titles.map((title, i) => course(`d${i}`, title, "COMPLETED"))] }),
+    }),
+  );
+  await page.route("**/api/courses/completions", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ completions: titles.map((title, i) => ({ courseId: `d${i}`, certificateId: `cert-${i}`, completedAt: "2026-08-20T12:00:00.000Z", courseTitle: title })) }),
+    }),
+  );
+  await page.route("**/api/courses/d1", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "d1", title: titles[1], modules: [], items: [] } }) }),
+  );
+  await loadList(page);
+}
+
+test("2.152.0: fem fullførte kurs i ett kort, tette rader, én felles grønn linje; kursenes egne linjer er skjult", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await fiveDone(page);
+  const group = page.locator(".course-done-group");
+  await expect(group).toHaveCount(1);
+  await expect(group.locator(".course-accordion-item--done")).toHaveCount(5);
+  await expect(page.locator(".course-group-divider")).toHaveText("Fullført · 5");
+  // Én felles linje, synlig; kursenes egne er skjult.
+  await expect(group.locator(".course-done-group-bar")).toBeVisible();
+  for (let i = 0; i < 5; i++) await expect(group.locator(`[data-course-id="d${i}"] .course-progress-bar`)).toBeHidden();
+  // Kontrollcase: kurset i gang har fortsatt sin linje.
+  await expect(page.locator('[data-course-id="open1"] .course-progress-bar')).toBeVisible();
+  // Tette rader: 32 px er minstehøyden; en rad med kort tittel blir ikke over 40 px.
+  const row = await group.locator('[data-course-id="d1"] .course-done-row').boundingBox();
+  expect(row!.height).toBeGreaterThanOrEqual(31);
+  expect(row!.height).toBeLessThanOrEqual(40);
+  // Hele kortet: fem rader og linja, lavere enn to av de gamle kortene per kurs (om lag 75 px hver).
+  const box = await group.boundingBox();
+  expect(box!.height).toBeLessThan(5 * 50);
+});
+
+test("2.152.0: et fullført kurs åpnet fra kortet står alene, med egen grønn linje; tilbake gir kortet igjen", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await fiveDone(page);
+  await page.locator('[data-course-id="d1"] .course-accordion-header').click();
+  await expect(page.locator("#courseBackBtn")).toBeVisible();
+  await expect(page.locator('[data-course-id="d1"]')).toBeVisible();
+  for (const id of ["d0", "d2", "open1"]) await expect(page.locator(`[data-course-id="${id}"]`)).toBeHidden();
+  await expect(page.locator(".course-done-group-bar")).toBeHidden();
+  await expect(page.locator('[data-course-id="d1"] .course-progress-bar')).toBeVisible();
+  await page.locator("#courseBackBtn").click();
+  await expect(page.locator(".course-done-group-bar")).toBeVisible();
+  await expect(page.locator('[data-course-id="d1"] .course-progress-bar')).toBeHidden();
+  // Klikk på raden etter omtegningen virker fortsatt (lytterne følger med kortene).
+  await page.locator('[data-course-id="d2"] .course-accordion-header').click();
+  await expect(page.locator("#courseBackBtn")).toBeVisible();
+});
+
+for (const width of [390, 360]) {
+  test(`2.152.0: på telefon (${width} px) står «Vis bevis» alene, radene er tette, og en lang tittel går ikke ut av kortet`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await fiveDone(page);
+    const group = page.locator(".course-done-group");
+    const link = group.locator('[data-course-id="d1"] .course-certificate-link');
+    await expect(link).toHaveText(/Vis bevis/);
+    await expect(link.locator(".course-certificate-link-kind")).toBeHidden();
+    const row = await group.locator('[data-course-id="d1"] .course-done-row').boundingBox();
+    expect(row!.height).toBeGreaterThanOrEqual(35);
+    expect(row!.height).toBeLessThanOrEqual(48);
+    // Den lange tittelen (ett ord) brytes inne i kortet; lenka står fortsatt innenfor.
+    const groupBox = await group.boundingBox();
+    const longLink = await group.locator('[data-course-id="d4"] .course-certificate-link').boundingBox();
+    expect(longLink!.x + longLink!.width).toBeLessThanOrEqual(groupBox!.x + groupBox!.width + 0.5);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+}
 
 test("#936: grensen vises ikke når alt er fullført — da skiller den ingenting", async ({ page }) => {
   await mockBase(page);

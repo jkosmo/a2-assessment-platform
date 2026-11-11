@@ -10,17 +10,16 @@ import { sortCoursesForParticipant } from "../modules/course/courseOrdering.js";
 import {
   listUserEnrollments,
   selfEnroll,
-  filterVisibleCourseIds,
   // #959: deltakerrutene henter kurs GJENNOM denne. `findCourseById` er ufiltrert og hører til
   // forfatter-/systemflatene; `course-visibility-guard` nekter den i denne fila.
   findCourseForParticipant,
   getUserClassIds,
   getClassAssignedCourseDueDates,
   deriveStatus,
-  findLocalizedThemesForCourses,
   sortThemesByName,
+  getMyCoursesProgress,
 } from "../modules/course/index.js";
-import type { CourseListItem, CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
+import type { CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
 import { queryLatestSubmissionsForModules } from "../modules/submission/submissionRepository.js";
 import { hasCertificateBackground } from "../modules/platformConfig/certificateBackgroundService.js";
 import { discussionsRouter } from "./discussions.js";
@@ -46,81 +45,12 @@ coursesRouter.get("/", async (request, response, next) => {
   const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
 
   try {
-    const allCourses = await courseRepository.findPublishedCourses();
-    // #496/EN-2 + #645/CL-2: RESTRICTED courses are visible to users with an individual enrolment OR
-    // a class assignment (member of a class the course is assigned to); OPEN courses to everyone.
-    const classIds = await getUserClassIds({
+    // #1139 skive 0: framdriften er flyttet uendret til `getMyCoursesProgress`, som den ukentlige e-posten også bruker.
+    const { items } = await getMyCoursesProgress({
       userId,
       roles: request.context?.roles ?? [],
       groupIds: request.context?.principal?.groupIds,
-    });
-    const classCourseDue = await getClassAssignedCourseDueDates(classIds, userId);
-    const visibleIds = await filterVisibleCourseIds(userId, allCourses, new Set(classCourseDue.keys()));
-    const courses = allCourses.filter((course) => visibleIds.has(course.id));
-
-    // #799: batch every per-course read across ALL visible courses (a fixed number of queries) instead of
-    // ~4 queries per course, then derive each course's progress in memory. Behaviour-preserving — the same
-    // counts as the previous per-course version, just fetched together.
-    const courseIds = courses.map((course) => course.id);
-    const allModuleIds = courses.flatMap((course) => course.modules.map((m) => m.moduleId));
-
-    const [sectionRows, moduleProgress, readRows, latestSubmissions] = await Promise.all([
-      courseRepository.findCourseItemSectionIdsForCourses(courseIds),
-      // #934 skive 5a-3: beståtte per kurs. Samme modul kan telle i ett kurs og ikke i et annet.
-      courseRepository.findModuleProgress({
-        userIds: [userId],
-        courses: courses.map((course) => ({ courseId: course.id, moduleIds: course.modules.map((m) => m.moduleId) })),
-      }),
-      courseRepository.findReadSectionIdsForCourses(userId, courseIds),
-      allModuleIds.length > 0 ? queryLatestSubmissionsForModules(userId, allModuleIds) : Promise.resolve([]),
-    ]);
-
-    const sectionIdsByCourse = new Map<string, string[]>();
-    for (const row of sectionRows) {
-      const list = sectionIdsByCourse.get(row.courseId);
-      if (list) list.push(row.sectionId);
-      else sectionIdsByCourse.set(row.courseId, [row.sectionId]);
-    }
-    const readSectionsByCourse = new Map<string, Set<string>>();
-    for (const row of readRows) {
-      const set = readSectionsByCourse.get(row.courseId);
-      if (set) set.add(row.sectionId);
-      else readSectionsByCourse.set(row.courseId, new Set([row.sectionId]));
-    }
-    const startedModuleIds = new Set(latestSubmissions.map((s) => s.moduleId));
-    // 2.102.0: temaene i «Mine kurs». Ett kall for alle kursene.
-    const themesByCourse = await findLocalizedThemesForCourses(courseIds, locale);
-
-    const items: CourseListItem[] = courses.map((course) => {
-      // #938/#945: samme filter som kursdetaljen og bevisporten — den tredje telleren.
-      const moduleIds = course.modules.filter((m) => m.module?.archivedAt == null).map((m) => m.moduleId);
-      const sectionIds = sectionIdsByCourse.get(course.id) ?? [];
-      const passedInCourse = moduleProgress.passedModuleIds(userId, course.id);
-      const passed = moduleIds.filter((id) => passedInCourse.has(id)).length;
-      const readSet = readSectionsByCourse.get(course.id);
-      const readCount = readSet ? sectionIds.filter((id) => readSet.has(id)).length : 0;
-      const total = moduleIds.length + sectionIds.length;
-      const completed = passed + readCount;
-      const hasStarted = moduleIds.some((id) => startedModuleIds.has(id)) || readCount > 0;
-
-      return {
-        id: course.id,
-        title: localizeContentText(locale, course.title) ?? course.title,
-        description: localizeContentText(locale, course.description) ?? course.description,
-        sortOrder: course.sortOrder ?? null,
-        slug: course.slug ?? null,
-        themes: themesByCourse.get(course.id) ?? [],
-        moduleCount: moduleIds.length,
-        progress: {
-          completed,
-          total,
-          courseStatus: computeCourseStatus(completed, total, hasStarted),
-          moduleCompleted: passed,
-          moduleTotal: moduleIds.length,
-          sectionCompleted: readCount,
-          sectionTotal: sectionIds.length,
-        },
-      };
+      locale,
     });
 
     // #1093: satt rekkefølge først, resten alfabetisk på tittelen i deltakerens språk. Klienten
