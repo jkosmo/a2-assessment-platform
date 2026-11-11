@@ -65,6 +65,13 @@ vi.mock("../../src/db/prisma.js", () => ({
 // #934 skive 5a-1: låsene er SQL; her går de rett gjennom den falske transaksjonen.
 vi.mock("../../src/db/contentLock.js", () => import("../support/contentLockThroughTransaction.js"));
 
+// #1140 etappe 1: ingen kurs har låst en hovedversjon i disse testene, så versjonen er modulens aktive.
+vi.mock("../../src/modules/module/participantModuleVersion.js", () => ({
+  prepareShownMajorScope: vi.fn(async () => null),
+  findVersionToSubmitOn: vi.fn(async (_client: unknown, _moduleId: string, active: unknown) => active),
+  ShownMajorScopeOutdatedError: class extends Error {},
+}));
+
 vi.mock("../../src/modules/submission/submissionRepository.js", () => ({
   getModuleWithActiveVersion,
   submissionRepository: { create: submissionCreate },
@@ -603,7 +610,7 @@ describe("transactional failure injection", () => {
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
       await expect(
-        createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+        createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
       ).rejects.toThrow("DB write failed");
 
       expect(supersedeEligibleReviewsForRetake).not.toHaveBeenCalled();
@@ -617,7 +624,7 @@ describe("transactional failure injection", () => {
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
       await expect(
-        createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+        createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
       ).rejects.toThrow("Review supersede failed");
 
       expect(supersedeEligibleAppealsForRetake).not.toHaveBeenCalled();
@@ -630,7 +637,7 @@ describe("transactional failure injection", () => {
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
       await expect(
-        createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+        createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
       ).rejects.toThrow("Appeal supersede failed");
     });
 
@@ -640,7 +647,7 @@ describe("transactional failure injection", () => {
 
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
-      const result = await createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
+      const result = await createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
 
       expect(supersedeEligibleReviewsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", FAKE_TX);
       expect(supersedeEligibleAppealsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", FAKE_TX);
@@ -656,7 +663,7 @@ describe("transactional failure injection", () => {
       supersedeEligibleAppealsForRetake.mockResolvedValue(0);
 
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
-      await createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
+      await createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
 
       const actions = recordAuditEvent.mock.calls.map((c: unknown[]) => (c[0] as { action: string }).action);
       expect(actions).toContain("submission_created");

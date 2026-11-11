@@ -1378,3 +1378,27 @@ ikke e-post. `OPEN`-kurs gir e-post når de tildeles en klasse, med vilje.
 - `test/m2-course-assignment-email-1142.test.ts` — veiene inn gjennom rutene, vinduet, sjekken før sending, omstart og
   dobbel levering. `test/m2-course-assignment-baseline-1142.test.ts` kjører den ekte migreringen.
 - `test/unit/stage-copy-guard-1142.test.ts` — stage-kopiskriptet nekter prod og krever bekreftelse.
+
+## 31. «Hvilken versjon av modulen får denne deltakeren?» — ett hjem (#1140 etappe 1, 2.154.0)
+
+Regelen bor i `src/modules/module/participantModuleVersion.ts` (se toppen av fila og `doc/DESIGN_1140.md`): kurset modulen
+åpnes fra, bestemmer; uten kjent kurs den høyeste hovedversjonen blant kursene deltakeren har modulen i; uten kurs modulens
+nyeste. Et kurs viser modulens nyeste til det har låst en hovedversjon (`CourseModuleRequirement.shownModuleMajor`).
+
+| Flate | Hvor | Hvordan |
+|---|---|---|
+| Modullista | `listModules` (moduleService.ts), `GET /api/modules?courseId=` | `withShownVersions` |
+| Enkeltoppslaget | `getModuleById`, `getActiveModuleVersion`, `GET /api/modules/:id(/active-version)?courseId=` | `withShownVersions` |
+| Innleveringen | `versionToSubmitOn` (submissionService.ts), `POST /api/submissions` med `courseId` | `findVersionToSubmitOn`, i forhåndssjekken og under låsene |
+| Deltakersiden | `loadModulesForCourse` (det ene stedet lista hentes, setter `moduleContextCourseId` sammen med lista), `enterModuleCourseContext`, `openCourseModule` (participant.js) | henter lista for kurset modulen åpnes fra, og sender det kurset med innleveringen |
+
+**Leser IKKE regelen, med vilje:** flervalg, vurdering, vedtak, resultat, modellsvar og bestått følger innleveringens egen
+versjon. Forfatter- og administratorlesing (`adminFacing`), biblioteket, publisering og kalibrering ser modulens nyeste.
+`available` i kurset følger modulens aktive versjon.
+
+**Vakter:** `test/participant-module-version-guard.test.js` (ingen skriver låsen, én leser av den, de rå oppslagene har én
+kaller hver og går gjennom regelen, kurset følger med fra ruta). Leseren av kravet per kurs står i
+`test/content-lock-write-guard.test.js`. Regelen gjennom rutene: `test/m2-participant-module-version-1140.test.ts`.
+Deltakersiden: `test/e2e/participant-module-course-context-1140.spec.ts`.
+
+**Når en ny flate viser eller leverer en modul til en deltaker:** les gjennom regelen, og send kurset med.

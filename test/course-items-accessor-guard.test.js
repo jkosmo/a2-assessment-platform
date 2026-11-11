@@ -69,7 +69,9 @@ const EXCEPTIONS = [
     file: "modules/course/enrollmentService.ts",
     reason:
       "isModuleInAccessibleCourse / canParticipantReadSection — omvendt oppslag (innhold → kurs) "
-      + "for objektnivå-authz. Svarer på «er brukeren privilegert nok», ikke «hva inneholder kurset».",
+      + "for objektnivå-authz. Svarer på «er brukeren privilegert nok», ikke «hva inneholder kurset». "
+      + "#1140 etappe 1: findAccessibleCoursesContainingModules (som isModuleInAccessibleCourse nå bruker) og "
+      + "filterPublishedCoursesContainingModule er samme omvendte oppslag (modul → kurs), for hvilken versjon deltakeren får.",
   },
 ];
 

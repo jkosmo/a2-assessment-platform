@@ -18,6 +18,17 @@ vi.mock("../../src/db/prisma.js", () => ({
 // #934 skive 5a-1: låsene er SQL; her går de rett gjennom den falske transaksjonen.
 vi.mock("../../src/db/contentLock.js", () => import("../support/contentLockThroughTransaction.js"));
 
+// #1140 etappe 1: ingen kurs har låst en hovedversjon i disse testene, så versjonen er modulens aktive. Regelen selv er
+// prøvd i participant-module-version-1140.test.ts og gjennom rutene i m2-participant-module-version-1140.test.ts.
+const prepareShownMajorScope = vi.fn();
+const findVersionToSubmitOn = vi.fn();
+class ShownMajorScopeOutdatedError extends Error {}
+vi.mock("../../src/modules/module/participantModuleVersion.js", () => ({
+  prepareShownMajorScope,
+  findVersionToSubmitOn,
+  ShownMajorScopeOutdatedError,
+}));
+
 vi.mock("../../src/modules/submission/submissionRepository.js", () => ({
   getModuleWithActiveVersion,
   submissionRepository: { create: submissionCreate },
@@ -56,6 +67,40 @@ describe("submission service", () => {
     resolveSubmissionResponseJson.mockReset();
     supersedeEligibleReviewsForRetake.mockReset().mockResolvedValue(0);
     supersedeEligibleAppealsForRetake.mockReset().mockResolvedValue(0);
+    prepareShownMajorScope.mockReset().mockResolvedValue(null);
+    findVersionToSubmitOn.mockReset().mockImplementation(async (_client: unknown, _moduleId: string, active: unknown) => active);
+  });
+
+  // #1140 etappe 1: versjonen deltakeren skal ha, kan være en annen enn modulens aktive.
+  it("submits on the version the participant's courses show, not the module's active one", async () => {
+    getModuleWithActiveVersion.mockResolvedValue({ id: "module-1", activeVersion: { id: "module-version-2", versionMajor: 2, publishedAt: new Date() } });
+    prepareShownMajorScope.mockResolvedValue(["course-1"]);
+    findVersionToSubmitOn.mockResolvedValue({ id: "module-version-1", publishedAt: new Date() });
+    resolveSubmissionResponseJson.mockResolvedValue({ resolvedResponseJson: {}, parser: "text" });
+    submissionCreate.mockResolvedValue({ id: "submission-1", moduleId: "module-1", moduleVersionId: "module-version-1", deliveryType: "text" });
+    const { createSubmission } = await import("../../src/modules/submission/index.js");
+    const base = { userId: "user-1", roles: [], groupIds: ["g1"], courseId: "course-1", moduleId: "module-1", locale: "nb" as const, deliveryType: "text", responseJson: {} };
+
+    await expect(createSubmission({ ...base, moduleVersionId: "module-version-2" })).rejects.toMatchObject({ code: "module_version_changed" });
+    expect(submissionCreate).not.toHaveBeenCalled();
+
+    await createSubmission({ ...base, moduleVersionId: "module-version-1" });
+    expect(submissionCreate).toHaveBeenCalledWith(expect.objectContaining({ moduleVersionId: "module-version-1" }));
+    // Kurset modulen ble åpnet fra, følger med til regelen.
+    expect(prepareShownMajorScope).toHaveBeenCalledWith({ userId: "user-1", roles: [], groupIds: ["g1"] }, "module-1", "course-1");
+    // Kursene fra forberedelsen brukes både i forhåndssjekken og under låsene.
+    expect(findVersionToSubmitOn.mock.calls.filter((call) => call[3] !== null && (call[3] as string[])[0] === "course-1").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("a lock that appeared after the courses were worked out: 409 module_version_changed, nothing parsed or written", async () => {
+    getModuleWithActiveVersion.mockResolvedValue({ id: "module-1", activeVersion: { id: "module-version-1", versionMajor: 1, publishedAt: new Date() } });
+    findVersionToSubmitOn.mockRejectedValue(new ShownMajorScopeOutdatedError());
+    const { createSubmission } = await import("../../src/modules/submission/index.js");
+    await expect(
+      createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+    ).rejects.toMatchObject({ code: "module_version_changed" });
+    expect(resolveSubmissionResponseJson).not.toHaveBeenCalled();
+    expect(submissionCreate).not.toHaveBeenCalled();
   });
 
   it("rejects submission creation when no published active module version exists", async () => {
@@ -69,6 +114,7 @@ describe("submission service", () => {
     await expect(
       createSubmission({
         userId: "user-1",
+        roles: [],
         moduleId: "module-1",
         locale: "nb",
         deliveryType: "text",
@@ -85,7 +131,7 @@ describe("submission service", () => {
   it("does not parse the answer when the version is stale or missing", async () => {
     getModuleWithActiveVersion.mockResolvedValue({ id: "module-1", activeVersion: { id: "module-version-2", publishedAt: new Date() } });
     const { createSubmission } = await import("../../src/modules/submission/index.js");
-    const base = { userId: "user-1", moduleId: "module-1", locale: "nb" as const, deliveryType: "text", responseJson: {} };
+    const base = { userId: "user-1", roles: [], moduleId: "module-1", locale: "nb" as const, deliveryType: "text", responseJson: {} };
 
     await expect(createSubmission({ ...base, moduleVersionId: "module-version-1" })).rejects.toMatchObject({ code: "module_version_changed" });
     await expect(createSubmission(base)).rejects.toMatchObject({ code: "client_outdated" });
@@ -117,6 +163,7 @@ describe("submission service", () => {
 
     const result = await createSubmission({
       userId: "user-1",
+      roles: [],
       moduleId: "module-1",
       moduleVersionId: "module-version-1",
       locale: "nn",
@@ -187,7 +234,7 @@ describe("submission service", () => {
     supersedeEligibleAppealsForRetake.mockResolvedValue(0);
 
     const { createSubmission } = await import("../../src/modules/submission/index.js");
-    await createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
+    await createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
 
     const actions = recordAuditEvent.mock.calls.map((c) => c[0].action);
     expect(actions).not.toContain("retake_supersede_completed");
@@ -204,7 +251,7 @@ describe("submission service", () => {
     supersedeEligibleAppealsForRetake.mockResolvedValue(1);
 
     const { createSubmission } = await import("../../src/modules/submission/index.js");
-    await createSubmission({ userId: "user-1", moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
+    await createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
 
     expect(recordAuditEvent).toHaveBeenCalledWith(
       {

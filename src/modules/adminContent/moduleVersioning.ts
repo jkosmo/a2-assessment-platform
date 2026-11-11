@@ -242,6 +242,27 @@ export async function raiseModuleRequirementInCourse(locked: ContentWriteTx, cou
   return raised.count > 0;
 }
 
+/**
+ * #1140 etappe 1 (doc/DESIGN_1140.md): hovedversjonen kursene VISER av modulene. Bare kurs som har låst en hovedversjon, er med;
+ * et kurs som mangler her, følger modulens nyeste. Den ENE leseren av `shownModuleMajor` (vakt: content-lock-write-guard).
+ * Regelen for hvem som får hva, bor i `participantModuleVersion.ts`.
+ */
+export async function findShownModuleMajors(
+  client: Pick<DbTransactionClient, "courseModuleRequirement">,
+  where: { moduleIds: string[]; courseIds?: string[] },
+): Promise<Array<{ courseId: string; moduleId: string; shownModuleMajor: number }>> {
+  if (where.moduleIds.length === 0 || where.courseIds?.length === 0) return [];
+  const rows = await client.courseModuleRequirement.findMany({
+    where: {
+      moduleId: { in: where.moduleIds },
+      shownModuleMajor: { not: null },
+      ...(where.courseIds ? { courseId: { in: where.courseIds } } : {}),
+    },
+    select: { courseId: true, moduleId: true, shownModuleMajor: true },
+  });
+  return rows.flatMap((row) => (row.shownModuleMajor === null ? [] : [{ courseId: row.courseId, moduleId: row.moduleId, shownModuleMajor: row.shownModuleMajor }]));
+}
+
 /** #934 skive 5a-3: hvilke av modulene som ligger i hvilke av kursene. Også arkiverte og avpubliserte teller. */
 export async function findModulePlacements(locked: ContentWriteTx, courseIds: string[], moduleIds: string[]): Promise<Array<{ courseId: string; moduleId: string }>> {
   const rows = await locked.courseItem.findMany({

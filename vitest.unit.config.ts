@@ -82,6 +82,8 @@ export default defineConfig({
       // #1142 skive 1: nekter en ny skriver av medlemskap, tildelinger og publisering uten at den er tatt stilling til.
       "test/course-assignment-ways-in-guard.test.js",
       "test/weekly-digest-write-guard.test.js",
+      // #1140 etappe 1: nekter en ny leser av modulens versjon for deltakere utenom regelen, og en skriver av låsen.
+      "test/participant-module-version-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

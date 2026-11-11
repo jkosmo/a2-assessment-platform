@@ -13,6 +13,7 @@ import {
   queryModuleVersion,
 } from "../../repositories/moduleRepository.js";
 import { queryLatestSubmissionsForModules } from "../submission/submissionRepository.js";
+import { withShownVersions, type ModuleReader } from "./participantModuleVersion.js";
 
 // #962: settet bor nå i `src/auth/roleSets.ts`, sammen med de nitten andre rollesjekkene. Det er
 // UENDRET — poenget med flyttingen er at man skal kunne lese hele policyen ett sted og se hvor
@@ -24,7 +25,19 @@ function hasAdminRead(roles: AppRoleType[]) {
 type ListModulesOptions = {
   includeCompleted?: boolean;
   participantFacing?: boolean;
+  /** #1140: gruppene fra innloggingen, for kursene leseren har tilgang til gjennom en Entra-klasse. */
+  groupIds?: string[];
+  /** #1140: kurset modulene åpnes fra. Det kurset bestemmer versjonen for modulene leseren har i det. */
+  courseId?: string;
 };
+
+/**
+ * #1140 etappe 1: den som leser deltakervendt, får versjonen kursene sine viser (`participantModuleVersion.ts`). Forfatter- og
+ * administratorlesing (`participantFacing: false`) og et kall uten bruker får modulens nyeste, som før.
+ */
+function shownVersionReader(roles: AppRoleType[], participantFacing: boolean, userId?: string, groupIds?: string[]): ModuleReader | null {
+  return participantFacing && userId ? { userId, roles, groupIds } : null;
+}
 
 /**
  * #1051: oppgaveteksten og veiledningen — både som tekst og som rendret HTML.
@@ -91,7 +104,9 @@ export async function listModules(
   const now = new Date();
   const participantFacing = options.participantFacing ?? false;
   const adminRead = participantFacing ? false : hasAdminRead(roles);
-  const modules = await queryModules(adminRead, now);
+  const reader = shownVersionReader(roles, participantFacing, userId, options.groupIds);
+  const published = await queryModules(adminRead, now);
+  const modules = reader ? await withShownVersions(published, reader, options.courseId) : published;
 
   if (!userId) {
     return modules.map((module) => ({
@@ -167,16 +182,18 @@ export async function getModuleById(
   moduleId: string,
   roles: AppRoleType[],
   locale: SupportedLocale = "en-GB",
-  options: { participantFacing?: boolean } = {},
+  options: { participantFacing?: boolean; userId?: string; groupIds?: string[]; courseId?: string } = {},
 ) {
   const now = new Date();
   const participantFacing = options.participantFacing ?? false;
   const adminRead = participantFacing ? false : hasAdminRead(roles);
-  const module = await queryModuleById(moduleId, adminRead, now);
+  const found = await queryModuleById(moduleId, adminRead, now);
 
-  if (!module) {
+  if (!found) {
     return null;
   }
+  const reader = shownVersionReader(roles, participantFacing, options.userId, options.groupIds);
+  const module = reader ? (await withShownVersions([found], reader, options.courseId))[0]! : found;
 
   return {
     ...module,
@@ -193,7 +210,7 @@ export async function getActiveModuleVersion(
   moduleId: string,
   roles: AppRoleType[],
   locale: SupportedLocale = "en-GB",
-  options: { participantFacing?: boolean } = {},
+  options: { participantFacing?: boolean; userId?: string; groupIds?: string[]; courseId?: string } = {},
 ) {
   const participantFacing = options.participantFacing ?? false;
   const module = await getModuleById(moduleId, roles, locale, options);

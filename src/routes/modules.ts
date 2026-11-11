@@ -18,6 +18,15 @@ const modulesRouter = Router();
 const modulesListQuerySchema = z.object({
   adminFacing: z.string().trim().optional(),
 });
+
+/**
+ * #1140 etappe 1: `?courseId=` er kurset modulen åpnes fra. Det bestemmer versjonen når leseren har modulen i det kurset
+ * (participantModuleVersion.ts). En verdi som ikke er en id, regnes som utelatt: da gjelder reserven, og lista svarer som før.
+ */
+function openedCourseId(query: unknown): string | undefined {
+  const value = (query as { courseId?: unknown } | undefined)?.courseId;
+  return typeof value === "string" && value.length > 0 && value.length <= 64 ? value : undefined;
+}
 const mcqStartQuerySchema = z.object({
   submissionId: z.string().min(1),
 });
@@ -62,7 +71,12 @@ modulesRouter.get("/", async (request, response) => {
   const adminFacingRequested = parsed.data.adminFacing === "true";
   const hasElevatedRole = hasAnyRole(roles, CONTENT_AUTHORS);
   const participantFacing = adminFacingRequested && hasElevatedRole ? false : true;
-  const modules = await listModules(roles, userId, locale, { participantFacing });
+  // #1140: deltakervendt lesing får versjonen kursene til leseren viser (participantModuleVersion.ts).
+  const modules = await listModules(roles, userId, locale, {
+    participantFacing,
+    groupIds: request.context?.principal?.groupIds,
+    courseId: openedCourseId(request.query),
+  });
 
   response.json({
     modules,
@@ -79,7 +93,12 @@ modulesRouter.get("/:moduleId", async (request, response) => {
   const roles = request.context?.roles ?? [];
   const locale = requestLocale(request);
   const moduleId = request.params.moduleId as string;
-  const module = await getModuleById(moduleId, roles, locale, { participantFacing: true });
+  const module = await getModuleById(moduleId, roles, locale, {
+    participantFacing: true,
+    userId: request.context?.userId,
+    groupIds: request.context?.principal?.groupIds,
+    courseId: openedCourseId(request.query),
+  });
 
   if (!module) {
     response.status(404).json({ error: "not_found", message: t(locale, "module_not_found") });
@@ -93,7 +112,12 @@ modulesRouter.get("/:moduleId/active-version", async (request, response) => {
   const roles = request.context?.roles ?? [];
   const locale = requestLocale(request);
   const moduleId = request.params.moduleId as string;
-  const activeVersion = await getActiveModuleVersion(moduleId, roles, locale, { participantFacing: true });
+  const activeVersion = await getActiveModuleVersion(moduleId, roles, locale, {
+    participantFacing: true,
+    userId: request.context?.userId,
+    groupIds: request.context?.principal?.groupIds,
+    courseId: openedCourseId(request.query),
+  });
 
   if (!activeVersion) {
     response

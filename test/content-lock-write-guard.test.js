@@ -571,6 +571,9 @@ const PROGRESS_READERS = new Map([
       "modules/course/moduleCredit.ts:readPerCourseRule",
       "modules/course/moduleCredit.ts:findCreditedModules",
       "modules/adminContent/moduleVersioning.ts:syncModuleRequirements",
+      // #1140 etappe 1: hovedversjonen kurset VISER (`shownModuleMajor`). Ikke fremdrift: hvilken versjon en deltaker får,
+      // avgjøres i participantModuleVersion.ts. Vakt: participant-module-version-guard.test.js.
+      "modules/adminContent/moduleVersioning.ts:findShownModuleMajors",
     ]),
   ],
 ]);

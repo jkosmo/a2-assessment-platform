@@ -1634,3 +1634,26 @@ kursbevis på plattformen. Plan og gjennomgang: `doc/design/PLAN_1145.md`.
 Kjente mangler: neste repetisjon regnes fra registreringen. Ruller man tilbake etter første skriving i prod, viser gammel kode
 registrerte bevis **med registreringsdagen som fullføringsdato** (profilen, kursbeviset, rapporten) og som aktivitet. Etter første
 registrering i prod rettes feil derfor framover, med en ny versjon, ikke ved tilbakerulling.
+
+## Kurset bestemmer hva deltakerne ser (#1140, 2026-11-11)
+
+Produkteier, etter en kveld med fem utkast (`doc/DESIGN_1140.md`). Delt innhold er sjeldent i dag, så dette er ikke valgt for
+tilfellet, men for mønsteret: «et konsistent grunnlag med noen gjennomgående mønstre, som på sikt begrenser kompleksitet».
+
+- **Det deltakerne ser i et kurs, endres bare når noen publiserer kurset.** Et publisert kurs får et utkast; «Lagre» skriver
+  dit, «Publiser» sender det ut. Utkastet omfatter alt i kursskjemaet. Opplasting av kursfil og skillet skriver til utkastet.
+- **Hvert kurs står på sin hovedversjon av hver modul.** En rettelse (mindre versjon) går til kursene på den hovedversjonen.
+  En ny hovedversjon endrer ingen kurs; eieren tar den i bruk når kurset publiseres. Kopier («bytt med egen kopi», 2026-10-12)
+  og «ny versjon av samme modul for alle» ble begge vurdert og forkastet.
+- **Kurset modulen åpnes fra, bestemmer versjonen deltakeren får.** Første avgjørelse var «den høyeste blant kursene deltakeren
+  har»; den ble reserven for når kurset ikke er kjent. Grunnen: alle har tilgang til åpne kurs, så den høyeste ville i praksis
+  alltid vært den nyeste noen hadde tatt i bruk.
+- **En bestått teller i hvert kurs etter kravet der** (terskelen fra #934), uansett hvilket kurs modulen ble åpnet fra.
+- **Eldre hovedversjoner fryses:** ingen rettelser i en gammel linje når en nyere finnes. Modulen har én rett historie.
+- **En kurseier kan lage ny hovedversjon av en modul hen ikke eier,** for sitt kurs. Eierne av modulen og av andre kurs med
+  modulen får beskjed på e-post og i kursbyggeren.
+- **Seksjoner tas til slutt,** som egen etappe, og virker som før til da.
+- **Prøven på at dette forenkler** er lista over det som fjernes (designnotatet, «Dette fjernes»). Blir den kort, er det et lag
+  til, og da skal det ikke bygges.
+
+Bygges i etapper. Etappe 1 (2.154.0) gir bare feltet og regelen; ingen kurs kan låse en hovedversjon før etappe 3.

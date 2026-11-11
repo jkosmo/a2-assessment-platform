@@ -650,6 +650,11 @@ model CourseModuleRequirement {
   courseId       String
   moduleId       String
   minModuleMajor Int
+  // #1140 etappe 1 (doc/DESIGN_1140.md): hovedversjonen av modulen dette kurset VISER. Tomt = kurset følger modulens nyeste, som
+  // før #1140. `minModuleMajor` over er hvilke beståtte som teller; dette er hva en deltaker får når hen åpner modulen. Leses
+  // bare gjennom `findShownModuleMajors` (moduleVersioning.ts), og INGEN skriver feltet før etappe 3 gir det sin ene skriver.
+  // DB-CHECK i migreringen: tomt, eller minst `minModuleMajor` (ellers kunne kravet aldri oppfylles av det deltakeren får).
+  shownModuleMajor Int?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)

@@ -355,18 +355,36 @@ export async function isModuleInAccessibleCourse(input: {
   roles: AppRoleType[];
   groupIds?: string[];
 }): Promise<boolean> {
+  const accessible = await findAccessibleCoursesContainingModules({ ...input, moduleIds: [input.moduleId] });
+  return (accessible.get(input.moduleId) ?? []).length > 0;
+}
+
+/**
+ * #1140 etappe 1: for hver modul, de publiserte kursene som inneholder den OG som personen har tilgang til (åpent, tildelt
+ * eller påmeldt). Regelen `isModuleInAccessibleCourse` alltid har brukt, nå for flere moduler og med kursene i svaret:
+ * `participantModuleVersion.ts` trenger dem for å avgjøre hvilken hovedversjon deltakeren får. Moduler uten et slikt kurs
+ * er ikke med i svaret.
+ */
+export async function findAccessibleCoursesContainingModules(input: {
+  moduleIds: string[];
+  userId: string;
+  roles: AppRoleType[];
+  groupIds?: string[];
+}): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (input.moduleIds.length === 0) return out;
   const links = await prisma.courseItem.findMany({
-    where: { moduleId: input.moduleId },
-    select: { courseId: true },
+    where: { moduleId: { in: input.moduleIds } },
+    select: { courseId: true, moduleId: true },
   });
   const courseIds = [...new Set(links.map((l) => l.courseId))];
-  if (courseIds.length === 0) return false;
+  if (courseIds.length === 0) return out;
 
   const courses = await prisma.course.findMany({
     where: { id: { in: courseIds }, publishedAt: { not: null }, archivedAt: null },
     select: { id: true, enrollmentPolicy: true },
   });
-  if (courses.length === 0) return false;
+  if (courses.length === 0) return out;
 
   const classIds = await getUserClassIds({
     userId: input.userId,
@@ -375,7 +393,32 @@ export async function isModuleInAccessibleCourse(input: {
   });
   const classCourseDue = await getClassAssignedCourseDueDates(classIds, input.userId);
   const visible = await filterVisibleCourseIds(input.userId, courses, new Set(classCourseDue.keys()));
-  return courses.some((c) => visible.has(c.id));
+  for (const link of links) {
+    if (!link.moduleId || !visible.has(link.courseId)) continue;
+    const list = out.get(link.moduleId);
+    if (list) {
+      if (!list.includes(link.courseId)) list.push(link.courseId);
+    } else out.set(link.moduleId, [link.courseId]);
+  }
+  return out;
+}
+
+/**
+ * #1140 etappe 1: hvilke av disse kursene som FORTSATT er publisert og inneholder modulen. Kalles under innholdslåsen i
+ * innleveringen, med kursene tilgangen ble regnet ut for før låsen: et kurs som er avpublisert, arkivert eller har fått modulen
+ * tatt ut i mellomtiden, teller ikke.
+ */
+export async function filterPublishedCoursesContainingModule(
+  client: Pick<typeof prisma, "courseItem">,
+  moduleId: string,
+  courseIds: string[],
+): Promise<string[]> {
+  if (courseIds.length === 0) return [];
+  const rows = await client.courseItem.findMany({
+    where: { moduleId, courseId: { in: courseIds }, course: { publishedAt: { not: null }, archivedAt: null } },
+    select: { courseId: true },
+  });
+  return [...new Set(rows.map((row) => row.courseId))];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────

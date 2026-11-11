@@ -200,6 +200,13 @@ let selectedModuleId = "";
 // #934 skive 5a-3: modulen er åpnet fra et kurs som sier at den må tas på nytt (`retakeRequired`). Står til et nytt vedtak kommer.
 let courseRetakeModuleId = null;
 let courseRetakeCourseId = null;
+// #1140 etappe 1: kurset `loadedModules` ble hentet for. Kurset modulen åpnes fra, bestemmer hvilken versjon deltakeren får, så
+// modullista hentes for kurset (`?courseId=`), og innleveringen sender det samme kurset. `null`: lista er hentet uten kurs, og
+// serveren bruker reserven. Settes bare av `loadModulesForCourse`, sammen med lista.
+let moduleContextCourseId = null;
+// Løpenummer: bare svaret på den siste hentingen av modullista tas i bruk, og bare det siste klikket på en modul i et kurs åpner.
+let moduleListFetchSeq = 0;
+let courseModuleOpenSeq = 0;
 let autosaveTimer = null;
 let flowState = {
   hasSubmission: false,
@@ -347,9 +354,10 @@ function setLocale(locale) {
   } else if (hasLoadedModules) {
     // Re-fetch modules so server-resolved titles and descriptions reflect the new locale.
     // Intentionally fire-and-forget — locale switch must not block or disrupt flow state.
-    apiFetch("/api/modules?includeCompleted=true", headers)
-      .then((body) => {
-        loadedModules = Array.isArray(body.modules) ? body.modules : [];
+    loadModulesForCourse(moduleContextCourseId)
+      .then(({ applied }) => {
+        // #1140: åpnet deltakeren en modul fra et annet kurs i mellomtiden, er den hentingen nyere, og den tegner selv.
+        if (!applied) return;
         renderModules();
         renderSelectedModuleSummary();
       })
@@ -1300,16 +1308,67 @@ async function ensureParticipantModuleAvailable(moduleId) {
     return loadedModules.some((module) => module?.id === moduleId);
   }
 
-  const body = await apiFetch("/api/modules?includeCompleted=true", headers);
-  loadedModules = Array.isArray(body.modules) ? body.modules : [];
-  hasLoadedModules = true;
+  await loadModulesForCourse(moduleContextCourseId);
   syncParticipantModuleWorkspace();
 
   return loadedModules.some((module) => module?.id === moduleId);
 }
 
+/** #1140 etappe 1: adressen til modullista for et kurs. Uten kurs: lista uten kurs, og serveren bruker reserven. */
+function modulesListUrl(courseId) {
+  const base = "/api/modules?includeCompleted=true";
+  return courseId ? `${base}&courseId=${encodeURIComponent(courseId)}` : base;
+}
+
+/**
+ * #1140 etappe 1: DET ENE STEDET modullista hentes. Lista tas i bruk sammen med kurset den ble hentet for, i samme øyeblikk, så
+ * `moduleContextCourseId` alltid er kurset `loadedModules` gjelder — også når hentingen feiler (da står begge som de var), og
+ * når to hentinger krysser hverandre: bare svaret på den SISTE tas i bruk (QA-porten 2.154.0). Innleveringen sender versjonen
+ * fra lista og dette kurset, og serveren regner ut versjonen for det samme kurset.
+ *
+ * Svarer `applied: false` når en nyere henting er startet i mellomtiden; den tar da lista i bruk.
+ */
+async function loadModulesForCourse(courseId) {
+  const request = ++moduleListFetchSeq;
+  const body = await apiFetch(modulesListUrl(courseId), headers);
+  if (request !== moduleListFetchSeq) return { applied: false, body };
+  loadedModules = Array.isArray(body.modules) ? body.modules : [];
+  moduleContextCourseId = courseId || null;
+  hasLoadedModules = true;
+  return { applied: true, body };
+}
+
+/**
+ * #1140 etappe 1: en modul åpnes fra et annet kurs enn lista gjelder. Kurset bestemmer versjonen, så lista hentes på nytt for
+ * det kurset FØR modulen velges. Kladden for modulen som står valgt, lagres først, så ingenting som er skrevet, går tapt i
+ * omtegningen.
+ */
+async function enterModuleCourseContext(courseId) {
+  if (previewModeEnabled || !courseId || moduleContextCourseId === courseId) return;
+  persistCurrentModuleDraft(false);
+  const { applied } = await loadModulesForCourse(courseId);
+  if (applied) syncParticipantModuleWorkspace({ restoreDraft: true });
+}
+
+/**
+ * Åpner modulen fra kurset. Svarer `false` når et nyere klikk (en annen modul eller et annet kurs) kom mens modullista ble
+ * hentet: det klikket åpner sin modul, og dette gjør ingenting. Uten det ville den først klikkede modulen blitt åpnet til
+ * slutt, og en ren flervalgsmodul ville startet en innlevering deltakeren ikke ba om (QA-porten 2.154.0).
+ */
 async function openCourseModule(courseId, moduleId, retakeRequired) {
+  const request = ++courseModuleOpenSeq;
+  await enterModuleCourseContext(courseId);
+  // Sjekkes FØR noe mer hentes: et forbigått klikk skal ikke starte en henting som skyver til side den riktige.
+  if (request !== courseModuleOpenSeq) return false;
+  if (!previewModeEnabled && moduleContextCourseId !== courseId) {
+    // En annen henting (språkbyttet) kom imellom og tok lista i bruk for et annet kurs. Én gang til, så modulen aldri åpnes
+    // fra en liste som gjelder et annet kurs enn det den ble åpnet fra.
+    await enterModuleCourseContext(courseId);
+    if (request !== courseModuleOpenSeq) return false;
+    if (moduleContextCourseId !== courseId) throw new Error(t("courses.module.unavailable"));
+  }
   const available = await ensureParticipantModuleAvailable(moduleId);
+  if (request !== courseModuleOpenSeq) return false;
   if (!available) {
     throw new Error(t("courses.module.unavailable"));
   }
@@ -1321,6 +1380,7 @@ async function openCourseModule(courseId, moduleId, retakeRequired) {
   if (courseDetailCache[courseId]) {
     renderCourseDetailModules(courseId, courseDetailCache[courseId]);
   }
+  return true;
 }
 
 /**
@@ -3237,9 +3297,7 @@ loadModulesButton.addEventListener("click", async () => {
         loadPreviewModules();
         return;
       }
-      const body = await apiFetch("/api/modules?includeCompleted=true", headers);
-      loadedModules = Array.isArray(body.modules) ? body.modules : [];
-      hasLoadedModules = true;
+      const { body } = await loadModulesForCourse(moduleContextCourseId);
       syncParticipantModuleWorkspace({ restoreDraft: true });
       log(body);
     } catch (error) {
@@ -3307,6 +3365,9 @@ createSubmissionButton.addEventListener("click", async () => {
       // ikke lenger aktiv, svarer serveren 409. Svaret står i feltene og i kladden (autolagringen hvert kvarte sekund, og
       // `beforeunload`), så det er der etter at siden er lastet på nytt.
       const seenVersionId = resolveSelectedModule(loadedModules, moduleId)?.activeVersion?.id;
+      // #1140 etappe 1: kurset lista ble hentet for, lest i samme øyeblikk som versjonen. Serveren regner ut versjonen for det
+      // samme kurset, så de to stemmer også om et annet kurs åpnes mens dialogen under står oppe.
+      const seenInCourseId = moduleContextCourseId;
       const responseJson = {};
       for (const field of currentSubmissionFields) {
         const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
@@ -3343,6 +3404,7 @@ createSubmissionButton.addEventListener("click", async () => {
         body: JSON.stringify({
           moduleId,
           moduleVersionId: seenVersionId,
+          ...(seenInCourseId ? { courseId: seenInCourseId } : {}),
           deliveryType: "text",
           responseJson,
           responsibilityAcknowledged: selectedModuleIsMcqOnly() ? true : ackCheckbox.checked,
@@ -4978,7 +5040,12 @@ async function openInlineItemByEntry(courseId, entry) {
   try {
     // openCourseModule activates the module AND re-renders the course detail; the re-render's
     // reopenInlineAfterRender mounts the workspace into this row's panel.
-    await openCourseModule(courseId, entry.moduleId, entry.retakeRequired === true);
+    const opened = await openCourseModule(courseId, entry.moduleId, entry.retakeRequired === true);
+    if (!opened) {
+      // #1140: et nyere klikk tok over mens modullista ble hentet. Det eier `inlineOpen` og visningen nå.
+      if (row) row.disabled = false;
+      return;
+    }
   } catch (error) {
     inlineOpen = null;
     if (row) row.disabled = false;

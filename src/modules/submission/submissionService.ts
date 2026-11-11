@@ -1,5 +1,14 @@
+import type { AppRole as AppRoleType } from "@prisma/client";
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
+import { prisma } from "../../db/prisma.js";
+import type { DbTransactionClient } from "../../db/transaction.js";
 import { ConflictError } from "../../errors/AppError.js";
+import {
+  findVersionToSubmitOn,
+  prepareShownMajorScope,
+  ShownMajorScopeOutdatedError,
+  type ShownMajorClient,
+} from "../module/participantModuleVersion.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { submissionRepository, createSubmissionRepository, getModuleWithActiveVersion, queryRubricCriteriaJson } from "./submissionRepository.js";
 import { runContentReadForLearner } from "../../db/contentLock.js";
@@ -14,6 +23,11 @@ import { toSubmissionHistoryResponseView, toSubmissionResultView } from "./submi
 
 export type CreateSubmissionInput = {
   userId: string;
+  // #1140 etappe 1: rollene og gruppene fra innloggingen, for kursene deltakeren har tilgang til (hvilken versjon hen skal ha).
+  roles: AppRoleType[];
+  groupIds?: string[];
+  // #1140 etappe 1: kurset modulen ble åpnet fra. Har deltakeren modulen i det, bestemmer det kurset versjonen.
+  courseId?: string;
   moduleId: string;
   // #934 skive 5a-1: modulversjonen siden viste da deltakeren skrev svaret. Mangler den, er fanen fra før utrullingen.
   moduleVersionId?: string;
@@ -51,24 +65,43 @@ function moduleVersionChanged(moduleId: string) {
   );
 }
 
+/**
+ * #1140 etappe 1: versjonen deltakeren skal levere på. Modulens aktive versjon, eller en eldre hovedversjon når kursene
+ * deltakeren har modulen i, har låst den (`participantModuleVersion.ts`). `null` når modulen ikke har en publisert versjon.
+ * En lås som dukket opp etter at kursene ble regnet ut, svares som en endret versjon: deltakeren laster siden på nytt.
+ */
+async function versionToSubmitOn(client: ShownMajorClient & Pick<DbTransactionClient, "module">, moduleId: string, scope: string[] | null) {
+  const module = await getModuleWithActiveVersion(moduleId, client);
+  if (!module?.activeVersion?.publishedAt) return null;
+  try {
+    const version = await findVersionToSubmitOn(client, module.id, module.activeVersion, scope);
+    return version.publishedAt ? { moduleId: module.id, versionId: version.id } : null;
+  } catch (error) {
+    if (error instanceof ShownMajorScopeOutdatedError) throw moduleVersionChanged(moduleId);
+    throw error;
+  }
+}
+
 async function createSubmissionCommand(
   input: CreateSubmissionInput,
   seenVersionId: string,
   parseOutcome: ParseOutcome,
+  scope: string[] | null,
 ) {
   // #934 skive 5a-1: innholdslåsen delt, så deltakerlåsen. Versjonen leses og sjekkes ETTER låsene: en publisering
   // står enten ferdig (409 under) eller venter til innleveringen er skrevet. Den registreres aldri på en annen versjon
   // enn den deltakeren så.
+  // #1140: «versjonen» er den deltakeren skal ha, og hovedversjonene kursene har låst, leses også her, under låsen.
   return runContentReadForLearner(input.userId, async (tx) => {
-    const module = await getModuleWithActiveVersion(input.moduleId, tx);
-    if (!module?.activeVersion?.publishedAt) throw moduleVersionUnavailable(input.moduleId);
-    if (module.activeVersion.id !== seenVersionId) throw moduleVersionChanged(input.moduleId);
-    const moduleId = module.id;
+    const target = await versionToSubmitOn(tx, input.moduleId, scope);
+    if (!target) throw moduleVersionUnavailable(input.moduleId);
+    if (target.versionId !== seenVersionId) throw moduleVersionChanged(input.moduleId);
+    const moduleId = target.moduleId;
 
     const submission = await createSubmissionRepository(tx).create(tx, {
       userId: input.userId,
       moduleId,
-      moduleVersionId: module.activeVersion.id,
+      moduleVersionId: target.versionId,
       locale: input.locale,
       deliveryType: input.deliveryType,
       responseJson: JSON.stringify(parseOutcome.resolvedResponseJson),
@@ -111,10 +144,17 @@ async function createSubmissionCommand(
 }
 
 export async function createSubmission(input: CreateSubmissionInput) {
+  // #1140 etappe 1: kursene deltakeren har modulen i, regnes ut her, før låsene (som kursporten i ruta). `null` når ingen
+  // kurs har låst en hovedversjon av modulen, og da er versjonen modulens aktive, som før.
+  const scope = await prepareShownMajorScope(
+    { userId: input.userId, roles: input.roles, groupIds: input.groupIds },
+    input.moduleId,
+    input.courseId,
+  );
   // Bare en rask sjekk, så et dokument ikke tolkes til ingen nytte. Det som avgjør, skjer under låsene.
-  const module = await getModuleWithActiveVersion(input.moduleId);
+  const target = await versionToSubmitOn(prisma, input.moduleId, scope);
 
-  if (!module || !module.activeVersion || !module.activeVersion.publishedAt) {
+  if (!target) {
     throw moduleVersionUnavailable(input.moduleId);
   }
   // #934 skive 5a-1: en fane fra før utrullingen sender ikke versjonen. Den kan ikke vite hva deltakeren så.
@@ -125,7 +165,7 @@ export async function createSubmission(input: CreateSubmissionInput) {
       { moduleId: input.moduleId },
     );
   }
-  if (module.activeVersion.id !== input.moduleVersionId) throw moduleVersionChanged(input.moduleId);
+  if (target.versionId !== input.moduleVersionId) throw moduleVersionChanged(input.moduleId);
 
   const parseOutcome = await resolveSubmissionResponseJson({
     responseJson: input.responseJson,
@@ -134,7 +174,7 @@ export async function createSubmission(input: CreateSubmissionInput) {
     attachmentMimeType: input.attachmentMimeType,
   });
 
-  const submission = await createSubmissionCommand(input, input.moduleVersionId, parseOutcome);
+  const submission = await createSubmissionCommand(input, input.moduleVersionId, parseOutcome, scope);
 
   logOperationalEvent(operationalEvents.submission.documentParse, {
     submissionId: submission.id,

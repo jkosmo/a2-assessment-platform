@@ -56,6 +56,18 @@ See [DOMAIN_LIFECYCLE.md](DOMAIN_LIFECYCLE.md) for the full ownership model.
 > repeated. A module without a published active version still answers `409 module_version_unavailable`, before the other
 > checks.
 
+> **#1140 stage 1 (2.154.0):** the module version a participant gets is decided in one place
+> (`participantModuleVersion.ts`). `GET /api/modules`, `GET /api/modules/:moduleId` and
+> `GET /api/modules/:moduleId/active-version` accept `?courseId=<id>`, and `POST /api/submissions` accepts `courseId`: the
+> course the module was opened from. When the caller has access to that course and it contains the module, the course
+> decides which major version is shown. Omitted, unknown, no access, or the module is not in it: the fallback applies (the
+> highest major version among the courses the caller has the module in; without any course, the module's newest). On the
+> `GET` routes a `courseId` that is empty or longer than 64 characters counts as omitted; `POST /api/submissions` answers
+> `400 validation_error` for it. In the
+> participant-facing answers `activeVersion` therefore means "the version you get", and that id is what `moduleVersionId`
+> must carry. A course shows the module's newest version until it has pinned a major version; nothing pins one yet, so
+> every answer is the same as before. Author-facing reads (`?adminFacing=true`) always get the module's newest.
+
 > **#475 (v2.8.0):** `POST /api/submissions` accepts an optional `processSignals` object —
 > `{ declaration?: "none"|"ideas"|"improve"|"autonomous", declarationText?: string, insistedAfterPrompt?: boolean }`
 > — the participant's AI-use declaration. Stored on `Submission.processSignalsJson` (aggregate-only; no

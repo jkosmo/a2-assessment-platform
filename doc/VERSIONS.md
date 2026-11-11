@@ -2,6 +2,42 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.154.0 - 2026-11-11
+
+#1140 etappe 1: hvilken versjon av en modul en deltaker får, avgjøres ett sted. Første etappe av «kurset bestemmer hva
+deltakerne ser» (`doc/DESIGN_1140.md`, plan og planlesing i `doc/design/PLAN_1140_E1.md`).
+
+- **Hva brukerne merker:** innholdet er som før. Ingen kurs kan låse en hovedversjon ennå, så alle får modulens nyeste.
+  Én liten forskjell: åpner deltakeren en modul fra et annet kurs enn sist, hentes modullista på nytt først, så raden kan stå
+  et øyeblikk før modulen åpnes.
+- **Slik virker det:**
+  - Nytt felt `CourseModuleRequirement.shownModuleMajor`: hovedversjonen kurset viser av modulen. Tomt = følger modulens
+    nyeste. Ingen kode skriver feltet før etappe 3.
+  - Regelen bor i `participantModuleVersion.ts`: kurset modulen åpnes fra, bestemmer; uten kjent kurs den høyeste blant kursene
+    deltakeren har modulen i; uten kurs modulens nyeste. Modullista, enkeltoppslaget og innleveringen leser gjennom den.
+    Alt etter innleveringen følger innleveringens versjon, som før.
+  - Deltakersiden sier hvilket kurs modulen åpnes fra: `?courseId=` på modullista, og `courseId` i innleveringen.
+  - `isModuleInAccessibleCourse` og regelen deler nå én tilgangsfunksjon (`findAccessibleCoursesContainingModules`).
+- **Ved utrulling:** én migrering, ren utvidelse (kolonnen, og en sjekk i databasen: vist hovedversjon kan ikke være lavere enn
+  kravet). Ingen nye innstillinger. Gammel og ny kode gir samme svar under utrullingen.
+- **Rotårsak, planlesingen:** første regel («den høyeste blant kursene deltakeren har») bygde på at to kurs med samme modul og
+  samme deltaker er sjeldent. Jeg sjekket ikke hva «har tilgang til» betyr i koden: åpne kurs gjelder alle. Planlesingen fant
+  det før noe var rullet ut. Sjekken som fanget det, var at leseren fikk i oppdrag å finne hva planen hadde oversett, mot koden.
+- **Rotårsak, QA-porten:** tre funn. (1) Den nye enhetstesten lastet `src/` på toppnivå uten oppvarming; vakta fantes, men jeg
+  kjørte bare de vaktene jeg selv hadde tenkt på, ikke hele enhetssuiten, før porten. (2) Deltakersiden satte kurset før lista
+  for kurset var hentet, og (3) et eldre klikk kunne vinne over et nyere. Begge er rettet: lista og kurset settes sammen, ett
+  sted (`loadModulesForCourse`), og bare siste henting og siste klikk tas i bruk.
+- **Rotårsak, mutasjonstestene:** de to første testene jeg skrev for (2) og (3), var grønne også med rettingene tatt ut. De
+  åpnet ikke tilstanden der feilen slår ut (lista må gjelde et ANNET kurs fra før; svaret for det forrige kurset må komme
+  SIST). Mutasjonskjøringen fant det, og testene er skrevet om til hver mutasjon blir rød.
+- **Kjente mangler:**
+  - En forfatter kan sette en eldre versjon i samme hovedversjon live igjen. Etter en ny hovedversjon vet ingenting hvilken
+    versjon som gjaldt sist i den gamle, og regelen gir den med høyest mindre nummer. Ingen kurs kan være låst før etappe 3,
+    der regelen for dette avgjøres. Festet i en test.
+  - Tittel, beskrivelse, ordgrenser og gyldighet ligger på modulen og deles av alle hovedversjoner.
+  - En klient fra før utrullingen sender ikke kurset og får reserven. Uten låser er svaret det samme.
+  - Ingen nettlesertest mot en ekte database med feltet satt; den tas på stage i etappen som gir feltet en skriver.
+
 ## 2.153.0 - 2026-11-11
 
 «Send til meg nå» for den ukentlige e-posten (#1139), på administratorsiden for plattformen.

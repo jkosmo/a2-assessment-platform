@@ -29,6 +29,9 @@ const createSubmissionSchema = z.object({
   // #934 skive 5a-1: valgfri i skjemaet, så en fane fra før utrullingen får `409 client_outdated` med en forklaring,
   // ikke en valideringsfeil. Se `createSubmission`.
   moduleVersionId: z.string().optional(),
+  // #1140 etappe 1: kurset modulen ble åpnet fra. Det bestemmer hvilken versjon som er «den deltakeren skal ha», når deltakeren
+  // har modulen i det kurset. Valgfri: en eldre klient, en lenke i e-post og frittstående modus sender den ikke.
+  courseId: z.string().trim().min(1).max(64).optional(),
   deliveryType: z.enum(["text", "file", "hybrid"]).default("text"),
   responseJson: z.record(z.string(), z.unknown()).default({}),
   attachmentUri: z.string().trim().optional(),
@@ -84,6 +87,9 @@ submissionsRouter.post("/", submissionCreateLimiter, async (request, response, n
   try {
     const submission = await createSubmission({
       userId,
+      // #1140: for kursene deltakeren har modulen i, og dermed hvilken versjon hen skal levere på.
+      roles,
+      groupIds: request.context?.principal?.groupIds,
       locale: requestLocale(request),
       ...parsed.data,
     });

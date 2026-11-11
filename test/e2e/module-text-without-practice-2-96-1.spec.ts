@@ -70,7 +70,7 @@ test("deltakerens modulside: øvelsene står som vanlig tekst i oppgaveteksten, 
   await page.route("**/api/courses/c1", (route: Route) =>
     route.fulfill(json({ course: { id: "c1", title: "Kurs", items: [{ type: "MODULE", moduleId: "m1", title: "Modul", available: true }] } })),
   );
-  await page.route("**/api/modules?includeCompleted=true", (route: Route) =>
+  await page.route("**/api/modules?includeCompleted=true**", (route: Route) =>
     route.fulfill(json({
       modules: [{
         id: "m1",
