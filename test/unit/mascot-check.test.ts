@@ -242,7 +242,7 @@ describe("reglene, én om gangen", () => {
       delete m.emailTexts;
     });
     expect(problems).toEqual([
-      "version er 0, men koden leser versjon 2: pakken er laget for en eldre utgave av koden. Nytt siden: emailTexts.courseAssignedIntro (versjon 2). Legg inn det som mangler (listet her), se mascots/seilbat/README.md, og sett version til 2",
+      `version er 0, men koden leser versjon 3: pakken er laget for en eldre utgave av koden. Nytt siden: emailTexts.courseAssignedIntro (versjon 2), ${MOOD_ALTS_V3}. Legg inn det som mangler (listet her), se mascots/seilbat/README.md, og sett version til 3`,
       "emailTexts.courseNewVersionIntro.en-GB mangler",
       "emailTexts.courseNewVersionIntro.nb mangler",
       "emailTexts.courseNewVersionIntro.nn mangler",
@@ -250,11 +250,11 @@ describe("reglene, én om gangen", () => {
       "emailTexts.courseAssignedIntro.nb mangler",
       "emailTexts.courseAssignedIntro.nn mangler",
     ]);
-    expect(problemsWith((_dir, m) => { m.version = 3; })).toEqual([
-      "version er 3, men koden leser versjon 2: pakken er laget for en nyere utgave av koden",
+    expect(problemsWith((_dir, m) => { m.version = 4; })).toEqual([
+      "version er 4, men koden leser versjon 3: pakken er laget for en nyere utgave av koden",
     ]);
     expect(problemsWith((_dir, m) => { delete m.version; })).toEqual([
-      "version mangler eller er ikke et heltall (fant undefined); koden leser versjon 2",
+      "version mangler eller er ikke et heltall (fant undefined); koden leser versjon 3",
     ]);
   });
 
@@ -264,13 +264,27 @@ describe("reglene, én om gangen", () => {
       delete m.emailTexts.courseAssignedIntro;
     });
     expect(problems).toEqual([
-      "version er 1, men koden leser versjon 2: pakken er laget for en eldre utgave av koden. Nytt siden: emailTexts.courseAssignedIntro (versjon 2). Legg inn det som mangler (listet her), se mascots/seilbat/README.md, og sett version til 2",
+      `version er 1, men koden leser versjon 3: pakken er laget for en eldre utgave av koden. Nytt siden: emailTexts.courseAssignedIntro (versjon 2), ${MOOD_ALTS_V3}. Legg inn det som mangler (listet her), se mascots/seilbat/README.md, og sett version til 3`,
       "emailTexts.courseAssignedIntro.en-GB mangler",
       "emailTexts.courseAssignedIntro.nb mangler",
       "emailTexts.courseAssignedIntro.nn mangler",
     ]);
   });
+
+  it("#1139: en pakke fra versjon 2 får vite at alt-teksten per humør er ny, og hva som mangler", () => {
+    const problems = problemsWith((_dir, m) => {
+      m.version = 2;
+      for (const mood of Object.values(m.moods) as Array<Record<string, unknown>>) delete mood.alt;
+    });
+    expect(problems[0]).toBe(
+      `version er 2, men koden leser versjon 3: pakken er laget for en eldre utgave av koden. Nytt siden: ${MOOD_ALTS_V3}. Legg inn det som mangler (listet her), se mascots/seilbat/README.md, og sett version til 3`,
+    );
+    expect(problems).toContain("moods.sulten.alt.nb mangler");
+    expect(problems).toHaveLength(1 + 5 * 3);
+  });
 });
+
+const MOOD_ALTS_V3 = ["ny", "mett", "sulten", "sur", "dramatisk"].map((mood) => `moods.${mood}.alt (versjon 3)`).join(", ");
 
 describe("det sjekken bygger på", () => {
   it("bredde og høyde leses fra JPEG-headeren", () => {

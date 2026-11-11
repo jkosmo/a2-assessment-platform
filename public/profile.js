@@ -259,7 +259,7 @@ const weeklyEmailStatus = document.getElementById("weeklyEmailStatus");
 function renderWeeklyEmailPreference(preferences) {
   if (!weeklyEmailSection || !weeklyEmailToggle) return;
   const known = preferences && typeof preferences.weeklyEmail === "boolean";
-  weeklyEmailSection.hidden = !known;
+  setHidden(weeklyEmailSection, !known);
   if (known) weeklyEmailToggle.checked = preferences.weeklyEmail;
 }
 

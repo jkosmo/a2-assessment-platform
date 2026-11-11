@@ -204,9 +204,12 @@
       }
       /* Ett kurs åpent alene: gruppen viker, og et åpent fullført kurs ser ut som før (eget kort, egen grønn linje). */
       .course-accordion--focused .course-done-group:not(:has(.is-focused)) { display: none; }
-      .course-accordion--focused .course-done-group { border: 0; background: transparent; }
+      /* Åpent alene er gruppa bare en ramme uten egen form: ingen klipping og ingen rutenettkolonne. Lesevisningen setter med vilje
+         `overflow: visible` på kortet, så hodet («Lukk», tittel) blir stående øverst når man ruller; bredt innhold (kodeblokk,
+         tabell) skal ikke klippes (QA-porten 2.152.0, bør 2). */
+      .course-accordion--focused .course-done-group { display: block; overflow: visible; border: 0; background: transparent; }
       .course-accordion--focused .course-done-group-bar { display: none; }
-      .course-accordion--focused .course-done-group > .course-accordion-item--done.is-focused { border: 1px solid #b8d9c6; border-radius: var(--radius-card); }
+      .course-accordion--focused .course-done-group > .course-accordion-item--done.is-focused:not(.course-reading) { border: 1px solid #b8d9c6; border-radius: var(--radius-card); }
       .course-accordion--focused .course-done-group > .course-accordion-item--done.is-focused > .course-progress { display: block; }
       .course-accordion--focused .course-done-group .course-done-row .course-accordion-header { min-height: 0; padding: var(--space-1) var(--space-2); font-size: 14px; line-height: normal; }
       /* Grensen mellom pågående og fullførte kurs. Navngitt, ikke bare en strek: en strek alene

@@ -56,6 +56,9 @@ export class WeeklyDigestMonitor {
       lastCycleAt: this.lastCycleAt?.toISOString() ?? null,
       lastError: this.lastError,
       lastSummary: this.lastSummary,
+      // Runden har en tidsgrense på 60 s for vurderingen (WEEKLY_DIGEST_RUN_BUDGET_MS) pluss ryddingen. Står den over 5 min, er den
+      // fastlåst (QA-porten 2.152.0, bør 4).
+      maxTickMs: 5 * 60_000,
     };
   }
 

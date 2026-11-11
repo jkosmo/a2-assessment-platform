@@ -23,7 +23,6 @@
       .profile-toggle { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 600; cursor: pointer; }
       .profile-toggle input { width: 20px; height: 20px; margin: 0; accent-color: var(--color-link-active); }
       #profileEmailSection p { margin: 4px 0 0; }
-      #profileEmailSection[hidden] { display: none; }
       .profile-dl dt { color: var(--color-meta); font-weight: 600; white-space: nowrap; }
       .profile-dl dd { margin: 0; color: var(--color-text); word-break: break-word; }
       .rights-grid { display: grid; gap: var(--space-1); margin-top: var(--space-1); }
@@ -187,7 +186,7 @@
         </section>
 
         <!-- #1139: den ukentlige e-posten. Skjult til /api/me sender `preferences` (en eldre tjener har ikke feltet). -->
-        <section class="card profile-section" id="profileEmailSection" hidden>
+        <section class="card profile-section" id="profileEmailSection" style="display:none">
           <h2 class="profile-section-title" data-i18n="profile.section.email">E-mail</h2>
           <label class="profile-toggle" for="weeklyEmailToggle">
             <input type="checkbox" id="weeklyEmailToggle" role="switch" aria-describedby="weeklyEmailHint weeklyEmailStatus">

@@ -15,6 +15,11 @@ import { COURSES, mockCourses, normalizedDom, progress, startFrozenCelebration }
 
 // Oppsettet og målingen står i test/support/mascotE2e.ts, som testen av et bytte (mascot-swap.spec.ts) også bruker.
 
+// 2.152.0 (produkteier 2026-11-11): fullførte kurs står i ett kort med ÉN felles grønn linje; kursets egen linje er skjult der og
+// vises bare mens båten feirer. Den fullførte tilstanden er derfor den felles linja.
+const line = (page: Page, id: string, celebrating: boolean) =>
+  id === "cDone" && !celebrating ? page.locator(".course-done-group-bar").first() : progress(page, id);
+
 async function shoot(page: Page, id: string, name: string, frozenByTest: boolean) {
   const info = test.info();
   const baseline = info.snapshotPath(name, { kind: "screenshot" });
@@ -23,7 +28,7 @@ async function shoot(page: Page, id: string, name: string, frozenByTest: boolean
     info.annotations.push({ type: "hoppet over", description: `${name}: ingen skjermbilder for ${process.platform}` });
     return;
   }
-  await expect(progress(page, id)).toHaveScreenshot(name, {
+  await expect(line(page, id, frozenByTest)).toHaveScreenshot(name, {
     maxDiffPixels: 0,
     threshold: 0,
     // Feiringen er fryst av testen over; Playwrights «disabled» ville spolt den til slutten, og da er båten borte.

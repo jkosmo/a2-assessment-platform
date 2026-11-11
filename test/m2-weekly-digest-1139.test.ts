@@ -156,6 +156,24 @@ describe("#1139: én per uke, og tempoet", () => {
     expect(times[1]! - times[0]!).toBe(WEEKLY_DIGEST_SPACING_MS);
     expect(times[0]!).toBeGreaterThanOrEqual(weeklyDigestSendStart(WEEK).getTime());
   });
+
+  it("QA-porten (bør 1): første runde kl. 09:00 gir ikke flere samme tid; ingen før nå; neste runde fortsetter etter den siste", async () => {
+    const week = "2026-11-23";
+    const nine = new Date("2026-11-23T08:00:00Z"); // 09:00 Oslo
+    const people = [await person(), await person(), await person()];
+    await withOutstanding(people);
+    await job(nine, [people[0]!.id, people[1]!.id]);
+    await job(new Date(nine.getTime() + 5 * 60_000), [people[2]!.id]);
+    const queuedAt = (await rows(people.map((p) => p.id))).filter((r) => r.weekKey === week).map((r) => r.queuedAt!.getTime());
+    const events = [];
+    for (const row of await rows(people.map((p) => p.id))) events.push((await eventFor(row.id))[0]!.availableAt.getTime());
+    expect(new Set(events).size).toBe(3);
+    expect(events.sort()).toEqual(queuedAt.sort());
+    const sorted = [...events].sort((x, y) => x - y);
+    expect(sorted[0]!).toBeGreaterThanOrEqual(nine.getTime());
+    expect(sorted[1]! - sorted[0]!).toBeGreaterThanOrEqual(WEEKLY_DIGEST_SPACING_MS);
+    expect(sorted[2]! - sorted[1]!).toBeGreaterThanOrEqual(WEEKLY_DIGEST_SPACING_MS);
+  });
 });
 
 describe("#1139: behandleren sjekker alt på nytt rett før sending", () => {
@@ -185,6 +203,18 @@ describe("#1139: behandleren sjekker alt på nytt rett før sending", () => {
     await deliverWeeklyDigest(q.row.id, { send, now: MONDAY_0730 });
     expect(send).not.toHaveBeenCalled();
     expect((await rows([q.p.id]))[0]).toMatchObject({ status: "skipped", reason: "unsubscribed" });
+  });
+
+  it("sluttet eller anonymisert etter at raden ble laget → `skipped` (`not_reachable`), ingen e-post", async () => {
+    const send = okSend();
+    const left = await queued();
+    await prisma.user.update({ where: { id: left.p.id }, data: { activeStatus: false } });
+    await deliverWeeklyDigest(left.row.id, { send, now: MONDAY_0730 });
+    const anonymized = await queued();
+    await prisma.user.update({ where: { id: anonymized.p.id }, data: { isAnonymized: true } });
+    await deliverWeeklyDigest(anonymized.row.id, { send, now: MONDAY_0730 });
+    expect(send).not.toHaveBeenCalled();
+    for (const q of [left, anonymized]) expect((await rows([q.p.id]))[0]).toMatchObject({ status: "skipped", reason: "not_reachable" });
   });
 
   it("nødstopp, for sent (etter tirsdag 17:00 Oslo), ikke lenger på lista, ingenting igjen → `skipped`", async () => {
@@ -255,6 +285,15 @@ describe("#1139: ryddingen og innsynet", () => {
     expect(statuses.get(stuck.id)).toEqual(["uncertain", "interrupted"]);
     expect(statuses.get(lost.id)).toEqual(["failed", "lost_event"]);
     expect(statuses.has(old.id)).toBe(false);
+  });
+
+  it("QA-porten (bør 3): en rad i kø denne uka står til to timer etter tirsdag 17:00 Oslo; etter det er hendelsen tapt", async () => {
+    const p = await person();
+    await prisma.weeklyDigest.create({ data: { userId: p.id, weekKey: WEEK, status: "queued" } });
+    expect(await job(new Date("2026-11-17T17:59:00Z"), [p.id])).toMatchObject({ lostEvents: 0 }); // 18:59 Oslo
+    expect((await rows([p.id]))[0]).toMatchObject({ status: "queued" });
+    expect(await job(new Date("2026-11-17T18:01:00Z"), [p.id])).toMatchObject({ lostEvents: 1 }); // 19:01 Oslo
+    expect((await rows([p.id]))[0]).toMatchObject({ status: "failed", reason: "lost_event" });
   });
 
   it("innsynet tar med ukene", async () => {

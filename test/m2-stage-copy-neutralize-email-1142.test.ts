@@ -10,6 +10,7 @@ import {
 } from "../src/modules/course/courseAssignmentNotice.js";
 import { runCourseMajorEmailSchedule } from "../src/modules/course/courseMajorVersionEmail.js";
 import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../src/modules/outbox/outboxService.js";
+import { weeklyDigestWeekKey } from "../src/modules/weeklyDigest/weeklyDigestContent.js";
 
 // #1142 skive 3: prod → stage-kopi (`npm run stage-copy:neutralize-email`, doc/design/PLAN_1142.md, punkt 2; Codex runde 1
 // nr. 2 og runde 2). Oppsettet er det en kopi av prod kan ha med seg: rader om nye kurs i `waiting`, `queued` (med en hendelse
@@ -74,7 +75,7 @@ describe("#1142 skive 3 — prod → stage-kopi: det som venter i prod, sendes a
     expect(summary.weeklyDigestsPendingSkipped).toBeGreaterThanOrEqual(1);
     expect((await prisma.weeklyDigest.findUniqueOrThrow({ where: { id: weekly.id } })).status).toBe("skipped");
     // Uka kopien ble tatt: alle nåbare uten rad har en `skipped`-rad, så stage ikke sender den ukentlige e-posten i dag.
-    const thisWeek = (await import("../src/modules/weeklyDigest/weeklyDigestContent.js")).weeklyDigestWeekKey(new Date());
+    const thisWeek = weeklyDigestWeekKey(new Date());
     expect(await prisma.weeklyDigest.findUnique({ where: { userId_weekKey: { userId: unseen.id, weekKey: thisWeek } } })).toMatchObject({ status: "skipped", reason: "copied_from_prod" });
     const weeklyEvents = (await prisma.outboxEvent.findMany({ where: { type: OUTBOX_EVENT_TYPES.weeklyDigest } })).filter((e) => e.payloadJson.includes(weekly.id));
     expect(weeklyEvents.map((e) => e.status)).toEqual(["failed"]);

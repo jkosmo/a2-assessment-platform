@@ -1221,6 +1221,7 @@ model WeeklyDigest {
   // queued | sending | sent | skipped | uncertain | failed
   status    String
   reason    String?
+  // Tidspunktet raden er satt opp til å sendes (`availableAt` på hendelsen). Jobben regner neste ledige tid fra den siste.
   queuedAt  DateTime?
   sendingAt DateTime?
   sentAt    DateTime?

@@ -31,6 +31,7 @@ import { runInTransaction, type DbTransactionClient } from "../../db/transaction
 import { recipientLocale } from "../../i18n/recipientLocale.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { getActiveRoles } from "../../repositories/userRepository.js";
+import { isReachableParticipant } from "../user/participantReach.js";
 import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 import { deliverIllustratedEmail, type NotificationResult } from "../certification/participantNotificationService.js";
 import { EmailContainsLinkError } from "../certification/illustratedEmail.js";
@@ -163,9 +164,12 @@ export async function runWeeklyDigestSchedule(input?: { now?: Date; onlyUserIds?
     LIMIT ${WEEKLY_DIGEST_EVALUATED_PER_RUN + 1}
   `;
   const started = Date.now();
-  // Hvor mange som alt er satt opp denne uka: den neste får plassen etter dem (12 minutter imellom).
-  let index = await prisma.weeklyDigest.count({ where: { weekKey, status: { not: WEEKLY_DIGEST_STATUS.skipped } } });
-  const sendStart = weeklyDigestSendStart(weekKey);
+  // Neste ledige tid: 12 minutter etter den siste som er satt opp denne uka, aldri før mandag 07:00 og aldri før nå. `queuedAt` er
+  // tidspunktet raden er satt opp til å sendes (`availableAt` på hendelsen). Regnet fra den siste, ikke fra antallet: kommer første
+  // runde sent (workeren startet på nytt, bryteren slått på 09:00), ville ellers alle som «skulle vært sendt» fått samme tid
+  // (QA-porten 2.152.0, bør 1).
+  const last = await prisma.weeklyDigest.aggregate({ where: { weekKey, queuedAt: { not: null } }, _max: { queuedAt: true } });
+  let nextSlot = Math.max(now.getTime(), weeklyDigestSendStart(weekKey).getTime(), (last._max.queuedAt?.getTime() ?? -Infinity) + WEEKLY_DIGEST_SPACING_MS);
 
   for (const user of candidates) {
     if (summary.evaluated >= WEEKLY_DIGEST_EVALUATED_PER_RUN || Date.now() - started > WEEKLY_DIGEST_RUN_BUDGET_MS) {
@@ -184,11 +188,11 @@ export async function runWeeklyDigestSchedule(input?: { now?: Date; onlyUserIds?
       summary.nothingOutstanding += 1;
       continue;
     }
-    const availableAt = new Date(Math.max(now.getTime(), sendStart.getTime() + index * WEEKLY_DIGEST_SPACING_MS));
+    const availableAt = new Date(nextSlot);
     const created = await runInTransaction(async (tx) => {
       const rows = await tx.$queryRaw<Array<{ id: string }>>`
         INSERT INTO "WeeklyDigest" ("id", "userId", "weekKey", "status", "queuedAt", "createdAt", "updatedAt")
-        VALUES (gen_random_uuid()::text, ${user.id}, ${weekKey}, ${WEEKLY_DIGEST_STATUS.queued}, ${utc(now)}, ${NOW_UTC}, ${NOW_UTC})
+        VALUES (gen_random_uuid()::text, ${user.id}, ${weekKey}, ${WEEKLY_DIGEST_STATUS.queued}, ${utc(availableAt)}, ${NOW_UTC}, ${NOW_UTC})
         ON CONFLICT ("userId", "weekKey") DO NOTHING
         RETURNING id
       `;
@@ -198,7 +202,7 @@ export async function runWeeklyDigestSchedule(input?: { now?: Date; onlyUserIds?
     });
     if (created) {
       summary.queued += 1;
-      index += 1;
+      nextSlot += WEEKLY_DIGEST_SPACING_MS;
     }
   }
   return summary;
@@ -254,7 +258,7 @@ export async function deliverWeeklyDigest(
       where: { id: row.userId },
       select: { email: true, name: true, preferredLocale: true, activeStatus: true, isAnonymized: true, weeklyEmailEnabled: true },
     });
-    if (!user || !user.activeStatus || user.isAnonymized) return void (await skip("not_reachable"));
+    if (!user || !isReachableParticipant(user)) return void (await skip("not_reachable"));
     if (!user.weeklyEmailEnabled) return void (await skip("unsubscribed"));
     if (!isWeeklyDigestRecipient(user.email)) return void (await skip("not_listed"));
     const locale = recipientLocale(user);

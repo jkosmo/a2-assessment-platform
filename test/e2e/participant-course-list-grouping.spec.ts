@@ -155,6 +155,13 @@ test("2.152.0: et fullført kurs åpnet fra kortet står alene, med egen grønn 
   for (const id of ["d0", "d2", "open1"]) await expect(page.locator(`[data-course-id="${id}"]`)).toBeHidden();
   await expect(page.locator(".course-done-group-bar")).toBeHidden();
   await expect(page.locator('[data-course-id="d1"] .course-progress-bar')).toBeVisible();
+  // QA-porten 2.152.0 (bør 2): åpent alene klipper ikke gruppa (lesevisningens faste hode og bredt innhold), og er ikke et rutenett.
+  const groupStyle = await page.locator(".course-done-group").evaluate((el) => ({ display: getComputedStyle(el).display, overflow: getComputedStyle(el).overflow }));
+  expect(groupStyle).toEqual({ display: "block", overflow: "visible" });
+  // Lesevisningen: lesearket har ingen grønn ramme (`.course-reading` vinner over gruppas ramme).
+  await page.locator('[data-course-id="d1"]').evaluate((el) => el.classList.add("course-reading"));
+  expect(await page.locator('[data-course-id="d1"]').evaluate((el) => getComputedStyle(el).borderTopColor)).toBe("rgba(0, 0, 0, 0)");
+  await page.locator('[data-course-id="d1"]').evaluate((el) => el.classList.remove("course-reading"));
   await page.locator("#courseBackBtn").click();
   await expect(page.locator(".course-done-group-bar")).toBeVisible();
   await expect(page.locator('[data-course-id="d1"] .course-progress-bar')).toBeHidden();
