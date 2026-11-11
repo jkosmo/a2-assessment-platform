@@ -225,6 +225,37 @@ const sendWeeklyDigest: WeeklyDigestSend = (input) =>
     logPayload: { notificationType: "weekly_digest", digestId: input.digestId, weekKey: input.content.weekKey, recipient: { email: input.recipientEmail, locale: input.locale } },
   });
 
+/** `digestId` i loggen for en sending administratoren har bestilt til seg selv: ingen rad finnes. */
+export const WEEKLY_DIGEST_SELF_SEND_ID = "self";
+
+export type WeeklyDigestSelfSendResult =
+  | { sent: true }
+  | { sent: false; reason: "not_found" | "nothing_outstanding" | "not_delivered" | "uncertain"; detail?: string };
+
+/**
+ * Engangsutsending til en administrator selv (produkteier 2026-11-11): ukens e-post med en gang, også utenfor vinduet, slik at den
+ * kan ses før alle får den. Skriver INGEN `WeeklyDigest`-rad, så jobben sender som før på mandag. Bryteren, mottakerlista og
+ * WEEKLY_EMAIL_ENABLED gjelder ikke: det er en uttrykkelig bestilling fra personen selv, til egen adresse. Kanalen gjelder (av → ikke
+ * sendt), og lenkesperren kaster som ellers.
+ */
+export async function sendWeeklyDigestToSelf(
+  userId: string,
+  options?: { send?: WeeklyDigestSend; now?: Date },
+): Promise<WeeklyDigestSelfSendResult> {
+  const send = options?.send ?? sendWeeklyDigest;
+  const now = options?.now ?? new Date();
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true, preferredLocale: true } });
+  if (!user) return { sent: false, reason: "not_found" };
+  const locale = recipientLocale(user);
+  const content = await getWeeklyDigestContent({ userId, roles: await getActiveRoles(userId), locale, now });
+  if (!content) return { sent: false, reason: "nothing_outstanding" };
+  const result = await send({ digestId: WEEKLY_DIGEST_SELF_SEND_ID, userId, recipientEmail: user.email, recipientName: user.name, locale, content });
+  if (result.delivered) return { sent: true };
+  // Avbrutt underveis (#1115): den kan ha gått. Siden ber om å sjekke innboksen før et nytt trykk.
+  const detail = (result.failureReason ?? "unknown").slice(0, 200);
+  return { sent: false, reason: result.ambiguous ? "uncertain" : "not_delivered", detail };
+}
+
 class WeeklyDigestNotDeliveredError extends Error {}
 
 /** Betinget: endrer bare raden når den fortsatt står i `from`. */

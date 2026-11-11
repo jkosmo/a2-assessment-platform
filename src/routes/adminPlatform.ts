@@ -24,6 +24,7 @@ import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { registerExternalCompletions } from "../modules/course/externalCompletionService.js";
+import { sendWeeklyDigestToSelf } from "../modules/weeklyDigest/weeklyDigestJob.js";
 
 const adminPlatformRouter = Router();
 
@@ -253,6 +254,22 @@ adminPlatformRouter.post("/course-completions/external", async (request, respons
       dryRun: parsed.data.dryRun,
     });
     response.json({ dryRun: parsed.data.dryRun, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── POST /api/admin/platform/weekly-email/send-to-me (#1139) ─────────────────────
+// Ukens e-post fra båten til den innloggede administratoren, med en gang (produkteier 2026-11-11). Ingen bruker-id fra
+// forespørselen: alltid til egen adresse. Skriver ingen `WeeklyDigest`-rad, så mandagens utsending går som før.
+adminPlatformRouter.post("/weekly-email/send-to-me", async (request, response, next) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    response.json(await sendWeeklyDigestToSelf(userId));
   } catch (error) {
     next(error);
   }

@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 //   - `WeeklyDigest` skrives bare av weeklyDigestJob.ts (jobben, behandleren og nøytraliseringen av en prod-kopi);
 //   - `User.weeklyEmailEnabled` skrives bare av PUT /api/me/preferences (routes/me.ts);
 //   - ingen admin-rute eller rapport leser dem: arbeidsgiver skal ikke kunne se hvem som får, åpner eller melder seg av.
-// Lesere som er lov: modulen selv (weeklyDigest/), innsynet og profilen (routes/me.ts).
+// Lesere som er lov: modulen selv (weeklyDigest/), innsynet og profilen (routes/me.ts). routes/adminPlatform.ts kaller bare modulen
+// («Send til meg nå», 2.153.0): sender til den innloggede selv og leser verken tabellen eller bryteren.
 
 const SRC = fileURLToPath(new URL("../src", import.meta.url));
 
@@ -41,8 +42,11 @@ describe("#1139: vakt for den ukentlige e-posten", () => {
       .filter((f) => /weeklyDigest\b|weeklyDigests\b|"WeeklyDigest"|weeklyEmailEnabled/.test(f.text))
       .map((f) => f.rel)
       .filter((rel) => !rel.startsWith("modules/weeklyDigest/"));
-    // Utboksen kjenner typen og kaller behandleren; nøytraliseringen av en prod-kopi kaller modulen; index.ts starter overvåkeren.
-    expect(readers.sort()).toEqual(["index.ts", "modules/course/courseAssignmentNotice.ts", "modules/outbox/outboxService.ts", "routes/me.ts"].sort());
+    // Utboksen kjenner typen og kaller behandleren; nøytraliseringen av en prod-kopi kaller modulen; index.ts starter overvåkeren;
+    // administratorsiden kaller «send til meg selv».
+    expect(readers.sort()).toEqual(
+      ["index.ts", "modules/course/courseAssignmentNotice.ts", "modules/outbox/outboxService.ts", "routes/adminPlatform.ts", "routes/me.ts"].sort(),
+    );
     for (const rel of readers.filter((r) => r !== "routes/me.ts")) {
       const text = files.find((f) => f.rel === rel).text;
       expect(text, `${rel} skal bare kalle modulen, ikke lese tabellen eller bryteren`).not.toMatch(/prisma\.weeklyDigest|"WeeklyDigest"|weeklyEmailEnabled/);

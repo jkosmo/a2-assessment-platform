@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.153.0 - 2026-11-11
+
+«Send til meg nå» for den ukentlige e-posten (#1139), på administratorsiden for plattformen.
+
+- **Hva brukerne merker:** administratorer får et kort «Ukentlig e-post fra båten» på `/admin-platform` med knappen «Send til meg
+  nå». Den sender ukens e-post til egen adresse med en gang, slik den ser ut for dem, så den kan ses før alle får den
+  (produkteier 2026-11-11). Ingenting utestående → ingen e-post, og siden sier det. Ikke sendt → årsaken står med; avbrutt
+  underveis → «kan ha gått, sjekk innboksen før du prøver igjen».
+- **Slik virker det:** `POST /api/admin/platform/weekly-email/send-to-me` (bare administrator, alltid den innloggede) kaller
+  `sendWeeklyDigestToSelf`. Den skriver ingen `WeeklyDigest`-rad, så mandagens utsending går som før. Bryteren, mottakerlista og
+  `WEEKLY_EMAIL_ENABLED` gjelder ikke; kanalen og lenkesperren gjør. Sendes fra appen, ikke workeren.
+- **Ved utrulling:** ingen migrering, ingen nye innstillinger.
+- **Kjente mangler:** ingen sperre mot mange trykk etter hverandre; hvert trykk bruker av sendekvoten (10 i timen).
+
 ## 2.152.0 - 2026-11-11
 
 Den ukentlige e-posten fra båten (#1139, `doc/design/PLAN_1139.md`), og fullførte kurs mer kompakt i «Mine kurs».

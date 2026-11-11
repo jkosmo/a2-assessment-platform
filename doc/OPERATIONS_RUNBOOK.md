@@ -510,6 +510,9 @@ Planen: `doc/design/PLAN_1139.md`. To innstillinger på WORKEREN, i Bicep og i G
    infrastrukturutrulling (eller sett dem på workeren og start den på nytt). Første mandag: bare produkteier får den.
 3. Når produkteier har godkjent e-posten: `WEEKLY_EMAIL_RECIPIENTS=*`. **Stage beholder lista for godt.**
 
+**Se e-posten før mandag:** en administrator kan sende ukens e-post til seg selv med en gang: `/admin-platform`, kortet «Ukentlig
+e-post fra båten», «Send til meg nå» (2.153.0). Lager ingen rad, så mandagens utsending går som før.
+
 **Kontroll:** `weeklyDigestMonitor` i workerens helsesvar, med `lastSummary` (`weekKey`, `inWindow`, `queued`,
 `nothingOutstanding`, `notReached`). Første 15 minutter etter oppstart står det `startup_grace`. Jobben lager rader mandag
 07:00–12:00 Oslo; utsendingen spres med høyst 5 i timen (sendekvoten er 10 i timen for hele abonnementet), så 60 mottakere er
