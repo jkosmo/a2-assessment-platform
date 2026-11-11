@@ -587,6 +587,142 @@ export function sortCourseAssignmentDigestCourses(locale: SupportedLocale, cours
     });
 }
 
+// ── #1139: den ukentlige e-posten (doc/design/PLAN_1139.md, punkt 1 og 2) ──────────────────────────────────────────────────
+//
+// Emnet er fast. Innholdet i rekkefølge: hilsen, båtens linje for humøret (fra maskotpakken, i weeklyDigestEmail.ts), frister som
+// har gått ut, frister innen to uker, kurs i gang med steg igjen, tildelte kurs som ikke er påbegynt, avslutning. Siste linje er
+// ALLTID avmeldingen, steg for steg, med bryterens navn nøyaktig som på profilen (`WEEKLY_EMAIL_TOGGLE_NAME`; testen sammenligner
+// med profilens oversettelse). Tonen: humor og et snev av dårlig samvittighet, aldri skam. Båten står for humoren; resten er rett
+// fram.
+
+/** Bryteren på profilen. Profilens oversettelse skal bruke nøyaktig denne teksten (skive 2, testen sammenligner). */
+export const WEEKLY_EMAIL_TOGGLE_NAME: Record<SupportedLocale, string> = {
+  "en-GB": "Weekly e-mail from the boat",
+  nb: "Ukentlig e-post fra båten",
+  nn: "Vekentleg e-post frå båten",
+};
+
+/** Så mange kurs vises per gruppe; resten blir «… og N til». */
+export const WEEKLY_DIGEST_MAX_PER_GROUP = 8;
+
+type WeeklyDigestLabels = {
+  subject: string;
+  greeting: string;
+  overdue: string;
+  dueSoon: string;
+  inProgress: string;
+  notStarted: string;
+  due: string; // {date}
+  stepsLeftOne: string;
+  stepsLeftMany: string; // {n}
+  more: string; // {n}
+  closing: string;
+  reason: string; // {toggle}
+};
+
+const weeklyDigestMessages: Record<SupportedLocale, WeeklyDigestLabels> = {
+  "en-GB": {
+    subject: "The learning platform: status of your courses",
+    greeting: "Hello!",
+    overdue: "The due date has passed:",
+    dueSoon: "Due soon:",
+    inProgress: "In progress:",
+    notStarted: "Assigned, not started:",
+    due: "due {date}",
+    stepsLeftOne: "1 step left",
+    stepsLeftMany: "{n} steps left",
+    more: "… and {n} more",
+    closing: "Log in to A-2 læringsplattform and open My courses.",
+    reason:
+      "You get this e-mail on Mondays because you have courses waiting on A-2 læringsplattform. To stop it: log in, open Profile and turn off «{toggle}».",
+  },
+  nb: {
+    subject: "Læringsplattformen, status på dine kurs",
+    greeting: "Hei!",
+    overdue: "Fristen har gått ut:",
+    dueSoon: "Frist snart:",
+    inProgress: "I gang:",
+    notStarted: "Tildelt, ikke påbegynt:",
+    due: "frist {date}",
+    stepsLeftOne: "1 steg igjen",
+    stepsLeftMany: "{n} steg igjen",
+    more: "… og {n} til",
+    closing: "Logg inn på A-2 læringsplattform og åpne Mine kurs.",
+    reason:
+      "Du får denne e-posten på mandager fordi du har kurs som venter på A-2 læringsplattform. Vil du ikke ha den: logg inn, åpne Profil og slå av «{toggle}».",
+  },
+  nn: {
+    subject: "Læringsplattforma, status på kursa dine",
+    greeting: "Hei!",
+    overdue: "Fristen har gått ut:",
+    dueSoon: "Frist snart:",
+    inProgress: "I gang:",
+    notStarted: "Tildelt, ikkje påbyrja:",
+    due: "frist {date}",
+    stepsLeftOne: "1 steg att",
+    stepsLeftMany: "{n} steg att",
+    more: "… og {n} til",
+    closing: "Logg inn på A-2 læringsplattform og opne Mine kurs.",
+    reason:
+      "Du får denne e-posten på måndagar fordi du har kurs som ventar på A-2 læringsplattform. Vil du ikkje ha han: logg inn, opne Profil og slå av «{toggle}».",
+  },
+};
+
+export type WeeklyDigestMessageCourse = { title: string; dueAt: Date | null; stepsLeft: number; started: boolean };
+
+/** Fristen som dato i Oslo (fristdager er Oslo-dager, planen 12.11). */
+function formatOsloDate(date: Date, locale: SupportedLocale): string {
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "Europe/Oslo" }).format(date);
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * Teksten i den ukentlige e-posten. `moodLine` er båtens linje (maskotpakken). Gruppene uten kurs utelates; minst én gruppe har
+ * kurs (behandleren sender aldri en tom e-post).
+ */
+export function getWeeklyDigestMessage(
+  locale: SupportedLocale,
+  input: {
+    moodLine: string;
+    overdue: WeeklyDigestMessageCourse[];
+    dueSoon: WeeklyDigestMessageCourse[];
+    inProgress: WeeklyDigestMessageCourse[];
+    notStarted: WeeklyDigestMessageCourse[];
+  },
+): { subject: string; paragraphs: string[]; reason: string } {
+  const t = weeklyDigestMessages[locale];
+  const groups: Array<[string, WeeklyDigestMessageCourse[], { due: boolean; steps: boolean }]> = [
+    [t.overdue, input.overdue, { due: true, steps: true }],
+    [t.dueSoon, input.dueSoon, { due: true, steps: true }],
+    [t.inProgress, input.inProgress, { due: true, steps: true }],
+    [t.notStarted, input.notStarted, { due: true, steps: false }],
+  ];
+  const sections = groups
+    .filter(([, courses]) => courses.length > 0)
+    .map(([heading, courses, show]) => {
+      const lines = courses.slice(0, WEEKLY_DIGEST_MAX_PER_GROUP).map((course) => {
+        const details: string[] = [];
+        if (show.due && course.dueAt) details.push(t.due.split("{date}").join(formatOsloDate(course.dueAt, locale)));
+        if (show.steps && course.started && course.stepsLeft > 0) {
+          details.push(course.stepsLeft === 1 ? t.stepsLeftOne : t.stepsLeftMany.split("{n}").join(String(course.stepsLeft)));
+        }
+        return `• «${course.title}»${details.length > 0 ? ` – ${details.join(", ")}` : ""}`;
+      });
+      const hidden = courses.length - WEEKLY_DIGEST_MAX_PER_GROUP;
+      if (hidden > 0) lines.push(t.more.split("{n}").join(String(hidden)));
+      return `${heading}\n${lines.join("\n")}`;
+    });
+  if (sections.length === 0) throw new Error("A weekly digest needs at least one course.");
+  return {
+    subject: t.subject,
+    paragraphs: [t.greeting, input.moodLine.trim(), ...sections, t.closing],
+    reason: t.reason.split("{toggle}").join(WEEKLY_EMAIL_TOGGLE_NAME[locale]),
+  };
+}
+
 export function getCourseAssignmentDigestMessage(
   locale: SupportedLocale,
   courses: CourseAssignmentDigestCourse[],

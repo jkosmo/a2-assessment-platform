@@ -19,7 +19,7 @@ import { BOAT_MOODS, type BoatMood } from "../gamification/moods.js";
 import { SUPPORTED_LOCALES, type SupportedLocale } from "../../i18n/locale.js";
 
 /** Versjonen av formatet i `mascot.json` som denne koden leser. */
-export const MASCOT_PACK_VERSION = 2;
+export const MASCOT_PACK_VERSION = 3;
 
 /**
  * Hva som er lagt til i hver versjon etter den første. Når koden krever en ny nøkkel (for eksempel `moods.anker`,
@@ -29,6 +29,8 @@ export const MASCOT_PACK_VERSION = 2;
 const ADDED_IN_VERSION: Record<number, string[]> = {
   // #1142: begynnelsen av innledningen i den samlede e-posten om nye kurs.
   2: ["emailTexts.courseAssignedIntro"],
+  // #1139: bildeteksten for humøret, når det står øverst i den ukentlige e-posten.
+  3: BOAT_MOODS.map((mood) => `moods.${mood}.alt`),
 };
 
 /** Situasjonene der en e-post har et bilde øverst (#1141). Nøklene i `EMAIL_ILLUSTRATIONS`. */
@@ -76,8 +78,8 @@ export type MascotPack = {
   dir: string;
   version: number;
   name: Localized;
-  /** Bildet er et filnavn i `images/`. */
-  moods: Record<BoatMood, { image: string; line: Localized }>;
+  /** Bildet er et filnavn i `images/`. `alt` (versjon 3, #1139): bildeteksten når humøret står øverst i den ukentlige e-posten. */
+  moods: Record<BoatMood, { image: string; line: Localized; alt: Localized }>;
   emails: Record<MascotEmailSituation, { image: string; alt: Localized }>;
   emailTexts: Record<MascotEmailText, Localized>;
   figure: {
@@ -176,7 +178,11 @@ export function readMascotPack(root: string, id: string): { pack: MascotPack; pr
 
   const moods = {} as MascotPack["moods"];
   for (const mood of BOAT_MOODS) {
-    moods[mood] = { image: image(raw.moods?.[mood]?.image, `moods.${mood}.image`), line: localized(raw.moods?.[mood]?.line, `moods.${mood}.line`) };
+    moods[mood] = {
+      image: image(raw.moods?.[mood]?.image, `moods.${mood}.image`),
+      line: localized(raw.moods?.[mood]?.line, `moods.${mood}.line`),
+      alt: localized(raw.moods?.[mood]?.alt, `moods.${mood}.alt`),
+    };
   }
   const emails = {} as MascotPack["emails"];
   for (const situation of MASCOT_EMAIL_SITUATIONS) {

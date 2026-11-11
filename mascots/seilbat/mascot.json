@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "name": {
     "nb": "Seilbåten",
     "nn": "Seglbåten",
@@ -12,6 +12,11 @@
         "nb": "Klar til å kaste loss. Les din første seksjon, så setter vi kursen.",
         "nn": "Klar til å kaste laus. Les den første seksjonen din, så set vi kursen.",
         "en-GB": "Ready to cast off. Read your first section and we'll set our course."
+      },
+      "alt": {
+        "nb": "Båten kaster loss: fortøyningen slippes og seilet går opp",
+        "nn": "Båten kastar laus: fortøyinga vert sleppt og seglet går opp",
+        "en-GB": "The boat casts off: the mooring line is released and the sail goes up"
       }
     },
     "mett": {
@@ -20,6 +25,11 @@
         "nb": "Full fart! God bør i seilene.",
         "nn": "Full fart! God bør i segla.",
         "en-GB": "Full speed! A fine breeze in the sails."
+      },
+      "alt": {
+        "nb": "Båten seiler for fullt seil, med vimpelen til topps",
+        "nn": "Båten seglar for fullt segl, med vimpelen til topps",
+        "en-GB": "The boat sails under full sail, with its pennant flying"
       }
     },
     "sulten": {
@@ -28,6 +38,11 @@
         "nb": "Flau vind her ute. En seksjon til, så fyller vi seilene.",
         "nn": "Flau vind her ute. Ein seksjon til, så fyller vi segla.",
         "en-GB": "Light airs out here. One more section and we'll fill the sails."
+      },
+      "alt": {
+        "nb": "Båten ligger stille i flau vind med slapt seil, mens skipperen fisker og en måke sitter i baugen",
+        "nn": "Båten ligg stille i flau vind med slapt segl, medan skipperen fiskar og ein måse sit i baugen",
+        "en-GB": "The boat lies still in light airs with a slack sail, while the skipper fishes and a seagull sits in the bow"
       }
     },
     "sur": {
@@ -36,6 +51,11 @@
         "nb": "Vi ligger i dødvannet. Jeg sier ikke noe. Jeg bare nevner det.",
         "nn": "Vi ligg i daudvatnet. Eg seier ikkje noko. Eg berre nemner det.",
         "en-GB": "We're stuck in dead water. I'm not saying anything. I'm just mentioning it."
+      },
+      "alt": {
+        "nb": "Båten ligger i havna og venter på vind, med slakt seil",
+        "nn": "Båten ligg i hamna og ventar på vind, med slakt segl",
+        "en-GB": "The boat lies in the harbour waiting for wind, its sail slack"
       }
     },
     "dramatisk": {
@@ -44,6 +64,11 @@
         "nb": "Jeg begynner å føle meg akterutseilt. Måkene er hyggelige, da.",
         "nn": "Eg byrjar å kjenne meg akterutsegla. Måsane er hyggelege, då.",
         "en-GB": "I'm starting to feel left behind in port. The seagulls are nice, though."
+      },
+      "alt": {
+        "nb": "Båten ligger i havna og venter på vind, med slakt seil",
+        "nn": "Båten ligg i hamna og ventar på vind, med slakt segl",
+        "en-GB": "The boat lies in the harbour waiting for wind, its sail slack"
       }
     }
   },

@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "name": {
     "nb": "Testbåten",
     "nn": "Testbåten",
@@ -12,6 +12,11 @@
         "nb": "Testbåten er klar. Første seksjon er første testkjøring.",
         "nn": "Testbåten er klar. Den første seksjonen er den første testkøyringa.",
         "en-GB": "The test boat is ready. Your first section is the first test run."
+      },
+      "alt": {
+        "nb": "Testbåten, humøret «ny»",
+        "nn": "Testbåten, humøret «ny»",
+        "en-GB": "The test boat, mood «ny»"
       }
     },
     "mett": {
@@ -20,6 +25,11 @@
         "nb": "Testbåten går som en klokke.",
         "nn": "Testbåten går som ei klokke.",
         "en-GB": "The test boat runs like clockwork."
+      },
+      "alt": {
+        "nb": "Testbåten, humøret «mett»",
+        "nn": "Testbåten, humøret «mett»",
+        "en-GB": "The test boat, mood «mett»"
       }
     },
     "sulten": {
@@ -28,6 +38,11 @@
         "nb": "Testbåten venter på neste seksjon.",
         "nn": "Testbåten ventar på neste seksjon.",
         "en-GB": "The test boat is waiting for the next section."
+      },
+      "alt": {
+        "nb": "Testbåten, humøret «sulten»",
+        "nn": "Testbåten, humøret «sulten»",
+        "en-GB": "The test boat, mood «sulten»"
       }
     },
     "sur": {
@@ -36,6 +51,11 @@
         "nb": "Testbåten har ligget stille en stund.",
         "nn": "Testbåten har lege still ei stund.",
         "en-GB": "The test boat has been idle for a while."
+      },
+      "alt": {
+        "nb": "Testbåten, humøret «sur»",
+        "nn": "Testbåten, humøret «sur»",
+        "en-GB": "The test boat, mood «sur»"
       }
     },
     "dramatisk": {
@@ -44,6 +64,11 @@
         "nb": "Testbåten lurer på om du har glemt den.",
         "nn": "Testbåten lurer på om du har gløymt han.",
         "en-GB": "The test boat wonders if you have forgotten it."
+      },
+      "alt": {
+        "nb": "Testbåten, humøret «dramatisk»",
+        "nn": "Testbåten, humøret «dramatisk»",
+        "en-GB": "The test boat, mood «dramatisk»"
       }
     }
   },
