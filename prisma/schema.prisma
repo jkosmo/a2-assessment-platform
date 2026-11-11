@@ -88,6 +88,9 @@ model User {
   department                    String?
   manager                       String?
   activeStatus                  Boolean                  @default(true)
+  // #1139: den ukentlige e-posten fra båten. På som standard; slås av med bryteren på profilen (`PUT /api/me/preferences`, det
+  // ENESTE stedet som skriver feltet). Arbeidsgiver ser det ikke: ingen admin-rute eller rapport leser det.
+  weeklyEmailEnabled            Boolean                  @default(true)
   lastLoginAt                   DateTime?
   isAnonymized                  Boolean                  @default(false)
   anonymizedAt                  DateTime?

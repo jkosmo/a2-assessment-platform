@@ -246,8 +246,42 @@ function renderProfile(meData) {
     profileConsent.textContent = t("profile.field.notAccepted");
   }
 
+  renderWeeklyEmailPreference(meData?.preferences);
   profileContent.style.display = "";
 }
+
+// #1139: bryteren «Ukentlig e-post fra båten». Vises bare når tjeneren sender `preferences` (en eldre tjener har ikke feltet).
+// Lagres med en gang; feiler det, settes bryteren tilbake og meldingen sier det.
+const weeklyEmailSection = document.getElementById("profileEmailSection");
+const weeklyEmailToggle = document.getElementById("weeklyEmailToggle");
+const weeklyEmailStatus = document.getElementById("weeklyEmailStatus");
+
+function renderWeeklyEmailPreference(preferences) {
+  if (!weeklyEmailSection || !weeklyEmailToggle) return;
+  const known = preferences && typeof preferences.weeklyEmail === "boolean";
+  weeklyEmailSection.hidden = !known;
+  if (known) weeklyEmailToggle.checked = preferences.weeklyEmail;
+}
+
+weeklyEmailToggle?.addEventListener("change", async () => {
+  const wanted = weeklyEmailToggle.checked;
+  weeklyEmailToggle.disabled = true;
+  weeklyEmailStatus.textContent = "";
+  try {
+    const body = await apiFetch("/api/me/preferences", headers, {
+      method: "PUT",
+      body: JSON.stringify({ weeklyEmail: wanted }),
+      headers: { "Content-Type": "application/json" },
+    });
+    weeklyEmailToggle.checked = body?.preferences?.weeklyEmail ?? wanted;
+    weeklyEmailStatus.textContent = t("profile.weeklyEmail.saved");
+  } catch {
+    weeklyEmailToggle.checked = !wanted;
+    weeklyEmailStatus.textContent = t("profile.weeklyEmail.failed");
+  } finally {
+    weeklyEmailToggle.disabled = false;
+  }
+});
 
 // ── Modules rendering ─────────────────────────────────────────────────────────
 

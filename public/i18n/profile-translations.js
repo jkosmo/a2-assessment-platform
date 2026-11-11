@@ -58,6 +58,12 @@ const own = {
     "profile.field.consent": "Privacy notice accepted",
     "profile.signOut.btn": "Sign out",
     "profile.signOut.hint": "You are signed out of the platform and of the Microsoft account in this browser. The next time, you choose which account to sign in with.",
+    // #1139: navnet skal være nøyaktig som i e-posten (WEEKLY_EMAIL_TOGGLE_NAME, notificationMessages.ts); testen sammenligner.
+    "profile.section.email": "E-mail",
+    "profile.weeklyEmail.label": "Weekly e-mail from the boat",
+    "profile.weeklyEmail.hint": "Arrives on Mondays when you have courses waiting: due dates, courses in progress and new courses. Only you see this setting.",
+    "profile.weeklyEmail.saved": "Saved.",
+    "profile.weeklyEmail.failed": "Could not save. Try again.",
     "profile.field.consentVersion": "Version",
     "profile.field.notAccepted": "Not yet accepted",
 
@@ -210,6 +216,11 @@ const own = {
     "profile.field.consent": "Personvernerklæring akseptert",
     "profile.signOut.btn": "Logg ut",
     "profile.signOut.hint": "Du logges ut av plattformen og av Microsoft-kontoen i denne nettleseren. Neste gang velger du hvilken konto du logger inn med.",
+    "profile.section.email": "E-post",
+    "profile.weeklyEmail.label": "Ukentlig e-post fra båten",
+    "profile.weeklyEmail.hint": "Kommer på mandager når du har kurs som venter: frister, kurs i gang og nye kurs. Bare du ser denne innstillingen.",
+    "profile.weeklyEmail.saved": "Lagret.",
+    "profile.weeklyEmail.failed": "Kunne ikke lagre. Prøv igjen.",
     "profile.field.consentVersion": "Versjon",
     "profile.field.notAccepted": "Ikke akseptert ennå",
 
@@ -358,6 +369,11 @@ const own = {
     "profile.field.consent": "Personvernerklæring akseptert",
     "profile.signOut.btn": "Logg ut",
     "profile.signOut.hint": "Du blir logga ut av plattforma og av Microsoft-kontoen i denne nettlesaren. Neste gong vel du kva konto du loggar inn med.",
+    "profile.section.email": "E-post",
+    "profile.weeklyEmail.label": "Vekentleg e-post frå båten",
+    "profile.weeklyEmail.hint": "Kjem på måndagar når du har kurs som ventar: fristar, kurs i gang og nye kurs. Berre du ser denne innstillinga.",
+    "profile.weeklyEmail.saved": "Lagra.",
+    "profile.weeklyEmail.failed": "Kunne ikkje lagre. Prøv igjen.",
     "profile.field.consentVersion": "Versjon",
     "profile.field.notAccepted": "Ikkje akseptert enno",
 

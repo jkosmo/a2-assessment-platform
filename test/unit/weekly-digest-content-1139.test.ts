@@ -181,6 +181,16 @@ describe("#1139: teksten", () => {
   });
 });
 
+describe("#1139: bryternavnet i e-posten er det samme som på profilen (planen 12.10)", () => {
+  it("nb, nn og en-GB: avmeldingen nevner bryteren nøyaktig slik profilen viser den", async () => {
+    // @ts-expect-error — klientfila er ren JavaScript uten typer.
+    const { translations } = await import("../../public/i18n/profile-translations.js");
+    for (const locale of ["nb", "nn", "en-GB"] as const) {
+      expect(translations[locale]["profile.weeklyEmail.label"], locale).toBe(WEEKLY_EMAIL_TOGGLE_NAME[locale]);
+    }
+  });
+});
+
 describe("#1139: e-posten", () => {
   it("bildet og linja fra SAMME humør i maskotpakken, med bildetekst; avmeldingen sist i ren tekst", () => {
     const content = classify({ progress: [course("run", "IN_PROGRESS", 1)], lastActivityAt: new Date("2026-11-08T12:00:00Z") })!;

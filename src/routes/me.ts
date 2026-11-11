@@ -26,12 +26,14 @@ meRouter.get("/", async (request, response, next) => {
   }
 
   try {
-    const [consentVersion, pendingDeletion] = await Promise.all([
+    const [consentVersion, pendingDeletion, preferences] = await Promise.all([
       getActiveConsentVersion(),
       prisma.deletionRequest.findFirst({
         where: { userId, status: "PENDING" },
         select: { effectiveAt: true, trigger: true },
       }),
+      // #1139: bryteren på profilen. Slått opp i databasen hver gang, ikke fra innloggingen.
+      prisma.user.findUnique({ where: { id: userId }, select: { weeklyEmailEnabled: true } }),
     ]);
 
     const consent = await prisma.userConsent.findUnique({
@@ -56,8 +58,38 @@ meRouter.get("/", async (request, response, next) => {
       pendingDeletion: pendingDeletion
         ? { effectiveAt: pendingDeletion.effectiveAt, trigger: pendingDeletion.trigger }
         : null,
+      // #1139: mangler feltet (en eldre tjener), skjuler profilen bryteren.
+      preferences: { weeklyEmail: preferences?.weeklyEmailEnabled ?? true },
       supportedLocales: SUPPORTED_LOCALES,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── PUT /api/me/preferences ──────────────────────────────────────────────────
+// #1139 (doc/design/PLAN_1139.md, punkt 5): bryteren «Ukentlig e-post fra båten». Det ENESTE stedet som skriver
+// `User.weeklyEmailEnabled`, og alltid for den innloggede: ingen bruker-id fra forespørselen. Unntatt fra samtykkesperren (12.7).
+const preferencesSchema = z.object({ weeklyEmail: z.boolean() }).strict();
+
+meRouter.put("/preferences", async (request, response, next) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const parsed = preferencesSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "invalid_request", message: "Expected { weeklyEmail: boolean }." });
+    return;
+  }
+  try {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { weeklyEmailEnabled: parsed.data.weeklyEmail },
+      select: { weeklyEmailEnabled: true },
+    });
+    response.json({ preferences: { weeklyEmail: user.weeklyEmailEnabled } });
   } catch (error) {
     next(error);
   }
@@ -131,6 +163,8 @@ meRouter.get("/data", async (request, response, next) => {
         select: {
           id: true, name: true, email: true, department: true, manager: true,
           activeStatus: true, lastLoginAt: true, createdAt: true, isAnonymized: true,
+          // #1139: bryteren for den ukentlige e-posten.
+          weeklyEmailEnabled: true,
           roleAssignments: {
             select: { appRole: true, validFrom: true, validTo: true, createdAt: true, createdBy: true },
           },

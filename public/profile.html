@@ -19,6 +19,11 @@
       .profile-signout { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: var(--space-2); }
       .profile-signout .btn { width: auto; }
       .profile-signout p { margin: 0; flex: 1 1 240px; }
+      /* #1139: bryteren for den ukentlige e-posten. Hele raden er klikkflate, minst 44 px høy. */
+      .profile-toggle { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 600; cursor: pointer; }
+      .profile-toggle input { width: 20px; height: 20px; margin: 0; accent-color: var(--color-link-active); }
+      #profileEmailSection p { margin: 4px 0 0; }
+      #profileEmailSection[hidden] { display: none; }
       .profile-dl dt { color: var(--color-meta); font-weight: 600; white-space: nowrap; }
       .profile-dl dd { margin: 0; color: var(--color-text); word-break: break-word; }
       .rights-grid { display: grid; gap: var(--space-1); margin-top: var(--space-1); }
@@ -179,6 +184,17 @@
             <button type="button" id="signOutBtn" class="btn btn-secondary" data-i18n="profile.signOut.btn">Sign out</button>
             <p class="small" data-i18n="profile.signOut.hint">You are signed out of the platform and of the Microsoft account in this browser. The next time, you choose which account to sign in with.</p>
           </div>
+        </section>
+
+        <!-- #1139: den ukentlige e-posten. Skjult til /api/me sender `preferences` (en eldre tjener har ikke feltet). -->
+        <section class="card profile-section" id="profileEmailSection" hidden>
+          <h2 class="profile-section-title" data-i18n="profile.section.email">E-mail</h2>
+          <label class="profile-toggle" for="weeklyEmailToggle">
+            <input type="checkbox" id="weeklyEmailToggle" role="switch" aria-describedby="weeklyEmailHint weeklyEmailStatus">
+            <span data-i18n="profile.weeklyEmail.label">Weekly e-mail from the boat</span>
+          </label>
+          <p class="small" id="weeklyEmailHint" data-i18n="profile.weeklyEmail.hint">Arrives on Mondays when you have courses waiting.</p>
+          <p class="small" id="weeklyEmailStatus" role="status" aria-live="polite"></p>
         </section>
 
         <!-- #1138: innsatsen i tre faner. Konto først, så fanene, så rettighetene (produkteier 2026-11-07). -->
