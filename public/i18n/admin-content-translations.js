@@ -471,6 +471,7 @@ const adminContentBase = {
   "shell.settings.invalidValidity": "The end date cannot be before the start date.",
   "shell.settings.noChanges": "Nothing changed, so no new version was created.",
   "shell.settings.draftBlocks": "You have an unsaved draft in Edit. Save or discard it first — a settings save would write the stored content, not your draft.",
+  "shell.save.settingsLostConfirm": "You have unsaved changes in Settings. Saving the content does not include them, so they will be lost. Save the content anyway?",
   // Stage-tilbakemelding 2026-08-19: navngi hullet, ikke kravet.
   "shell.settings.needsMissing": "missing {missing}",
   "shell.settings.needs.and": "and",
@@ -1614,6 +1615,7 @@ const adminContentLateOverrides = {
     "shell.settings.invalidValidity": "Sluttdatoen kan ikke være før startdatoen.",
     "shell.settings.noChanges": "Ingenting er endret, så det ble ikke laget noen ny versjon.",
     "shell.settings.draftBlocks": "Du har et ulagret utkast i Rediger. Lagre eller forkast det først — en innstillingslagring ville skrevet det lagrede innholdet, ikke utkastet ditt.",
+    "shell.save.settingsLostConfirm": "Du har ulagrede endringer i Innstillinger. Lagringen av innholdet tar dem ikke med, så de går tapt. Lagre innholdet likevel?",
     "shell.settings.needsMissing": "mangler {missing}",
     "shell.settings.needs.and": "og",
     "shell.settings.needs.taskText": "oppgavetekst",
@@ -2451,6 +2453,7 @@ const adminContentLateOverrides = {
     "shell.settings.invalidValidity": "Sluttdatoen kan ikkje vere før startdatoen.",
     "shell.settings.noChanges": "Ingenting er endra, så det blei ikkje laga nokon ny versjon.",
     "shell.settings.draftBlocks": "Du har eit ulagra utkast i Rediger. Lagre eller forkast det først — ei innstillingslagring ville skrive det lagra innhaldet, ikkje utkastet ditt.",
+    "shell.save.settingsLostConfirm": "Du har ulagra endringar i Innstillingar. Lagringa av innhaldet tek dei ikkje med, så dei går tapt. Lagre innhaldet likevel?",
     "shell.settings.needsMissing": "manglar {missing}",
     "shell.settings.needs.and": "og",
     "shell.settings.needs.taskText": "oppgåvetekst",
