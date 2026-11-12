@@ -47,6 +47,8 @@ fills only the gaps. Same gate on the course cascade (`/admin-content/courses`) 
 auto-publish. No new route; the behaviour is on
 `POST .../module-versions/:id/publish`. See `doc/API_REFERENCE.md` → "Publish translation gate".
 
+**#1140 etappe 2, skive 2a — course drafts (2.155.0).** No new page; the course builder is unchanged until slice 2c. New routes: `GET|PUT|DELETE /api/admin/content/courses/:courseId/draft`. Saving (`PUT`) needs the switch `course_drafts` (off); reading and discarding always work. See `doc/API_REFERENCE.md` and `doc/FEATURE_SURFACE_MAP.md` §32.
+
 **#934 slice 5b — the dialogs (2.136.0).** No new page or route. The module page and the course page use the routes below when the switch is on, and the old ones when it is off. See `doc/FEATURE_SURFACE_MAP.md`.
 
 **#934 slice 5a-3 — versioned publishing (2.135.0).** No new page; the dialogs come in 5b. New routes behind the switch `module_pass_per_course`, `409 module_versioning_not_active` until it is on:

@@ -124,6 +124,9 @@ export interface AdminCourseDetail {
   /** #934 skive 4a: telleren kursskjemaet sender tilbake når det lagrer (`expectedRevision`). Har noen andre
    *  lagret kurset siden, avvises lagringen med 409 `course_changed`. */
   contentRevision: number;
+  /** #1140 etappe 2: er utkast for kurs slått på (bryteren `course_drafts`), og har dette kurset et utkast?
+   *  Utkastet selv hentes med `GET …/draft`. */
+  drafts: { enabled: boolean; hasDraft: boolean };
   modules: Array<{
     moduleId: string;
     sortOrder: number;

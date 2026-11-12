@@ -2,6 +2,46 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.155.0 - 2026-11-12
+
+#1140 etappe 2, skive 2a: et publisert kurs kan ha et utkast, bak en bryter som står av (`doc/design/PLAN_1140_E2.md`).
+
+- **Hva brukerne merker:** ingenting. Bryteren `course_drafts` står av på stage og i prod, og kursbyggeren er ikke endret.
+  Den slås på på stage i skive 2c (kursbyggeren), og i prod først når etappe 3 er ferdig.
+- **Slik virker det, med bryteren på:**
+  - Ny tabell `CourseDraft`: høyst én rad per kurs, med det kursskjemaet sendte, telleren kurset hadde da skjemaet ble lastet
+    (`baseRevision`), og en egen teller for utkastet.
+  - `GET`/`PUT`/`DELETE /api/admin/content/courses/:courseId/draft`. Lagringen sier hva skjemaet lastet: «ingen utkast» med
+    kursets teller, eller utkastets id og teller. Stemmer det ikke, er svaret 409 og ingenting er lagret. Ingenting
+    deltakerne ser, endres av å lagre eller forkaste.
+  - Et kurs med utkast er låst for alt annet som skriver feltene eller lista (`409 course_has_draft`). Låsen sitter ett sted,
+    i `claimCourseRevision`, også for kursimporten.
+  - Et publisert kurs kan ikke lagres direkte (`409 course_form_outdated`), heller ikke uten utkast.
+  - Kursdetaljen sier om utkast er på og om kurset har et (`drafts: { enabled, hasDraft }`).
+- **Med bryteren av:** alt er som før. En utkastrad som finnes, låser ingenting; den kan hentes og forkastes.
+- **Ikke med ennå:** «Publiser utkastet» (skive 2b), kursbyggeren (2c), og en måte å slå bryteren av og på uten databasetilgang
+  (kommer med 2c, der den trengs).
+- **Ved utrulling:** én migrering, ren utvidelse (ny tabell). Ingen nye innstillinger. Gammel kode kjenner ikke tabellen og
+  leser den ikke.
+- **Tester:** `test/m2-course-draft-1140-e2.test.ts` gjennom rutene (lagre, hente, forkaste, tellerne, samtidige lagringer,
+  låsen på hver vei inn, bryteren av, eierskap, deltakeren ser den publiserte utgaven). Vakt: `test/course-draft-guard.test.js`,
+  og `courseDraft` er lagt til i `test/content-lock-write-guard.test.js`. Agent-tokenet når ingen av rutene
+  (`test/unit/agent-token-scope.test.ts`).
+- **Mutasjonstestene:** 28 bevisste feil, 27 gjorde en test rød. Den som overlevde, var en ekstra sjekk i kursimportens rute
+  («har kurset utkast?» før importen starter). Den var overflødig: låsen avviser importen uansett, importens ene transaksjon
+  rulles tilbake, og importen fjerner selv bildene den lastet opp. Sjekken er fjernet, så låsen står ett sted.
+- **QA-porten:** GO. Ingen funn rammer brukere med bryteren av. Åtte funn gjelder med bryteren på og tas i skive 2b, før
+  kursbyggeren bygges på API-et; de står i `doc/design/PLAN_1140_E2.md`. De to viktigste: «Forkast» sjekker ikke hvilket
+  utkast fana lastet, og vakta ser ikke relasjonen `Course.draft`.
+- **Kjente mangler:**
+  - Funnene fra QA-porten over.
+  - Et element som bare står i utkastet, kan arkiveres eller slettes. `GET …/draft` merker det, og publiseringen (2b) vil
+    avvise det.
+  - Sjekken «publisert kurs lagres ikke direkte» gjøres i ruta før transaksjonen. Publiseres kurset i samme øyeblikk som en
+    direkte lagring kommer, kan lagringen gå gjennom. Låsen for et kurs MED utkast sjekkes under innholdslåsen og har ikke
+    denne åpningen.
+  - Vedlikeholdsskriptet for titler retter ikke titler i utkast. Eksport gir den publiserte utgaven.
+
 ## 2.154.1 - 2026-11-12
 
 Stage-testkontoen kan opptre som deltaker, så deltakerflyten kan prøves på stage uten at et menneske logger inn.

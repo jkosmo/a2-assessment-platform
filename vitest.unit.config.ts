@@ -84,6 +84,8 @@ export default defineConfig({
       "test/weekly-digest-write-guard.test.js",
       // #1140 etappe 1: nekter en ny leser av modulens versjon for deltakere utenom regelen, og en skriver av låsen.
       "test/participant-module-version-guard.test.js",
+      // #1140 etappe 2: nekter en ny leser eller skriver av kursutkastet utenom fila som eier det.
+      "test/course-draft-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

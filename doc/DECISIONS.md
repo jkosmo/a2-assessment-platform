@@ -1657,3 +1657,24 @@ tilfellet, men for mønsteret: «et konsistent grunnlag med noen gjennomgående 
   til, og da skal det ikke bygges.
 
 Bygges i etapper. Etappe 1 (2.154.0) gir bare feltet og regelen; ingen kurs kan låse en hovedversjon før etappe 3.
+
+### Utkastet til et kurs (#1140 etappe 2, 2026-11-12)
+
+Valg i byggingen der et annet ville vært like forsvarlig (`doc/design/PLAN_1140_E2.md`):
+
+- **Et kurs med utkast er låst for alt annet som skriver feltene eller lista.** Alternativet var å la importen og API-et skrive
+  i den publiserte utgaven ved siden av utkastet og flette ved publisering. Valgt bort: da finnes to sannheter om kurset, og
+  publiseringen av utkastet måtte avgjøre hvem som vinner. Nå avvises den andre skriveren, og forfatteren publiserer eller
+  forkaster først.
+- **Med bryteren på kan et publisert kurs ikke lagres direkte, heller ikke uten utkast.** Ellers kunne en fane fra før
+  utrullingen gå utenom utkastet. Kursimporten er unntatt til etappe 4, der den får skrive til utkastet.
+- **Utkastet lagrer det skjemaet sendte, ikke en kopi av hele kurset.** Et felt som ikke er sendt, betyr «som publisert»,
+  slik `PUT …/content` tolker det. Følgen: endres det feltet i den publiserte utgaven mens utkastet finnes, følger utkastet
+  med. Låsen stenger for skjemaet, API-et og importen. To veier går utenom den: sletting av et tema (kurset mister det) og
+  vedlikeholdsskriptet for titler. Med bryteren av stenger ingenting.
+- **Alle forfattere kan lese et utkast; bare kursets eiere kan lagre og forkaste det.** Samme linje som kursdetaljen
+  (produkteier 2026-09-07: størst mulig deling).
+- **Forkast virker alltid,** også med bryteren av og for et kurs som er avpublisert eller arkivert. Et utkast skal aldri bli
+  stående uten en vei ut.
+- **Sammenslåingen av «Publiser utkastet» og «Publiser nye versjoner» er flyttet til etappe 3.** Bygd nå måtte den stå på
+  maskineriet med ett svar per kurs, som etappe 3 fjerner. Bryteren står derfor av i prod til etappe 3 er ferdig.

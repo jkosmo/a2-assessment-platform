@@ -56,6 +56,11 @@ const FORBIDDEN: Array<[string, string]> = [
   ["GET", "/api/admin/content/courses/course_abc"],
   ["PUT", "/api/admin/content/courses/course_abc"], // course update (not the /items subpath)
   ["POST", "/api/admin/content/courses/course_abc/items"], // wrong method (only PUT allowed)
+  // #1140 etappe 2: utkastet til et publisert kurs er utenfor det et agent-token får gjøre.
+  ["GET", "/api/admin/content/courses/course_abc/draft"],
+  ["PUT", "/api/admin/content/courses/course_abc/draft"],
+  ["DELETE", "/api/admin/content/courses/course_abc/draft"],
+  ["POST", "/api/admin/content/courses/course_abc/draft/publish"],
   ["POST", "/api/submissions"],
   ["GET", "/api/admin/platform/config"],
 ];

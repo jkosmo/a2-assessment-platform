@@ -765,6 +765,30 @@ model Course {
   themes             CourseThemeAssignment[]
   // #934 skive 5a-2: den laveste hovedversjonen av hver modul som teller i dette kurset.
   moduleRequirements CourseModuleRequirement[]
+  // #1140 etappe 2: utkastet til neste utgave av kurset. Høyst ett.
+  draft              CourseDraft?
+}
+
+// #1140 etappe 2 (doc/design/PLAN_1140_E2.md): utkastet til et PUBLISERT kurs. «Lagre» i kursbyggeren skriver hit, og ingenting
+// deltakerne ser, endres før utkastet publiseres. Bare kursbyggerens ruter leser tabellen (src/modules/course/courseDraft.ts,
+// vakt: test/course-draft-guard.test.js). Alt deltakerne leser, står i `Course` og `CourseItem`, som før.
+//
+// `payloadText` er det `PUT …/content` tar imot, etter validering: felt som er utelatt, betyr «som publisert». TEKST, ikke Json:
+// publiseringen leser den gjennom samme skjema som lagringen. `baseRevision` er kursets `contentRevision` slik skjemaet lastet
+// den; publiseringen avvises hvis kurset er endret siden. `revision` er utkastets egen teller, og gjelder sammen med `id`:
+// en forkastet og ny rad starter på nytt.
+model CourseDraft {
+  id           String   @id @default(cuid())
+  courseId     String   @unique
+  payloadText  String
+  baseRevision Int
+  revision     Int      @default(1)
+  // Hvor siste skriving kom fra: `form` (kursbyggeren). `import` kommer i etappe 4 (kursfil og skillet).
+  source       String   @default("form")
+  updatedById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
 }
 
 // 2.102.0: et tema i «Mine kurs» (produkteier 2026-10-25: «det blir relativt mange kurs som er

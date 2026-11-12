@@ -427,16 +427,8 @@ export async function setCourseItems(
   return tx ? run(tx) : runContentWrite(run);
 }
 
-/**
- * Skriver kursets elementer og avgjør versjonen. Kalles bare med låst klient, etter at telleren er tatt
- * (`setCourseItems`, og `updateCourse` som tar telleren selv).
- */
-async function writeCourseItems(
-  client: ContentWriteTx,
-  courseId: string,
-  items: CourseItemInput[],
-  options?: { actorId?: string; agent?: AgentAuthoringContext; versionRequest?: CourseVersionRequest },
-): Promise<CourseVersionBump | null> {
+/** Et element kan bare stå én gang i et kurs. Gir id-ene tilbake, delt på type. */
+function assertNoDuplicateCourseItems(items: CourseItemInput[]): { moduleIds: string[]; sectionIds: string[] } {
   const moduleIds = items.flatMap((i) => (i.type === "MODULE" ? [i.moduleId] : []));
   const sectionIds = items.flatMap((i) => (i.type === "SECTION" ? [i.sectionId] : []));
   if (new Set(moduleIds).size !== moduleIds.length) {
@@ -453,6 +445,28 @@ async function writeCourseItems(
       { itemType: "SECTION" },
     );
   }
+  return { moduleIds, sectionIds };
+}
+
+/**
+ * #1140 etappe 2: de to sjekkene lagringen av et kurs gjør av lista (ingen dobbel, ingenting arkivert eller borte), uten å
+ * skrive. Utkastet til et kurs kaller den ved lagring, så feilen kommer da og ikke først når utkastet publiseres.
+ */
+export async function assertCourseItemsUsable(reader: DbTransactionClient | typeof prisma, items: CourseItemInput[]) {
+  await assertContentUsableInCourse(reader, assertNoDuplicateCourseItems(items));
+}
+
+/**
+ * Skriver kursets elementer og avgjør versjonen. Kalles bare med låst klient, etter at telleren er tatt
+ * (`setCourseItems`, og `updateCourse` som tar telleren selv).
+ */
+async function writeCourseItems(
+  client: ContentWriteTx,
+  courseId: string,
+  items: CourseItemInput[],
+  options?: { actorId?: string; agent?: AgentAuthoringContext; versionRequest?: CourseVersionRequest },
+): Promise<CourseVersionBump | null> {
+  const { moduleIds, sectionIds } = assertNoDuplicateCourseItems(items);
   await assertContentUsableInCourse(client, { moduleIds, sectionIds });
 
   // #502: CourseItem er eneste sannhetskilde — ingen dual-write til CourseModule lenger.

@@ -118,6 +118,9 @@ export const auditActions = {
     completionRegisteredExternal: "course_completion_registered_external",
     // #934 skive 3: kursets versjon økte (mindre eller hoved), med fra/til og hva forfatteren ba om.
     versionChanged: "course_version_changed",
+    // #1140 etappe 2: utkastet til et publisert kurs ble lagret eller forkastet. Publiseringen spores som `updated`.
+    draftSaved: "course_draft_saved",
+    draftDiscarded: "course_draft_discarded",
     // #497: automatiske frist-påminnelser (frist nærmer seg / forfalt) fra bakgrunnsjobben.
     reminderSent: "course_reminder_sent",
     reminderFailed: "course_reminder_failed",
@@ -399,6 +402,8 @@ export type AuditMetadataByAction = {
   [auditActions.course.created]: EventMetadata<{ courseId: string }>;
   [auditActions.course.updated]: EventMetadata<{ courseId: string; changedFields: string[] }>;
   [auditActions.course.itemsUpdated]: EventMetadata<{ courseId: string; itemCount: number }>;
+  [auditActions.course.draftSaved]: EventMetadata<{ courseId: string; draftId: string; revision: number; created: boolean }>;
+  [auditActions.course.draftDiscarded]: EventMetadata<{ courseId: string; draftId: string; revision: number }>;
   [auditActions.course.published]: EventMetadata<{ courseId: string }>;
   [auditActions.course.unpublished]: EventMetadata<{ courseId: string }>;
   [auditActions.course.archived]: EventMetadata<{ courseId: string }>;

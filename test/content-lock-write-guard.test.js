@@ -28,9 +28,11 @@ const LOCK_FILE = "db/contentLock.ts";
 // Innholdstabellene (doc/DESIGN_934.md, «Én hjelpefunksjon»), pluss `CourseVersion`: den skrives bare av
 // versjonsendringen, og den skal også holde låsen.
 // #934 skive 5a-2: `CourseModuleRequirement` er hvilke moduler et kurs krever, så den skrives under samme lås.
-const CONTENT_MODELS = new Set(["courseItem", "course", "module", "moduleVersion", "courseSection", "courseSectionVersion", "sectionAsset", "courseVersion", "courseModuleRequirement"]);
+// #1140 etappe 2: `CourseDraft` er utkastet til et kurs. Låsen av den publiserte utgaven spør om utkastet finnes, så det må
+// lages og fjernes under samme lås som det den stenger for.
+const CONTENT_MODELS = new Set(["courseItem", "course", "module", "moduleVersion", "courseSection", "courseSectionVersion", "sectionAsset", "courseVersion", "courseModuleRequirement", "courseDraft"]);
 const WRITE_OPS = new Set(["create", "createMany", "createManyAndReturn", "update", "updateMany", "updateManyAndReturn", "upsert", "delete", "deleteMany"]);
-const CONTENT_TABLES_SQL = /"(CourseItem|Course|Module|ModuleVersion|CourseSection|CourseSectionVersion|SectionAsset|CourseVersion|CourseModuleRequirement)"/;
+const CONTENT_TABLES_SQL = /"(CourseItem|Course|Module|ModuleVersion|CourseSection|CourseSectionVersion|SectionAsset|CourseVersion|CourseModuleRequirement|CourseDraft)"/;
 
 // Bevisste unntak (doc/DESIGN_934.md, «Kjente mangler» nr. 3): vedlikeholdsskript som kjøres for hånd, én gang,
 // ikke mens forfattere arbeider. Unntaket er per FUNKSJON, så en ny skriver i samme fil ikke slipper gjennom.

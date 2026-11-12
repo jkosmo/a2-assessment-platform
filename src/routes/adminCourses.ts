@@ -21,6 +21,7 @@ import {
   publishCourseCascade,
   publishCourseChecked,
   courseFormOutdatedError,
+  assertCourseItemsUsable,
   getCoursePendingVersions,
   publishCoursePendingVersions,
   getCourseCascadeDeletePreview,
@@ -42,6 +43,13 @@ import { NotFoundError, AppError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
 import { countCourseInProgressParticipants } from "../modules/course/contentLifecycle.js";
 import { countMajorVersionRecipients } from "../modules/course/courseVersioning.js";
+import {
+  discardCourseDraft,
+  findCourseDraft,
+  isCourseDraftsOn,
+  saveCourseDraft,
+  type CourseDraftRow,
+} from "../modules/course/courseDraft.js";
 import { prisma } from "../db/prisma.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
@@ -434,6 +442,10 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       certificateHolders: await courseRepository.countCertificateHolders(course.id, course.versionMajor),
       majorEmailRecipients: await countMajorVersionRecipients(prisma, course.id),
       contentRevision: course.contentRevision,
+      drafts: {
+        enabled: await isCourseDraftsOn(prisma),
+        hasDraft: (await findCourseDraft(prisma, course.id)) != null,
+      },
       modules: course.modules.map((cm) => ({
         moduleId: cm.moduleId,
         sortOrder: cm.sortOrder,
@@ -447,6 +459,18 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
   }
 });
 
+/**
+ * #1140 etappe 2: med bryteren `course_drafts` på lagrer kursbyggeren et PUBLISERT kurs til utkastet (`PUT …/draft`). En
+ * direkte lagring er da en fane fra før (eller et API-kall) som ville gått utenom utkastet: `409 course_form_outdated`, og
+ * ingenting er skrevet. Gjelder også uten utkast. Kalles av de fire rutene som lagrer kursets felt eller liste direkte.
+ * Kursimporten er ikke med: den skriver rett i kurset til etappe 4 (et kurs MED utkast stopper låsen den i).
+ */
+async function assertDirectCourseSaveAllowed(courseId: string) {
+  if (!(await isCourseDraftsOn(prisma))) return;
+  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { publishedAt: true } });
+  if (course?.publishedAt != null) throw courseFormOutdatedError();
+}
+
 // #934 skive 4a: kursskjemaet bruker ikke lenger denne for et eksisterende kurs (alt går til `…/content`). En fane
 // fra før utrullingen gjør det, og den sender ikke telleren: `409 course_form_outdated` før noe skrives — ellers
 // ville navnet stått lagret mens elementene ble avvist i neste kall, eller skrevet over en annens endring.
@@ -459,6 +483,7 @@ adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId
 
   try {
     if (parsed.data.expectedRevision === undefined) throw courseFormOutdatedError();
+    await assertDirectCourseSaveAllowed(request.params.courseId);
     const course = await updateCourse(request.params.courseId, {
       title: parsed.data.title ? localizedTextCodec.serialize(parsed.data.title) : undefined,
       description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : undefined,
@@ -486,6 +511,7 @@ adminCoursesRouter.put("/:courseId/content", requireContentOwnership("COURSE", "
   }
   try {
     if (parsed.data.expectedRevision === undefined) throw courseFormOutdatedError();
+    await assertDirectCourseSaveAllowed(request.params.courseId);
     const course = await updateCourse(request.params.courseId, {
       title: parsed.data.title ? localizedTextCodec.serialize(parsed.data.title) : undefined,
       description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : undefined,
@@ -507,6 +533,116 @@ adminCoursesRouter.put("/:courseId/content", requireContentOwnership("COURSE", "
   }
 });
 
+// ── #1140 etappe 2: utkastet til et publisert kurs (doc/design/PLAN_1140_E2.md) ──────────────────────────────────────────────
+//
+// «Lagre» i kursbyggeren skriver hit når kurset er publisert og bryteren `course_drafts` er på. Ingenting deltakerne ser, endres
+// før utkastet publiseres (skive 2b). Alt om `CourseDraft` bor i modules/course/courseDraft.ts; rutene her eier skjemaet, og
+// leser den lagrede teksten gjennom det. Agent-tokenet når ingen av rutene (ikke i hvitelista).
+
+/** Det utkastet inneholder: kroppen til `PUT …/content`, uten svaret om versjon og uten telleren. */
+const courseDraftPayloadSchema = courseBodySchema.partial().extend({ items: setCourseItemsBodySchema.shape.items });
+
+/** Det skjemaet lastet: et utkast, eller den publiserte utgaven uten utkast. Se `LoadedCourseEdition` i courseDraft.ts. */
+const loadedCourseEditionSchema = z.union([
+  z.object({ draftId: z.string().min(1), revision: z.number().int().min(1) }).strict(),
+  z.object({ expectedRevision: z.number().int().min(0) }).strict(),
+]);
+
+const saveCourseDraftBodySchema = courseDraftPayloadSchema.extend({ loaded: loadedCourseEditionSchema });
+
+/**
+ * Utkastet slik kursbyggeren skal vise det: det lagrede, flettet med den publiserte utgaven der et felt er utelatt («som
+ * publisert»), og med titlene på elementene. Et element som er arkivert eller borte, merkes: det stopper publiseringen.
+ */
+async function courseDraftView(courseId: string, draft: CourseDraftRow) {
+  const course = await courseRepository.findCourseById(courseId);
+  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+  const payload = courseDraftPayloadSchema.parse(JSON.parse(draft.payloadText));
+  const moduleIds = payload.items.flatMap((item) => (item.type === "MODULE" ? [item.moduleId] : []));
+  const sectionIds = payload.items.flatMap((item) => (item.type === "SECTION" ? [item.sectionId] : []));
+  const [modules, sections] = await Promise.all([
+    moduleIds.length > 0 ? prisma.module.findMany({ where: { id: { in: moduleIds } }, select: { id: true, title: true, archivedAt: true } }) : [],
+    sectionIds.length > 0 ? prisma.courseSection.findMany({ where: { id: { in: sectionIds } }, select: { id: true, title: true, archivedAt: true } }) : [],
+  ]);
+  const known = new Map([...modules, ...sections].map((row) => [row.id, row]));
+  return {
+    id: draft.id,
+    revision: draft.revision,
+    baseRevision: draft.baseRevision,
+    source: draft.source,
+    updatedById: draft.updatedById,
+    updatedAt: draft.updatedAt.toISOString(),
+    course: {
+      title: payload.title ? localizedTextCodec.serialize(payload.title) : course.title,
+      description: payload.description ? localizedTextCodec.serialize(payload.description) : course.description,
+      certificationLevel: payload.certificationLevel ? localizedTextCodec.serialize(payload.certificationLevel) : course.certificationLevel,
+      enrollmentPolicy: payload.enrollmentPolicy ?? course.enrollmentPolicy,
+      discussionsEnabled: payload.discussionsEnabled ?? course.discussionsEnabled,
+      discussionOwnerNotifications: payload.discussionOwnerNotifications ?? course.discussionOwnerNotifications,
+      sortOrder: payload.sortOrder !== undefined ? payload.sortOrder : course.sortOrder ?? null,
+      themeIds: payload.themeIds ?? (await findThemeIdsForCourse(courseId)),
+    },
+    items: payload.items.map((item, index) => {
+      const refId = item.type === "MODULE" ? item.moduleId : item.sectionId;
+      const row = known.get(refId);
+      return {
+        type: item.type,
+        sortOrder: index,
+        moduleId: item.type === "MODULE" ? item.moduleId : null,
+        sectionId: item.type === "SECTION" ? item.sectionId : null,
+        title: row?.title ?? null,
+        discussionsEnabled: item.discussionsEnabled !== false,
+        archivedAt: row?.archivedAt?.toISOString() ?? null,
+        missing: !row,
+      };
+    }),
+  };
+}
+
+// Lesingen er åpen for alle forfattere, som kursdetaljen og `GET …/items` (produkteier 2026-09-07: størst mulig deling).
+adminCoursesRouter.get("/:courseId/draft", async (request, response, next) => {
+  try {
+    const draft = await findCourseDraft(prisma, request.params.courseId);
+    if (!draft) throw new NotFoundError("CourseDraft", "course_draft_not_found", "This course has no draft.");
+    response.json({ draft: await courseDraftView(request.params.courseId, draft) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminCoursesRouter.put("/:courseId/draft", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = saveCourseDraftBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const { loaded, ...payload } = parsed.data;
+    const draft = await saveCourseDraft({
+      courseId: request.params.courseId,
+      payload,
+      loaded,
+      actorId: request.context?.userId,
+      // Samme sjekk som lagringen av et kurs gjør: ingen dobbel, og ingenting arkivert. En feil kommer da ved lagring av
+      // utkastet, og ikke først når det publiseres.
+      checkUsable: (tx) => assertCourseItemsUsable(tx, payload.items),
+    });
+    response.json({ draft: await courseDraftView(request.params.courseId, draft) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminCoursesRouter.delete("/:courseId/draft", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  try {
+    const discarded = await discardCourseDraft(request.params.courseId, request.context?.userId);
+    if (!discarded) throw new NotFoundError("CourseDraft", "course_draft_not_found", "This course has no draft.");
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminCoursesRouter.put("/:courseId/modules", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = setCourseModulesBodySchema.safeParse(request.body);
   if (!parsed.success) {
@@ -515,6 +651,7 @@ adminCoursesRouter.put("/:courseId/modules", requireContentOwnership("COURSE", "
   }
 
   try {
+    await assertDirectCourseSaveAllowed(request.params.courseId);
     // #934 skive 4a: uten telleren bare på et kurs som aldri har vært ute (sjekkes etter innholdslåsen).
     await setCourseModules(request.params.courseId, parsed.data.modules, undefined, request.context?.userId, undefined, {
       expected: parsed.data.expectedRevision,
@@ -573,6 +710,7 @@ adminCoursesRouter.put("/:courseId/items", requireContentOwnership("COURSE", "co
         return;
       }
     }
+    await assertDirectCourseSaveAllowed(request.params.courseId);
     await setCourseItems(request.params.courseId, parsed.data.items, {
       actorId: request.context?.userId,
       agent: { agentRunId: parsed.data.agentRunId },

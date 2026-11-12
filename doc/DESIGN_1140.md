@@ -132,8 +132,8 @@ Hver etappe kan rulles ut alene, endrer så lite som mulig for brukerne, og blir
 | | Etappe | Merkes av brukerne |
 |---|---|---|
 | 1 | **Vist hovedversjon per kurs, og den ene funksjonen for hvilken versjon en deltaker får.** Feltet står tomt (følger modulens nyeste, som i dag). Deltakersiden sier hvilket kurs modulen åpnes fra. | Nei |
-| 2 | **Kursutkast og samlet publisering**, bak bryter. | Ja: «Lagre» og «Publiser» er to steg for publiserte kurs |
-| 3 | **Vendingen:** ny hovedversjon av en modul endrer ikke kursene; «ta i bruk» i kursbyggeren; beskjed til eierne. Det gamle maskineriet fjernes. | Ja |
+| 2 | **Kursutkast**, bak bryter: «Lagre» skriver til utkastet, «Publiser utkastet» skriver det til kurset med dagens lagring. «Publiser nye versjoner» står som egen knapp. Bryteren av i prod til etappe 3 (`doc/design/PLAN_1140_E2.md`). | Bare på stage |
+| 3 | **Vendingen og den ene publiseringen:** ny hovedversjon av en modul endrer ikke kursene; «ta i bruk» i kursbyggeren; beskjed til eierne. «Publiser» sender ut utkastet og nye versjoner samlet, med ett svar. Det gamle maskineriet fjernes. Bryteren på i prod. | Ja |
 | 4 | **Kursfil og skillet til utkast**, og ny hovedversjon av andres modul. | Ja |
 | 5 | **Seksjoner** med samme mønster. | Ja |
 | 6 | Skillet og dokumentasjonen følger etappe 4. | |

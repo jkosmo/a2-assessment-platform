@@ -23,6 +23,7 @@ import { listManageableContentIds } from "../content/contentOwnershipService.js"
 import type { ContentWriteTx } from "../../db/contentLock.js";
 import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { raiseModuleRequirementInCourse } from "../adminContent/moduleVersioning.js";
+import { assertNoCourseDraftBlocksWrite } from "./courseDraft.js";
 
 export type CourseVersionChoice = "major" | "minor";
 
@@ -146,7 +147,15 @@ export async function isCourseEverPublished(
  *
  * Returnerer den nye verdien.
  */
-export async function claimCourseRevision(client: ContentWriteTx, courseId: string, expected?: number): Promise<number> {
+export async function claimCourseRevision(
+  client: ContentWriteTx,
+  courseId: string,
+  expected?: number,
+  // #1140 etappe 2: bare publiseringen av utkastet setter denne. Alle andre som skriver kursets felt eller liste, stoppes
+  // her når kurset har et utkast (og bryteren er på): `409 course_has_draft`, og ingenting er skrevet.
+  options?: { publishingDraft?: boolean },
+): Promise<number> {
+  if (!options?.publishingDraft) await assertNoCourseDraftBlocksWrite(client, courseId);
   if (expected === undefined) {
     const updated = await client.course.updateMany({ where: { id: courseId }, data: { contentRevision: { increment: 1 } } });
     if (updated.count === 0) throw new NotFoundError("Course", "course_not_found", "Course not found.");
