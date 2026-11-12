@@ -2,6 +2,65 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.157.0 - 2026-11-12
+
+#1140 etappe 2, skive 2c: et publisert kurs redigeres gjennom et utkast, i kursbyggeren. Dette er utgaven brukerne merker.
+Veiledning for forfattere: `doc/COURSE_DRAFTS_GUIDE.md`.
+
+- **Hva forfatterne merker:**
+  - «Lagre» på et publisert kurs lagrer et utkast. Deltakerne ser ingenting av det før forfatteren trykker «Publiser
+    utkastet». Et kurs som ikke er publisert, lagres som før.
+  - Kurset står som «Publisert» med brikken «Nyere utkast», i kurslista og i kursbyggeren, med en linje om hvem som lagret
+    utkastet og hvilken versjon deltakerne ser.
+  - «Publiser utkastet» sender utkastet ut. Spørsmålet om mindre versjon eller hovedversjon kommer der, ikke ved «Lagre»,
+    og bare når innholdet er endret og noen har kursbevis.
+  - «Forkast utkast» sletter utkastet etter en bekreftelse. «Avbryt» tar som før bare bort det som er skrevet siden siste
+    lagring.
+  - En kursfil («Oppdater dette kurset») kan ikke lastes opp i et kurs som har et utkast.
+  - Innstillingene (synlighet, plassering, tema, diskusjon) er med i utkastet, og virker for deltakerne først når utkastet
+    er publisert. «Eksporter» gir det publiserte kurset, ikke utkastet.
+- **Hva deltakerne merker:** ingenting.
+- **Produkteiers avgjørelser (2026-11-12, `doc/DECISIONS.md`):** ingen bryter, utkast er alltid på; samme merke som
+  moduler; ingen visning av «hva endres» ved publisering; «Avbryt» og «Forkast utkast» som to knapper.
+- **Serveren:**
+  - Bryteren `course_drafts` fra 2.155.0 og 2.156.0 er fjernet, og med den reglene som bare fantes på grunn av den:
+    «utkast finnes, men bryteren er av», utdaterte utkast (`course_draft_outdated`) og avvisningen av direkte lagring
+    (`assertDirectCourseSaveAllowed`). Et kurs med utkast er låst for alt annet som skriver feltene eller lista; uten
+    utkast virker direkte lagring og import som før.
+  - Kurslista og kursdetaljen sier `lifecycle: "published_with_draft"`, regnet ut i `deriveContentLifecycle` som for
+    moduler. Kursdetaljen sier `hasDraft` (erstatter `drafts: { enabled, hasDraft }`).
+  - `GET …/draft` gir navnet på den som lagret sist (`updatedByName`), og merker et element som er NYTT i utkastet og ikke
+    publisert (`unpublished`). Publiseringen avviser det, som arkiverte og slettede (`reason: "unpublished"`). Et
+    upublisert element som alt står i det publiserte kurset, slipper gjennom.
+  - Lagring, forkast og publisering svarer `409 course_draft_changed` også når utkastet fana lastet, er borte (før 404 fra
+    forkast og publisering).
+- **Klienten:** `public/static/admin-content-courses.js`. `published_with_draft` behandles som publisert i handlingsraden
+  og i kurslista (`isLiveLifecycle`); før ville et kurs med utkast fått «Publiser» i stedet for «Avpubliser».
+- **Ved utrulling:** ingen migrering, ingen nye innstillinger. En fane fra før utrullingen lagrer et publisert kurs direkte
+  som før (det virker, så lenge kurset ikke har et utkast). Raden `course_drafts` i `PlatformConfig` leses ikke lenger.
+- **Tester:** 26 nettlesertester for kursbyggeren (`test/e2e/admin-content-course-draft-1140.spec.ts`), 40 gjennom rutene
+  (`test/m2-course-draft-1140-e2.test.ts`), tekstene i tre språk. Tre eldre nettlesertester som lagret et publisert kurs
+  direkte med versjonsdialogen, bruker nå et avpublisert kurs med kursbevis: der gjelder direkte lagring fortsatt.
+  Stage-testen `test/stage/release-2-157-kursutkast.spec.ts` erstatter `release-2-155-kursutkast-av.spec.ts`.
+- **Mutasjonstestene:** serveren 11 av 11 (låsen, utkast som er borte, avpublisert element, `published_with_draft` i
+  lista og detaljen, navnet, kravet om publisert kurs); kursbyggeren 13 av 13. Hver bevisst feil gjorde en test rød.
+- **QA-porten:** GO, ingen vei til tapt arbeid eller feil utgave ut til deltakerne. Rettet før commit: (1) et publisert
+  kurs som alt hadde et upublisert element i lista (kursimporten kan legge en ny seksjon inn som utkast), ville ikke fått
+  publisert noe utkast; nå stopper bare et element som er nytt i utkastet. Rotårsak: jeg la inn «avpublisert stopper
+  publiseringen» etter forrige QA-runde uten å spørre om tilstanden alt finnes i publiserte kurs. (2) Teksten «Ikke
+  publisert lenger» var feil for et element som aldri har vært publisert. (3) Feilbanneret ved «Lagre» rulles inn i
+  synsfeltet. (4) «Publiser utkastet» og «Forkast utkast» venter når en lagring pågår. Ført som kjent: en fane åpnet før
+  utrullingen viser «Publiser» i stedet for «Avpubliser» for et kurs med utkast, til den lastes på nytt.
+- **Rotårsak, bryteren:** jeg la inn bryteren fordi serveren ble rullet ut før kursbyggeren, og lot den stå som «av i prod
+  til etappe 3» etter planlesingen. Jeg telte ikke hva den kostet: en hel regelklasse, en egen feilkode og dobbel testing
+  ble bygget samme dag for tilstander som bare bryteren kunne lage. Produkteier spurte om den trengtes. Sjekken som mangler,
+  er ikke mekanisk: før en bryter legges inn, skrives det ned hva som finnes i koden bare på grunn av den, og når den skal ut.
+- **Kjente mangler:**
+  - Har kurset både et utkast og nye versjoner av innholdet, er det to knapper og to versjonsøkninger. Slås sammen i etappe 3.
+  - Sletting av et tema og vedlikeholdsskriptet for titler endrer den publiserte utgaven mens utkastet ligger.
+  - Et avpublisert kurs med et utkast liggende igjen kan ikke lagres før utkastet er forkastet eller kurset publisert igjen.
+  - På 390 px bredde blir titlene i elementlista trange ved siden av knappene. Det var slik før denne utgaven.
+
 ## 2.156.0 - 2026-11-12
 
 #1140 etappe 2, skive 2b: «Publiser utkastet», og rettingene etter QA-porten for skive 2a (`doc/design/PLAN_1140_E2.md`).

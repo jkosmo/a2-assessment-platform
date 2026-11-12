@@ -1449,6 +1449,21 @@ lagring stoppes av låsen til utkastet er forkastet, eller kurset er publisert i
 **Vakter:** `test/course-draft-guard.test.js` (ordet `courseDraft` brukes bare i fila; den importeres bare av rutene og
 låsesjekken; låsen står før telleren; unntaket `publishingDraft: true` gis ett sted, inne i `publishCourseDraft`, som
 sletter raden etterpå). Skrivingen holder innholdslåsen: `test/content-lock-write-guard.test.js`. Gjennom rutene:
-`test/m2-course-draft-1140-e2.test.ts`.
+`test/m2-course-draft-1140-e2.test.ts`. Kursbyggeren: `test/e2e/admin-content-course-draft-1140.spec.ts`.
+
+**Kursbyggeren (`public/static/admin-content-courses.js`):**
+
+| Flate | Hvor |
+|---|---|
+| Åpne kurset: skjemaet fylles fra utkastet når det finnes | `renderDetailView` (henter `GET …/draft`, husker id og teller i `courseDraft`) |
+| «Lagre» på et publisert kurs går til utkastet | `saveCourse` (`savesToDraft`); et kurs som ikke er publisert, lagres direkte |
+| «Publiser utkastet», med versjonsspørsmålet når lista er endret og noen har kursbevis | `publishCourseDraftFromForm`, `commitCourseDraftPublish`, `askCourseVersion` |
+| «Forkast utkast» | `discardCourseDraftFromForm` |
+| Merket, linja «Utkast lagret av …» og merknaden for et avpublisert kurs | `lifecycleBadge` (felles), `courseDraftStateHtml` |
+| Knappene som spør «er kurset ute?» | `isLiveLifecycle`, brukt i kurslista og i `courseDetailActions` |
+| Merkede elementer | `courseDraftItemToFormItem`, `renderModuleList` |
+
+**Når en ny knapp eller liste spør om et kurs er publisert:** bruk `isLiveLifecycle`, ikke `=== "published"`. Et kurs med
+utkast er publisert.
 
 **Når en ny vei skriver kursets felt eller liste:** la den gå gjennom `claimCourseRevision`, så gjelder låsen.

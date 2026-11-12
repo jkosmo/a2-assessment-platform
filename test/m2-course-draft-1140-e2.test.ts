@@ -913,6 +913,51 @@ describe("#1140 etappe 2 skive 2b: «Publiser utkastet»", () => {
     expect(await draftRow(c.courseId)).not.toBeNull();
   });
 
+  it("et upublisert element som ALT står i det publiserte kurset, stopper ikke publiseringen og merkes ikke (QA-porten, skive 2c)", async () => {
+    // Slik kursimporten etterlater et publisert kurs: en ny seksjon lagt inn i lista som utkast, uten publisert versjon.
+    const c = await publishedCourse("pub-alt-i-kurset");
+    const pending = await prisma.courseSection.create({ data: { title: JSON.stringify(L(tag("lagt inn av importen"))) }, select: { id: true } });
+    await prisma.courseSectionVersion.create({ data: { sectionId: pending.id, versionNo: 1, bodyMarkdown: JSON.stringify(L("Ikke publisert ennå.")) } });
+    await prisma.courseItem.create({ data: { courseId: c.courseId, itemType: "SECTION", sectionId: pending.id, sortOrder: 2 } });
+    const list = [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }, { type: "SECTION", sectionId: pending.id }];
+    const nyttNavn = L(tag("navnet rettes"));
+    expect((await saveFirstDraft(c.courseId, { title: nyttNavn, items: list })).status).toBe(200);
+
+    const got = await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN);
+    expect(got.body.draft.items.map((i: { unpublished: boolean }) => i.unpublished)).toEqual([false, false, false]);
+    const published = await publishDraft(c.courseId);
+    expect(published.status, JSON.stringify(published.body).slice(0, 300)).toBe(200);
+    const after = await publishedState(c.courseId);
+    expect(JSON.parse(after.title)).toEqual(nyttNavn);
+    expect(after.items).toEqual([c.moduleId, c.sectionId, pending.id]);
+
+    // KONTROLL: den samme upubliserte seksjonen, NY i utkastet til et annet kurs, stopper publiseringen der.
+    const other = await publishedCourse("pub-ny-i-utkastet");
+    await saveFirstDraft(other.courseId, { items: [{ type: "MODULE", moduleId: other.moduleId }, { type: "SECTION", sectionId: pending.id }] });
+    const rejected = await publishDraft(other.courseId);
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.details.items).toEqual([expect.objectContaining({ id: pending.id, reason: "unpublished" })]);
+  });
+
+  it("avpublisert med utkast, så publisert igjen: utkastet står, kurset er «publisert med nyere utkast», og utkastet kan publiseres", async () => {
+    const c = await publishedCourse("pub-igjen");
+    const utkastnavn = L(tag("overlever avpubliseringen"));
+    await saveFirstDraft(c.courseId, { title: utkastnavn, items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }] });
+    expect((await request(app).post(`${base(c.courseId)}/unpublish`).set(ADMIN)).status).toBe(200);
+    expect(await detail(c.courseId)).toMatchObject({ lifecycle: "draft", hasDraft: true });
+
+    // «Publiser» sender den publiserte utgaven ut igjen, ikke utkastet.
+    const again = await request(app).post(`${base(c.courseId)}/publish`).set(ADMIN).send({});
+    expect(again.status, JSON.stringify(again.body).slice(0, 300)).toBe(200);
+    expect(await detail(c.courseId)).toMatchObject({ lifecycle: "published_with_draft", hasDraft: true });
+    expect(JSON.parse((await publishedState(c.courseId)).title).nb).toBe(c.title);
+
+    const published = await publishDraft(c.courseId);
+    expect(published.status, JSON.stringify(published.body).slice(0, 300)).toBe(200);
+    expect(JSON.parse((await publishedState(c.courseId)).title)).toEqual(utkastnavn);
+    expect(await detail(c.courseId)).toMatchObject({ lifecycle: "published", hasDraft: false });
+  });
+
   it("kurset er avpublisert: 409, ingenting skrevet, og utkastet kan forkastes", async () => {
     const c = await publishedCourse("pub-avpublisert");
     await saveFirstDraft(c.courseId, { title: L("venter"), items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }] });

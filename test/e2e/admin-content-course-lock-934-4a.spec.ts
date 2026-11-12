@@ -38,8 +38,10 @@ const ITEMS = [
 
 type Sent = { method: string; url: string; body: unknown };
 
-async function openCourse(page: Page, options: { itemsFail?: boolean; saveStatus?: number; saveBody?: unknown } = {}) {
-  await mockCommonApis(page, { courses: [course() as never], libraryModules: [] });
+// #1140 etappe 2 (skive 2c): et PUBLISERT kurs lagres til utkastet (`PUT …/draft`, test/e2e/admin-content-course-draft-1140.spec.ts).
+// Testene av den direkte lagringen til …/content bruker derfor et kurs som er avpublisert (`unpublished`).
+async function openCourse(page: Page, options: { itemsFail?: boolean; saveStatus?: number; saveBody?: unknown; unpublished?: boolean } = {}) {
+  await mockCommonApis(page, { courses: [course(options.unpublished ? { publishedAt: null } : {}) as never], libraryModules: [] });
   await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
   const writes: Sent[] = [];
   await page.route("**/api/admin/content/courses/course-1/items", async (route: Route) => {
@@ -94,7 +96,7 @@ test.describe("#934 skive 4a — kursskjemaet", () => {
   });
 
   test("kontroll: kom lista, lagres kurset i ÉTT kall til …/content med elementene, seksjonen og telleren", async ({ page }) => {
-    const { writes } = await openCourse(page);
+    const { writes } = await openCourse(page, { unpublished: true });
     await expect(page.locator("#moduleList li")).toHaveCount(2);
     await expect(page.locator("#formErrorBanner")).toBeHidden();
     await page.locator("#title-nb").fill("Generativ KI — nytt navn");
@@ -110,6 +112,7 @@ test.describe("#934 skive 4a — kursskjemaet", () => {
 
   test("noen andre har lagret kurset (409 course_changed): skjemaet beholder teksten og sier hva forfatteren skal gjøre", async ({ page }) => {
     const { writes } = await openCourse(page, {
+      unpublished: true,
       saveStatus: 409,
       saveBody: { error: "course_changed", message: "Someone else saved this course after you opened it.", details: { expectedRevision: 9, currentRevision: 10 } },
     });

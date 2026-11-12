@@ -1,5 +1,6 @@
-import { createDateFormatter } from "./format-display.js";
+import { createDateFormatter, createDateTimeFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
+const formatDateTime = createDateTimeFormatter(() => currentLocale, "");
 import { pickLocalizedText, resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
 import { escapeHtml } from "./html-escape.js";
 import { lifecycleBadge, lifecycleOf } from "./content-status-badge.js";
@@ -371,6 +372,17 @@ function certBadge(level) {
 function canPublishCourse(course) {
   const moduleCount = Number(course?.moduleCount ?? course?.modules?.length ?? 0);
   return !course?.publishedAt && !course?.archivedAt && moduleCount > 0;
+}
+
+// #1140 etappe 2 (skive 2c): et kurs med et nyere utkast er fortsatt publisert. Knappene som spør «er kurset ute?» (lista og
+// handlingsraden), leser dette. Før sjekket de `=== "published"`, og et kurs med utkast fikk «Publiser» i stedet for «Avpubliser».
+function isLiveLifecycle(lifecycle) {
+  return lifecycle === "published" || lifecycle === "published_with_draft";
+}
+
+/** Kurset har et lagret utkast. Et avpublisert kurs kan ha et liggende igjen (`lifecycle: "draft"`, `hasDraft: true`). */
+function courseHasDraft(course) {
+  return course?.hasDraft === true || lifecycleOf(course) === "published_with_draft";
 }
 
 // #734: publishing a course must never leave it containing unavailable (draft/archived) modules or
@@ -867,8 +879,10 @@ function courseItemChanges(beforeKey, afterList) {
  * Spør forfatteren før et publisert kurs med kursbevis lagres med endret innhold.
  * Gir svaret (`{ version: "major" | "minor", confirmEmailRecipients? }`, se `courseVersionAnswer`), eller null når
  * forfatteren avbryter (da lagres ingenting).
+ *
+ * #1140 etappe 2: «Publiser utkastet» bruker den samme dialogen, med knappen «Publiser som {x.y}» (`saveKey`).
  */
-function askCourseVersion(course, changes) {
+function askCourseVersion(course, changes, { saveKey = "courses.version.save" } = {}) {
   const dialog = document.getElementById("courseVersionDialog");
   const host = document.getElementById("courseVersionChoiceHost");
   const saveBtn = document.getElementById("courseVersionSaveBtn");
@@ -888,7 +902,7 @@ function askCourseVersion(course, changes) {
   cancelBtn.textContent = t("courses.version.cancel");
   const minor = Number.isInteger(course.versionMinor) ? course.versionMinor : 0;
   mountCourseVersionChoice(host, "courseVersionChoice", course, (choice) => {
-    saveBtn.textContent = tf("courses.version.save", { next: choice === "major" ? `${course.versionMajor + 1}.0` : `${course.versionMajor}.${minor + 1}` });
+    saveBtn.textContent = tf(saveKey, { next: choice === "major" ? `${course.versionMajor + 1}.0` : `${course.versionMajor}.${minor + 1}` });
   });
 
   return new Promise((resolve) => {
@@ -1003,7 +1017,7 @@ function getListPage() {
       // #705: samme handlings-rekkefølge som modul/seksjon — Publiser⇄Avpubliser, Arkiver⇄Gjenopprett.
       // Publiser vises bare for et utkast som har innhold (samme krav som canPublishCourse i detaljvisningen).
       const publishToggle = lifecycle === "archived" ? ""
-        : lifecycle === "published"
+        : isLiveLifecycle(lifecycle)
           ? `<button class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.unpublish"))}</button>`
           : (course.moduleCount > 0 ? `<button class="row-action-btn" data-action="publish" data-course-id="${cid}">${escapeHtml(t("ui.action.publish"))}</button>` : "");
       // #705-UX: Slett vises kun for arkiverte elementer (terminal steg etter arkivering).
@@ -1569,25 +1583,63 @@ async function renderDetailView(courseId) {
   // (`course.modules`). Skjemaet sender hele lista ved hver lagring, så en lagring tok da bort alle seksjonene
   // fra kurset. Nå står lista tom, skjemaet sier fra, og `saveCourse` nekter å lagre.
   courseItemsLoadFailed = false;
+  courseDraft = null;
+  courseDraftLoadError = null;
+  publishedCourseItemsKey = null;
+  let draft = null;
   if (course) {
+    // Lista slik den er publisert. Uten utkast er det den skjemaet viser; med utkast sammenligner «Publiser utkastet» med den.
+    let publishedItems = null;
     try {
       const itemsData = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/items`, getHeaders);
-      courseModules = (itemsData.items ?? [])
+      publishedItems = (itemsData.items ?? [])
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map(it => ({ type: it.type, refId: it.type === "MODULE" ? it.moduleId : it.sectionId, title: localizedText(it.title) || it.moduleId || it.sectionId, discussionsEnabled: it.discussionsEnabled !== false }));
     } catch {
+      publishedItems = null;
+    }
+    // #1140 etappe 2 (skive 2c): har kurset et utkast, viser skjemaet utkastet (feltene og lista), også når kurset er
+    // avpublisert, og «Ulagrede endringer» måles mot det.
+    if (courseHasDraft(course)) {
+      try {
+        draft = (await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/draft`, getHeaders))?.draft ?? null;
+      } catch (err) {
+        if (apiErrorStatus(err) === 404) {
+          // Publisert eller forkastet mellom kursdetaljen og denne lesingen: kurset har ikke noe utkast lenger.
+          course = { ...course, hasDraft: false, lifecycle: lifecycleOf(course) === "published_with_draft" ? "published" : lifecycleOf(course) };
+        } else {
+          // Skjemaet viser da det publiserte, og lagring er stengt: en lagring ville gått forbi utkastet som ligger.
+          courseDraftLoadError = apiErrorText(err);
+          // En lagret rad som ikke kan leses, kan forkastes med id-en og telleren serveren sender med.
+          const details = apiErrorBody(err)?.details;
+          if (apiErrorCode(err) === "course_draft_unreadable" && typeof details?.draftId === "string" && Number.isInteger(details?.revision)) {
+            courseDraft = { draftId: details.draftId, revision: details.revision, unreadable: true };
+          }
+        }
+      }
+    }
+    if (draft) {
+      courseDraft = { draftId: draft.id, revision: draft.revision, updatedByName: draft.updatedByName ?? null, updatedAt: draft.updatedAt ?? null };
+      courseModules = [...(draft.items ?? [])].sort((a, b) => a.sortOrder - b.sortOrder).map(courseDraftItemToFormItem);
+      publishedCourseItemsKey = publishedItems ? courseItemsKey(publishedItems) : null;
+    } else if (publishedItems) {
+      courseModules = publishedItems;
+    } else {
       courseModules = [];
       courseItemsLoadFailed = true;
     }
   } else {
     courseModules = [];
   }
-  // #934 skive 3: innholdet slik det står nå — lagringen sammenligner med dette.
+  // #934 skive 3: innholdet slik det står nå — lagringen sammenligner med dette. #1140: med utkast er det utkastets liste.
   initialCourseItemsKey = courseItemsKey(courseModules);
 
+  // Feltene kommer fra utkastet når det finnes (serveren har fylt inn det utkastet lot stå «som publisert»).
+  const formSource = draft?.course ?? course;
+
   // Init locale values from existing course or empty
-  const titleValues = parseLocalizedFieldValues(course?.title);
-  const descriptionValues = parseLocalizedFieldValues(course?.description);
+  const titleValues = parseLocalizedFieldValues(formSource?.title);
+  const descriptionValues = parseLocalizedFieldValues(formSource?.description);
   const localeValues = {};
   for (const loc of DETAIL_LOCALES) {
     localeValues[loc] = {
@@ -1600,14 +1652,14 @@ async function renderDetailView(courseId) {
     description: descriptionValues,
   });
 
-  const certLevel = course?.certificationLevel ?? "";
-  const enrollmentPolicy = course?.enrollmentPolicy ?? "OPEN";
+  const certLevel = formSource?.certificationLevel ?? "";
+  const enrollmentPolicy = formSource?.enrollmentPolicy ?? "OPEN";
   // #495/T-QA-4: default på for nye kurs og når feltet mangler (eldre detaljer).
-  const discussionsEnabled = course?.discussionsEnabled !== false;
+  const discussionsEnabled = formSource?.discussionsEnabled !== false;
   // 2.119.0: e-post til kursets eiere om nye spørsmål; på når feltet mangler.
-  const discussionOwnerNotifications = course?.discussionOwnerNotifications !== false;
+  const discussionOwnerNotifications = formSource?.discussionOwnerNotifications !== false;
   // #1093: plassering i «Mine kurs»; tomt = alfabetisk.
-  const sortOrder = Number.isInteger(course?.sortOrder) ? String(course.sortOrder) : "";
+  const sortOrder = Number.isInteger(formSource?.sortOrder) ? String(formSource.sortOrder) : "";
   const pageTitle = course ? (localizedText(course.title) || t("ui.kind.course")) : t("courses.newCourse");
   const showPublishButton = canPublishCourse({
     ...course,
@@ -1618,7 +1670,7 @@ async function renderDetailView(courseId) {
   // 2.102.0: temaene kurset kan velge blant. Kom ikke lista, vises ikke valget — og da sendes
   // heller ingen themeIds ved lagring, så kursets temaer ikke viskes ut av en feil.
   const availableThemes = await loadAvailableThemes();
-  const themeIds = Array.isArray(course?.themeIds) ? course.themeIds : [];
+  const themeIds = Array.isArray(formSource?.themeIds) ? formSource.themeIds : [];
 
   courseDetail = { courseId: courseId ?? null, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, discussionOwnerNotifications, sortOrder, availableThemes, themeIds };
   const page = getCourseFormPage();
@@ -1777,14 +1829,25 @@ function bindCourseDetail() {
 }
 
 // #934 skive 4a: feilet lastingen av elementlista, står meldingen i skjemaets feilbanner, og lagring er stengt.
+// #1140 etappe 2: det samme når kurset har et utkast som ikke kom (eller ikke kan leses).
 function showCourseItemsLoadError() {
-  if (!courseItemsLoadFailed) return false;
-  const errorBanner = document.getElementById("formErrorBanner");
-  if (errorBanner) {
-    errorBanner.innerHTML = `<div class="error-banner" data-course-items-load-error>${escapeHtml(t("courses.itemsLoadError"))}</div>`;
-    errorBanner.hidden = false;
+  if (courseItemsLoadFailed) {
+    showCourseFormError(`<div class="error-banner" data-course-items-load-error>${escapeHtml(t("courses.itemsLoadError"))}</div>`);
+    return true;
   }
-  return true;
+  if (courseDraftLoadError) {
+    showCourseFormError(`<div class="error-banner" data-course-draft-load-error>${escapeHtml(courseDraftLoadError)}</div>`);
+    return true;
+  }
+  return false;
+}
+
+/** Skjemaets feilbanner, med ferdig HTML. */
+function showCourseFormError(html) {
+  const errorBanner = document.getElementById("formErrorBanner");
+  if (!errorBanner) return;
+  errorBanner.innerHTML = html;
+  errorBanner.hidden = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -1796,6 +1859,16 @@ let initialCourseItemsKey = ""; // #934 skive 3: kursets innhold da det ble last
 // #934 skive 4a: elementlista kom ikke. Da kan skjemaet ikke lagres — det ville sendt en tom (eller gammel) liste.
 let courseItemsLoadFailed = false;
 let courseFormPage = null;
+// #1140 etappe 2 (skive 2c): utkastet skjemaet lastet, `{ draftId, revision, updatedByName, updatedAt }`, eller null. Lagring,
+// publisering og forkasting sender id-en og telleren, så serveren kan se om noen andre har endret utkastet siden.
+// `unreadable`: raden finnes, men kan ikke leses; den kan bare forkastes.
+let courseDraft = null;
+// Teksten når kurset har et utkast som ikke kom. Da er lagring stengt (feilbanneret).
+let courseDraftLoadError = null;
+// Lista slik den er publisert, når skjemaet viser et utkast (null når den ikke kom). «Publiser utkastet» sammenligner med den.
+let publishedCourseItemsKey = null;
+// Én handling på utkastet om gangen (publiser eller forkast).
+let courseDraftActionRunning = false;
 
 const courseFormTexts = () => formPageTexts(t, { back: t("courses.back"), typeLabel: t("courses.typeLabel"), untitled: t("courses.untitled") });
 
@@ -1815,13 +1888,18 @@ function getCourseFormPage() {
     title: () => {
       const nb = document.getElementById("title-nb")?.value?.trim();
       if (nb) return nb;
+      // #1140 etappe 2: før feltet finnes (første tegning av hodet) er det skjemaets verdi som gjelder, og med et utkast er
+      // det utkastets navn, ikke det publiserte. Ellers sto overskriften med ett navn og navnefeltet med et annet.
+      const loaded = courseDetail?.localeValues?.nb?.title?.trim();
+      if (loaded) return loaded;
       return courseDetail?.course ? (localizedText(courseDetail.course.title) || "") : "";
     },
     item: () => courseDetail?.course ?? null,
     // #934 skive 3: versjonen («v3.2») ved statusmerket. Et nytt kurs har ingen ennå.
+    // #1140 etappe 2: med utkast «Publisert» + «Nyere utkast» (det felles merket), og linja om hvem som lagret det.
     statusHtml: () => {
       const course = courseDetail?.course ?? null;
-      return course ? lifecycleBadge(course, t) + courseVersionChipHtml(course) : "";
+      return course ? lifecycleBadge(course, t) + courseVersionChipHtml(course) + courseDraftStateHtml(course) : "";
     },
     t,
     actions: () => courseDetailActions(),
@@ -1848,13 +1926,22 @@ function courseDetailActions() {
   const ctitle = escapeHtml(localizedText(c.title) || c.id);
   const moduleCount = courseModules.filter(it => it.type === "MODULE").length;
   const pendingCount = lifecycle === "archived" ? 0 : (pendingVersions?.items?.length ?? 0);
+  // #1140 etappe 2: rett etter Lagre og Avbryt, og bare når kurset har et lagret utkast. «Publiser utkastet» bare for et
+  // publisert kurs (serveren avviser ellers); «Forkast utkast» alltid, så et utkast aldri står uten en vei ut.
+  const draftLoaded = courseDraft != null && courseHasDraft(c);
   return [
+    draftLoaded && isLiveLifecycle(lifecycle) && !courseDraft.unreadable
+      ? `<button type="button" id="publishCourseDraftBtn" class="row-action-btn" data-action="publish-draft" data-course-id="${cid}">${escapeHtml(t("courses.draft.publishAction"))}</button>`
+      : "",
+    draftLoaded
+      ? `<button type="button" id="discardCourseDraftBtn" class="row-action-btn" data-action="discard-draft" data-course-id="${cid}">${escapeHtml(t("courses.draft.discardAction"))}</button>`
+      : "",
     pendingCount > 0
       ? `<button type="button" class="row-action-btn" data-action="publish-pending" data-course-id="${cid}">${escapeHtml(tf("adminContent.courses.pendingPublish.action", { count: pendingCount }))}</button>`
       : "",
     `<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`,
     lifecycle === "archived" ? ""
-      : lifecycle === "published"
+      : isLiveLifecycle(lifecycle)
         ? `<button type="button" class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.unpublish"))}</button>`
         : (moduleCount > 0 ? `<button type="button" id="publishCourseBtn" class="row-action-btn" data-action="publish" data-course-id="${cid}">${escapeHtml(t("ui.action.publish"))}</button>` : ""),
     lifecycle === "archived"
@@ -1870,6 +1957,165 @@ async function refreshCourseView(courseId) {
   const route = detectRoute();
   if (route.view === "list") await renderListView();
   else await renderDetailView(courseId ?? route.courseId);
+}
+
+// ---------------------------------------------------------------------------
+// #1140 etappe 2 (skive 2c): utkastet til et publisert kurs. doc/design/PLAN_1140_E2.md, «Skive 2c: kursbyggeren», og
+// doc/DECISIONS.md, «Ingen bryter, og mest mulig likt moduler».
+// ---------------------------------------------------------------------------
+
+/** Versjonen deltakerne ser, som «3.2» (uten «v»). */
+function courseVersionNumber(course) {
+  return courseVersionLabel(course).slice(1);
+}
+
+/** Hvorfor et element i utkastet ikke kan publiseres ut i kurset (fra `GET …/draft`), eller null. */
+function courseDraftItemProblem(item) {
+  if (item?.missing) return "missing";
+  if (item?.archivedAt) return "archived";
+  if (item?.unpublished) return "unpublished";
+  return null;
+}
+
+function courseDraftItemToFormItem(item) {
+  const refId = item.type === "MODULE" ? item.moduleId : item.sectionId;
+  return {
+    type: item.type,
+    refId,
+    title: localizedText(item.title) || refId,
+    discussionsEnabled: item.discussionsEnabled !== false,
+    problem: courseDraftItemProblem(item),
+  };
+}
+
+/**
+ * Under merket: hvem som lagret utkastet og hvilken versjon deltakerne ser. For et kurs som ikke er publisert, med et utkast
+ * liggende igjen: veien ut i stedet (publiser kurset igjen, eller forkast utkastet).
+ */
+function courseDraftStateHtml(course) {
+  if (!courseDraft || !courseHasDraft(course)) return "";
+  if (!isLiveLifecycle(lifecycleOf(course))) {
+    return `<p class="course-draft-notice" role="status" data-course-draft-notice>${escapeHtml(t("courses.draft.notLiveNotice"))}</p>`;
+  }
+  if (courseDraft.unreadable) return "";
+  const time = formatDateTime(courseDraft.updatedAt);
+  const version = courseVersionNumber(course);
+  const text = courseDraft.updatedByName
+    ? tf("courses.draft.line", { name: courseDraft.updatedByName, time, version })
+    : tf("courses.draft.lineNoName", { time, version });
+  return `<p class="course-draft-line" data-course-draft-line>${escapeHtml(text)}</p>`;
+}
+
+/** `400 course_draft_item_unusable`: navnene og grunnene serveren sendte, som én setning. Tom når listen mangler. */
+function courseDraftUnusableText(err) {
+  const items = apiErrorBody(err)?.details?.items;
+  if (!Array.isArray(items) || items.length === 0) return "";
+  const known = new Set(["archived", "unpublished", "missing"]);
+  const list = items
+    .map((item) => {
+      const name = `«${localizedText(item?.title) || item?.id || ""}»`;
+      return known.has(item?.reason) ? `${name} (${t(`courses.draft.reason.${item.reason}`)})` : name;
+    })
+    .join(", ");
+  return tf("courses.draft.unusableList", { items: list });
+}
+
+/** Feil fra publisering eller forkasting i skjemaets feilbanner, på brukerens språk. Skjemaet beholder det som står. */
+function showCourseDraftError(err) {
+  const extra = apiErrorCode(err) === "course_draft_item_unusable" ? courseDraftUnusableText(err) : "";
+  showCourseFormError(`<div class="error-banner" data-course-draft-error>${escapeHtml(apiErrorText(err))}${extra ? ` ${escapeHtml(extra)}` : ""}</div>`);
+  document.getElementById("formErrorBanner")?.scrollIntoView?.({ block: "nearest" });
+}
+
+/**
+ * «Publiser utkastet». Ulagrede endringer lagres først (feiler det, publiseres ingenting). Er lista endret mot den publiserte og
+ * noen har kursbevis, kommer «Hva slags endring er dette?» med knappen «Publiser som {x.y}»; ellers publiseres det direkte.
+ * Ingen visning av hva som endres (produkteier 2026-11-12).
+ */
+async function publishCourseDraftFromForm() {
+  const courseId = courseDetail?.courseId ?? null;
+  const course = courseDetail?.course ?? null;
+  if (courseDraftActionRunning || !courseId || !course || !courseDraft || courseDraft.unreadable) return;
+  const page = getCourseFormPage();
+  // En lagring som pågår («Lagre» rett før «Publiser utkastet»), må bli ferdig først: ellers sendes to lagringer med samme
+  // teller, og den ene får «noen andre har endret utkastet».
+  if (page.state.saving) return;
+  courseDraftActionRunning = true;
+  try {
+    if (page.state.dirty) {
+      page.setBusy(true);
+      let saved = false;
+      try {
+        saved = await saveCourse(courseId, { beforePublish: true });
+      } finally {
+        page.setBusy(false);
+      }
+      if (!saved) return;
+      page.markClean();
+    }
+    // Lista i utkastet (skjemaet er lagret nå) mot den publiserte. Kom ikke den publiserte lista, vet vi det ikke: da avgjør
+    // serveren, og svarer `course_version_required` hvis spørsmålet trengs.
+    const changes = publishedCourseItemsKey === null ? null : courseItemChanges(publishedCourseItemsKey, courseModules);
+    const listChanged = publishedCourseItemsKey !== null && courseItemsKey(courseModules) !== publishedCourseItemsKey;
+    let answer;
+    if (listChanged && Number(course.certificateHolders) > 0) {
+      answer = await askCourseVersion(course, changes, { saveKey: "courses.draft.publishAs" });
+      if (answer === null) return;
+    }
+    await commitCourseDraftPublish(courseId, course, answer, changes);
+  } finally {
+    courseDraftActionRunning = false;
+  }
+}
+
+async function commitCourseDraftPublish(courseId, course, answer, changes, retried = false) {
+  const draft = courseDraft;
+  try {
+    const result = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/draft/publish`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify({ loaded: { draftId: draft.draftId, revision: draft.revision }, ...versionRequestBody(answer, "version") }),
+    });
+    showToast(t("courses.draft.published"), "success", tf("courses.draft.publishedDetail", { version: courseVersionNumber(result?.course ?? course) }));
+    await renderDetailView(courseId);
+  } catch (err) {
+    // Noen har fått kursbevis siden kurset ble åpnet, eller lista vi sammenlignet med kom ikke: spør, og prøv én gang til.
+    if (!retried && answer === undefined && apiErrorCode(err) === "course_version_required") {
+      const holders = Number(apiErrorBody(err)?.details?.certificateHolders);
+      const asked = { ...course, certificateHolders: Number.isFinite(holders) && holders > 0 ? holders : course.certificateHolders };
+      const again = await askCourseVersion(asked, changes ?? { added: 0, removed: 0, moved: 0 }, { saveKey: "courses.draft.publishAs" });
+      if (again === null) return;
+      await commitCourseDraftPublish(courseId, asked, again, changes, true);
+      return;
+    }
+    showCourseDraftError(err);
+  }
+}
+
+/** «Forkast utkast»: sletter det lagrede utkastet etter en bekreftelse. Kurset deltakerne ser, endres ikke. */
+async function discardCourseDraftFromForm(button) {
+  const courseId = courseDetail?.courseId ?? null;
+  const course = courseDetail?.course ?? null;
+  if (courseDraftActionRunning || getCourseFormPage().state.saving || !courseId || !course || !courseDraft) return;
+  if (!window.confirm(tf("courses.draft.discardConfirm", { version: courseVersionNumber(course) }))) return;
+  courseDraftActionRunning = true;
+  if (button) button.disabled = true;
+  const { draftId, revision } = courseDraft;
+  try {
+    await apiFetch(
+      `/api/admin/content/courses/${encodeURIComponent(courseId)}/draft?draftId=${encodeURIComponent(draftId)}&revision=${encodeURIComponent(String(revision))}`,
+      getHeaders,
+      { method: "DELETE" },
+    );
+    // Det som var skrevet og ikke lagret, var en del av utkastet, og er forkastet med det.
+    getCourseFormPage().markClean();
+    showToast(t("courses.draft.discarded"), "success");
+    await renderDetailView(courseId);
+  } catch (err) {
+    showCourseDraftError(err);
+    if (button) button.disabled = false;
+  } finally {
+    courseDraftActionRunning = false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1899,8 +2145,13 @@ function renderModuleList() {
       // #744: åpne elementets editor i ny fane så kursbyggeren ikke går tapt.
       // Modul → samtale-editoren; seksjon → seksjons-editoren.
       const openHref = buildCourseItemHref(m, aktivtKursId);
+      // #1140 etappe 2: et element i utkastet som er arkivert, avpublisert eller slettet siden utkastet ble lagret, merkes med
+      // grunnen. Publiseringen avvises av serveren til det er tatt ut.
+      const problemNote = m.problem
+        ? `<span class="form-row-note" data-item-problem="${escapeHtml(m.problem)}">${escapeHtml(t(`courses.draft.item.${m.problem}`))}</span>`
+        : "";
       return `
-      <li class="form-row" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
+      <li class="form-row${m.problem ? " is-blocked" : ""}" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
         <span class="form-row-order">${i + 1}.</span>
         <span class="form-row-badge">${courseItemTypeBadge(m.type)}</span>
         <span class="form-row-title">${escapeHtml(m.title)}</span>
@@ -1910,6 +2161,7 @@ function renderModuleList() {
           <a href="${openHref}" class="row-action-btn" target="_blank" rel="noopener">${escapeHtml(t("ui.action.open"))}</a>
           <button type="button" class="row-action-btn destructive" data-remove="${i}" aria-label="${escapeHtml(t("courses.removeModule"))}">${escapeHtml(t("ui.action.remove"))}</button>
         </div>
+        ${problemNote}
       </li>`;
     }).join("")}
   </ul>`;
@@ -2073,6 +2325,16 @@ function bindHeaderActions() {
     }
     const btn = e.target.closest(".form-page-actions [data-action]");
     if (!btn) return;
+    // #1140 etappe 2: utkastets to knapper forlater ikke skjemaet, og spør ikke om det. «Publiser utkastet» lagrer det som
+    // er skrevet først; «Forkast utkast» har sin egen bekreftelse, som gjelder det ulagrede også.
+    if (btn.dataset.action === "publish-draft") {
+      publishCourseDraftFromForm();
+      return;
+    }
+    if (btn.dataset.action === "discard-draft") {
+      discardCourseDraftFromForm(btn);
+      return;
+    }
     if (!getCourseFormPage().confirmLeave()) return;
     handleListTableClick(e, btn);
   });
@@ -2247,7 +2509,13 @@ function resolveActiveWorkspaceRoles() {
   return Array.isArray(defaults?.roles) && defaults.roles.length > 0 ? defaults.roles : ["SUBJECT_MATTER_OWNER"];
 }
 
-async function saveCourse(courseId) {
+/**
+ * Lagre. Et nytt kurs og et kurs som ikke er publisert, lagres direkte som før. #1140 etappe 2: et PUBLISERT kurs lagres til
+ * utkastet (`PUT …/draft`), uten spørsmål om versjon; ingenting deltakerne ser, endres.
+ * `beforePublish`: kalt av «Publiser utkastet». Da vises ingen melding, og visningen lastes ikke på nytt (publiseringen gjør det);
+ * id-en og telleren til det lagrede utkastet huskes, så publiseringen sender dem.
+ */
+async function saveCourse(courseId, { beforePublish = false } = {}) {
   const saveBtn = document.getElementById("formSaveBtn");
   const errorBanner = document.getElementById("formErrorBanner");
 
@@ -2323,9 +2591,11 @@ async function saveCourse(courseId) {
   // avpublisert (kursbevis betyr at det har vært ute). Avbryter forfatteren, lagres ingenting. Uten
   // kursbevis spørres det ikke — tjeneren gir en mindre versjon.
   const loadedCourse = courseId ? courseDetail?.course ?? null : null;
+  // #1140 etappe 2: et publisert kurs (med eller uten utkast) lagres til utkastet. Versjonen avgjøres når utkastet publiseres.
+  const savesToDraft = Boolean(courseId) && isLiveLifecycle(lifecycleOf(loadedCourse));
   const itemsChanged = Boolean(courseId) && courseItemsKey(courseModules) !== initialCourseItemsKey;
   let versionAnswer;
-  if (itemsChanged && Number(loadedCourse?.certificateHolders) > 0) {
+  if (!savesToDraft && itemsChanged && Number(loadedCourse?.certificateHolders) > 0) {
     versionAnswer = await askCourseVersion(loadedCourse, courseItemChanges(initialCourseItemsKey, courseModules));
     if (versionAnswer === null) return false;
   }
@@ -2348,8 +2618,32 @@ async function saveCourse(courseId) {
 
   try {
     let savedCourseId = courseId;
+    let savedDraft = null;
 
-    if (!courseId) {
+    if (savesToDraft) {
+      // #1140 etappe 2: de samme feltene som direkte lagring sender, og `loaded`: hva skjemaet lastet. Uten utkast kursets
+      // teller (`expectedRevision`), med utkast utkastets id og teller. Har noen andre lagret, publisert eller forkastet
+      // siden, svarer serveren 409 og har ikke skrevet noe; skjemaet beholder det forfatteren skrev (feilbanneret under).
+      const loaded = courseDraft && !courseDraft.unreadable
+        ? { draftId: courseDraft.draftId, revision: courseDraft.revision }
+        : { expectedRevision: Number.isInteger(loadedCourse?.contentRevision) ? loadedCourse.contentRevision : 0 };
+      const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/draft`, getHeaders, {
+        method: "PUT",
+        body: JSON.stringify({
+          title: normalizedTitle,
+          description: normalizedDescription,
+          certificationLevel: certLevel || undefined,
+          enrollmentPolicy,
+          discussionsEnabled,
+          discussionOwnerNotifications,
+          sortOrder,
+          themeIds,
+          items,
+          loaded,
+        }),
+      });
+      savedDraft = body?.draft ?? null;
+    } else if (!courseId) {
       // Create
       const body = await apiFetch("/api/admin/content/courses", getHeaders, {
         method: "POST",
@@ -2391,8 +2685,24 @@ async function saveCourse(courseId) {
       });
     }
 
-    showToast(t("courses.saved"), "success");
     initialDetailLocaleValues = cloneCourseLocaleValues(effectiveValues);
+
+    if (savesToDraft) {
+      if (beforePublish) {
+        // Publiseringen kommer rett etter, og sender utkastet slik det nå er lagret.
+        if (savedDraft?.id && Number.isInteger(savedDraft.revision)) {
+          courseDraft = { draftId: savedDraft.id, revision: savedDraft.revision, updatedByName: savedDraft.updatedByName ?? null, updatedAt: savedDraft.updatedAt ?? null };
+        }
+        initialCourseItemsKey = courseItemsKey(courseModules);
+        if (saveBtn) saveBtn.disabled = false;
+        return true;
+      }
+      showToast(t("courses.draft.savedToast"), "success", tf("courses.draft.savedDetail", { version: courseVersionNumber(loadedCourse) }));
+      await renderDetailView(courseId);
+      return true;
+    }
+
+    showToast(t("courses.saved"), "success");
 
     // If new, navigate to the saved course URL (skjemaet er lagret — ingen spørsmål ved navigering).
     if (!courseId) {
@@ -2406,6 +2716,9 @@ async function saveCourse(courseId) {
     if (errorBanner) {
       errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(apiErrorText(err))}</div>`;
       errorBanner.hidden = false;
+      // Banneret står under innholdslista. På et langt kurs havnet «Noen andre har endret utkastet …» under kanten, og
+      // «Lagre» så ut til å ikke gjøre noe (QA-porten, skive 2c).
+      errorBanner.scrollIntoView?.({ block: "nearest" });
     }
     if (saveBtn) saveBtn.disabled = false;
     return false;

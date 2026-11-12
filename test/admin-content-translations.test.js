@@ -76,4 +76,51 @@ describe("admin content translation resources", () => {
       }
     }
   });
+
+  // #1140 etappe 2 (skive 2c): kursbyggerens utkast. Bokmål og nynorsk bygges som engelsk + overstyringer, så paritetstesten over
+  // er grønn også når en norsk overstyring mangler: da vises engelsk. Denne krever at hver tekst finnes OG er oversatt.
+  it("translates the course draft texts and its API error codes into Bokmål and Nynorsk", () => {
+    const keys = [
+      "courses.draft.savedToast",
+      "courses.draft.savedDetail",
+      "courses.draft.line",
+      "courses.draft.lineNoName",
+      "courses.draft.publishAction",
+      "courses.draft.discardAction",
+      "courses.draft.discardConfirm",
+      "courses.draft.discarded",
+      "courses.draft.published",
+      "courses.draft.publishedDetail",
+      "courses.draft.publishAs",
+      "courses.draft.notLiveNotice",
+      "courses.draft.item.archived",
+      "courses.draft.item.unpublished",
+      "courses.draft.item.missing",
+      "courses.draft.reason.archived",
+      "courses.draft.reason.unpublished",
+      "courses.draft.reason.missing",
+      "courses.draft.unusableList",
+      "errors.api.course_draft_changed",
+      "errors.api.course_has_draft",
+      "errors.api.course_draft_requires_published",
+      "errors.api.course_draft_unreadable",
+      "errors.api.course_draft_item_unusable",
+      "errors.api.course_changed",
+    ];
+    for (const key of keys) {
+      const en = translations["en-GB"][key];
+      expect(en, `en-GB is missing ${key}`).toBeTypeOf("string");
+      for (const locale of ["nb", "nn"]) {
+        expect(translations[locale][key], `${locale} is missing ${key}`).toBeTypeOf("string");
+        expect(translations[locale][key], `${locale}.${key} is still English`).not.toBe(en);
+      }
+    }
+    // Plassholderne er de samme i alle tre språk: en som mangler, ville stått som «{version}» i teksten.
+    for (const key of keys) {
+      const holders = (text) => [...String(text).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+      for (const locale of ["nb", "nn"]) {
+        expect(holders(translations[locale][key]), `${locale}.${key}`).toEqual(holders(translations["en-GB"][key]));
+      }
+    }
+  });
 });

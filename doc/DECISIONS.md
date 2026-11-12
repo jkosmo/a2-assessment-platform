@@ -1703,5 +1703,13 @@ Da kursbyggeren skulle bygges, svarte produkteier på fire spørsmål (skissen: 
 - **Et publisert kurs uten utkast kan fortsatt lagres direkte gjennom API-et** (min avgjørelse i byggingen). Kursbyggeren
   gjør det ikke; den lagrer til utkastet. Å nekte det på serveren ville ikke beskyttet noe: uten utkast er en direkte
   lagring det samme som i dag, og med utkast stopper låsen den. Rutene ryddes i etappe 3.
-- **Sammenslåingen av «Publiser utkastet» og «Publiser nye versjoner» er flyttet til etappe 3.** Bygd nå måtte den stå på
-  maskineriet med ett svar per kurs, som etappe 3 fjerner. Bryteren står derfor av i prod til etappe 3 er ferdig.
+- **Sammenslåingen av «Publiser utkastet» og «Publiser nye versjoner» er flyttet til etappe 3** (fra planlesingen, står
+  fortsatt). Bygd nå måtte den stå på maskineriet med ett svar per kurs, som etappe 3 fjerner. Til da er det to knapper.
+  Den opprinnelige følgen, «bryteren står derfor av i prod til etappe 3 er ferdig», gjelder ikke lenger.
+- **Utkastet omfatter også innstillingene** (synlighet, plassering, tema, diskusjon), som produkteier avgjorde 2026-11-11
+  («Alt»). Følgen: en innstilling som endres på et publisert kurs, virker først når utkastet publiseres. Den som vil
+  begrense synligheten raskt, må publisere utkastet, eller forkaste et som ligger der fra før.
+- **Et upublisert element stopper publiseringen bare når det er NYTT i utkastet.** Et element som alt står i det
+  publiserte kurset, slipper gjennom selv om det ikke er publisert (kursimporten kan legge en ny seksjon inn som utkast).
+  Det er tilstanden kurset alt har, og utkastet gjør den ikke verre. Uten dette ville et slikt kurs ikke fått publisert
+  noe utkast (QA-porten, skive 2c).

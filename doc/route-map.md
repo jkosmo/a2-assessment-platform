@@ -47,6 +47,8 @@ fills only the gaps. Same gate on the course cascade (`/admin-content/courses`) 
 auto-publish. No new route; the behaviour is on
 `POST .../module-versions/:id/publish`. See `doc/API_REFERENCE.md` → "Publish translation gate".
 
+**#1140 etappe 2, skive 2c — the course builder saves a published course to a draft (2.157.0).** No new page. On `/admin-content/courses/:courseId` «Lagre» on a published course writes the draft; «Publiser utkastet» and «Forkast utkast» are new buttons; the course list shows «Publisert» + «Nyere utkast». Author guide: `doc/COURSE_DRAFTS_GUIDE.md`.
+
 **#1140 etappe 2, skive 2b — publish the draft (2.156.0).** No new page. New route `POST /api/admin/content/courses/:courseId/draft/publish`; `DELETE …/draft` now takes `?draftId=…&revision=…`.
 
 **#1140 etappe 2, skive 2a — course drafts (2.155.0).** No new page; the course builder is unchanged until slice 2c. New routes: `GET|PUT|DELETE /api/admin/content/courses/:courseId/draft`. Saving (`PUT`) needs the switch `course_drafts` (off); reading and discarding always work. See `doc/API_REFERENCE.md` and `doc/FEATURE_SURFACE_MAP.md` §32.

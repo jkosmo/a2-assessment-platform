@@ -38,8 +38,11 @@ async function nb(page: Page) {
   await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
 }
 
+// #1140 etappe 2 (skive 2c): et PUBLISERT kurs lagres til utkastet uten spørsmål om versjon; spørsmålet og e-posttallet kommer
+// når utkastet publiseres (test/e2e/admin-content-course-draft-1140.spec.ts). Direkte lagring med dialogen gjelder fortsatt et
+// kurs som har vært ute og er avpublisert, så skjematestene her bruker et slikt kurs.
 async function openCourse(page: Page, overrides: Record<string, unknown> = {}, contentStatus = 200) {
-  await mockCommonApis(page, { courses: [course(overrides) as never], libraryModules: [] });
+  await mockCommonApis(page, { courses: [course({ publishedAt: null, ...overrides }) as never], libraryModules: [] });
   await nb(page);
   const sent: Array<Record<string, unknown>> = [];
   await page.route("**/api/admin/content/courses/*/items", async (route: Route) => {

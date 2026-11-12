@@ -14,6 +14,7 @@ import {
   setCourseItems,
   deleteCourse,
   courseRepository,
+  createCourseRepository,
   assignEnrollments,
   revokeEnrollment,
   listCourseEnrollments,
@@ -573,16 +574,28 @@ function readCourseDraftPayload(draft: CourseDraftRow): CourseDraftPayload {
 
 type DraftItemReader = Pick<typeof prisma, "module" | "courseSection">;
 
-/** Elementene i utkastet slik de står NÅ: tittel, og om de er arkivert eller borte siden utkastet ble lagret. */
-async function describeCourseDraftItems(client: DraftItemReader, items: CourseDraftPayload["items"]) {
+/**
+ * Elementene i utkastet slik de står NÅ: tittel, og om noe hindrer at de publiseres ut i kurset (arkivert, slettet, eller
+ * nytt i utkastet uten å være publisert). `liveItems` er kursets publiserte liste, hentet av kalleren gjennom den navngitte
+ * døra (`findAllCourseItems`, #958).
+ */
+async function describeCourseDraftItems(
+  client: DraftItemReader,
+  items: CourseDraftPayload["items"],
+  liveItems: ReadonlyArray<{ moduleId: string | null; sectionId: string | null }>,
+) {
   const moduleIds = items.flatMap((item) => (item.type === "MODULE" ? [item.moduleId] : []));
   const sectionIds = items.flatMap((item) => (item.type === "SECTION" ? [item.sectionId] : []));
   const select = { id: true, title: true, archivedAt: true, activeVersionId: true } as const;
   const modules = moduleIds.length > 0 ? await client.module.findMany({ where: { id: { in: moduleIds } }, select }) : [];
   const sections = sectionIds.length > 0 ? await client.courseSection.findMany({ where: { id: { in: sectionIds } }, select }) : [];
   const known = new Map([...modules, ...sections].map((row) => [row.id, row]));
+  // Det som alt står i det publiserte kurset. Et slikt element stopper ikke publiseringen selv om det ikke er publisert:
+  // det er tilstanden kurset alt har (kursimporten kan legge en ny seksjon inn som utkast), og utkastet gjør den ikke verre.
+  const alreadyInCourse = new Set(liveItems.map((row) => row.moduleId ?? row.sectionId));
   return items.map((item, index) => {
-    const row = known.get(item.type === "MODULE" ? item.moduleId : item.sectionId);
+    const refId = item.type === "MODULE" ? item.moduleId : item.sectionId;
+    const row = known.get(refId);
     return {
       type: item.type,
       sortOrder: index,
@@ -591,9 +604,10 @@ async function describeCourseDraftItems(client: DraftItemReader, items: CourseDr
       title: row?.title ?? null,
       discussionsEnabled: item.discussionsEnabled !== false,
       archivedAt: row?.archivedAt?.toISOString() ?? null,
-      // Ingen publisert versjon. Et element som bare står i utkastet, ses ikke av bruk-låsen (den leser kursets liste), så
-      // det kan avpubliseres etter at utkastet ble lagret. I et levende kurs ville deltakerne da møtt noe som ikke kan åpnes.
-      unpublished: row != null && row.activeVersionId == null,
+      // NYTT i utkastet og uten publisert versjon. Et element som bare står i utkastet, ses ikke av bruk-låsen (den leser
+      // kursets liste), så det kan avpubliseres etter at utkastet ble lagret; og velgeren i kursbyggeren tilbyr seksjoner
+      // som aldri har vært publisert. I et levende kurs ville deltakerne da møtt noe NYTT som ikke kan åpnes.
+      unpublished: row != null && row.activeVersionId == null && !alreadyInCourse.has(refId),
       missing: !row,
     };
   });
@@ -633,7 +647,7 @@ async function courseDraftView(courseId: string, draft: CourseDraftRow) {
       sortOrder: payload.sortOrder !== undefined ? payload.sortOrder : course.sortOrder ?? null,
       themeIds: payload.themeIds ?? (await findThemeIdsForCourse(courseId)),
     },
-    items: await describeCourseDraftItems(prisma, payload.items),
+    items: await describeCourseDraftItems(prisma, payload.items, await courseRepository.findAllCourseItems(courseId)),
   };
 }
 
@@ -710,7 +724,8 @@ adminCoursesRouter.post("/:courseId/draft/publish", requireContentOwnership("COU
       actorId,
       apply: async (tx, draft) => {
         const payload = readCourseDraftPayload(draft);
-        const unusable = (await describeCourseDraftItems(tx, payload.items)).flatMap((item) => {
+        const liveItems = await createCourseRepository(tx).findAllCourseItems(courseId);
+        const unusable = (await describeCourseDraftItems(tx, payload.items, liveItems)).flatMap((item) => {
           const reason = draftItemProblem(item);
           return reason ? [{ type: item.type, id: item.moduleId ?? item.sectionId, title: item.title, reason }] : [];
         });

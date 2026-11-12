@@ -198,6 +198,22 @@
       .course-theme-option input { width: 18px; height: 18px; margin: 0; accent-color: var(--color-primary); }
       /* #934 skive 3: «Hva slags endring er dette?». Valget bor i shared.css, siden modulsiden bruker det også (5b). */
       #courseVersionDialog, #pendingPublishDialog.is-versioned { max-width: min(620px, calc(100vw - 24px)); }
+      /* #1140 etappe 2: linja under merket når kurset har et utkast. Den står i tilstandslinja (flex), men alltid på egen
+         linje etter «Alt lagret»/«Ulagrede endringer» (order), og brekker på en smal skjerm. */
+      .course-draft-line, .course-draft-notice {
+        flex-basis: 100%;
+        order: 1;
+        margin: 0;
+        font-size: 13px;
+        border-radius: var(--radius-card);
+        padding: 7px 10px;
+        overflow-wrap: anywhere;
+      }
+      .course-draft-line { color: #8a5a00; background: #fff5e6; border: 1px solid #e3c58a; }
+      .course-draft-notice { color: var(--color-error); background: #fdf0ef; border: 1px solid #f5c0bb; }
+      /* Et element i utkastet som ikke kan publiseres: grunnen på egen linje i raden. */
+      .form-row.is-blocked { flex-wrap: wrap; border-color: #f5c0bb; background: #fdf0ef; }
+      .form-row-note { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--color-error); }
       .cascade-delete-heading { font-size: 13px; font-weight: 700; margin: var(--space-2) 0 4px; }
       .cascade-delete-body .cascade-publish-blocker { display: block; color: var(--color-meta); font-size: 12px; }
 

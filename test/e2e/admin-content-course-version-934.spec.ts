@@ -35,8 +35,11 @@ function course(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// #1140 etappe 2 (skive 2c): kursbyggeren lagrer et PUBLISERT kurs til utkastet, uten spørsmål om versjon; spørsmålet stilles
+// når utkastet publiseres (test/e2e/admin-content-course-draft-1140.spec.ts). Direkte lagring med spørsmålet gjelder fortsatt
+// et kurs som har vært ute og er avpublisert (kursbevis finnes). Testene her bruker derfor et slikt kurs som standard.
 async function openCourse(page: Page, overrides: Record<string, unknown> = {}) {
-  await mockCommonApis(page, { courses: [course(overrides) as never], libraryModules: [] });
+  await mockCommonApis(page, { courses: [course({ publishedAt: null, ...overrides }) as never], libraryModules: [] });
   await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
   const sentItems: Array<Record<string, unknown>> = [];
   const sentCourse: Array<Record<string, unknown>> = [];
