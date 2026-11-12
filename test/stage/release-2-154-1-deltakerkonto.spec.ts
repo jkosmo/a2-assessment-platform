@@ -39,6 +39,7 @@ const noter = (hva: string, verdi: unknown) => {
   fs.mkdirSync(RAPPORT, { recursive: true });
   fs.appendFileSync(path.join(RAPPORT, "funn.jsonl"), `${JSON.stringify({ test: "2.154.1", hva, verdi: typeof verdi === "string" ? verdi : JSON.stringify(verdi) })}\n`, "utf8");
 };
+const noterFunn = noter;
 
 type Som = "fagansvarlig" | "deltaker";
 const ROLLEHODE = "x-stage-test-role";
@@ -128,6 +129,13 @@ async function leverOgTaFlervalg(moduleId: string, moduleVersionId: string, cour
 }
 
 test.afterAll(async () => {
+  // En rydding som feiler, skal gjøre kjøringen rød: første kjøring på stage var grønn med 400 i ryddingen, og kurs og moduler
+  // ble liggende igjen. Alt forsøkes først, så feiler den til slutt med lista over det som ikke gikk.
+  const mislyktes: string[] = [];
+  const noter = (hva: string, status: number) => {
+    noterFunn(hva, status);
+    if (status >= 400) mislyktes.push(`${hva}: ${status}`);
+  };
   // Klassen først, så kurset ikke lenger er tildelt noen.
   if (tilstand.klasseId) {
     const k = tilstand.klasseId;
@@ -142,12 +150,15 @@ test.afterAll(async () => {
     if (!kursId) continue;
     noter("avpubliser testkurs", (await api("fagansvarlig", "POST", `/api/admin/content/courses/${kursId}/unpublish`)).status);
     const kurs = await api("fagansvarlig", "GET", `/api/admin/content/courses/${kursId}`);
-    noter("tøm testkurs", (await api("fagansvarlig", "PUT", `/api/admin/content/courses/${kursId}/items`, { items: [], expectedRevision: kurs.json.course?.contentRevision })).status);
+    // Deltakeren har bestått kursets eneste modul og har kursbevis: uten svar på versjonsspørsmålet gir tømmingen 400
+    // `course_version_required`, og modulen blir liggende i kurset og kan ikke arkiveres. «minor» sender ingen e-post.
+    noter("tøm testkurs", (await api("fagansvarlig", "PUT", `/api/admin/content/courses/${kursId}/items`, { items: [], expectedRevision: kurs.json.course?.contentRevision, version: "minor" })).status);
     noter("arkiver testkurs", (await api("fagansvarlig", "POST", `/api/admin/content/courses/${kursId}/archive`)).status);
   }
   for (const id of [tilstand.modulA, tilstand.modulB, tilstand.modulC]) {
     if (id) noter("arkiver testmodul", (await api("fagansvarlig", "POST", `/api/admin/content/modules/${id}/archive`)).status);
   }
+  expect(mislyktes, "ryddingen på stage feilet; se funn.jsonl og rydd for hånd").toEqual([]);
 });
 
 test("versjonen er minst 2.154.1, og kursporten er på", async () => {
