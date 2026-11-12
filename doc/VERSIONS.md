@@ -44,6 +44,14 @@ Veiledning for forfattere: `doc/COURSE_DRAFTS_GUIDE.md`.
   Stage-testen `test/stage/release-2-157-kursutkast.spec.ts` erstatter `release-2-155-kursutkast-av.spec.ts`.
 - **Mutasjonstestene:** serveren 11 av 11 (låsen, utkast som er borte, avpublisert element, `published_with_draft` i
   lista og detaljen, navnet, kravet om publisert kurs); kursbyggeren 13 av 13. Hver bevisst feil gjorde en test rød.
+- **Stage (2026-11-12 kl. 15:59):** `test/stage/release-2-157-kursutkast.spec.ts`, 4 av 4 med ekte data. Uten utkast
+  lagres og importeres et publisert kurs som før. Med utkast: en ekte deltaker (stage-testkontoen som deltaker) ser det
+  publiserte navnet og den publiserte rekkefølgen; direkte lagring og import gir `409 course_has_draft`; en fane med
+  gammel teller gir `409 course_draft_changed`; «Publiser utkastet» sender det ut (versjon 1.1 → 1.2) og deltakeren ser
+  det nye; «Forkast utkast» fjerner utkastet uten å endre kurset. Den ekte kursbyggeren: «Lagre» gikk til `PUT …/draft`,
+  merket og linja «Utkast lagret av Stage-testkonto …» vises, begge knappene virker, ingen overløp på 390 px.
+  Utrullingsjobben ble rød på helsesjekken av workeren: workeren brukte ti minutter på å starte (databasen svarte ikke
+  under oppstarten), og kom opp på 2.157.0 uten inngrep. Appen var oppe hele tiden.
 - **QA-porten:** GO, ingen vei til tapt arbeid eller feil utgave ut til deltakerne. Rettet før commit: (1) et publisert
   kurs som alt hadde et upublisert element i lista (kursimporten kan legge en ny seksjon inn som utkast), ville ikke fått
   publisert noe utkast; nå stopper bare et element som er nytt i utkastet. Rotårsak: jeg la inn «avpublisert stopper
