@@ -302,8 +302,8 @@ describe("authenticate middleware", () => {
       jwtVerify: vi.fn().mockResolvedValue({
         payload: {
           oid: "user-oid-1",
-          preferred_username: "jko@a-2.no",
-          name: "Joakim Kosmo",
+          preferred_username: "test.person@example.test",
+          name: "Test Person",
           roles: ["ADMINISTRATOR"],
         },
       }),
@@ -349,8 +349,8 @@ describe("authenticate middleware", () => {
       jwtVerify: vi.fn().mockResolvedValue({
         payload: {
           oid: "user-oid-1",
-          preferred_username: "jko@a-2.no",
-          name: "Joakim Kosmo",
+          preferred_username: "test.person@example.test",
+          name: "Test Person",
           roles: ["ADMINISTRATORS", "INVALID_ROLE"],
         },
       }),

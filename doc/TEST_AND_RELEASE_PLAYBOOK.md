@@ -180,6 +180,20 @@ ellers gitt en suite som feiler uten grunn. Fila er gitignorert og utløper av s
 fangst kan ikke bli liggende og gi tilgang i det stille. Utløpt sesjon gir **skip med begrunnelse**,
 aldri rødt.
 
+**Uten at noen logger inn: stage-testkontoen** (2.105.0). `npm run stage:auth:service` henter et
+token for app-registreringen «A-2 stage-testkonto» og skriver `.stage-service-auth.json` (gitignorert).
+Stage godtar den bare på stage og bare fra den ene appen (`src/auth/stageTestService.ts`), og den er
+**fagansvarlig**. Testene bruker den når det personlige tokenet mangler eller er utløpt.
+
+**Som deltaker** (2.154.1). Forfattere går forbi kursporten for deltakere (`PARTICIPANT_COURSE_ONLY` i
+`routes/submissions.ts`), så fagansvarlig-kontoen kan ikke prøve deltakerflyten. Med hodet
+`x-stage-test-role: PARTICIPANT` er samme token en egen bruker med bare rollen deltaker
+(«Stage-testkonto (deltaker)», `stage-testkonto-deltaker@stage.invalid`). Enhver annen verdi gir 401.
+Hodet virker bare for testkontoen: et personlig token eller et agent-token ser bort fra det. En test som
+trenger begge identitetene, leser `readServiceAuth()` (`test/stage/stageAuth.ts`), ikke `readAuth()`,
+og setter hodet selv — se `test/stage/release-2-154-1-deltakerkonto.spec.ts`. Deltakerbrukeren må godta
+personvernerklæringen første gang (testen gjør det).
+
 ---
 
 ## 8 · Parallelle agenter — og fella som rammet alle tre

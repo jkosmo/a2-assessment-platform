@@ -12,6 +12,11 @@
 //
 // Kjør:  npm run stage:auth:service
 //
+// 2.154.1: det samme tokenet kan også opptre som DELTAKER. Skriptet endrer ingenting for det: testen setter hodet
+// `x-stage-test-role: PARTICIPANT` selv, og da er tokenet en egen bruker med bare deltakerrollen (src/auth/stageTestService.ts).
+// Skriptet sjekker og godtar personvernerklæringen bare for fagansvarlig-identiteten; deltakerbrukeren godtar den første gang
+// testen bruker den (test/stage/release-2-154-1-deltakerkonto.spec.ts). Det holder skriptet virkende mot en stage uten 2.154.1.
+//
 // ⚠️ Verken hemmeligheten eller tokenet skal logges, deles eller committes.
 
 import fs from "node:fs";

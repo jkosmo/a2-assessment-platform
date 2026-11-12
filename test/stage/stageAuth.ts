@@ -44,6 +44,15 @@ export function readAuth(): { auth: StageAuth | null; reason: string } {
   return { auth: null, reason: `${personal.reason}; ${service.reason}` };
 }
 
+/**
+ * Bare stage-testkontoen, også når en personlig sesjon finnes. 2.154.1: en test som skal opptre som DELTAKER (hodet
+ * `x-stage-test-role: PARTICIPANT`, src/auth/stageTestService.ts) trenger kontoens token — hodet virker ikke på et
+ * brukertoken.
+ */
+export function readServiceAuth(): { auth: StageAuth | null; reason: string } {
+  return readAuthFile(".stage-service-auth.json", "npm run stage:auth:service");
+}
+
 export function stageBaseUrl(auth: StageAuth | null): string {
   return (
     auth?.baseUrl

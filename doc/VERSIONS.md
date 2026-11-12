@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.154.1 - 2026-11-12
+
+Stage-testkontoen kan opptre som deltaker, så deltakerflyten kan prøves på stage uten at et menneske logger inn.
+
+- **Hva brukerne merker:** ingenting. Endringen virker bare på stage, og bare for stage-testkontoen.
+- **Hvorfor:** stage-testkontoen er fagansvarlig, og forfattere går forbi kursporten for deltakere (`PARTICIPANT_COURSE_ONLY` i
+  `routes/submissions.ts`). Porten deler kode med #1140 etappe 1 (`findAccessibleCoursesContainingModules`), og var bare prøvd
+  lokalt.
+- **Slik virker det:** når en forespørsel alt er godkjent som stage-testkontoen (`DEPLOY_ENVIRONMENT` er nøyaktig `staging`, appen
+  er `STAGE_TEST_SERVICE_APP_ID`, tokenet er app-only), leses hodet `x-stage-test-role` (`src/auth/stageTestService.ts`):
+  - utelatt → fagansvarlig, som før;
+  - nøyaktig `PARTICIPANT` → en egen bruker, `stage-test-service-participant:<appId>` («Stage-testkonto (deltaker)»,
+    `stage-testkonto-deltaker@stage.invalid`), med bare rollen deltaker. Egen bruker, så fagansvarliges innleveringer og klasser
+    ikke blandes inn;
+  - alt annet → 401. Ikke stille tilbake til fagansvarlig.
+  Hodet sendes bare videre til grenen for app-only tokens (`authenticate.ts`); brukertokens og agent-tokens ser bort fra det.
+  Rollene er de samme som for alle Entra-brukere: lagrede roller pluss rollene fra innloggingen. Deltakerbrukeren har ingen lagrede
+  roller (ingen kode lager dem uten Entra-grupper, og kontoen har ingen), så den ender med nøyaktig `PARTICIPANT`, også andre gang.
+- **Tester:** enhetstester for regelen (`test/unit/stage-test-service.test.ts`), og en integrasjonstest gjennom rutene i
+  Entra-modus med ekte database (`test/m2-stage-test-participant.test.ts`): roller første og andre gang, 403 på
+  administrasjonsflaten, 401 for ukjent verdi, utenfor stage og fra en annen app, ingen virkning for brukertoken og agent-token,
+  og kursporten (uten kurs, åpent kurs, begrenset kurs før og etter klasse). Mutasjonssjekket: stage-vilkåret fjernet, hvitelisten
+  fjernet (to varianter), hodet ikke koblet til, og hodet lekket til brukertokens — hver gir rød test.
+- **Stage-test:** `test/stage/release-2-154-1-deltakerkonto.spec.ts`. Krever `npm run stage:auth:service`; bruker bare
+  testkontoen, også når en personlig sesjon finnes (`readServiceAuth()` i `test/stage/stageAuth.ts`).
+- **Ved utrulling:** ingen migrering, ingen nye innstillinger. De to innstillingene fra 2.105.0 står fortsatt bare på stage, ikke
+  i Bicep: en full infrastruktur-utrulling fjerner dem, og da avvises begge identitetene (det trygge utfallet).
+- **Kjente mangler:**
+  - Deltakerbrukeren har rollen bare fra innloggingen, ikke lagret. Den regnes derfor ikke med i «Alle deltakere» der lista
+    hentes fra databasen (`findActiveParticipants`: kursrapportenes nevner, påminnelser, kullstatus). For dens egne forespørsler
+    gjelder klassen som for andre deltakere (`getUserClassIds` leser rollene fra innloggingen).
+  - Hodet utvider ikke hva kontoen kan gjøre på stage, men det gir en ny bruker i stage-databasen som ikke er en person.
+
 ## 2.154.0 - 2026-11-11
 
 #1140 etappe 1: hvilken versjon av en modul en deltaker får, avgjøres ett sted. Første etappe av «kurset bestemmer hva
