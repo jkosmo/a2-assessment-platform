@@ -258,6 +258,15 @@ test("forfatteren åpner modulen i Rediger, går til Innstillinger, krysser av g
   });
   const { versjoner, nyeste } = await lesModul();
   noter("modulen etter «Lagre»", { versjonerFør: tilstand.versjonerFør, versjonerEtter: versjoner.length, reviewAfterSubmit: nyeste?.assessmentPolicy?.mcq?.reviewAfterSubmit ?? null });
+  // Målingen over tas rett etter svaret, før siden har lastet modulen på nytt. Når den er ferdig, skal hodet si «Alt
+  // lagret», avkrysningen stå, og siden ikke mene at det ligger et utkast. Bare når en lagring faktisk ble sendt
+  // (på en versjon med feilen er det ingenting å vente på; påstand A fanger det).
+  if (svar) {
+    await expect(page.locator("#formPageDirty")).toHaveText("Alt lagret", { timeout: 30_000 });
+    await expect(page.locator("#settingsMcqReview")).toBeChecked();
+    await expect(panel.getByText("Du har et ulagret utkast i Rediger")).toHaveCount(0);
+    noter("Innstillinger når siden er ferdig etter «Lagre»", { hode: await page.locator("#formPageDirty").innerText(), avkrysset: await page.locator("#settingsMcqReview").isChecked() });
+  }
 });
 
 test("påstand A: «Lagre» i hodet sender lagringen, og modulens nyeste versjon har reviewAfterSubmit === true", async () => {
