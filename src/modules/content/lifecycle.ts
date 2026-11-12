@@ -22,6 +22,8 @@ export interface LifecycleInput {
   latestVersionId?: string | null;
   /** Uversjonert innhold (kurs): når det ble publisert, eller null. */
   publishedAt?: Date | string | null;
+  /** #1140 etappe 2, kurs: finnes det et lagret utkast ved siden av den publiserte utgaven? */
+  hasDraft?: boolean;
 }
 
 /**
@@ -30,7 +32,9 @@ export interface LifecycleInput {
  * - versjonert innhold er «published» når en versjon er live, «published_with_draft» når det i
  *   tillegg finnes en nyere versjon enn den som er live, ellers «draft» (også når ingen versjon
  *   finnes ennå — et tomt skall er et utkast);
- * - uversjonert innhold er «published» når det har `publishedAt`, ellers «draft».
+ * - uversjonert innhold er «published» når det har `publishedAt`, ellers «draft»;
+ * - et publisert kurs med et lagret utkast (#1140) er «published_with_draft», som en modul med en nyere versjon. Et kurs
+ *   som ikke er publisert, er «draft» også om en utkastrad ligger igjen fra før det ble avpublisert.
  */
 export function deriveContentLifecycle(input: LifecycleInput): ContentLifecycle {
   if (input.archivedAt) return "archived";
@@ -39,7 +43,8 @@ export function deriveContentLifecycle(input: LifecycleInput): ContentLifecycle 
     if (input.latestVersionId && input.latestVersionId !== input.activeVersionId) return "published_with_draft";
     return "published";
   }
-  return input.publishedAt ? "published" : "draft";
+  if (!input.publishedAt) return "draft";
+  return input.hasDraft ? "published_with_draft" : "published";
 }
 
 export function deriveClassLifecycle(input: { archivedAt: Date | string | null | undefined }): ClassLifecycle {

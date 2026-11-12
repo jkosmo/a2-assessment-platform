@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 //   - Tabellen `CourseDraft` leses og skrives bare i modules/course/courseDraft.ts. En leser et annet sted (en deltakerrute,
 //     en rapport, eksporten) ville vist noe som ikke er publisert.
 //   - Den fila importeres bare av kursbyggerens ruter og av låsesjekken i `claimCourseRevision`.
-//   - Bryteren `course_drafts` leses bare der, ved hvert kall, og mellomlagres ikke: app og worker må være enige.
+//   - Utkastet leses fra databasen ved hvert kall og mellomlagres ikke: app og worker må være enige. (Bryteren fra skive
+//     2a og 2b er fjernet; utkast er alltid på.)
 //   - Låsen har ETT unntak (`publishingDraft: true`), og det gis ETT sted: i ruta som publiserer utkastet, inne i
 //     `publishCourseDraft`, som sletter utkastet i samme transaksjon.
 // At skrivingen holder innholdslåsen, passer test/content-lock-write-guard.test.js på (`courseDraft` står i lista der).
@@ -54,13 +55,12 @@ function violationsIn(file, rawText) {
     // mot tabellen. Navnet «CourseDraft» alene er lov (en feilmelding sier det om det som ikke ble funnet).
     const withoutImportPaths = text.replace(/["'][^"'\n]*\/courseDraft\.js["']/g, '""');
     if (/\bcourseDraft\b/.test(withoutImportPaths) || /\b(FROM|INTO|UPDATE|JOIN|TABLE)\s+"CourseDraft"/i.test(text)) out.push(`${file} leser eller skriver CourseDraft. Alt om tabellen bor i ${DRAFT_FILE}`);
-    if (/["'`]course_drafts["'`]/.test(text) || /\bCOURSE_DRAFTS_SWITCH_KEY\b/.test(text)) out.push(`${file} leser bryteren selv. Spør isCourseDraftsOn (${DRAFT_FILE})`);
     if (/from\s+["'][^"']*\/courseDraft\.js["']/.test(text) && !DRAFT_IMPORTERS.includes(file)) out.push(`${file} importerer ${DRAFT_FILE}. Bare kursbyggerens ruter og låsesjekken gjør det`);
   }
   // Bare på toppnivå: en `let`, `Map` eller `Set` inne i en funksjon lever ikke mellom to kall (en funksjon som svarer med
   // et `Set` over kurs med utkast, er lov).
   if (file === DRAFT_FILE && /^(let|var)\s|^(export\s+)?const\s+\w+[^=\n]*=\s*new\s+(Map|Set|WeakMap)\b|\bsetTimeout\b|\bcache\b/m.test(text)) {
-    out.push(`${file} mellomlagrer bryteren eller utkastet. Da kan app og worker bli uenige`);
+    out.push(`${file} mellomlagrer utkastet. Da kan app og worker bli uenige`);
   }
   // Ordet `publishingDraft` får stå et fast antall ganger i tre filer, og ingen andre steder. Tellingen fanger også
   // `{ publishingDraft: flagg }` og `{ publishingDraft }`, som en regel på `publishingDraft: true` ville sluppet gjennom
@@ -77,7 +77,7 @@ function violationsIn(file, rawText) {
 }
 
 describe("#1140 etappe 2: vakt for utkastet til et kurs", () => {
-  it("tabellen, bryteren og unntaket fra låsen brukes bare der de skal", () => {
+  it("tabellen og unntaket fra låsen brukes bare der de skal", () => {
     expect(files.flatMap((f) => violationsIn(f.rel, f.text))).toEqual([]);
   });
 
@@ -119,8 +119,6 @@ describe("#1140 etappe 2: vakt for utkastet til et kurs", () => {
     expect(caught("const draft = await prisma.courseDraft.findUnique({ where: { courseId } });")).toHaveLength(1);
     expect(caught("const d = tx.courseDraft; await d.deleteMany();")).toHaveLength(1);
     expect(caught('await tx.$executeRaw`DELETE FROM "CourseDraft"`;')).toHaveLength(1);
-    expect(caught('where: { key: "course_drafts" }')).toHaveLength(1);
-    expect(caught("where: { key: COURSE_DRAFTS_SWITCH_KEY }")).toHaveLength(1);
     expect(caught('import { findCourseDraft } from "../course/courseDraft.js";')).toHaveLength(1);
     expect(caught("await claimCourseRevision(tx, courseId, expected, { publishingDraft: true });")).toHaveLength(1);
     // Relasjonen fra kurset: lesing og skriving uten å nevne klientens `courseDraft`-delegat.

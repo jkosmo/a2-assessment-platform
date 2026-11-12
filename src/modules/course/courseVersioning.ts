@@ -152,7 +152,7 @@ export async function claimCourseRevision(
   courseId: string,
   expected?: number,
   // #1140 etappe 2: bare publiseringen av utkastet setter denne. Alle andre som skriver kursets felt eller liste, stoppes
-  // her når kurset har et utkast (og bryteren er på): `409 course_has_draft`, og ingenting er skrevet.
+  // her når kurset har et utkast: `409 course_has_draft`, og ingenting er skrevet.
   options?: { publishingDraft?: boolean },
 ): Promise<number> {
   if (!options?.publishingDraft) await assertNoCourseDraftBlocksWrite(client, courseId);

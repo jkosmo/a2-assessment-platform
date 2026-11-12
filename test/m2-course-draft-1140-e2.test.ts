@@ -1,16 +1,15 @@
 import request from "supertest";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { setCourseItems, updateCourse } from "../src/modules/course/index.js";
-import { COURSE_DRAFTS_SWITCH_KEY } from "../src/modules/course/courseDraft.js";
 
 // #1140 etappe 2, skive 2a (doc/design/PLAN_1140_E2.md): utkastet til et publisert kurs.
-//   - Bryteren `course_drafts` styrer alt. Av: som før, og en utkastrad låser ingenting.
-//   - På: «Lagre» på et publisert kurs går til utkastet (`PUT …/draft`), og ingenting deltakerne ser, endres.
-//   - Med utkast og bryteren på er den publiserte utgaven låst for alt annet som skriver felt eller liste.
-// Testene går gjennom rutene (supertest), med de feltene klienten sender. Integrasjonstestene kjører én fil om gangen, så
-// bryteren kan settes her uten å treffe andre filer; den fjernes etter hver test.
+//   - Utkast for kurs er alltid på: det finnes ingen bryter (produkteier 2026-11-12).
+//   - «Lagre» på et publisert kurs går til utkastet (`PUT …/draft`), og ingenting deltakerne ser, endres.
+//   - Med utkast er den publiserte utgaven låst for alt annet som skriver felt eller liste (`409 course_has_draft`).
+//   - Uten utkast lagres et publisert kurs direkte som før.
+// Testene går gjennom rutene (supertest), med de feltene klienten sender.
 
 const RUN = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
 const L = (text: string) => ({ "en-GB": text, nb: text, nn: text });
@@ -41,24 +40,7 @@ let seq = 0;
 const tag = (name: string) => `e2 ${name} ${RUN}-${seq++}`;
 const base = (courseId: string) => `/api/admin/content/courses/${courseId}`;
 
-async function setSwitch(on: boolean) {
-  if (on) {
-    await prisma.platformConfig.upsert({
-      where: { key: COURSE_DRAFTS_SWITCH_KEY },
-      create: { key: COURSE_DRAFTS_SWITCH_KEY, value: "on", updatedBy: "test" },
-      update: { value: "on", updatedBy: "test" },
-    });
-  } else {
-    await prisma.platformConfig.deleteMany({ where: { key: COURSE_DRAFTS_SWITCH_KEY } });
-  }
-}
-
-afterEach(async () => {
-  await setSwitch(false);
-});
-
 afterAll(async () => {
-  await setSwitch(false);
   await prisma.$disconnect();
 });
 
@@ -123,7 +105,8 @@ async function publishedCourse(name: string) {
   return { courseId: course.id, moduleId, sectionId, title, moduleTitle, sectionTitle };
 }
 
-type Detail = { title: string; contentRevision: number; versionMajor: number; versionMinor: number; drafts: { enabled: boolean; hasDraft: boolean } };
+type Lifecycle = "draft" | "published" | "published_with_draft" | "archived";
+type Detail = { title: string; contentRevision: number; versionMajor: number; versionMinor: number; hasDraft: boolean; lifecycle: Lifecycle };
 
 async function detail(courseId: string) {
   const response = await request(app).get(base(courseId)).set(ADMIN);
@@ -167,60 +150,12 @@ async function saveFirstDraft(courseId: string, body: Record<string, unknown>, h
   return request(app).put(`${base(courseId)}/draft`).set(headers).send({ ...body, loaded: { expectedRevision: loaded } });
 }
 
-describe("#1140 etappe 2: bryteren av — alt er som før", () => {
-  it("kursdetaljen sier at utkast er av, og `PUT …/draft` avvises uten å skrive noe", async () => {
-    const c = await publishedCourse("av");
-    expect((await detail(c.courseId)).drafts).toEqual({ enabled: false, hasDraft: false });
-    const saved = await saveFirstDraft(c.courseId, { title: L(tag("nytt navn")), items: [{ type: "MODULE", moduleId: c.moduleId }] });
-    expect(saved.status).toBe(409);
-    expect(saved.body.error).toBe("course_drafts_off");
-    expect(await draftRow(c.courseId)).toBeNull();
-  });
-
-  it("bare verdien «on» slår bryteren på: en rad med en annen verdi er av", async () => {
-    const c = await publishedCourse("av-verdi");
-    await prisma.platformConfig.upsert({
-      where: { key: COURSE_DRAFTS_SWITCH_KEY },
-      create: { key: COURSE_DRAFTS_SWITCH_KEY, value: "off", updatedBy: "test" },
-      update: { value: "off", updatedBy: "test" },
-    });
-    expect((await detail(c.courseId)).drafts.enabled).toBe(false);
-    const saved = await saveFirstDraft(c.courseId, { items: [{ type: "MODULE", moduleId: c.moduleId }] });
-    expect(saved.status).toBe(409);
-    expect(saved.body.error).toBe("course_drafts_off");
-  });
-
-  it("en utkastrad som finnes, låser ingenting: direkte lagring går gjennom, og utkastet kan hentes og forkastes", async () => {
-    const c = await publishedCourse("av-med-rad");
-    await setSwitch(true);
-    expect((await saveFirstDraft(c.courseId, { title: L(tag("i utkastet")), items: [{ type: "MODULE", moduleId: c.moduleId }] })).status).toBe(200);
-    await setSwitch(false);
-
-    const d = await detail(c.courseId);
-    expect(d.drafts).toEqual({ enabled: false, hasDraft: true });
-    const nyttNavn = L(tag("lagret direkte"));
-    const direct = await request(app).put(`${base(c.courseId)}/content`).set(ADMIN).send({
-      title: nyttNavn, items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }], expectedRevision: d.contentRevision,
-    });
-    expect(direct.status, JSON.stringify(direct.body).slice(0, 300)).toBe(200);
-    expect(JSON.parse((await publishedState(c.courseId)).title)).toEqual(nyttNavn);
-
-    expect((await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(200);
-    expect((await discard(c.courseId)).status).toBe(204);
-    expect(await draftRow(c.courseId)).toBeNull();
-  });
-});
-
-describe("#1140 etappe 2: bryteren på — lagre, hente og forkaste utkastet", () => {
-  beforeEach(async () => {
-    await setSwitch(true);
-  });
-
+describe("#1140 etappe 2: lagre, hente og forkaste utkastet", () => {
   it("første lagring lager utkastet, og ingenting i den publiserte utgaven er endret", async () => {
     const c = await publishedCourse("lagre");
     const extra = await createPublishedModule(tag("lagre ekstra"));
     const before = await publishedState(c.courseId);
-    expect((await detail(c.courseId)).drafts).toEqual({ enabled: true, hasDraft: false });
+    expect(await detail(c.courseId)).toMatchObject({ hasDraft: false, lifecycle: "published" });
 
     const nyttNavn = L(tag("navn i utkastet"));
     const saved = await saveFirstDraft(c.courseId, {
@@ -230,10 +165,12 @@ describe("#1140 etappe 2: bryteren på — lagre, hente og forkaste utkastet", (
       items: [{ type: "SECTION", sectionId: c.sectionId }, { type: "MODULE", moduleId: extra, discussionsEnabled: false }],
     });
     expect(saved.status, JSON.stringify(saved.body).slice(0, 300)).toBe(200);
-    expect(saved.body.draft).toMatchObject({ revision: 1, baseRevision: before.contentRevision, source: "form" });
+    expect(saved.body.draft).toMatchObject({ revision: 1, source: "form" });
+    // Telleren utkastet ble laget på, står i raden (ikke lenger i svaret).
+    expect((await draftRow(c.courseId))?.baseRevision).toBe(before.contentRevision);
 
     expect(await publishedState(c.courseId)).toEqual(before);
-    expect((await detail(c.courseId)).drafts).toEqual({ enabled: true, hasDraft: true });
+    expect(await detail(c.courseId)).toMatchObject({ hasDraft: true, lifecycle: "published_with_draft" });
 
     const audits = await prisma.auditEvent.findMany({ where: { entityId: c.courseId, action: "course_draft_saved" } });
     expect(audits).toHaveLength(1);
@@ -257,8 +194,8 @@ describe("#1140 etappe 2: bryteren på — lagre, hente og forkaste utkastet", (
     expect(draft.course.discussionsEnabled).toBe(published.discussionsEnabled);
     expect(draft.course.themeIds).toEqual([]);
     expect(draft.items).toEqual([
-      { type: "SECTION", sortOrder: 0, moduleId: null, sectionId: c.sectionId, title: JSON.stringify(L(c.sectionTitle)), discussionsEnabled: true, archivedAt: null, missing: false },
-      { type: "MODULE", sortOrder: 1, moduleId: c.moduleId, sectionId: null, title: JSON.stringify(L(c.moduleTitle)), discussionsEnabled: false, archivedAt: null, missing: false },
+      { type: "SECTION", sortOrder: 0, moduleId: null, sectionId: c.sectionId, title: JSON.stringify(L(c.sectionTitle)), discussionsEnabled: true, archivedAt: null, unpublished: false, missing: false },
+      { type: "MODULE", sortOrder: 1, moduleId: c.moduleId, sectionId: null, title: JSON.stringify(L(c.moduleTitle)), discussionsEnabled: false, archivedAt: null, unpublished: false, missing: false },
     ]);
     expect(draft.updatedAt).toEqual(expect.any(String));
   });
@@ -347,7 +284,7 @@ describe("#1140 etappe 2: bryteren på — lagre, hente og forkaste utkastet", (
       title: L("på riktig grunnlag"), items: [{ type: "MODULE", moduleId: c.moduleId }], loaded: { expectedRevision: 5 },
     });
     expect(ok.status).toBe(200);
-    expect(ok.body.draft.baseRevision).toBe(5);
+    expect((await draftRow(c.courseId))?.baseRevision).toBe(5);
   });
 
   it("to samtidige første lagringer: én lager utkastet, den andre får 409 — ingen 500", async () => {
@@ -370,7 +307,7 @@ describe("#1140 etappe 2: bryteren på — lagre, hente og forkaste utkastet", (
     expect(saved.status).toBe(409);
     expect(saved.body.error).toBe("course_draft_requires_published");
     expect(await draftRow(c.courseId)).toBeNull();
-    // Kontroll: direkte lagring av det upubliserte kurset virker med bryteren på.
+    // Kontroll: direkte lagring av det upubliserte kurset virker.
     const nyttNavn = L(tag("direkte på upublisert"));
     const direct = await request(app).put(`${base(c.courseId)}/content`).set(ADMIN).send({
       title: nyttNavn, items: [{ type: "MODULE", moduleId: c.moduleId }], expectedRevision: (await detail(c.courseId)).contentRevision,
@@ -412,10 +349,11 @@ describe("#1140 etappe 2: bryteren på — lagre, hente og forkaste utkastet", (
     expect(await draftRow(c.courseId)).toBeNull();
   });
 
-  it("forkast fjerner utkastet og sporer det; uten utkast svarer hente og forkaste 404", async () => {
+  it("forkast fjerner utkastet og sporer det; uten utkast svarer hente 404, og forkast 409 (fana viser noe som er borte)", async () => {
     const c = await publishedCourse("forkast");
     expect((await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(404);
-    expect((await discard(c.courseId)).status).toBe(404);
+    const noDraft = await discard(c.courseId);
+    expect([noDraft.status, noDraft.body.error]).toEqual([409, "course_draft_changed"]);
 
     const before = await publishedState(c.courseId);
     await saveFirstDraft(c.courseId, { title: L("forkastes"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
@@ -423,7 +361,7 @@ describe("#1140 etappe 2: bryteren på — lagre, hente og forkaste utkastet", (
     expect(gone.status).toBe(204);
     expect(await draftRow(c.courseId)).toBeNull();
     expect(await publishedState(c.courseId)).toEqual(before);
-    expect((await detail(c.courseId)).drafts.hasDraft).toBe(false);
+    expect(await detail(c.courseId)).toMatchObject({ hasDraft: false, lifecycle: "published" });
     expect(await prisma.auditEvent.count({ where: { entityId: c.courseId, action: "course_draft_discarded" } })).toBe(1);
     const missing = await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN);
     expect(missing.status).toBe(404);
@@ -443,11 +381,63 @@ describe("#1140 etappe 2: bryteren på — lagre, hente og forkaste utkastet", (
     await prisma.course.delete({ where: { id: d.courseId } });
     expect(await draftRow(d.courseId)).toBeNull();
   });
+
+  it("et avpublisert kurs med en utkastrad liggende igjen: kursdetaljen sier «draft» og `hasDraft: true`", async () => {
+    const c = await publishedCourse("avpublisert-detalj");
+    expect((await saveFirstDraft(c.courseId, { title: L("ligger igjen"), items: [{ type: "MODULE", moduleId: c.moduleId }] })).status).toBe(200);
+    expect(await detail(c.courseId)).toMatchObject({ hasDraft: true, lifecycle: "published_with_draft" });
+    expect((await request(app).post(`${base(c.courseId)}/unpublish`).set(ADMIN)).status).toBe(200);
+    expect(await draftRow(c.courseId)).not.toBeNull();
+    expect(await detail(c.courseId)).toMatchObject({ hasDraft: true, lifecycle: "draft" });
+    // Kontroll: uten raden er det samme kurset «draft» uten utkast.
+    expect((await discard(c.courseId)).status).toBe(204);
+    expect(await detail(c.courseId)).toMatchObject({ hasDraft: false, lifecycle: "draft" });
+  });
+
+  it("`updatedByName` er navnet til den som lagret utkastet sist, i svaret på lagringen og på hentingen", async () => {
+    const owner = smo("lagrer");
+    const moduleId = await createPublishedModule(tag("navn modul"));
+    const created = await request(app).post("/api/admin/content/courses").set(owner).send({ title: L(tag("navn")), certificationLevel: L("basic") });
+    expect(created.status).toBe(201);
+    const courseId = created.body.course.id as string;
+    await prisma.courseItem.create({ data: { courseId, itemType: "MODULE", moduleId, sortOrder: 0 } });
+    await prisma.course.update({ where: { id: courseId }, data: { publishedAt: new Date() } });
+
+    const saved = await request(app).put(`${base(courseId)}/draft`).set(owner).send({ title: L("fra lagrer"), items: [{ type: "MODULE", moduleId }], loaded: { expectedRevision: 0 } });
+    expect(saved.status, JSON.stringify(saved.body).slice(0, 300)).toBe(200);
+    expect(saved.body.draft.updatedByName).toBe(owner["x-user-name"]);
+    // Hentet av en annen (administratoren): navnet er lagrerens, ikke leserens.
+    const got = await request(app).get(`${base(courseId)}/draft`).set(ADMIN);
+    expect(got.status).toBe(200);
+    expect(got.body.draft.updatedByName).toBe("lagrer");
+    expect(got.body.draft.updatedById).toBe((await draftRow(courseId))?.updatedById);
+
+    // Administratoren lagrer videre: navnet følger den som lagret sist.
+    const next = await request(app).put(`${base(courseId)}/draft`).set(ADMIN).send({ title: L("fra admin"), items: [{ type: "MODULE", moduleId }], loaded: { draftId: saved.body.draft.id, revision: saved.body.draft.revision } });
+    expect(next.status, JSON.stringify(next.body).slice(0, 300)).toBe(200);
+    expect((await request(app).get(`${base(courseId)}/draft`).set(ADMIN)).body.draft.updatedByName).toBe(ADMIN["x-user-name"]);
+  });
+
+  it("kurslista viser «published_with_draft» for et publisert kurs med utkast, og «published» for et uten", async () => {
+    const withDraft = await publishedCourse("liste-med-utkast");
+    const without = await publishedCourse("liste-uten-utkast");
+    expect((await saveFirstDraft(withDraft.courseId, { title: L("i lista"), items: [{ type: "MODULE", moduleId: withDraft.moduleId }] })).status).toBe(200);
+
+    const lifecycles = async () => {
+      const list = await request(app).get("/api/admin/content/courses").set(ADMIN);
+      expect(list.status).toBe(200);
+      const rows = list.body.courses as Array<{ id: string; lifecycle: Lifecycle }>;
+      return [withDraft.courseId, without.courseId].map((id) => rows.find((row) => row.id === id)?.lifecycle);
+    };
+    expect(await lifecycles()).toEqual(["published_with_draft", "published"]);
+    // Kontroll: det er utkastet som gir merket. Forkastet, står begge som «published».
+    expect((await discard(withDraft.courseId)).status).toBe(204);
+    expect(await lifecycles()).toEqual(["published", "published"]);
+  });
 });
 
 describe("#1140 etappe 2: deltakerne ser den publiserte utgaven mens utkastet finnes", () => {
   it("kurset i «Mine kurs» og kursdetaljen har navnet og innholdet fra den publiserte utgaven", async () => {
-    await setSwitch(true);
     const c = await publishedCourse("deltaker");
     const extra = await createPublishedModule(tag("bare i utkastet"));
     const draftTitle = tag("navn bare i utkastet");
@@ -475,38 +465,70 @@ describe("#1140 etappe 2: deltakerne ser den publiserte utgaven mens utkastet fi
   });
 });
 
-describe("#1140 etappe 2: låsen — med utkast og bryteren på skriver ingenting annet i den publiserte utgaven", () => {
-  beforeEach(async () => {
-    await setSwitch(true);
-  });
+describe("#1140 etappe 2: låsen — med utkast skriver ingenting annet i den publiserte utgaven", () => {
+  /**
+   * De fire rutene som lagrer kursets felt eller liste direkte. Hver sender noe som ville ENDRET den publiserte utgaven
+   * (kurset starter som [modul, seksjon]), så «gikk gjennom» og «ingenting skrevet» kan skilles på det som står lagret.
+   * `PUT …/modules` beholder seksjonene og legger dem etter modulene.
+   */
+  function directSaves(c: { courseId: string; moduleId: string; sectionId: string }, extra: string, title: Record<string, string>) {
+    const send = (path: string, body: Record<string, unknown>) => async () =>
+      request(app).put(`${base(c.courseId)}${path}`).set(ADMIN).send({ ...body, expectedRevision: (await publishedState(c.courseId)).contentRevision });
+    return {
+      content: send("/content", { title, items: [{ type: "SECTION", sectionId: c.sectionId }, { type: "MODULE", moduleId: c.moduleId }] }),
+      fields: send("", { sortOrder: 3 }),
+      items: send("/items", { items: [{ type: "MODULE", moduleId: c.moduleId }] }),
+      modules: send("/modules", { modules: [{ moduleId: extra, sortOrder: 0 }, { moduleId: c.moduleId, sortOrder: 1 }] }),
+    };
+  }
 
-  it("med bryteren på avvises direkte lagring av et publisert kurs, også uten utkast (en fane fra før)", async () => {
+  it("UTEN utkast lagres et publisert kurs direkte som før, gjennom alle fire rutene", async () => {
     const c = await publishedCourse("direkte");
-    const before = await publishedState(c.courseId);
-    const loaded = before.contentRevision;
-    const list = [{ type: "MODULE", moduleId: c.moduleId }];
-    const answers = [
-      await request(app).put(`${base(c.courseId)}/content`).set(ADMIN).send({ title: L("direkte"), items: list, expectedRevision: loaded }),
-      await request(app).put(base(c.courseId)).set(ADMIN).send({ sortOrder: 3, expectedRevision: loaded }),
-      await request(app).put(`${base(c.courseId)}/items`).set(ADMIN).send({ items: list, expectedRevision: loaded }),
-      await request(app).put(`${base(c.courseId)}/modules`).set(ADMIN).send({ modules: [{ moduleId: c.moduleId, sortOrder: 0 }], expectedRevision: loaded }),
-    ];
-    for (const answer of answers) {
-      expect(answer.status).toBe(409);
-      expect(answer.body.error).toBe("course_form_outdated");
-    }
-    expect(await publishedState(c.courseId)).toEqual(before);
+    const extra = await createPublishedModule(tag("direkte ekstra"));
+    const nyttNavn = L(tag("lagret direkte"));
+    const saves = directSaves(c, extra, nyttNavn);
+    const start = await publishedState(c.courseId);
+    expect(start.items).toEqual([c.moduleId, c.sectionId]);
+    expect(start.sortOrder).not.toBe(3);
+
+    const content = await saves.content();
+    expect(content.status, JSON.stringify(content.body).slice(0, 300)).toBe(200);
+    const afterContent = await publishedState(c.courseId);
+    expect(JSON.parse(afterContent.title)).toEqual(nyttNavn);
+    expect(afterContent.items).toEqual([c.sectionId, c.moduleId]);
+
+    const fields = await saves.fields();
+    expect(fields.status, JSON.stringify(fields.body).slice(0, 300)).toBe(200);
+    expect((await publishedState(c.courseId)).sortOrder).toBe(3);
+
+    const items = await saves.items();
+    expect(items.status, JSON.stringify(items.body).slice(0, 300)).toBe(204);
+    expect((await publishedState(c.courseId)).items).toEqual([c.moduleId]);
+
+    const modules = await saves.modules();
+    expect(modules.status, JSON.stringify(modules.body).slice(0, 300)).toBe(204);
+    const end = await publishedState(c.courseId);
+    expect(end.items).toEqual([extra, c.moduleId]);
+    // Hver lagring økte telleren, og ingen av dem laget et utkast.
+    expect(end.contentRevision).toBe(start.contentRevision + 4);
+    expect(await draftRow(c.courseId)).toBeNull();
+    expect(await detail(c.courseId)).toMatchObject({ hasDraft: false, lifecycle: "published" });
   });
 
-  it("KONTROLL: med bryteren av går de samme fire lagringene gjennom", async () => {
-    await setSwitch(false);
-    const c = await publishedCourse("direkte-av");
-    const list = [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }];
-    const rev = async () => (await detail(c.courseId)).contentRevision;
-    expect((await request(app).put(`${base(c.courseId)}/content`).set(ADMIN).send({ title: L(tag("direkte av")), items: list, expectedRevision: await rev() })).status).toBe(200);
-    expect((await request(app).put(base(c.courseId)).set(ADMIN).send({ sortOrder: 3, expectedRevision: await rev() })).status).toBe(200);
-    expect((await request(app).put(`${base(c.courseId)}/items`).set(ADMIN).send({ items: list, expectedRevision: await rev() })).status).toBe(204);
-    expect((await request(app).put(`${base(c.courseId)}/modules`).set(ADMIN).send({ modules: [{ moduleId: c.moduleId, sortOrder: 0 }], expectedRevision: await rev() })).status).toBe(204);
+  it("MED utkast gir de samme fire rutene 409 course_has_draft, og ingenting i den publiserte utgaven er endret", async () => {
+    const c = await publishedCourse("direkte-med-utkast");
+    const extra = await createPublishedModule(tag("direkte ekstra"));
+    const saves = directSaves(c, extra, L(tag("forbi låsen")));
+    expect((await saveFirstDraft(c.courseId, { title: L("låser"), items: [{ type: "MODULE", moduleId: c.moduleId }] })).status).toBe(200);
+    const before = await publishedState(c.courseId);
+    expect(before.items).toEqual([c.moduleId, c.sectionId]);
+
+    for (const [name, save] of Object.entries(saves)) {
+      const answer = await save();
+      expect([answer.status, answer.body.error], name).toEqual([409, "course_has_draft"]);
+      expect(await publishedState(c.courseId), name).toEqual(before);
+    }
+    expect((await draftRow(c.courseId))?.revision).toBe(1);
   });
 
   it("tjenestene som skriver felt og liste, avviser et kurs med utkast (`course_has_draft`), og virker igjen når utkastet er forkastet", async () => {
@@ -522,13 +544,10 @@ describe("#1140 etappe 2: låsen — med utkast og bryteren på skriver ingentin
     await expect(setCourseItems(c.courseId, list)).rejects.toMatchObject({ code: "course_has_draft" });
     expect(await publishedState(c.courseId)).toEqual(before);
 
-    // Kontroll: bryteren av, og den samme skrivingen går gjennom med utkastet liggende.
-    await setSwitch(false);
+    // Kontroll: etter at utkastet er forkastet, går de samme skrivingene gjennom.
+    expect((await discard(c.courseId)).status).toBe(204);
     await updateCourse(c.courseId, { sortOrder: 9 }, undefined, { expectedRevision: before.contentRevision });
     expect((await publishedState(c.courseId)).sortOrder).toBe(9);
-    // Og med bryteren på igjen, etter at utkastet er forkastet.
-    await setSwitch(true);
-    expect((await discard(c.courseId)).status).toBe(204);
     await setCourseItems(c.courseId, list, { revision: { expected: (await publishedState(c.courseId)).contentRevision } });
     expect((await publishedState(c.courseId)).items).toEqual([c.moduleId]);
   });
@@ -585,7 +604,7 @@ describe("#1140 etappe 2: låsen — med utkast og bryteren på skriver ingentin
     expect(await publishedState(c.courseId)).toEqual(before);
     expect(await counts()).toEqual(countsBefore);
 
-    // Kontroll: uten utkast går importen gjennom med bryteren på (den skriver rett i kurset til etappe 4).
+    // Kontroll: uten utkast går importen gjennom (den skriver rett i kurset til etappe 4).
     expect((await discard(c.courseId)).status).toBe(204);
     const ok = await request(app).post("/api/admin/content/courses/import").set(ADMIN).send({ payload: envelope, mode: "updateExisting", targetId: c.courseId });
     expect(ok.status, JSON.stringify(ok.body).slice(0, 300)).toBe(201);
@@ -603,7 +622,6 @@ describe("#1140 etappe 2: låsen — med utkast og bryteren på skriver ingentin
 
 describe("#1140 etappe 2: hvem som kan lagre og forkaste", () => {
   it("en forfatter som ikke eier kurset, kan lese utkastet, men ikke lagre eller forkaste det", async () => {
-    await setSwitch(true);
     const owner = smo("eier");
     const other = smo("annen");
     const moduleId = await createPublishedModule(tag("eierskap modul"));
@@ -641,10 +659,6 @@ describe("#1140 etappe 2: hvem som kan lagre og forkaste", () => {
 });
 
 describe("#1140 etappe 2: forkast, tema og utkast som ikke kan leses (QA-porten for skive 2a)", () => {
-  beforeEach(async () => {
-    await setSwitch(true);
-  });
-
   it("forkast krever utkastet fana lastet: har en annen lagret siden, 409, og det nyere arbeidet står", async () => {
     const c = await publishedCourse("forkast-gammel-fane");
     const first = await saveFirstDraft(c.courseId, { title: L("B så dette"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
@@ -705,32 +719,8 @@ describe("#1140 etappe 2: forkast, tema og utkast som ikke kan leses (QA-porten 
       expect(published.body.error).toBe("course_draft_unreadable");
     }
     expect(await draftRow(c.courseId)).not.toBeNull();
-    expect((await detail(c.courseId)).drafts.hasDraft).toBe(true);
+    expect((await detail(c.courseId)).hasDraft).toBe(true);
     expect((await discard(c.courseId, ADMIN, { draftId: saved.body.draft.id, revision: 1 })).status).toBe(204);
-  });
-
-  it("kurset er lagret etter at utkastet ble laget (bryteren har vært av): utkastet er utdatert, og kan bare forkastes", async () => {
-    const c = await publishedCourse("utdatert");
-    const first = await saveFirstDraft(c.courseId, { title: L("laget før"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
-    expect((await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN)).body.draft.outdated).toBe(false);
-    // Bryteren av: en direkte lagring går gjennom ved siden av utkastet.
-    await setSwitch(false);
-    const direct = await request(app).put(base(c.courseId)).set(ADMIN).send({ sortOrder: 5, expectedRevision: (await detail(c.courseId)).contentRevision });
-    expect(direct.status).toBe(200);
-    await setSwitch(true);
-    const before = await publishedState(c.courseId);
-
-    const got = await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN);
-    expect(got.body.draft.outdated).toBe(true);
-    const save = await request(app).put(`${base(c.courseId)}/draft`).set(ADMIN).send({ title: L("lagrer videre"), items: [{ type: "MODULE", moduleId: c.moduleId }], loaded: { draftId: first.body.draft.id, revision: 1 } });
-    expect(save.status).toBe(409);
-    expect(save.body.error).toBe("course_draft_outdated");
-    const publish = await publishDraft(c.courseId);
-    expect(publish.status).toBe(409);
-    expect(publish.body.error).toBe("course_draft_outdated");
-    expect(await publishedState(c.courseId)).toEqual(before);
-    expect((await draftRow(c.courseId))?.revision).toBe(1);
-    expect((await discard(c.courseId)).status).toBe(204);
   });
 
   it("låsen gjelder også den gamle veien for modullista (`setCourseModules`)", async () => {
@@ -746,10 +736,6 @@ describe("#1140 etappe 2: forkast, tema og utkast som ikke kan leses (QA-porten 
 });
 
 describe("#1140 etappe 2 skive 2b: «Publiser utkastet»", () => {
-  beforeEach(async () => {
-    await setSwitch(true);
-  });
-
   async function users(name: string, count: number) {
     const data = Array.from({ length: count }, (_, i) => ({ externalId: `draft-e2-${name}-${RUN}-${seq++}-${i}`, email: `draft.e2.${name}.${RUN}.${seq++}.${i}@company.com`, name: `Deltaker ${i}` }));
     await prisma.user.createMany({ data });
@@ -775,7 +761,7 @@ describe("#1140 etappe 2 skive 2b: «Publiser utkastet»", () => {
     expect(after.items).toEqual(before.items);
     expect(after.contentRevision).toBe(before.contentRevision + 1);
     expect(await draftRow(c.courseId)).toBeNull();
-    expect((await detail(c.courseId)).drafts).toEqual({ enabled: true, hasDraft: false });
+    expect(await detail(c.courseId)).toMatchObject({ hasDraft: false, lifecycle: "published" });
     expect(await prisma.courseVersionNotice.count({ where: { courseId: c.courseId } })).toBe(0);
 
     // Revisjonssporet: utkastet publisert, og kurset oppdatert, i samme transaksjon.
@@ -784,7 +770,7 @@ describe("#1140 etappe 2 skive 2b: «Publiser utkastet»", () => {
     // Låsen er borte: et nytt utkast kan lages på den nye telleren.
     const next = await saveFirstDraft(c.courseId, { title: L("neste utkast"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
     expect(next.status, JSON.stringify(next.body).slice(0, 300)).toBe(200);
-    expect(next.body.draft.baseRevision).toBe(after.contentRevision);
+    expect((await draftRow(c.courseId))?.baseRevision).toBe(after.contentRevision);
   });
 
   it("bare innstillinger endret: ingen ny versjon", async () => {
@@ -864,14 +850,14 @@ describe("#1140 etappe 2 skive 2b: «Publiser utkastet»", () => {
     expect(await publishedState(c.courseId)).toEqual(before);
   });
 
-  it("to samtidige publiseringer av samme utkast: én vinner, den andre får 404 eller 409, og versjonen øker én gang", async () => {
+  it("to samtidige publiseringer av samme utkast: én vinner, de andre får 409, og versjonen øker én gang", async () => {
     const c = await publishedCourse("pub-samtidig");
     const saved = await saveFirstDraft(c.courseId, { title: L(tag("samtidig publisert")), items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }] });
     const loaded = { draftId: saved.body.draft.id as string, revision: 1 };
     const send = () => request(app).post(`${base(c.courseId)}/draft/publish`).set(ADMIN).send({ loaded });
     const answers = await Promise.all([send(), send(), send()]);
     expect(answers.filter((r) => r.status === 200)).toHaveLength(1);
-    for (const lost of answers.filter((r) => r.status !== 200)) expect(lost.body.error).toBe("course_draft_not_found");
+    for (const lost of answers.filter((r) => r.status !== 200)) expect([lost.status, lost.body.error]).toEqual([409, "course_draft_changed"]);
     expect((await publishedState(c.courseId)).version).toBe("1.1");
     expect(await prisma.auditEvent.count({ where: { entityId: c.courseId, action: "course_draft_published" } })).toBe(1);
   });
@@ -908,14 +894,28 @@ describe("#1140 etappe 2 skive 2b: «Publiser utkastet»", () => {
     expect(await draftRow(c.courseId)).not.toBeNull();
   });
 
-  it("kurset er avpublisert: 409, ingenting skrevet, og utkastet kan forkastes; med bryteren av: 409", async () => {
+  it("et element som er AVPUBLISERT siden utkastet ble lagret: merket i utkastet, og publiseringen avvises med navn", async () => {
+    const c = await publishedCourse("pub-avpublisert-element");
+    const title = tag("avpubliseres før publisering");
+    const extra = await createPublishedModule(title);
+    await saveFirstDraft(c.courseId, { items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "MODULE", moduleId: extra }] });
+    // Modulen står bare i utkastet, så ingenting hindrer eieren i å avpublisere den.
+    await prisma.module.update({ where: { id: extra }, data: { activeVersionId: null } });
+    const before = await publishedState(c.courseId);
+
+    const got = await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN);
+    expect(got.body.draft.items.map((i: { unpublished: boolean }) => i.unpublished)).toEqual([false, true]);
+    const rejected = await publishDraft(c.courseId);
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.error).toBe("course_draft_item_unusable");
+    expect(rejected.body.details.items).toEqual([{ type: "MODULE", id: extra, title: JSON.stringify(L(title)), reason: "unpublished" }]);
+    expect(await publishedState(c.courseId)).toEqual(before);
+    expect(await draftRow(c.courseId)).not.toBeNull();
+  });
+
+  it("kurset er avpublisert: 409, ingenting skrevet, og utkastet kan forkastes", async () => {
     const c = await publishedCourse("pub-avpublisert");
     await saveFirstDraft(c.courseId, { title: L("venter"), items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }] });
-    await setSwitch(false);
-    const off = await publishDraft(c.courseId);
-    expect(off.status).toBe(409);
-    expect(off.body.error).toBe("course_drafts_off");
-    await setSwitch(true);
 
     expect((await request(app).post(`${base(c.courseId)}/unpublish`).set(ADMIN)).status).toBe(200);
     const before = await publishedState(c.courseId);
@@ -925,10 +925,9 @@ describe("#1140 etappe 2 skive 2b: «Publiser utkastet»", () => {
     expect(await publishedState(c.courseId)).toEqual(before);
     expect(await draftRow(c.courseId)).not.toBeNull();
     expect((await discard(c.courseId)).status).toBe(204);
-    // Uten utkast: 404.
+    // Uten utkast: samme svar som når en annen har lagret, publisert eller forkastet. Fana må laste på nytt.
     const none = await publishDraft(c.courseId);
-    expect(none.status).toBe(404);
-    expect(none.body.error).toBe("course_draft_not_found");
+    expect([none.status, none.body.error]).toEqual([409, "course_draft_changed"]);
   });
 
   it("deltakeren ser den nye utgaven først når utkastet er publisert", async () => {

@@ -1681,6 +1681,27 @@ Valg i byggingen der et annet ville vært like forsvarlig (`doc/design/PLAN_1140
   e-post avgjøres av samme kode som ved direkte lagring. Alternativet var en egen publiseringsvei for utkast; den ville
   gitt to steder som avgjør versjonen.
 - **Et utkast på utdatert grunnlag kan bare forkastes.** Er kurset lagret etter at utkastet ble laget (mulig bare når
-  bryteren har vært av), flettes ingenting: forfatteren forkaster og gjør endringene på nytt.
+  bryteren har vært av), flettes ingenting: forfatteren forkaster og gjør endringene på nytt. (Falt bort med bryteren,
+  se under.)
+
+### Ingen bryter, og mest mulig likt moduler (#1140 etappe 2, produkteier 2026-11-12)
+
+Da kursbyggeren skulle bygges, svarte produkteier på fire spørsmål (skissen: «Kursbygger med utkast»):
+
+- **Utkast for kurs er alltid på.** «Trenger vi å slå dette av og på? Er det ikke enklere at det standard er på? Vi har
+  ingen bryter for lignende funksjonalitet for moduler.» Bryteren `course_drafts` fra skive 2a og 2b er fjernet, og med
+  den reglene som bare fantes på grunn av den: «utkast finnes, men bryteren er av», utdaterte utkast, og avvisningen av
+  direkte lagring. Følgene er godtatt: ingen av-knapp i prod (en feil rettes med ny utrulling eller tilbakerulling), og
+  etappe 2 går til prod før etappe 3, så et kurs med både utkast og nye versjoner av innholdet har to knapper til da.
+  Dette erstatter «bryteren står av i prod til etappe 3 er ferdig» fra planlesingen.
+- **Samme uttrykk som moduler:** «Publisert» pluss brikken «Nyere utkast». Ikke et eget merke for kurs.
+- **«Publiser utkastet» viser ikke hva som endres.** Moduler har ingen slik visning, og prinsippet er mest mulig likt.
+  Knappen publiserer direkte; er innholdet endret og noen har kursbevis, kommer dialogen som finnes fra før («Hva slags
+  endring er dette?»), som alt sier hvor mye som er lagt til, tatt ut og flyttet.
+- **«Avbryt» og «Forkast utkast» er to knapper.** «Avbryt» tar bort det som er skrevet siden siste lagring; «Forkast
+  utkast» sletter det lagrede utkastet etter en bekreftelse.
+- **Et publisert kurs uten utkast kan fortsatt lagres direkte gjennom API-et** (min avgjørelse i byggingen). Kursbyggeren
+  gjør det ikke; den lagrer til utkastet. Å nekte det på serveren ville ikke beskyttet noe: uten utkast er en direkte
+  lagring det samme som i dag, og med utkast stopper låsen den. Rutene ryddes i etappe 3.
 - **Sammenslåingen av «Publiser utkastet» og «Publiser nye versjoner» er flyttet til etappe 3.** Bygd nå måtte den stå på
   maskineriet med ett svar per kurs, som etappe 3 fjerner. Bryteren står derfor av i prod til etappe 3 er ferdig.

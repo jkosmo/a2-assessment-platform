@@ -1403,40 +1403,52 @@ Deltakersiden: `test/e2e/participant-module-course-context-1140.spec.ts`.
 
 **Når en ny flate viser eller leverer en modul til en deltaker:** les gjennom regelen, og send kurset med.
 
-## 32. Utkastet til et kurs — én fil eier det, én lås stenger for resten (#1140 etappe 2, 2.155.0)
+## 32. Utkastet til et kurs — én fil eier det, én lås stenger for resten (#1140 etappe 2, 2.157.0)
 
-Et publisert kurs kan ha ett utkast (`CourseDraft`): det kursskjemaet har lagret, men ikke publisert. Alt om tabellen og
-bryteren `course_drafts` bor i `src/modules/course/courseDraft.ts` (plan: `doc/design/PLAN_1140_E2.md`).
+Et publisert kurs redigeres gjennom ett utkast (`CourseDraft`): det kursbyggeren har lagret, men ikke publisert. Alt om
+tabellen bor i `src/modules/course/courseDraft.ts` (plan: `doc/design/PLAN_1140_E2.md`). Det finnes ingen bryter: utkast er
+alltid på, som for moduler.
 
 **Leser utkastet:** bare kursbyggerens ruter (`GET`/`PUT`/`DELETE /api/admin/content/courses/:courseId/draft`,
-`POST …/draft/publish`) og kursdetaljen (`drafts: { enabled, hasDraft }`). Ingen deltakerflate, rapport, eksport eller
-e-post leser det. Relasjonen fra kurset heter `courseDraft`, så vakta finner også `include: { courseDraft: true }`.
+`POST …/draft/publish`), kursdetaljen (`hasDraft`, `lifecycle`) og kurslista (`lifecycle`). Ingen deltakerflate, rapport,
+eksport eller e-post leser det. Relasjonen fra kurset heter `courseDraft`, så vakta finner også
+`include: { courseDraft: true }`.
 
-**Publiserer utkastet (2.156.0):** `publishCourseDraft` (courseDraft.ts) sjekker bryteren, at kurset er publisert, at
-utkastet er det fana lastet, og at kurset ikke er lagret siden utkastet ble laget. Så skriver ruta utkastet med
-`updateCourse` (samme vei som `PUT …/content`: versjon, krav og e-post avgjøres der), og raden slettes, alt i én
-transaksjon. Unntaket fra låsen (`publishingDraft: true`) gis ett sted, i den ruta.
+**«Publisert med nyere utkast»** regnes ut ett sted, `deriveContentLifecycle` (`src/modules/content/lifecycle.ts`):
+`published_with_draft`, samme ord som en modul med en nyere versjon. Klienten viser «Publisert» + «Nyere utkast» og
+behandler tilstanden som publisert i knappene (`content-status-badge.js`, kurslista og kursets handlingsrad).
 
-**Skriver kursets felt eller liste, og stoppes derfor av låsen** (bryter på + utkast finnes → `409 course_has_draft`). Låsen
-sitter ETT sted, i `claimCourseRevision` (courseVersioning.ts), som alle disse går gjennom:
+**Publiserer utkastet:** `publishCourseDraft` (courseDraft.ts) sjekker at utkastet er det fana lastet, og at kurset er
+publisert. Så skriver ruta utkastet med `updateCourse` (samme vei som `PUT …/content`: versjon, krav og e-post avgjøres
+der), og raden slettes, alt i én transaksjon. Et element som er arkivert, avpublisert eller slettet siden utkastet ble
+lagret, stopper publiseringen med navn. Unntaket fra låsen (`publishingDraft: true`) gis ett sted, i den ruta.
 
-| Vei inn | Funksjon | I tillegg |
-|---|---|---|
-| `PUT /:courseId` | `updateCourse` | Bryter på og kurset publisert: `409 course_form_outdated` før noe skrives (`assertDirectCourseSaveAllowed`) |
-| `PUT /:courseId/content` | `updateCourse` med `items` | Samme |
-| `PUT /:courseId/items` | `setCourseItems` | Samme |
-| `PUT /:courseId/modules` | `setCourseModules` | Samme |
-| Kursimport (`replaceExisting`, `updateExisting`) | `setCourseItems` uten teller (en fil i gammelt format uten `items`: `setCourseModules`) | Ingen egen sjekk: importens ene transaksjon rulles tilbake, og den fjerner bildene den lastet opp |
+**Skriver kursets felt eller liste, og stoppes derfor av låsen** (utkast finnes → `409 course_has_draft`). Låsen sitter ETT
+sted, i `claimCourseRevision` (courseVersioning.ts), som alle disse går gjennom:
+
+| Vei inn | Funksjon |
+|---|---|
+| `PUT /:courseId` | `updateCourse` |
+| `PUT /:courseId/content` | `updateCourse` med `items` |
+| `PUT /:courseId/items` | `setCourseItems` |
+| `PUT /:courseId/modules` | `setCourseModules` |
+| Kursimport (`replaceExisting`, `updateExisting`) | `setCourseItems` uten teller (en fil i gammelt format uten `items`: `setCourseModules`). Ingen egen sjekk: importens ene transaksjon rulles tilbake, og den fjerner bildene den lastet opp |
+
+Uten utkast virker alle fem som før. Kursbyggeren bruker dem bare for et kurs som ikke er publisert; et publisert kurs
+lagrer den til utkastet. Fordi alt som øker kursets teller, går gjennom låsen, bygger utkastet alltid på den publiserte
+utgaven slik den er.
 
 **Stoppes IKKE av låsen, med vilje:** en seksjon eller modul publisert fra sin egen side, «Publiser nye versjoner»,
 avpublisering, arkivering, tildeling og klasser. De skriver ikke kursets felt eller liste gjennom telleren. Heller ikke
 sletting av et tema (`courseThemeService.ts`: kurset mister temaet) og vedlikeholdsskriptet for titler
 (`localizedTitleCleanup.ts`); begge endrer den publiserte utgaven mens utkastet ligger.
 
-**Vakter:** `test/course-draft-guard.test.js` (ordet `courseDraft` og bryteren brukes bare i fila; den importeres bare av
-rutene og låsesjekken; låsen står før telleren; unntaket `publishingDraft: true` gis ett sted, inne i
-`publishCourseDraft`, som sletter raden etterpå). Skrivingen holder
-innholdslåsen: `test/content-lock-write-guard.test.js`. Gjennom rutene: `test/m2-course-draft-1140-e2.test.ts`.
+**Et avpublisert kurs med et utkast liggende igjen:** står som utkast (`lifecycle: "draft"`, `hasDraft: true`). Direkte
+lagring stoppes av låsen til utkastet er forkastet, eller kurset er publisert igjen og utkastet publisert.
 
-**Når en ny vei skriver kursets felt eller liste:** la den gå gjennom `claimCourseRevision`, så gjelder låsen. Er den et
-skjema som lagrer et publisert kurs direkte, skal den også kalle `assertDirectCourseSaveAllowed`.
+**Vakter:** `test/course-draft-guard.test.js` (ordet `courseDraft` brukes bare i fila; den importeres bare av rutene og
+låsesjekken; låsen står før telleren; unntaket `publishingDraft: true` gis ett sted, inne i `publishCourseDraft`, som
+sletter raden etterpå). Skrivingen holder innholdslåsen: `test/content-lock-write-guard.test.js`. Gjennom rutene:
+`test/m2-course-draft-1140-e2.test.ts`.
+
+**Når en ny vei skriver kursets felt eller liste:** la den gå gjennom `claimCourseRevision`, så gjelder låsen.

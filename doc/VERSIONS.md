@@ -26,6 +26,9 @@ This document tracks release versions and what each version includes.
   slettet tema, arkivert element, avpublisert kurs, deltakeren ser den nye utgaven). Vakta er utvidet.
 - **Mutasjonstestene:** 28 bevisste feil, alle gjorde en test rød. 27 i testfila for utkast; den siste (tema følger ikke
   med fra kroppen ved direkte lagring) i `test/m2-course-themes.test.ts`.
+- **Stage (2026-11-12 kl. 10:14):** `test/stage/release-2-155-kursutkast-av.spec.ts`, 4 av 4 mot 2.156.0. Et publisert kurs
+  lagret direkte med alle feltene kursbyggeren sender (også tom plassering og ingen tema) står riktig etterpå, importen går
+  som før, `POST …/draft/publish` svarer `409 course_drafts_off`, og forkast uten id og teller svarer 400.
 - **QA-porten:** GO. Koden som er i bruk i prod (`updateCourse`, `courseFieldsFromBody`, `setCourseThemes`), er lest felt
   for felt og oppfører seg som før. Rettet før commit: vakta teller ordet `publishingDraft` per fil, og stage-testen prøver
   den nye ruta og sender kursbyggerens fulle kropp. Funnene som gjelder med bryteren på, tas først i skive 2c
