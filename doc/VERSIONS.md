@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.154.2 - 2026-11-12
+
+Hastefiks fra prod-koden (2.154.0), rullet ut alene: «Lagre» i modulens Innstillinger gjorde ingenting, uten melding.
+Samme retting ligger på utviklingslinja som 2.157.1, der den fulle beskrivelsen står. (2.154.1 finnes bare på
+utviklingslinja og er ikke med her.)
+
+- **Hva brukerne merket:** en forfatter åpnet en publisert modul, gikk til Innstillinger, endret en innstilling og trykket
+  «Lagre». Ingenting skjedde. Lagret forfatteren fra Rediger for å komme videre, forsvant innstillingen uten varsel.
+- **Rotårsak:** fanebyttet fra Rediger til Innstillinger laget et utkast ingen hadde skrevet, fordi «er skjemaet endret?»
+  (`editFormSnapshot`, `admin-content-shell.js`) sammenlignet det skjemaet leste tilbake, med verdiene det ble tegnet med.
+  Det slo til for moduler med spørsmål av typene «flere riktige», «sett i rekkefølge» og «fyll inn», og for tekst med
+  mellomrom eller linjeskift til slutt. Med et utkast tegner ikke Innstillinger lagreknappen, og «Lagre» i hodet traff
+  ingenting.
+- **Rettet:** «endret» måles mot det skjemaet ga tilbake rett etter tegning; «Lagre» i hodet sier hvorfor når
+  innstillingene ikke kan lagres; lagring fra Rediger spør først når ulagrede innstillinger ville gått tapt.
+- **Tester:** `test/e2e/admin-content-settings-save-after-edit-tab.spec.ts` (12) og
+  `test/e2e/admin-content-settings-lost-on-content-save.spec.ts` (2), røde på 2.154.0 og grønne etter rettingen.
+- **Ved utrulling:** bare klientfiler. Ingen migrering, ingen innstillinger.
+
 ## 2.154.0 - 2026-11-11
 
 #1140 etappe 1: hvilken versjon av en modul en deltaker får, avgjøres ett sted. Første etappe av «kurset bestemmer hva
