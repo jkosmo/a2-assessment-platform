@@ -2,6 +2,46 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.156.0 - 2026-11-12
+
+#1140 etappe 2, skive 2b: «Publiser utkastet», og rettingene etter QA-porten for skive 2a (`doc/design/PLAN_1140_E2.md`).
+
+- **Hva brukerne merker:** ingenting. Bryteren `course_drafts` står fortsatt av, og kursbyggeren er ikke endret (skive 2c).
+- **Nytt:** `POST /api/admin/content/courses/:courseId/draft/publish`. Utkastet skrives til kurset med den vanlige
+  lagringen (`updateCourse`: versjon, krav og e-post avgjøres som ved `PUT …/content`), og utkastet slettes, i én
+  transaksjon. Feiler noe, står begge som før. Lista endret og noen har kursbevis: forfatterens svar kreves. Et element som
+  er arkivert eller slettet siden utkastet ble lagret, stopper publiseringen med navnene; et slettet tema tas bare bort.
+- **Rettet etter QA-porten for 2a:**
+  - «Forkast» krever utkastet fana lastet (`?draftId=…&revision=…`). Har en annen lagret siden: 409, og ingenting forkastes.
+  - Relasjonen fra kurset heter `courseDraft`, og vakta finner ordet hvor som helst utenfor fila som eier tabellen.
+  - Et lagret utkast som ikke passer skjemaet lenger: `409 course_draft_unreadable` med id og teller, ikke 500.
+  - Tema sjekkes når utkastet lagres, og tellerne sjekkes før lista.
+  - Er kurset lagret etter at utkastet ble laget (bare mulig når bryteren har vært av): `409 course_draft_outdated` ved
+    lagring og publisering, `outdated` i `GET …/draft`. Utkastet kan da bare forkastes.
+- **Ryddet:** de tre stedene som gjorde kroppen fra kursskjemaet om til feltene `updateCourse` tar (`PUT /:courseId`,
+  `PUT …/content`, publiseringen), deler nå én funksjon (`courseFieldsFromBody`).
+- **Ved utrulling:** ingen migrering (relasjonens navn står ikke i databasen), ingen nye innstillinger.
+- **Tester:** 40 gjennom rutene i `test/m2-course-draft-1140-e2.test.ts` (15 nye: forkast med kontroll, tema, uleselig og
+  utdatert utkast, og publiseringen: bare tittel, bare innstillinger, svar kreves, hoved og mindre, gammel fane, samtidige,
+  slettet tema, arkivert element, avpublisert kurs, deltakeren ser den nye utgaven). Vakta er utvidet.
+- **Mutasjonstestene:** 28 bevisste feil, alle gjorde en test rød. 27 i testfila for utkast; den siste (tema følger ikke
+  med fra kroppen ved direkte lagring) i `test/m2-course-themes.test.ts`.
+- **QA-porten:** GO. Koden som er i bruk i prod (`updateCourse`, `courseFieldsFromBody`, `setCourseThemes`), er lest felt
+  for felt og oppfører seg som før. Rettet før commit: vakta teller ordet `publishingDraft` per fil, og stage-testen prøver
+  den nye ruta og sender kursbyggerens fulle kropp. Funnene som gjelder med bryteren på, tas først i skive 2c
+  (`doc/design/PLAN_1140_E2.md`).
+- **Rotårsak, 429 i egne tester:** testfila vokste forbi 120 kall fra samme administrator på ett minutt, og de siste
+  testene fikk 429 fra grensen for kall per bruker. Ikke en feil i produktet. Fila bruker nå en ny administrator per test.
+- **Kjente mangler:**
+  - Publiseringen stopper et arkivert eller slettet element, men ikke et AVPUBLISERT. Et element som bare står i utkastet,
+    kan avpubliseres, og ville da havnet i et levende kurs uten aktiv versjon. Rettes først i 2c, før bryteren slås på.
+  - Er utkastet borte når fana publiserer eller forkaster, er svaret 404; ved lagring 409. Samles i 2c.
+  - Har kurset både et utkast og nye versjoner av innholdet, er det to steg («Publiser utkastet» og «Publiser nye
+    versjoner») og to versjonsøkninger. Slås sammen i etappe 3; bryteren står av i prod til da.
+  - Agent-token mot et publisert kurs med bryteren på er ikke testet særskilt; avvisningen står før den nye koden i ruta.
+  - De nye feilkodene har ikke tekst på brukerens språk ennå (kommer med kursbyggeren i 2c), bortsett fra
+    `course_draft_item_unusable`.
+
 ## 2.155.0 - 2026-11-12
 
 #1140 etappe 2, skive 2a: et publisert kurs kan ha et utkast, bak en bryter som står av (`doc/design/PLAN_1140_E2.md`).
@@ -30,6 +70,11 @@ This document tracks release versions and what each version includes.
 - **Mutasjonstestene:** 28 bevisste feil, 27 gjorde en test rød. Den som overlevde, var en ekstra sjekk i kursimportens rute
   («har kurset utkast?» før importen starter). Den var overflødig: låsen avviser importen uansett, importens ene transaksjon
   rulles tilbake, og importen fjerner selv bildene den lastet opp. Sjekken er fjernet, så låsen står ett sted.
+- **Stage (2026-11-12):** `test/stage/release-2-155-kursutkast-av.spec.ts`, 3 av 3. Kursdetaljen svarer med
+  `drafts: { enabled: false, hasDraft: false }` (migreringen er inne), et publisert kurs lagres direkte som før, en utdatert
+  teller avvises som før, «Oppdater dette kurset» går som før, og utkastrutene svarer 404 / 409 `course_drafts_off`.
+  Første forsøk hang i fire minutter: testen ble startet da `/version` viste ny versjon, to minutter før utrullingen var
+  ferdig. Kallene i testen har nå tidsavbrudd med metode og sti i feilen.
 - **QA-porten:** GO. Ingen funn rammer brukere med bryteren av. Åtte funn gjelder med bryteren på og tas i skive 2b, før
   kursbyggeren bygges på API-et; de står i `doc/design/PLAN_1140_E2.md`. De to viktigste: «Forkast» sjekker ikke hvilket
   utkast fana lastet, og vakta ser ikke relasjonen `Course.draft`.

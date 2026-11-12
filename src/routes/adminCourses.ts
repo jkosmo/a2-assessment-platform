@@ -28,6 +28,8 @@ import {
   cascadeDeleteCourse,
   findThemeIdsForCourse,
   findLocalizedThemesForCourses,
+  assertCourseThemesExist,
+  findExistingThemeIds,
 } from "../modules/course/index.js";
 import { generationLocaleSchema, importBodySchema, normalizeImportPayload, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema, publishPendingVersionedBodySchema } from "../modules/adminContent/adminContentSchemas.js";
 import { publishCoursePendingVersioned } from "../modules/course/versionedPublishService.js";
@@ -39,7 +41,7 @@ import { importCourseFromEnvelope } from "../modules/adminContent/contentImportS
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { localizeContentText } from "../i18n/content.js";
 import { localizeCourseCopy } from "../modules/adminContent/llmContentGenerationService.js";
-import { NotFoundError, AppError } from "../errors/AppError.js";
+import { NotFoundError, AppError, ConflictError, DomainRuleError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
 import { countCourseInProgressParticipants } from "../modules/course/contentLifecycle.js";
 import { countMajorVersionRecipients } from "../modules/course/courseVersioning.js";
@@ -47,6 +49,7 @@ import {
   discardCourseDraft,
   findCourseDraft,
   isCourseDraftsOn,
+  publishCourseDraft,
   saveCourseDraft,
   type CourseDraftRow,
 } from "../modules/course/courseDraft.js";
@@ -460,6 +463,23 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
 });
 
 /**
+ * Kursets felt fra en validert kropp, slik `updateCourse` tar dem imot (lokaliserte tekster lagres som JSON-tekst). Utelatt
+ * felt = urørt. Brukt av `PUT /:courseId`, `PUT …/content` og publiseringen av utkastet, så de tre ikke kan drive fra hverandre.
+ */
+function courseFieldsFromBody(body: Partial<z.infer<typeof courseBodySchema>>) {
+  return {
+    title: body.title ? localizedTextCodec.serialize(body.title) : undefined,
+    description: body.description ? localizedTextCodec.serialize(body.description) : undefined,
+    certificationLevel: body.certificationLevel ? localizedTextCodec.serialize(body.certificationLevel) : undefined,
+    enrollmentPolicy: body.enrollmentPolicy,
+    discussionsEnabled: body.discussionsEnabled,
+    discussionOwnerNotifications: body.discussionOwnerNotifications,
+    sortOrder: body.sortOrder,
+    themeIds: body.themeIds,
+  };
+}
+
+/**
  * #1140 etappe 2: med bryteren `course_drafts` på lagrer kursbyggeren et PUBLISERT kurs til utkastet (`PUT …/draft`). En
  * direkte lagring er da en fane fra før (eller et API-kall) som ville gått utenom utkastet: `409 course_form_outdated`, og
  * ingenting er skrevet. Gjelder også uten utkast. Kalles av de fire rutene som lagrer kursets felt eller liste direkte.
@@ -484,16 +504,7 @@ adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId
   try {
     if (parsed.data.expectedRevision === undefined) throw courseFormOutdatedError();
     await assertDirectCourseSaveAllowed(request.params.courseId);
-    const course = await updateCourse(request.params.courseId, {
-      title: parsed.data.title ? localizedTextCodec.serialize(parsed.data.title) : undefined,
-      description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : undefined,
-      certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : undefined,
-      enrollmentPolicy: parsed.data.enrollmentPolicy,
-      discussionsEnabled: parsed.data.discussionsEnabled,
-      discussionOwnerNotifications: parsed.data.discussionOwnerNotifications,
-      sortOrder: parsed.data.sortOrder,
-      themeIds: parsed.data.themeIds,
-    }, request.context?.userId, { expectedRevision: parsed.data.expectedRevision });
+    const course = await updateCourse(request.params.courseId, courseFieldsFromBody(parsed.data), request.context?.userId, { expectedRevision: parsed.data.expectedRevision });
     response.json({ course });
   } catch (error) {
     next(error);
@@ -512,16 +523,7 @@ adminCoursesRouter.put("/:courseId/content", requireContentOwnership("COURSE", "
   try {
     if (parsed.data.expectedRevision === undefined) throw courseFormOutdatedError();
     await assertDirectCourseSaveAllowed(request.params.courseId);
-    const course = await updateCourse(request.params.courseId, {
-      title: parsed.data.title ? localizedTextCodec.serialize(parsed.data.title) : undefined,
-      description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : undefined,
-      certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : undefined,
-      enrollmentPolicy: parsed.data.enrollmentPolicy,
-      discussionsEnabled: parsed.data.discussionsEnabled,
-      discussionOwnerNotifications: parsed.data.discussionOwnerNotifications,
-      sortOrder: parsed.data.sortOrder,
-      themeIds: parsed.data.themeIds,
-    }, request.context?.userId, {
+    const course = await updateCourse(request.params.courseId, courseFieldsFromBody(parsed.data), request.context?.userId, {
       items: parsed.data.items,
       version: parsed.data.version,
       expectedRevision: parsed.data.expectedRevision,
@@ -536,39 +538,91 @@ adminCoursesRouter.put("/:courseId/content", requireContentOwnership("COURSE", "
 // ── #1140 etappe 2: utkastet til et publisert kurs (doc/design/PLAN_1140_E2.md) ──────────────────────────────────────────────
 //
 // «Lagre» i kursbyggeren skriver hit når kurset er publisert og bryteren `course_drafts` er på. Ingenting deltakerne ser, endres
-// før utkastet publiseres (skive 2b). Alt om `CourseDraft` bor i modules/course/courseDraft.ts; rutene her eier skjemaet, og
-// leser den lagrede teksten gjennom det. Agent-tokenet når ingen av rutene (ikke i hvitelista).
+// før utkastet publiseres. Alt om `CourseDraft` bor i modules/course/courseDraft.ts; rutene her eier skjemaet, og leser den
+// lagrede teksten gjennom det, både ved henting og ved publisering. Agent-tokenet når ingen av rutene (ikke i hvitelista).
 
 /** Det utkastet inneholder: kroppen til `PUT …/content`, uten svaret om versjon og uten telleren. */
 const courseDraftPayloadSchema = courseBodySchema.partial().extend({ items: setCourseItemsBodySchema.shape.items });
+type CourseDraftPayload = z.infer<typeof courseDraftPayloadSchema>;
 
-/** Det skjemaet lastet: et utkast, eller den publiserte utgaven uten utkast. Se `LoadedCourseEdition` i courseDraft.ts. */
-const loadedCourseEditionSchema = z.union([
-  z.object({ draftId: z.string().min(1), revision: z.number().int().min(1) }).strict(),
-  z.object({ expectedRevision: z.number().int().min(0) }).strict(),
-]);
+/** Utkastet fana lastet (`LoadedCourseDraft` i courseDraft.ts). Kreves for å lagre videre, forkaste og publisere. */
+const loadedCourseDraftSchema = z.object({ draftId: z.string().min(1), revision: z.number().int().min(1) }).strict();
+
+/** Det skjemaet lastet: et utkast, eller den publiserte utgaven uten utkast (`LoadedCourseEdition`). */
+const loadedCourseEditionSchema = z.union([loadedCourseDraftSchema, z.object({ expectedRevision: z.number().int().min(0) }).strict()]);
 
 const saveCourseDraftBodySchema = courseDraftPayloadSchema.extend({ loaded: loadedCourseEditionSchema });
+
+const publishCourseDraftBodySchema = z
+  .object({
+    loaded: loadedCourseDraftSchema,
+    // Forfatterens svar når lista er endret og noen har kursbevis, som i `PUT …/content`.
+    version: z.enum(["major", "minor"]).optional(),
+    confirmEmailRecipients: confirmEmailRecipientsSchema,
+  })
+  .strict();
+
+/**
+ * Leser den lagrede teksten gjennom skjemaet. En rad som ikke passer (skjemaet er strammet inn siden den ble lagret), kan
+ * verken vises eller publiseres: `409 course_draft_unreadable`, med id og teller så den kan forkastes. Ikke en 500.
+ */
+function readCourseDraftPayload(draft: CourseDraftRow): CourseDraftPayload {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(draft.payloadText);
+  } catch {
+    raw = undefined;
+  }
+  const parsed = courseDraftPayloadSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ConflictError(
+      "course_draft_unreadable",
+      "This draft was saved by an older version of the platform and cannot be opened. Discard the draft and make the changes again.",
+      { courseId: draft.courseId, draftId: draft.id, revision: draft.revision },
+    );
+  }
+  return parsed.data;
+}
+
+type DraftItemReader = Pick<typeof prisma, "module" | "courseSection">;
+
+/** Elementene i utkastet slik de står NÅ: tittel, og om de er arkivert eller borte siden utkastet ble lagret. */
+async function describeCourseDraftItems(client: DraftItemReader, items: CourseDraftPayload["items"]) {
+  const moduleIds = items.flatMap((item) => (item.type === "MODULE" ? [item.moduleId] : []));
+  const sectionIds = items.flatMap((item) => (item.type === "SECTION" ? [item.sectionId] : []));
+  const select = { id: true, title: true, archivedAt: true } as const;
+  const modules = moduleIds.length > 0 ? await client.module.findMany({ where: { id: { in: moduleIds } }, select }) : [];
+  const sections = sectionIds.length > 0 ? await client.courseSection.findMany({ where: { id: { in: sectionIds } }, select }) : [];
+  const known = new Map([...modules, ...sections].map((row) => [row.id, row]));
+  return items.map((item, index) => {
+    const row = known.get(item.type === "MODULE" ? item.moduleId : item.sectionId);
+    return {
+      type: item.type,
+      sortOrder: index,
+      moduleId: item.type === "MODULE" ? item.moduleId : null,
+      sectionId: item.type === "SECTION" ? item.sectionId : null,
+      title: row?.title ?? null,
+      discussionsEnabled: item.discussionsEnabled !== false,
+      archivedAt: row?.archivedAt?.toISOString() ?? null,
+      missing: !row,
+    };
+  });
+}
 
 /**
  * Utkastet slik kursbyggeren skal vise det: det lagrede, flettet med den publiserte utgaven der et felt er utelatt («som
  * publisert»), og med titlene på elementene. Et element som er arkivert eller borte, merkes: det stopper publiseringen.
+ * `outdated`: kurset er lagret etter at utkastet ble laget, så utkastet kan bare forkastes.
  */
 async function courseDraftView(courseId: string, draft: CourseDraftRow) {
   const course = await courseRepository.findCourseById(courseId);
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
-  const payload = courseDraftPayloadSchema.parse(JSON.parse(draft.payloadText));
-  const moduleIds = payload.items.flatMap((item) => (item.type === "MODULE" ? [item.moduleId] : []));
-  const sectionIds = payload.items.flatMap((item) => (item.type === "SECTION" ? [item.sectionId] : []));
-  const [modules, sections] = await Promise.all([
-    moduleIds.length > 0 ? prisma.module.findMany({ where: { id: { in: moduleIds } }, select: { id: true, title: true, archivedAt: true } }) : [],
-    sectionIds.length > 0 ? prisma.courseSection.findMany({ where: { id: { in: sectionIds } }, select: { id: true, title: true, archivedAt: true } }) : [],
-  ]);
-  const known = new Map([...modules, ...sections].map((row) => [row.id, row]));
+  const payload = readCourseDraftPayload(draft);
   return {
     id: draft.id,
     revision: draft.revision,
     baseRevision: draft.baseRevision,
+    outdated: draft.baseRevision !== course.contentRevision,
     source: draft.source,
     updatedById: draft.updatedById,
     updatedAt: draft.updatedAt.toISOString(),
@@ -582,20 +636,7 @@ async function courseDraftView(courseId: string, draft: CourseDraftRow) {
       sortOrder: payload.sortOrder !== undefined ? payload.sortOrder : course.sortOrder ?? null,
       themeIds: payload.themeIds ?? (await findThemeIdsForCourse(courseId)),
     },
-    items: payload.items.map((item, index) => {
-      const refId = item.type === "MODULE" ? item.moduleId : item.sectionId;
-      const row = known.get(refId);
-      return {
-        type: item.type,
-        sortOrder: index,
-        moduleId: item.type === "MODULE" ? item.moduleId : null,
-        sectionId: item.type === "SECTION" ? item.sectionId : null,
-        title: row?.title ?? null,
-        discussionsEnabled: item.discussionsEnabled !== false,
-        archivedAt: row?.archivedAt?.toISOString() ?? null,
-        missing: !row,
-      };
-    }),
+    items: await describeCourseDraftItems(prisma, payload.items),
   };
 }
 
@@ -623,9 +664,12 @@ adminCoursesRouter.put("/:courseId/draft", requireContentOwnership("COURSE", "co
       payload,
       loaded,
       actorId: request.context?.userId,
-      // Samme sjekk som lagringen av et kurs gjør: ingen dobbel, og ingenting arkivert. En feil kommer da ved lagring av
-      // utkastet, og ikke først når det publiseres.
-      checkUsable: (tx) => assertCourseItemsUsable(tx, payload.items),
+      // Samme sjekker som lagringen av et kurs gjør: ingen dobbel, ingenting arkivert eller borte, og temaene finnes. En feil
+      // kommer da ved lagring av utkastet, og ikke først når det publiseres.
+      checkUsable: async (tx) => {
+        await assertCourseItemsUsable(tx, payload.items);
+        if (payload.themeIds) await assertCourseThemesExist(tx, payload.themeIds);
+      },
     });
     response.json({ draft: await courseDraftView(request.params.courseId, draft) });
   } catch (error) {
@@ -633,11 +677,65 @@ adminCoursesRouter.put("/:courseId/draft", requireContentOwnership("COURSE", "co
   }
 });
 
+// Forkast: utkastet fana lastet, som `?draftId=…&revision=…` (en DELETE har ingen kropp). Har noen andre lagret siden,
+// `409 course_draft_changed`, og ingenting er forkastet.
 adminCoursesRouter.delete("/:courseId/draft", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const loaded = loadedCourseDraftSchema.safeParse({ draftId: request.query.draftId, revision: Number(request.query.revision) });
+  if (!loaded.success) {
+    response.status(400).json({ error: "validation_error", issues: loaded.error.issues });
+    return;
+  }
   try {
-    const discarded = await discardCourseDraft(request.params.courseId, request.context?.userId);
+    const discarded = await discardCourseDraft(request.params.courseId, loaded.data, request.context?.userId);
     if (!discarded) throw new NotFoundError("CourseDraft", "course_draft_not_found", "This course has no draft.");
     response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// «Publiser utkastet»: skriver utkastet til kurset med den vanlige lagringen (`updateCourse`: felt, tema, liste, versjon og
+// e-post avgjøres som ved `PUT …/content`) og sletter utkastet, i ÉN transaksjon. Feiler noe, står begge som før.
+//   - Lista endret og noen har kursbevis: forfatterens svar kreves (`400 course_version_required`), som ved direkte lagring.
+//   - Et element som er arkivert eller borte siden utkastet ble lagret: `400 course_draft_item_unusable`, med navnene.
+//   - Et tema som er slettet siden utkastet ble lagret, tas bort (det stopper ikke publiseringen).
+adminCoursesRouter.post("/:courseId/draft/publish", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = publishCourseDraftBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const courseId = request.params.courseId;
+    const actorId = request.context?.userId;
+    const course = await publishCourseDraft({
+      courseId,
+      loaded: parsed.data.loaded,
+      actorId,
+      apply: async (tx, draft) => {
+        const payload = readCourseDraftPayload(draft);
+        const unusable = (await describeCourseDraftItems(tx, payload.items))
+          .filter((item) => item.missing || item.archivedAt != null)
+          .map((item) => ({ type: item.type, id: item.moduleId ?? item.sectionId, title: item.title, reason: item.missing ? "missing" : "archived" }));
+        if (unusable.length > 0) {
+          throw new DomainRuleError(
+            "course_draft_item_unusable",
+            "One or more items in the draft have been archived or deleted. Take them out of the draft and publish again; nothing was published.",
+            { items: unusable },
+          );
+        }
+        const themeIds = payload.themeIds ? await findExistingThemeIds(tx, payload.themeIds) : undefined;
+        // Ingen `expectedRevision`: `publishCourseDraft` har alt sjekket, under samme lås, at kurset ikke er lagret siden
+        // utkastet ble laget (`409 course_draft_outdated`).
+        return updateCourse(courseId, { ...courseFieldsFromBody(payload), themeIds }, actorId, {
+          items: payload.items,
+          version: parsed.data.version,
+          confirmEmailRecipients: parsed.data.confirmEmailRecipients,
+          publishingDraft: true,
+        }, tx);
+      },
+    });
+    response.json({ course });
   } catch (error) {
     next(error);
   }

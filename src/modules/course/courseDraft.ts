@@ -83,17 +83,46 @@ export async function assertNoCourseDraftBlocksWrite(client: ContentWriteTx, cou
   if (blocked) throw courseHasDraftError(courseId);
 }
 
+/** Utkastet fana lastet. `id` følger med telleren: et utkast som er forkastet og laget på nytt, starter på 1 igjen. */
+export type LoadedCourseDraft = { draftId: string; revision: number };
+
 /**
- * Det skjemaet lastet: enten et utkast (`draftId` og `revision`), eller den publiserte utgaven uten utkast
- * (`expectedRevision`, kursets `contentRevision`). To ulike verdier med vilje: «jeg så ikke noe utkast» skal aldri kunne
- * skrive over et utkast noen andre har laget, eller lage utkastet på nytt etter at det er publisert.
+ * Det skjemaet lastet: enten et utkast, eller den publiserte utgaven uten utkast (`expectedRevision`, kursets
+ * `contentRevision`). To ulike verdier med vilje: «jeg så ikke noe utkast» skal aldri kunne skrive over et utkast noen andre
+ * har laget, eller lage utkastet på nytt etter at det er publisert.
  */
-export type LoadedCourseEdition = { draftId: string; revision: number } | { expectedRevision: number };
+export type LoadedCourseEdition = LoadedCourseDraft | { expectedRevision: number };
+
+function draftsOffError(courseId: string, nothing: "saved" | "published") {
+  return new ConflictError("course_drafts_off", `Course drafts are not switched on. Nothing was ${nothing}.`, { courseId });
+}
+
+/** Utkastet som ligger, må være det fana lastet. Ellers har noen andre lagret, publisert eller forkastet i mellomtiden. */
+function assertIsLoadedDraft(courseId: string, existing: CourseDraftRow | null, loaded: LoadedCourseDraft): asserts existing is CourseDraftRow {
+  if (!existing || existing.id !== loaded.draftId || existing.revision !== loaded.revision) {
+    throw draftChangedError(courseId, { loadedDraftId: loaded.draftId, loadedRevision: loaded.revision, currentRevision: existing?.revision ?? null });
+  }
+}
+
+/**
+ * Utkastet bygger på den publiserte utgaven slik den var da utkastet ble laget (`baseRevision`). Er kurset lagret siden,
+ * kan utkastet ikke publiseres: det ville skrevet over den lagringen. Med bryteren på stenger låsen for det; det kan bare
+ * skje når bryteren har vært av mens utkastet lå. Da er veien ut å forkaste utkastet.
+ */
+function assertDraftNotOutdated(courseId: string, draft: CourseDraftRow, contentRevision: number) {
+  if (draft.baseRevision !== contentRevision) {
+    throw new ConflictError(
+      "course_draft_outdated",
+      "The course was saved after this draft was created, so the draft can no longer be published. Discard the draft and make the changes again.",
+      { courseId, baseRevision: draft.baseRevision, currentRevision: contentRevision },
+    );
+  }
+}
 
 /**
  * Lagrer utkastet. Bare for et publisert kurs med bryteren på. `payload` er ferdig validert av ruta; `checkUsable` kjører
- * rutas sjekk av at elementene kan stå i et kurs, i samme transaksjon, så en feil kommer ved lagring og ikke først ved
- * publisering.
+ * rutas sjekk av at elementene og temaene finnes og kan brukes, i samme transaksjon, så en feil kommer ved lagring og ikke
+ * først ved publisering. Tellerne sjekkes først, som ved direkte lagring: en utdatert fane får vite at den er utdatert.
  */
 export async function saveCourseDraft(input: {
   courseId: string;
@@ -103,9 +132,7 @@ export async function saveCourseDraft(input: {
   checkUsable?: (tx: ContentWriteTx) => Promise<void>;
 }): Promise<CourseDraftRow> {
   return runContentWrite(async (tx) => {
-    if (!(await isCourseDraftsOn(tx))) {
-      throw new ConflictError("course_drafts_off", "Course drafts are not switched on. Nothing was saved.", { courseId: input.courseId });
-    }
+    if (!(await isCourseDraftsOn(tx))) throw draftsOffError(input.courseId, "saved");
     const course = await tx.course.findUnique({ where: { id: input.courseId }, select: { publishedAt: true, contentRevision: true } });
     if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
     if (course.publishedAt == null) {
@@ -115,21 +142,11 @@ export async function saveCourseDraft(input: {
         { courseId: input.courseId },
       );
     }
-    if (input.checkUsable) await input.checkUsable(tx);
 
     const existing = await findCourseDraft(tx, input.courseId);
-    const payloadText = JSON.stringify(input.payload);
-    let saved: CourseDraftRow;
-    let created = false;
     if ("draftId" in input.loaded) {
-      if (!existing || existing.id !== input.loaded.draftId || existing.revision !== input.loaded.revision) {
-        throw draftChangedError(input.courseId, { loadedDraftId: input.loaded.draftId, loadedRevision: input.loaded.revision, currentRevision: existing?.revision ?? null });
-      }
-      saved = await tx.courseDraft.update({
-        where: { id: existing.id },
-        data: { payloadText, revision: { increment: 1 }, updatedById: input.actorId ?? null, source: "form" },
-        select: DRAFT_SELECT,
-      });
+      assertIsLoadedDraft(input.courseId, existing, input.loaded);
+      assertDraftNotOutdated(input.courseId, existing, course.contentRevision);
     } else {
       // Skjemaet så ingen utkast. Finnes det ett nå, har noen andre laget det.
       if (existing) throw draftChangedError(input.courseId, { loadedDraftId: null, currentRevision: existing.revision });
@@ -140,19 +157,27 @@ export async function saveCourseDraft(input: {
           { expectedRevision: input.loaded.expectedRevision, currentRevision: course.contentRevision },
         );
       }
-      saved = await tx.courseDraft.create({
-        data: { courseId: input.courseId, payloadText, baseRevision: input.loaded.expectedRevision, updatedById: input.actorId ?? null, source: "form" },
-        select: DRAFT_SELECT,
-      });
-      created = true;
     }
+    if (input.checkUsable) await input.checkUsable(tx);
+
+    const payloadText = JSON.stringify(input.payload);
+    const saved = existing
+      ? await tx.courseDraft.update({
+          where: { id: existing.id },
+          data: { payloadText, revision: { increment: 1 }, updatedById: input.actorId ?? null, source: "form" },
+          select: DRAFT_SELECT,
+        })
+      : await tx.courseDraft.create({
+          data: { courseId: input.courseId, payloadText, baseRevision: course.contentRevision, updatedById: input.actorId ?? null, source: "form" },
+          select: DRAFT_SELECT,
+        });
     await recordAuditEvent(
       {
         entityType: auditEntityTypes.course,
         entityId: input.courseId,
         action: auditActions.course.draftSaved,
         actorId: input.actorId,
-        metadata: { courseId: input.courseId, draftId: saved.id, revision: saved.revision, created },
+        metadata: { courseId: input.courseId, draftId: saved.id, revision: saved.revision, created: !existing },
       },
       tx,
     );
@@ -161,13 +186,15 @@ export async function saveCourseDraft(input: {
 }
 
 /**
- * Forkaster utkastet. Virker ALLTID: også med bryteren av, og når kurset er avpublisert eller arkivert, så et utkast aldri
- * blir stående uten en vei ut. Svarer om noe ble forkastet.
+ * Forkaster utkastet fana lastet. Virker ALLTID: også med bryteren av, og når kurset er avpublisert eller arkivert, så et
+ * utkast aldri blir stående uten en vei ut. Har noen andre lagret utkastet siden fana lastet det, avvises forkastingen
+ * (`409 course_draft_changed`): ellers ville den slettet arbeid den som forkaster, aldri har sett. Svarer `false` uten utkast.
  */
-export async function discardCourseDraft(courseId: string, actorId?: string): Promise<boolean> {
+export async function discardCourseDraft(courseId: string, loaded: LoadedCourseDraft, actorId?: string): Promise<boolean> {
   return runContentWrite(async (tx) => {
     const existing = await findCourseDraft(tx, courseId);
     if (!existing) return false;
+    assertIsLoadedDraft(courseId, existing, loaded);
     await tx.courseDraft.delete({ where: { id: existing.id } });
     await recordAuditEvent(
       {
@@ -182,3 +209,47 @@ export async function discardCourseDraft(courseId: string, actorId?: string): Pr
     return true;
   });
 }
+
+/**
+ * Publiserer utkastet: `apply` skriver det til kurset (ruta leser `payloadText` gjennom skjemaet og kaller `updateCourse`
+ * med `publishingDraft`, det ene unntaket fra låsen), og raden slettes i SAMME transaksjon. Feiler noe, står både kurset
+ * og utkastet som før. Krever bryteren på, et publisert kurs, utkastet fana lastet, og at kurset ikke er lagret siden
+ * utkastet ble laget.
+ */
+export async function publishCourseDraft<T>(input: {
+  courseId: string;
+  loaded: LoadedCourseDraft;
+  actorId?: string;
+  apply: (tx: ContentWriteTx, draft: CourseDraftRow) => Promise<T>;
+}): Promise<T> {
+  return runContentWrite(async (tx) => {
+    if (!(await isCourseDraftsOn(tx))) throw draftsOffError(input.courseId, "published");
+    const course = await tx.course.findUnique({ where: { id: input.courseId }, select: { publishedAt: true, contentRevision: true } });
+    if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    const existing = await findCourseDraft(tx, input.courseId);
+    if (!existing) throw new NotFoundError("CourseDraft", "course_draft_not_found", "This course has no draft.");
+    assertIsLoadedDraft(input.courseId, existing, input.loaded);
+    if (course.publishedAt == null) {
+      throw new ConflictError(
+        "course_draft_requires_published",
+        "The course is not published. Publish the course again, or discard the draft; nothing was published.",
+        { courseId: input.courseId },
+      );
+    }
+    assertDraftNotOutdated(input.courseId, existing, course.contentRevision);
+    const result = await input.apply(tx, existing);
+    await tx.courseDraft.delete({ where: { id: existing.id } });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: input.courseId,
+        action: auditActions.course.draftPublished,
+        actorId: input.actorId,
+        metadata: { courseId: input.courseId, draftId: existing.id, revision: existing.revision },
+      },
+      tx,
+    );
+    return result;
+  });
+}
+

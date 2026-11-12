@@ -1675,6 +1675,12 @@ Valg i byggingen der et annet ville vært like forsvarlig (`doc/design/PLAN_1140
 - **Alle forfattere kan lese et utkast; bare kursets eiere kan lagre og forkaste det.** Samme linje som kursdetaljen
   (produkteier 2026-09-07: størst mulig deling).
 - **Forkast virker alltid,** også med bryteren av og for et kurs som er avpublisert eller arkivert. Et utkast skal aldri bli
-  stående uten en vei ut.
+  stående uten en vei ut. Men den som forkaster, må ha sett det som forkastes: forkastingen krever utkastets id og teller,
+  og avvises hvis en annen har lagret siden (2.156.0, etter QA-porten).
+- **Publiseringen av utkastet er den vanlige lagringen, pluss sletting av utkastet, i én transaksjon.** Versjon, krav og
+  e-post avgjøres av samme kode som ved direkte lagring. Alternativet var en egen publiseringsvei for utkast; den ville
+  gitt to steder som avgjør versjonen.
+- **Et utkast på utdatert grunnlag kan bare forkastes.** Er kurset lagret etter at utkastet ble laget (mulig bare når
+  bryteren har vært av), flettes ingenting: forfatteren forkaster og gjør endringene på nytt.
 - **Sammenslåingen av «Publiser utkastet» og «Publiser nye versjoner» er flyttet til etappe 3.** Bygd nå måtte den stå på
   maskineriet med ett svar per kurs, som etappe 3 fjerner. Bryteren står derfor av i prod til etappe 3 er ferdig.

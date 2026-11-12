@@ -176,16 +176,20 @@ export async function updateCourse(
   // kurset: `409 course_changed`, og ingenting er skrevet. Rutene krever den (en gammel fane sender den ikke).
   // #934 skive 4b: `confirmEmailRecipients` — tallet dialogen viste da forfatteren sa ja til e-post til mange
   // (se `applyCourseVersionChange`).
-  options?: { items?: CourseItemInput[]; version?: CourseVersionChoice; expectedRevision?: number; confirmEmailRecipients?: number },
+  // #1140 etappe 2: `publishingDraft` settes bare når utkastet til kurset publiseres (`publishCourseDraft`, courseDraft.ts).
+  // Da skrives utkastet til kurset med denne funksjonen, og låsen som utkastet selv gir, gjelder ikke.
+  options?: { items?: CourseItemInput[]; version?: CourseVersionChoice; expectedRevision?: number; confirmEmailRecipients?: number; publishingDraft?: boolean },
+  // #1140 etappe 2: publiseringen av utkastet holder alt innholdslåsen og sender transaksjonen sin, som `setCourseItems`.
+  lockedTx?: ContentWriteTx,
 ) {
   // #805: a course-metadata edit is a state change and must leave a trail. Record which fields changed.
   // #803: update + audit commit atomically.
   // #934 skive 4a: innholdslåsen først; telleren og alt annet sjekkes etter den, før noe skrives.
-  return runContentWrite(async (tx) => {
+  const run = async (tx: ContentWriteTx) => {
     const { themeIds, ...fields } = input;
     const previous = await tx.course.findUnique({ where: { id: courseId }, select: { title: true, description: true } });
     if (!previous) throw new NotFoundError("Course", "course_not_found", "Course not found.");
-    await claimCourseRevision(tx, courseId, options?.expectedRevision);
+    await claimCourseRevision(tx, courseId, options?.expectedRevision, { publishingDraft: options?.publishingDraft });
     let course = await tx.course.update({ where: { id: courseId }, data: fields });
     const itemsBump = options?.items
       ? await writeCourseItems(tx, courseId, options.items, {
@@ -218,7 +222,8 @@ export async function updateCourse(
       tx,
     );
     return course;
-  });
+  };
+  return lockedTx ? run(lockedTx) : runContentWrite(run);
 }
 
 // #934 skive 4a: `publishCourse` publiserer bare kursraden. Ruta og kaskaden kaller den inne i

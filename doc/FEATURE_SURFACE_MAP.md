@@ -1408,8 +1408,14 @@ Deltakersiden: `test/e2e/participant-module-course-context-1140.spec.ts`.
 Et publisert kurs kan ha ett utkast (`CourseDraft`): det kursskjemaet har lagret, men ikke publisert. Alt om tabellen og
 bryteren `course_drafts` bor i `src/modules/course/courseDraft.ts` (plan: `doc/design/PLAN_1140_E2.md`).
 
-**Leser utkastet:** bare kursbyggerens ruter (`GET`/`PUT`/`DELETE /api/admin/content/courses/:courseId/draft`) og
-kursdetaljen (`drafts: { enabled, hasDraft }`). Ingen deltakerflate, rapport, eksport eller e-post leser det.
+**Leser utkastet:** bare kursbyggerens ruter (`GET`/`PUT`/`DELETE /api/admin/content/courses/:courseId/draft`,
+`POST …/draft/publish`) og kursdetaljen (`drafts: { enabled, hasDraft }`). Ingen deltakerflate, rapport, eksport eller
+e-post leser det. Relasjonen fra kurset heter `courseDraft`, så vakta finner også `include: { courseDraft: true }`.
+
+**Publiserer utkastet (2.156.0):** `publishCourseDraft` (courseDraft.ts) sjekker bryteren, at kurset er publisert, at
+utkastet er det fana lastet, og at kurset ikke er lagret siden utkastet ble laget. Så skriver ruta utkastet med
+`updateCourse` (samme vei som `PUT …/content`: versjon, krav og e-post avgjøres der), og raden slettes, alt i én
+transaksjon. Unntaket fra låsen (`publishingDraft: true`) gis ett sted, i den ruta.
 
 **Skriver kursets felt eller liste, og stoppes derfor av låsen** (bryter på + utkast finnes → `409 course_has_draft`). Låsen
 sitter ETT sted, i `claimCourseRevision` (courseVersioning.ts), som alle disse går gjennom:
@@ -1427,8 +1433,9 @@ avpublisering, arkivering, tildeling og klasser. De skriver ikke kursets felt el
 sletting av et tema (`courseThemeService.ts`: kurset mister temaet) og vedlikeholdsskriptet for titler
 (`localizedTitleCleanup.ts`); begge endrer den publiserte utgaven mens utkastet ligger.
 
-**Vakter:** `test/course-draft-guard.test.js` (tabellen og bryteren brukes bare i fila; den importeres bare av rutene og
-låsesjekken; låsen står før telleren; unntaket `publishingDraft` gis ingen steder før skive 2b). Skrivingen holder
+**Vakter:** `test/course-draft-guard.test.js` (ordet `courseDraft` og bryteren brukes bare i fila; den importeres bare av
+rutene og låsesjekken; låsen står før telleren; unntaket `publishingDraft: true` gis ett sted, inne i
+`publishCourseDraft`, som sletter raden etterpå). Skrivingen holder
 innholdslåsen: `test/content-lock-write-guard.test.js`. Gjennom rutene: `test/m2-course-draft-1140-e2.test.ts`.
 
 **Når en ny vei skriver kursets felt eller liste:** la den gå gjennom `claimCourseRevision`, så gjelder låsen. Er den et

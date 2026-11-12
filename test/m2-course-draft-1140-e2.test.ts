@@ -14,13 +14,21 @@ import { COURSE_DRAFTS_SWITCH_KEY } from "../src/modules/course/courseDraft.js";
 
 const RUN = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
 const L = (text: string) => ({ "en-GB": text, nb: text, nn: text });
-const ADMIN = {
+// En ny administrator per test: fila sender flere enn 120 kall, og grensen for kall per bruker per minutt (`generalApiLimiter`)
+// ville ellers gitt 429 i de siste testene.
+const ADMIN: Record<string, string> = {
   "x-user-id": "draft-e2-admin",
   "x-user-email": "draft.e2.admin@x.test",
   "x-user-name": "Admin",
   "x-user-roles": "ADMINISTRATOR",
   "x-locale": "nb",
 };
+let adminSeq = 0;
+beforeEach(() => {
+  adminSeq += 1;
+  ADMIN["x-user-id"] = `draft-e2-admin-${RUN}-${adminSeq}`;
+  ADMIN["x-user-email"] = `draft.e2.admin.${RUN}.${adminSeq}@x.test`;
+});
 const smo = (name: string) => ({
   "x-user-id": `draft-e2-${name}-${RUN}`,
   "x-user-email": `draft.e2.${name}.${RUN}@x.test`,
@@ -140,6 +148,19 @@ async function publishedState(courseId: string) {
 
 const draftRow = (courseId: string) => prisma.courseDraft.findUnique({ where: { courseId } });
 
+/** Forkaster utkastet slik en fane som nettopp lastet det, gjør: med utkastets id og teller. Uten utkast: verdier som ikke finnes. */
+async function discard(courseId: string, headers: Record<string, string> = ADMIN, loaded?: { draftId: string; revision: number }) {
+  const row = loaded ? null : await draftRow(courseId);
+  const sent = loaded ?? { draftId: row?.id ?? "ingen", revision: row?.revision ?? 1 };
+  return request(app).delete(`${base(courseId)}/draft`).query(sent).set(headers);
+}
+
+/** Publiserer utkastet slik en fane som nettopp lastet det, gjør. */
+async function publishDraft(courseId: string, body: Record<string, unknown> = {}, headers: Record<string, string> = ADMIN) {
+  const row = await draftRow(courseId);
+  return request(app).post(`${base(courseId)}/draft/publish`).set(headers).send({ loaded: { draftId: row?.id ?? "ingen", revision: row?.revision ?? 1 }, ...body });
+}
+
 /** Lagrer et utkast slik skjemaet gjør når det ikke så noe utkast. */
 async function saveFirstDraft(courseId: string, body: Record<string, unknown>, headers: Record<string, string> = ADMIN) {
   const loaded = (await detail(courseId)).contentRevision;
@@ -185,7 +206,7 @@ describe("#1140 etappe 2: bryteren av — alt er som før", () => {
     expect(JSON.parse((await publishedState(c.courseId)).title)).toEqual(nyttNavn);
 
     expect((await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(200);
-    expect((await request(app).delete(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(204);
+    expect((await discard(c.courseId)).status).toBe(204);
     expect(await draftRow(c.courseId)).toBeNull();
   });
 });
@@ -298,7 +319,7 @@ describe("#1140 etappe 2: bryteren på — lagre, hente og forkaste utkastet", (
   it("et utkast som er forkastet og laget på nytt, er et annet utkast: den gamle id-en gir 409", async () => {
     const c = await publishedCourse("ny-rad");
     const first = await saveFirstDraft(c.courseId, { title: L("første rad"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
-    expect((await request(app).delete(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(204);
+    expect((await discard(c.courseId)).status).toBe(204);
     const again = await saveFirstDraft(c.courseId, { title: L("andre rad"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
     expect(again.body.draft.revision).toBe(1);
     expect(again.body.draft.id).not.toBe(first.body.draft.id);
@@ -394,11 +415,11 @@ describe("#1140 etappe 2: bryteren på — lagre, hente og forkaste utkastet", (
   it("forkast fjerner utkastet og sporer det; uten utkast svarer hente og forkaste 404", async () => {
     const c = await publishedCourse("forkast");
     expect((await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(404);
-    expect((await request(app).delete(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(404);
+    expect((await discard(c.courseId)).status).toBe(404);
 
     const before = await publishedState(c.courseId);
     await saveFirstDraft(c.courseId, { title: L("forkastes"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
-    const gone = await request(app).delete(`${base(c.courseId)}/draft`).set(ADMIN);
+    const gone = await discard(c.courseId);
     expect(gone.status).toBe(204);
     expect(await draftRow(c.courseId)).toBeNull();
     expect(await publishedState(c.courseId)).toEqual(before);
@@ -415,7 +436,7 @@ describe("#1140 etappe 2: bryteren på — lagre, hente og forkaste utkastet", (
     const unpublished = await request(app).post(`${base(c.courseId)}/unpublish`).set(ADMIN);
     expect(unpublished.status, JSON.stringify(unpublished.body).slice(0, 300)).toBe(200);
     expect((await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(200);
-    expect((await request(app).delete(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(204);
+    expect((await discard(c.courseId)).status).toBe(204);
 
     const d = await publishedCourse("slettes");
     await saveFirstDraft(d.courseId, { title: L("slettes med kurset"), items: [{ type: "MODULE", moduleId: d.moduleId }] });
@@ -507,7 +528,7 @@ describe("#1140 etappe 2: låsen — med utkast og bryteren på skriver ingentin
     expect((await publishedState(c.courseId)).sortOrder).toBe(9);
     // Og med bryteren på igjen, etter at utkastet er forkastet.
     await setSwitch(true);
-    expect((await request(app).delete(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(204);
+    expect((await discard(c.courseId)).status).toBe(204);
     await setCourseItems(c.courseId, list, { revision: { expected: (await publishedState(c.courseId)).contentRevision } });
     expect((await publishedState(c.courseId)).items).toEqual([c.moduleId]);
   });
@@ -523,7 +544,7 @@ describe("#1140 etappe 2: låsen — med utkast og bryteren på skriver ingentin
     expect(blocked.body.error).toBe("course_has_draft");
     expect(await publishedState(c.courseId)).toEqual(before);
 
-    expect((await request(app).delete(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(204);
+    expect((await discard(c.courseId)).status).toBe(204);
     const ok = await request(app).put(`${base(c.courseId)}/content`).set(ADMIN).send(body);
     expect(ok.status, JSON.stringify(ok.body).slice(0, 300)).toBe(200);
   });
@@ -565,7 +586,7 @@ describe("#1140 etappe 2: låsen — med utkast og bryteren på skriver ingentin
     expect(await counts()).toEqual(countsBefore);
 
     // Kontroll: uten utkast går importen gjennom med bryteren på (den skriver rett i kurset til etappe 4).
-    expect((await request(app).delete(`${base(c.courseId)}/draft`).set(ADMIN)).status).toBe(204);
+    expect((await discard(c.courseId)).status).toBe(204);
     const ok = await request(app).post("/api/admin/content/courses/import").set(ADMIN).send({ payload: envelope, mode: "updateExisting", targetId: c.courseId });
     expect(ok.status, JSON.stringify(ok.body).slice(0, 300)).toBe(201);
   });
@@ -604,17 +625,330 @@ describe("#1140 etappe 2: hvem som kan lagre og forkaste", () => {
     expect(row?.updatedById).toBe(ownerUser.id);
 
     expect((await request(app).get(`${base(courseId)}/draft`).set(other)).status).toBe(200);
-    expect((await request(app).delete(`${base(courseId)}/draft`).set(other)).status).toBe(403);
+    expect((await discard(courseId, other)).status).toBe(403);
+    expect((await publishDraft(courseId, {}, other)).status).toBe(403);
     expect(await draftRow(courseId)).not.toBeNull();
-    expect((await request(app).delete(`${base(courseId)}/draft`).set(owner)).status).toBe(204);
+    expect(JSON.parse((await prisma.course.findUniqueOrThrow({ where: { id: courseId } })).title).nb).not.toBe("fra eieren");
+
+    // Eieren publiserer, og kan forkaste et nytt.
+    const published = await publishDraft(courseId, {}, owner);
+    expect(published.status, JSON.stringify(published.body).slice(0, 300)).toBe(200);
+    expect(JSON.parse((await prisma.course.findUniqueOrThrow({ where: { id: courseId } })).title).nb).toBe("fra eieren");
+    const again = await request(app).put(`${base(courseId)}/draft`).set(owner).send({ ...body, loaded: { expectedRevision: (await detail(courseId)).contentRevision } });
+    expect(again.status, JSON.stringify(again.body).slice(0, 300)).toBe(200);
+    expect((await discard(courseId, owner)).status).toBe(204);
+  });
+});
+
+describe("#1140 etappe 2: forkast, tema og utkast som ikke kan leses (QA-porten for skive 2a)", () => {
+  beforeEach(async () => {
+    await setSwitch(true);
   });
 
-  it("en deltaker når ingen av rutene", async () => {
+  it("forkast krever utkastet fana lastet: har en annen lagret siden, 409, og det nyere arbeidet står", async () => {
+    const c = await publishedCourse("forkast-gammel-fane");
+    const first = await saveFirstDraft(c.courseId, { title: L("B så dette"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
+    const seenByB = { draftId: first.body.draft.id as string, revision: first.body.draft.revision as number };
+    // A lagrer videre.
+    const second = await request(app).put(`${base(c.courseId)}/draft`).set(ADMIN).send({ title: L("A sitt nyere arbeid"), items: [{ type: "MODULE", moduleId: c.moduleId }], loaded: seenByB });
+    expect(second.status).toBe(200);
+
+    const stale = await discard(c.courseId, ADMIN, seenByB);
+    expect(stale.status).toBe(409);
+    expect(stale.body.error).toBe("course_draft_changed");
+    expect(JSON.parse((await draftRow(c.courseId))!.payloadText).title.nb).toBe("A sitt nyere arbeid");
+    expect(await prisma.auditEvent.count({ where: { entityId: c.courseId, action: "course_draft_discarded" } })).toBe(0);
+
+    // Uten id og teller: 400. Med en annen rads id og riktig teller: 409.
+    const none = await request(app).delete(`${base(c.courseId)}/draft`).set(ADMIN);
+    expect(none.status).toBe(400);
+    expect((await discard(c.courseId, ADMIN, { draftId: "en-annen-rad", revision: 2 })).status).toBe(409);
+    expect(await draftRow(c.courseId)).not.toBeNull();
+    // Kontroll: med det som ligger nå, går den gjennom.
+    expect((await discard(c.courseId)).status).toBe(204);
+  });
+
+  it("et tema som ikke finnes, avvises når utkastet lagres, som ved direkte lagring", async () => {
+    const c = await publishedCourse("tema-lagring");
+    const theme = await prisma.courseTheme.create({ data: { name: JSON.stringify(L(tag("tema"))) }, select: { id: true } });
+    const unknown = await saveFirstDraft(c.courseId, { themeIds: [theme.id, "finnes-ikke"], items: [{ type: "MODULE", moduleId: c.moduleId }] });
+    expect(unknown.status).toBe(400);
+    expect(unknown.body.error).toBe("course_theme_not_found");
+    expect(await draftRow(c.courseId)).toBeNull();
+    // Kontroll: med bare temaet som finnes, lagres utkastet, og hentingen gir temaet tilbake.
+    const ok = await saveFirstDraft(c.courseId, { themeIds: [theme.id], items: [{ type: "MODULE", moduleId: c.moduleId }] });
+    expect(ok.status, JSON.stringify(ok.body).slice(0, 300)).toBe(200);
+    expect(ok.body.draft.course.themeIds).toEqual([theme.id]);
+  });
+
+  it("tellerne sjekkes før lista: en utdatert fane får vite at den er utdatert, ikke at et element er arkivert", async () => {
+    const c = await publishedCourse("rekkefølge");
+    const archived = await createPublishedModule(tag("arkivert"));
+    await prisma.module.update({ where: { id: archived }, data: { archivedAt: new Date() } });
+    await prisma.course.update({ where: { id: c.courseId }, data: { contentRevision: 3 } });
+    const stale = await request(app).put(`${base(c.courseId)}/draft`).set(ADMIN).send({ items: [{ type: "MODULE", moduleId: archived }], loaded: { expectedRevision: 2 } });
+    expect(stale.status).toBe(409);
+    expect(stale.body.error).toBe("course_changed");
+  });
+
+  it("et utkast som ikke passer skjemaet lenger: 409 med id og teller (ikke 500), og det kan forkastes", async () => {
+    const c = await publishedCourse("uleselig");
+    const saved = await saveFirstDraft(c.courseId, { title: L("blir uleselig"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
+    for (const payloadText of ['{"items":"ikke en liste"}', "ikke json"]) {
+      await prisma.courseDraft.update({ where: { courseId: c.courseId }, data: { payloadText } });
+      const got = await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN);
+      expect(got.status).toBe(409);
+      expect(got.body.error).toBe("course_draft_unreadable");
+      expect(got.body.details).toMatchObject({ draftId: saved.body.draft.id, revision: 1 });
+      const published = await publishDraft(c.courseId);
+      expect(published.status).toBe(409);
+      expect(published.body.error).toBe("course_draft_unreadable");
+    }
+    expect(await draftRow(c.courseId)).not.toBeNull();
+    expect((await detail(c.courseId)).drafts.hasDraft).toBe(true);
+    expect((await discard(c.courseId, ADMIN, { draftId: saved.body.draft.id, revision: 1 })).status).toBe(204);
+  });
+
+  it("kurset er lagret etter at utkastet ble laget (bryteren har vært av): utkastet er utdatert, og kan bare forkastes", async () => {
+    const c = await publishedCourse("utdatert");
+    const first = await saveFirstDraft(c.courseId, { title: L("laget før"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
+    expect((await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN)).body.draft.outdated).toBe(false);
+    // Bryteren av: en direkte lagring går gjennom ved siden av utkastet.
+    await setSwitch(false);
+    const direct = await request(app).put(base(c.courseId)).set(ADMIN).send({ sortOrder: 5, expectedRevision: (await detail(c.courseId)).contentRevision });
+    expect(direct.status).toBe(200);
     await setSwitch(true);
-    const c = await publishedCourse("deltaker-ruter");
-    const participant = { "x-user-id": `draft-e2-p2-${RUN}`, "x-user-email": `draft.e2.p2.${RUN}@x.test`, "x-user-name": "Deltaker", "x-user-roles": "PARTICIPANT", "x-locale": "nb" };
-    expect((await request(app).get(`${base(c.courseId)}/draft`).set(participant)).status).toBe(403);
-    expect((await request(app).put(`${base(c.courseId)}/draft`).set(participant).send({ items: [], loaded: { expectedRevision: 0 } })).status).toBe(403);
-    expect((await request(app).delete(`${base(c.courseId)}/draft`).set(participant)).status).toBe(403);
+    const before = await publishedState(c.courseId);
+
+    const got = await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN);
+    expect(got.body.draft.outdated).toBe(true);
+    const save = await request(app).put(`${base(c.courseId)}/draft`).set(ADMIN).send({ title: L("lagrer videre"), items: [{ type: "MODULE", moduleId: c.moduleId }], loaded: { draftId: first.body.draft.id, revision: 1 } });
+    expect(save.status).toBe(409);
+    expect(save.body.error).toBe("course_draft_outdated");
+    const publish = await publishDraft(c.courseId);
+    expect(publish.status).toBe(409);
+    expect(publish.body.error).toBe("course_draft_outdated");
+    expect(await publishedState(c.courseId)).toEqual(before);
+    expect((await draftRow(c.courseId))?.revision).toBe(1);
+    expect((await discard(c.courseId)).status).toBe(204);
+  });
+
+  it("låsen gjelder også den gamle veien for modullista (`setCourseModules`)", async () => {
+    const c = await publishedCourse("moduler-lås");
+    await saveFirstDraft(c.courseId, { title: L("låser"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
+    await prisma.course.update({ where: { id: c.courseId }, data: { publishedAt: null } });
+    const before = await publishedState(c.courseId);
+    const blocked = await request(app).put(`${base(c.courseId)}/modules`).set(ADMIN).send({ modules: [{ moduleId: c.moduleId, sortOrder: 0 }], expectedRevision: before.contentRevision });
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error).toBe("course_has_draft");
+    expect(await publishedState(c.courseId)).toEqual(before);
+  });
+});
+
+describe("#1140 etappe 2 skive 2b: «Publiser utkastet»", () => {
+  beforeEach(async () => {
+    await setSwitch(true);
+  });
+
+  async function users(name: string, count: number) {
+    const data = Array.from({ length: count }, (_, i) => ({ externalId: `draft-e2-${name}-${RUN}-${seq++}-${i}`, email: `draft.e2.${name}.${RUN}.${seq++}.${i}@company.com`, name: `Deltaker ${i}` }));
+    await prisma.user.createMany({ data });
+    return (await prisma.user.findMany({ where: { externalId: { in: data.map((d) => d.externalId) } }, select: { id: true } })).map((u) => u.id);
+  }
+  async function giveCertificates(courseId: string, userIds: string[]) {
+    await prisma.courseCompletion.createMany({ data: userIds.map((userId) => ({ userId, courseId, moduleSnapshotJson: "[]", sectionSnapshotJson: "[]", versionMajor: 1 })) });
+  }
+
+  it("bare tittelen endret: publiseres som mindre versjon uten spørsmål, utkastet er borte, og låsen er opphevet", async () => {
+    const c = await publishedCourse("pub-tittel");
+    await giveCertificates(c.courseId, await users("tittel", 1));
+    const before = await publishedState(c.courseId);
+    const nyttNavn = L(tag("publisert navn"));
+    await saveFirstDraft(c.courseId, { title: nyttNavn, items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }] });
+
+    const published = await publishDraft(c.courseId);
+    expect(published.status, JSON.stringify(published.body).slice(0, 300)).toBe(200);
+    expect(JSON.parse(published.body.course.title)).toEqual(nyttNavn);
+    const after = await publishedState(c.courseId);
+    expect(JSON.parse(after.title)).toEqual(nyttNavn);
+    expect(after.version).toBe("1.1");
+    expect(after.items).toEqual(before.items);
+    expect(after.contentRevision).toBe(before.contentRevision + 1);
+    expect(await draftRow(c.courseId)).toBeNull();
+    expect((await detail(c.courseId)).drafts).toEqual({ enabled: true, hasDraft: false });
+    expect(await prisma.courseVersionNotice.count({ where: { courseId: c.courseId } })).toBe(0);
+
+    // Revisjonssporet: utkastet publisert, og kurset oppdatert, i samme transaksjon.
+    expect(await prisma.auditEvent.count({ where: { entityId: c.courseId, action: "course_draft_published" } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { entityId: c.courseId, action: "course_updated" } })).toBe(1);
+    // Låsen er borte: et nytt utkast kan lages på den nye telleren.
+    const next = await saveFirstDraft(c.courseId, { title: L("neste utkast"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
+    expect(next.status, JSON.stringify(next.body).slice(0, 300)).toBe(200);
+    expect(next.body.draft.baseRevision).toBe(after.contentRevision);
+  });
+
+  it("bare innstillinger endret: ingen ny versjon", async () => {
+    const c = await publishedCourse("pub-innstillinger");
+    const theme = await prisma.courseTheme.create({ data: { name: JSON.stringify(L(tag("tema"))) }, select: { id: true } });
+    await saveFirstDraft(c.courseId, {
+      sortOrder: 12, enrollmentPolicy: "RESTRICTED", discussionsEnabled: false, themeIds: [theme.id],
+      items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }],
+    });
+    const published = await publishDraft(c.courseId);
+    expect(published.status, JSON.stringify(published.body).slice(0, 300)).toBe(200);
+    const course = await prisma.course.findUniqueOrThrow({ where: { id: c.courseId } });
+    expect({ sortOrder: course.sortOrder, enrollmentPolicy: course.enrollmentPolicy, discussionsEnabled: course.discussionsEnabled }).toEqual({ sortOrder: 12, enrollmentPolicy: "RESTRICTED", discussionsEnabled: false });
+    expect(`${course.versionMajor}.${course.versionMinor}`).toBe("1.0");
+    expect((await prisma.courseThemeAssignment.findMany({ where: { courseId: c.courseId } })).map((row) => row.themeId)).toEqual([theme.id]);
+    // Tittelen og beskrivelsen var ikke med i utkastet: de står som publisert.
+    expect(JSON.parse(course.title).nb).toBe(c.title);
+    expect(JSON.parse(course.description!).nb).toBe(`${c.title} beskrivelse`);
+  });
+
+  it("lista endret og noen har kursbevis: svaret kreves; uten det er ingenting publisert og utkastet står", async () => {
+    const c = await publishedCourse("pub-svar");
+    const holders = await users("svar", 2);
+    await giveCertificates(c.courseId, holders);
+    const extra = await createPublishedModule(tag("ny modul"));
+    await saveFirstDraft(c.courseId, { title: L(tag("med ny modul")), items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }, { type: "MODULE", moduleId: extra }] });
+    const before = await publishedState(c.courseId);
+
+    const unanswered = await publishDraft(c.courseId);
+    expect(unanswered.status).toBe(400);
+    expect(unanswered.body.error).toBe("course_version_required");
+    expect(await publishedState(c.courseId)).toEqual(before);
+    expect((await draftRow(c.courseId))?.revision).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { entityId: c.courseId, action: "course_draft_published" } })).toBe(0);
+
+    // Hovedversjon: ny versjon, e-postrader til dem med kursbevis, og utkastet er borte.
+    const major = await publishDraft(c.courseId, { version: "major" });
+    expect(major.status, JSON.stringify(major.body).slice(0, 300)).toBe(200);
+    const after = await publishedState(c.courseId);
+    expect(after.version).toBe("2.0");
+    expect(after.items).toEqual([c.moduleId, c.sectionId, extra]);
+    expect((await prisma.courseVersionNotice.findMany({ where: { courseId: c.courseId } })).map((n) => n.userId).sort()).toEqual([...holders].sort());
+    expect(await draftRow(c.courseId)).toBeNull();
+  });
+
+  it("lista endret, svaret «minor»: mindre versjon, ingen e-postrader", async () => {
+    const c = await publishedCourse("pub-minor");
+    await giveCertificates(c.courseId, await users("minor", 1));
+    await saveFirstDraft(c.courseId, { items: [{ type: "SECTION", sectionId: c.sectionId }, { type: "MODULE", moduleId: c.moduleId }] });
+    const minor = await publishDraft(c.courseId, { version: "minor" });
+    expect(minor.status, JSON.stringify(minor.body).slice(0, 300)).toBe(200);
+    const after = await publishedState(c.courseId);
+    expect(after.version).toBe("1.1");
+    expect(after.items).toEqual([c.sectionId, c.moduleId]);
+    expect(await prisma.courseVersionNotice.count({ where: { courseId: c.courseId } })).toBe(0);
+  });
+
+  it("publiseringen krever utkastet fana lastet: en annen har lagret siden → 409, og ingenting er publisert", async () => {
+    const c = await publishedCourse("pub-gammel-fane");
+    const first = await saveFirstDraft(c.courseId, { title: L("det B så"), items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }] });
+    const seenByB = { draftId: first.body.draft.id as string, revision: 1 };
+    await request(app).put(`${base(c.courseId)}/draft`).set(ADMIN).send({ title: L("det A la til"), items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }], loaded: seenByB });
+    const before = await publishedState(c.courseId);
+
+    const stale = await request(app).post(`${base(c.courseId)}/draft/publish`).set(ADMIN).send({ loaded: seenByB });
+    expect(stale.status).toBe(409);
+    expect(stale.body.error).toBe("course_draft_changed");
+    expect(await publishedState(c.courseId)).toEqual(before);
+    expect((await draftRow(c.courseId))?.revision).toBe(2);
+
+    const wrongId = await request(app).post(`${base(c.courseId)}/draft/publish`).set(ADMIN).send({ loaded: { draftId: "en-annen-rad", revision: 2 } });
+    expect(wrongId.status).toBe(409);
+    expect(await publishedState(c.courseId)).toEqual(before);
+    // Kroppen er streng: uten `loaded`, eller med ukjente felt, 400.
+    expect((await request(app).post(`${base(c.courseId)}/draft/publish`).set(ADMIN).send({})).status).toBe(400);
+    expect((await request(app).post(`${base(c.courseId)}/draft/publish`).set(ADMIN).send({ loaded: { draftId: first.body.draft.id, revision: 2 }, title: L("smugles inn") })).status).toBe(400);
+    expect(await publishedState(c.courseId)).toEqual(before);
+  });
+
+  it("to samtidige publiseringer av samme utkast: én vinner, den andre får 404 eller 409, og versjonen øker én gang", async () => {
+    const c = await publishedCourse("pub-samtidig");
+    const saved = await saveFirstDraft(c.courseId, { title: L(tag("samtidig publisert")), items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }] });
+    const loaded = { draftId: saved.body.draft.id as string, revision: 1 };
+    const send = () => request(app).post(`${base(c.courseId)}/draft/publish`).set(ADMIN).send({ loaded });
+    const answers = await Promise.all([send(), send(), send()]);
+    expect(answers.filter((r) => r.status === 200)).toHaveLength(1);
+    for (const lost of answers.filter((r) => r.status !== 200)) expect(lost.body.error).toBe("course_draft_not_found");
+    expect((await publishedState(c.courseId)).version).toBe("1.1");
+    expect(await prisma.auditEvent.count({ where: { entityId: c.courseId, action: "course_draft_published" } })).toBe(1);
+  });
+
+  it("et tema som er slettet siden utkastet ble lagret, tas bort ved publisering", async () => {
+    const c = await publishedCourse("pub-tema");
+    const kept = await prisma.courseTheme.create({ data: { name: JSON.stringify(L(tag("beholdes"))) }, select: { id: true } });
+    const deleted = await prisma.courseTheme.create({ data: { name: JSON.stringify(L(tag("slettes"))) }, select: { id: true } });
+    await saveFirstDraft(c.courseId, { themeIds: [kept.id, deleted.id], items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }] });
+    await prisma.courseTheme.delete({ where: { id: deleted.id } });
+    const published = await publishDraft(c.courseId);
+    expect(published.status, JSON.stringify(published.body).slice(0, 300)).toBe(200);
+    expect((await prisma.courseThemeAssignment.findMany({ where: { courseId: c.courseId } })).map((row) => row.themeId)).toEqual([kept.id]);
+  });
+
+  it("et element som er arkivert eller slettet siden utkastet ble lagret: avvist med navn, ingenting publisert", async () => {
+    const c = await publishedCourse("pub-arkivert");
+    const archivedTitle = tag("arkiveres før publisering");
+    const archived = await createPublishedModule(archivedTitle);
+    const doomed = await prisma.courseSection.create({ data: { title: JSON.stringify(L(tag("slettes før publisering"))) }, select: { id: true } });
+    await saveFirstDraft(c.courseId, { title: L(tag("skal ikke ut")), items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "MODULE", moduleId: archived }, { type: "SECTION", sectionId: doomed.id }] });
+    await prisma.module.update({ where: { id: archived }, data: { archivedAt: new Date() } });
+    await prisma.courseSection.delete({ where: { id: doomed.id } });
+    const before = await publishedState(c.courseId);
+
+    const rejected = await publishDraft(c.courseId, { version: "minor" });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.error).toBe("course_draft_item_unusable");
+    expect(rejected.body.details.items).toEqual([
+      { type: "MODULE", id: archived, title: JSON.stringify(L(archivedTitle)), reason: "archived" },
+      { type: "SECTION", id: doomed.id, title: null, reason: "missing" },
+    ]);
+    expect(await publishedState(c.courseId)).toEqual(before);
+    expect(await draftRow(c.courseId)).not.toBeNull();
+  });
+
+  it("kurset er avpublisert: 409, ingenting skrevet, og utkastet kan forkastes; med bryteren av: 409", async () => {
+    const c = await publishedCourse("pub-avpublisert");
+    await saveFirstDraft(c.courseId, { title: L("venter"), items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }] });
+    await setSwitch(false);
+    const off = await publishDraft(c.courseId);
+    expect(off.status).toBe(409);
+    expect(off.body.error).toBe("course_drafts_off");
+    await setSwitch(true);
+
+    expect((await request(app).post(`${base(c.courseId)}/unpublish`).set(ADMIN)).status).toBe(200);
+    const before = await publishedState(c.courseId);
+    const unpublished = await publishDraft(c.courseId);
+    expect(unpublished.status).toBe(409);
+    expect(unpublished.body.error).toBe("course_draft_requires_published");
+    expect(await publishedState(c.courseId)).toEqual(before);
+    expect(await draftRow(c.courseId)).not.toBeNull();
+    expect((await discard(c.courseId)).status).toBe(204);
+    // Uten utkast: 404.
+    const none = await publishDraft(c.courseId);
+    expect(none.status).toBe(404);
+    expect(none.body.error).toBe("course_draft_not_found");
+  });
+
+  it("deltakeren ser den nye utgaven først når utkastet er publisert", async () => {
+    const c = await publishedCourse("pub-deltaker");
+    const extra = await createPublishedModule(tag("kommer med publiseringen"));
+    const draftTitle = tag("navn etter publisering");
+    await saveFirstDraft(c.courseId, { title: L(draftTitle), items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "MODULE", moduleId: extra }] });
+    const participant = { "x-user-id": `draft-e2-p3-${RUN}`, "x-user-email": `draft.e2.p3.${RUN}@x.test`, "x-user-name": "Deltaker", "x-user-department": "Learning", "x-user-roles": "PARTICIPANT", "x-locale": "nb" };
+    const seen = async () => {
+      const one = await request(app).get(`/api/courses/${c.courseId}`).set(participant);
+      expect(one.status).toBe(200);
+      return { text: JSON.stringify(one.body), ids: (one.body.course.items as Array<{ moduleId?: string | null; sectionId?: string | null }>).map((i) => i.moduleId ?? i.sectionId) };
+    };
+    const before = await seen();
+    expect(before.text).not.toContain(draftTitle);
+    expect(before.ids).toEqual([c.moduleId, c.sectionId]);
+
+    expect((await publishDraft(c.courseId)).status).toBe(200);
+    const after = await seen();
+    expect(after.text).toContain(draftTitle);
+    expect(after.ids).toEqual([c.moduleId, extra]);
   });
 });

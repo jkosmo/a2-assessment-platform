@@ -765,8 +765,10 @@ model Course {
   themes             CourseThemeAssignment[]
   // #934 skive 5a-2: den laveste hovedversjonen av hver modul som teller i dette kurset.
   moduleRequirements CourseModuleRequirement[]
-  // #1140 etappe 2: utkastet til neste utgave av kurset. Høyst ett.
-  draft              CourseDraft?
+  // #1140 etappe 2: utkastet til neste utgave av kurset. Høyst ett. Navnet er med vilje ikke `draft`: vakta
+  // (test/course-draft-guard.test.js) finner enhver bruk av ordet `courseDraft` utenfor fila som eier tabellen, også
+  // `include: { courseDraft: true }`. `draft` brukes til annet i koden og kunne ikke vært søkt etter.
+  courseDraft        CourseDraft?
 }
 
 // #1140 etappe 2 (doc/design/PLAN_1140_E2.md): utkastet til et PUBLISERT kurs. «Lagre» i kursbyggeren skriver hit, og ingenting

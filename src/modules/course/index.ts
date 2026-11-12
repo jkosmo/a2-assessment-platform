@@ -21,6 +21,8 @@ export {
   findThemeIdsForCourse,
   findLocalizedThemesForCourses,
   sortThemesByName,
+  assertCourseThemesExist,
+  findExistingThemeIds,
 } from "./courseThemeService.js";
 export type { CourseThemeRow, LocalizedTheme } from "./courseThemeService.js";
 export type {
