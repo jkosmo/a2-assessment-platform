@@ -3040,18 +3040,27 @@ function enterPreviewEditMode({ force = false } = {}) {
       aria-label="${labelGuidance}">${escapedGuidance}</textarea>`;
 
   // Fanebytte uten å lagre: det som står i feltene nå, mot det skjemaet ble åpnet med.
-  editFormSnapshot = () => {
+  const readEditFormFields = () => {
     const val = (id) => document.getElementById(id)?.value.trim();
-    const title = val("previewEditTitle") ?? currentTitle;
-    const description = val("previewEditDescription") ?? currentDescription;
-    const taskText = editIsMcqOnly ? "" : (val("previewEditTaskText") ?? currentTaskText);
-    const assessorExpectedContent = editIsMcqOnly ? "" : (val("previewEditGuidanceText") ?? currentGuidanceText);
-    const candidateTaskConstraints = editIsMcqOnly ? "" : (val("previewEditCandidateTaskConstraints") ?? currentCandidateTaskConstraints);
-    const mcqQuestions = readMcqQuestionsFromForm(currentMcqQuestions);
-    const changed = title !== currentTitle || description !== currentDescription || taskText !== currentTaskText
-      || assessorExpectedContent !== currentGuidanceText || candidateTaskConstraints !== currentCandidateTaskConstraints
-      || JSON.stringify(mcqQuestions) !== JSON.stringify(currentMcqQuestions);
-    return { changed, editingLocale, title, description, taskText, assessorExpectedContent, candidateTaskConstraints, mcqQuestions };
+    return {
+      title: val("previewEditTitle") ?? currentTitle,
+      description: val("previewEditDescription") ?? currentDescription,
+      taskText: editIsMcqOnly ? "" : (val("previewEditTaskText") ?? currentTaskText),
+      assessorExpectedContent: editIsMcqOnly ? "" : (val("previewEditGuidanceText") ?? currentGuidanceText),
+      candidateTaskConstraints: editIsMcqOnly ? "" : (val("previewEditCandidateTaskConstraints") ?? currentCandidateTaskConstraints),
+      mcqQuestions: readMcqQuestionsFromForm(currentMcqQuestions),
+    };
+  };
+  // Prod 2.154.0: «endret» måles mot det SKJEMAET ga tilbake rett etter at det ble tegnet, ikke mot
+  // verdiene det ble tegnet med. Leseren trimmer, et <textarea> gjør CRLF om til LF, og spørsmål av
+  // typene «flere riktige», «sett i rekkefølge» og «fyll inn» leses tilbake med nøklene i en annen
+  // rekkefølge — så et urørt skjema var «endret», fanebyttet laget et utkast ingen hadde skrevet,
+  // og Innstillinger kunne ikke lagres (Lagre i hodet klikket en knapp som ikke var tegnet).
+  let editFormBaseline = null;
+  editFormSnapshot = () => {
+    const fields = readEditFormFields();
+    const changed = editFormBaseline === null || JSON.stringify(fields) !== editFormBaseline;
+    return { changed, editingLocale, ...fields };
   };
 
   // Produkteier 13.09: navnet er et vanlig felt med etikett («Navn (påkrevd)»), ikke en understreket
@@ -3076,6 +3085,7 @@ function enterPreviewEditMode({ force = false } = {}) {
   // `hasOpenEditForm` compares against these, and the form is now open the whole time Rediger is,
   // so an unstamped field would read as changed from the first render.
   stampEditFormValues();
+  editFormBaseline = JSON.stringify(readEditFormFields());
   // Legg til / fjern spørsmål: det som står i feltene tas med i utkastet, lista endres, skjemaet
   // tegnes på nytt fra utkastet. Ingenting går tapt, og tellingen stemmer.
   const rebuildWithQuestions = (mutate) => {
@@ -3539,7 +3549,20 @@ function createModuleFormPage() {
 
 function saveFromHeader() {
   const kind = moduleDirtyKind();
-  if (kind === "settings") { if (activeTab !== "settings") switchToTab("settings"); document.getElementById("settingsSave")?.click(); return; }
+  if (kind === "settings") {
+    if (activeTab !== "settings") switchToTab("settings");
+    const settingsSave = document.getElementById("settingsSave");
+    if (settingsSave) { settingsSave.click(); return; }
+    // Prod 2.154.0: med et ulagret utkast fra Rediger tegner Innstillinger ingen Lagre-knapp (en
+    // innstillingslagring ville skrevet det lagrede innholdet over utkastet), og klikket herfra traff
+    // ingenting — ingen lagring, ingen melding. Si hvorfor.
+    showToast(t("shell.settings.draftBlocks"), "warning");
+    return;
+  }
+  // Innholdslagringen tar ikke med ulagrede innstillinger, og modulen lastes på nytt etterpå — da er
+  // de borte. Si det FØR noe forsvinner (prod 2.154.0: avkrysningen forsvant uten et ord).
+  if ((kind === "form" || kind === "draft") && settingsTab.hasUnsavedSettingsEdits()
+    && !window.confirm(t("shell.save.settingsLostConfirm"))) return;
   if (kind === "form") { document.getElementById("previewEditConfirm")?.click(); return; }
   if (kind === "draft") {
     if (activeTab === "edit" && isEditFormOpen() && sessionDraftFromForm) { document.getElementById("previewEditConfirm")?.click(); return; }
