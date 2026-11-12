@@ -2,6 +2,52 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.157.1 - 2026-11-12
+
+«Lagre» i modulens Innstillinger gjorde ingenting, uten melding. Meldt av produkteier fra prod (2.154.0) samme kveld.
+
+- **Hva brukerne merket:** en forfatter åpnet en publisert modul, gikk til Innstillinger, endret en innstilling og trykket
+  «Lagre». Ingenting skjedde. Nederst i fanen sto «Du har et ulagret utkast i Rediger …», selv om ingen tekst var endret.
+  Lagret forfatteren fra Rediger for å komme videre, forsvant innstillingen uten varsel.
+- **Rotårsak:** fanebyttet fra Rediger til Innstillinger laget et utkast ingen hadde skrevet. Spørsmålet «er skjemaet
+  endret?» (`editFormSnapshot`, `admin-content-shell.js`) sammenlignet det skjemaet leste tilbake, med verdiene det ble
+  tegnet med. Leseren trimmer, et tekstfelt gjør CRLF om til LF, og spørsmål av typene «flere riktige», «sett i
+  rekkefølge» og «fyll inn» leses tilbake med nøklene i en annen rekkefølge. Et urørt skjema var derfor «endret» for slike
+  moduler. Med et utkast tegner ikke Innstillinger lagreknappen, og «Lagre» i hodet klikket en knapp som ikke fantes.
+- **Siden når:** sammenligningen kom i 2.68.0 og sperren i Innstillinger i 2.69.0. Med de nye spørsmålstypene (2.99.0,
+  2.106.0, 2.123.0) slo feilen til hver gang for moduler som har dem. Ikke en følge av #1140.
+- **Rettet:**
+  - «Endret» måles mot det skjemaet ga tilbake rett etter at det ble tegnet. Begge sider går gjennom samme leser.
+  - «Lagre» i hodet er aldri et stille ingenting: kan ikke innstillingene lagres, sier siden hvorfor.
+  - Lagring fra Rediger spør først når ulagrede innstillinger ville gått tapt («shell.save.settingsLostConfirm»).
+- **Hvorfor testene ikke fanget det:** testene for fanebytte brukte moduler med vanlige spørsmål og tekst uten mellomrom
+  eller linjeskift til slutt. Fiksturene sa ikke alt regelen leser (CLAUDE.md, «Pre-flight» punkt 4). De nye testene går
+  gjennom ti modulformer, også de tre spørsmålstypene, linjeskift til slutt og CRLF.
+- **Tester:** `test/e2e/admin-content-settings-save-after-edit-tab.spec.ts` (12) og
+  `test/e2e/admin-content-settings-lost-on-content-save.spec.ts` (2). Røde på prod-koden, grønne etter rettingen;
+  mutasjonssjekket del for del.
+- **Omvei til rettingen er i prod:** stå i Innstillinger (adressen slutter på `?tab=settings`), last siden på nytt, gjør
+  endringen og trykk «Lagre». Da åpner siden rett i Innstillinger, og utkastet oppstår ikke.
+- **Gjenskapt med ekte data:** `test/stage/release-2-157-1-innstillinger-lagre.spec.ts` laget en publisert modul med ett
+  vanlig spørsmål, ett «flere riktige» og ett «fyll inn» på stage (2.157.0). Rett etter klikk på Innstillinger sto
+  teksten om ulagret utkast der og lagreknappen manglet; etter avkrysning og «Lagre» ble ingenting sendt.
+- **QA-porten:** GO. Rettingen kan ikke skjule en ekte endring i Rediger: gammel og ny sjekk bruker samme leser, og et
+  skjema tegnet fra et utkast har alt arbeidet i utkastet. Funnene under er ført som kjente mangler.
+- **Til prod alene som 2.154.2** samme kveld (prod-koden pluss bare denne rettingen), fordi feilen sto i prod.
+- **Kjente mangler:**
+  - Finnes det et EKTE utkast (f.eks. et spørsmål er fjernet, eller innhold er generert) og skjemaet ellers er urørt, sier
+    «Lagre» i Innstillinger «lagre eller forkast utkastet først», og «Lagre» i Rediger sender forfatteren tilbake til
+    Innstillinger. Veien ut er «Avbryt» (forkaster innstillingen) eller å skrive et tegn i Rediger. Sjelden; ingenting tapt.
+  - Kriteriesjekken i Innstillinger har trolig samme type feil (lagret tekst med mellomrom til slutt regnes som endret).
+    Da vil lagring fra Rediger spørre om «ulagrede innstillinger» uten grunn. Ikke sett i prod.
+  - «Be om endring» åpnet og avbrutt lager et utkast ingen skrev. Fra før.
+  - En innstillingslagring kan kaste et generert utkast uten varsel når utkastet oppstår mens forfatteren står i
+    Innstillinger. Fra før.
+  - «Lagre» i Rediger har samme skjeve sammenligning i `nothingChanged`: skriver forfatteren noe og setter det tilbake,
+    kan lagringen likevel oversette og lage en ny versjon.
+  - Et spørsmål der lagret fasit ikke finnes blant alternativene på redigeringsspråket, tegnes med første alternativ som
+    fasit. En lagring fra Rediger ville byttet fasit. Gammel data, ikke sett i prod.
+
 ## 2.157.0 - 2026-11-12
 
 #1140 etappe 2, skive 2c: et publisert kurs redigeres gjennom et utkast, i kursbyggeren. Dette er utgaven brukerne merker.
