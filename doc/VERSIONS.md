@@ -4,6 +4,13 @@ This document tracks release versions and what each version includes.
 
 ## 2.158.1 - 2026-11-13
 
+**På stage 13.11.2026 kl. 14:49** (dev aa4173f2). `test/stage/release-2-158-1-jobber-og-sporsmaal.spec.ts` mot ekte data, 5 av
+5 grønne: en ekte oversetting startet i seksjon A (svarte 200) skrev ikke i seksjon B, verken på skjermen eller på tjeneren,
+og stoppet etter første svar; en menylenke fra et ulagret skjema ga ett spørsmål, tilbake-knappen spurte og Avbryt beholdt
+teksten; menyspråket ble byttet uten at ulagret tekst gikk tapt, både i en seksjon og i en klasse. Ingenting ble lagret
+fra skjemaene. Testdataene er ryddet. Ikke målt: den ekte tilbake-knappen i Chrome etter Avbryt (Playwrights `goBack` er
+ikke knappen i verktøylinja).
+
 De to sakene fra QA-porten for 2.157.2: #1154 og #1155. Begge gjelder seksjons- og klassesiden, der lista og skjemaet
 tegner i samme element og bytter uten at sida lastes. Alt fantes fra før (siden 12.09.2026); produkteier ba om at det
 ble håndtert før neste prod-pakke.
