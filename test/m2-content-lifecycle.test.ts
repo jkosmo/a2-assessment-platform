@@ -236,6 +236,10 @@ describe("Unified content lifecycle (#705)", () => {
 
     await expect(unpublishSection(sectionId, ACTOR)).rejects.toThrow(/i bruk i 1 kurs/);
     await expect(archiveSection(sectionId, ACTOR)).rejects.toThrow(/i bruk i 1 kurs/);
+    // #1151: slett krever arkivert. Et arkivert element i et aktivt kurs oppstår når et kurs gjenopprettes med et element som
+    // ble arkivert for seg; tilstanden skrives direkte, så «ligger i et kurs» kan måles.
+    await expect(deleteSection(sectionId, ACTOR)).rejects.toMatchObject({ code: "delete_requires_archived" });
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { archivedAt: new Date(), activeVersionId: null } });
     await expect(deleteSection(sectionId, ACTOR)).rejects.toThrow(/i bruk i 1 kurs/);
 
     // #961: en blokkert sletting skal heller ikke etterlate et spor — sporet og handlingen står og
@@ -256,6 +260,7 @@ describe("Unified content lifecycle (#705)", () => {
       select: { title: true },
     });
 
+    await archiveSection(sectionId, ACTOR); // #1151: bare en arkivert seksjon kan slettes.
     await deleteSection(sectionId, ACTOR);
 
     expect(await prisma.courseSection.findUnique({ where: { id: sectionId } })).toBeNull();
@@ -344,6 +349,7 @@ describe("Unified content lifecycle (#705)", () => {
   // A1 (#705): en sletting skal logges som `course_deleted`, ikke `course_archived`.
   it("logger course_deleted når et kurs slettes (ikke archived)", async () => {
     const courseId = await makeCourse({ published: false });
+    await prisma.course.update({ where: { id: courseId }, data: { archivedAt: new Date() } }); // #1151: slett krever arkivert.
     await deleteCourse(courseId, ACTOR);
     const audit = await prisma.auditEvent.findFirst({
       where: { entityType: "course", entityId: courseId },
@@ -367,6 +373,8 @@ describe("Unified content lifecycle (#705)", () => {
   it("modul-slett i bruk gir 409 med navngitt-kurs-melding", async () => {
     const moduleId = await makePublishedModule();
     await makeCourse({ moduleId, published: false });
+    // #1151: slett krever arkivert; modulen arkiveres direkte, så «ligger i et kurs» kan måles (se seksjonstesten over).
+    await prisma.module.update({ where: { id: moduleId }, data: { archivedAt: new Date(), activeVersionId: null } });
     const res = await request(app)
       .delete(`/api/admin/content/modules/${moduleId}`)
       .set(adminHeaders);
@@ -551,7 +559,7 @@ describe("#938: arkivert innhold kan ikke legges inn i et kurs", () => {
 describe("#938: innhold i et utstedt kursbevis kan ikke slettes", () => {
   it("en seksjon som står i et kursbevis nektes slettet — og bes arkivert i stedet", async () => {
     const section = await prisma.courseSection.create({
-      data: { title: JSON.stringify({ "en-GB": "In a certificate" }) },
+      data: { title: JSON.stringify({ "en-GB": "In a certificate" }), archivedAt: new Date() },
       select: { id: true },
     });
     const course = await prisma.course.create({
@@ -587,7 +595,7 @@ describe("#938: innhold i et utstedt kursbevis kan ikke slettes", () => {
 
   it("KONTROLLCASE: en seksjon uten kursbevis slettes fortsatt", async () => {
     const section = await prisma.courseSection.create({
-      data: { title: JSON.stringify({ "en-GB": "Free to delete" }) },
+      data: { title: JSON.stringify({ "en-GB": "Free to delete" }), archivedAt: new Date() },
       select: { id: true },
     });
     const res = await request(app).delete(`/api/admin/content/sections/${section.id}`).set(adminHeaders);
@@ -608,7 +616,7 @@ describe("#938 P1: slettevernet dekker gamle bevis og kaskaden", () => {
     // aldri NULL, så den første versjonen av vakta beskyttet ingen av dem — og jeg hadde selv skrevet
     // i beslutningsloggen at kolonnen var nullbar og ikke bakfylt.
     const section = await prisma.courseSection.create({
-      data: { title: JSON.stringify({ "en-GB": "Legacy basis" }) },
+      data: { title: JSON.stringify({ "en-GB": "Legacy basis" }), archivedAt: new Date() },
       select: { id: true },
     });
     const course = await prisma.course.create({
@@ -638,7 +646,7 @@ describe("#938 P1: slettevernet dekker gamle bevis og kaskaden", () => {
     // Kurs utsteder bevis i mai. Seksjon legges til i august. Deltakeren med mai-beviset leser den.
     // Før ble seksjonen permanent uslettbar, «fordi den står i et bevis» den aldri sto i.
     const section = await prisma.courseSection.create({
-      data: { title: JSON.stringify({ "en-GB": "Added later" }) },
+      data: { title: JSON.stringify({ "en-GB": "Added later" }), archivedAt: new Date() },
       select: { id: true },
     });
     const course = await prisma.course.create({
@@ -660,7 +668,7 @@ describe("#938 P1: slettevernet dekker gamle bevis og kaskaden", () => {
   it("#1003 kontroll: en lesning FØR beviset beskytter fortsatt", async () => {
     // Uten denne ville «ignorer lesetidspunkt helt» også bestått testen over.
     const section = await prisma.courseSection.create({
-      data: { title: JSON.stringify({ "en-GB": "Read before cert" }) },
+      data: { title: JSON.stringify({ "en-GB": "Read before cert" }), archivedAt: new Date() },
       select: { id: true },
     });
     const course = await prisma.course.create({
@@ -684,7 +692,7 @@ describe("#938 P1: slettevernet dekker gamle bevis og kaskaden", () => {
     // Uten denne ville «blokker hvis det finnes noe NULL-bevis i det hele tatt» bestått testen over.
     // Regelen er at deltakeren må ha lest seksjonen I DET KURSET hen fikk beviset for.
     const section = await prisma.courseSection.create({
-      data: { title: JSON.stringify({ "en-GB": "Unrelated" }) },
+      data: { title: JSON.stringify({ "en-GB": "Unrelated" }), archivedAt: new Date() },
       select: { id: true },
     });
     const otherCourse = await prisma.course.create({
@@ -723,7 +731,7 @@ describe("#938 P1: slettevernet dekker gamle bevis og kaskaden", () => {
 
     // Nå ligger seksjonen eksklusivt i et NYTT kurs, som ikke har noen fullføringer selv.
     const newCourse = await prisma.course.create({
-      data: { title: `New Home ${Date.now()}` },
+      data: { title: `New Home ${Date.now()}`, archivedAt: new Date() }, // #1151: kaskaden krever et arkivert kurs.
       select: { id: true },
     });
     await prisma.courseItem.create({

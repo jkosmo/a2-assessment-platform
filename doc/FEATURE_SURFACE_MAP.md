@@ -1649,7 +1649,7 @@ Begge knappene finnes **to steder**, og begge går gjennom samme funksjon (`hand
 | Gammel tjener | `archiveCourseWithoutPreview`, `restoreCourseWithoutPreview`, `previewRouteMissing` | 404 på forhåndsvisningen → den enkle bekreftelsen og `POST …/archive` uten kropp; gjenoppretting uten dialog, som før. Ikke når koden er `course_not_found` (tjeneren har ruta, kurset finnes ikke): da vises feilen |
 | Ett svar om gangen | `courseArchiveSeq`, `courseRestoreSeq` | Hver henting av forhåndsvisningen får et løpenummer; et svar som kommer etter en nyere henting, vises ikke (to klikk mens den laster). Lukking av arkiver-dialogen teller opp, så Esc mens den henter på nytt etter 409 ikke åpner den igjen |
 | Fokus | `returnFocusTo` | Knappen som åpnet dialogen, slås av mens den laster; når dialogen lukkes, virker den igjen og får fokuset tilbake |
-| Det åpnede, arkiverte kurset | `courseIsArchived`, `courseArchivedNoticeHtml`, `lockOpen` i `courseDetailBodyHtml`, `save.hidden` i `getCourseFormPage` | Linje under merket, Lagre/Avbryt borte, feltene, elementlista og innstillingene i en `<fieldset disabled>`. Eierpanelet står utenfor (lagrer for seg). Tjeneren sperrer ikke (#1151) |
+| Det åpnede, arkiverte kurset | `courseIsArchived`, `courseArchivedNoticeHtml`, `lockOpen` i `courseDetailBodyHtml`, `save.hidden` i `getCourseFormPage` | Linje under merket, Lagre/Avbryt borte, feltene, elementlista og innstillingene i en `<fieldset disabled>`. Eierpanelet står utenfor (lagrer for seg). Fra #1151 sperrer tjeneren også (`course_archived`, §33e) |
 | Tekstene | `courses.archiveDialog.*`, `courses.restoreDialog.*`, `courses.restored`, `courses.archivedNotice` i `public/i18n/admin-content-translations.js` (nb, nn, en-GB) | Feilsetningene er de felles `errors.api.*` |
 | Stage-testenes rydding | `test/stage/arkiver.ts` (`arkiverKurs`) | Hver stage-fil som arkiverer et kurs, går gjennom den: forhåndsvisning, `expected`, én ny runde ved 409 |
 
@@ -1659,3 +1659,62 @@ QA-porten: fokus etter lukking, to klikk med tilbakeholdt svar for begge dialoge
 og et arkivert kurs med et gammelt utkast). Den gamle
 `admin-content-workspaces.spec.ts` «course list can archive a course …» går nå gjennom 404-reserven (den statiske testtjeneren
 har ingen forhåndsvisning).
+
+### 33e. Arkivert er urørlig, og slett krever arkivert (#1151 skive 3a, 3b og 3c)
+
+Regelen (`doc/design/CONTENT_LIFECYCLE.md`, G5 og G4) bor i ÉN vakt, `assertNotArchived` i
+`src/modules/content/archivedGuard.ts`, som leser på transaksjonen som holder innholdslåsen. Veiene inn og hvor vakta står:
+
+| Type | Veier inn (ruter) | Vakta står i |
+|---|---|---|
+| Kurs | `PUT …/courses/:id`, `…/content`, `…/items` (også agent-tokenet), `…/modules`, `…/draft`, `POST …/draft/publish`, `…/publish` (vanlig og kaskade), `…/publish-pending`, `…/publish-pending-versioned`, `…/unpublish`, kursimport `replaceExisting`/`updateExisting` | `claimCourseRevision` og `claimRevisionForItemWrite` (felt og liste), `publishCourse` (stopper også kaskaden), `publishCoursePendingVersions`, `publishCoursePendingVersioned`, `unpublishCourse`, `saveCourseDraft`, `publishCourseDraft`, `importCourseFromEnvelope` (rett etter låsen) |
+| Modul | tittel, `/versions`, `/module-versions`, kriterier (`/rubric-versions`, `/ensure`, `/sync-blueprint`), ledetekst, flervalgssett, eksempelsvar, hent fram eldre versjon, `/mcq-questions` (agent), publisering (begge), `/unpublish`, kalibreringens terskler, modulimport `replaceExisting` | kommandoene i `adminContentCommands.ts`: tittel, `prepareComponentWrite` (komponentene), `createModuleVersionLocked` (hver ny modulversjon), `syncActiveRubricBlueprintHash`, eksempelsvar, publisering, avpublisering, hent fram, `/mcq-questions`, tersklene; og `publishModuleVersioned`. (Vakta sto først også i `composeModuleVersion`, `importModulePayload` og `publishCourseCascade`; den ble fjernet der etter mutasjonstesting, fordi stedene over stopper dem.) **Ikke** i skriveren (`adminContentRepository.ts`): den er felles for alle som skriver modulen, også gjenopprettingen, så vakta står i kommandoene. Gjenopprettingen med kurset nullstiller `archivedAt` før den publiserer |
+| Seksjon | tittel, innhold, bilder, figuroversetting, publiser, avpubliser, seksjonsimport `replaceExisting`, kursets «Oppdater» på seksjonen | `updateSectionTitle`, `updateSectionContent`, `publishSectionLocked`, `unpublishSection`, `createSectionAsset`, `localizeSectionAssets`, `appendInactiveSectionVersion` |
+
+**Forhåndssjekker** (`assertNotArchivedBeforeLock`, et forslag før låsen): «Publiser kurs», «Publiser nye versjoner», figuroversetting
+og `ensure` (før språkmodellen). Ikke foran en opplasting av bilder eller seksjonsimporten: der ryddes filene bort uansett når vakta avviser.
+`assertArchivedBeforeLock` i modulens sletterute, foran «ligger i et kurs». **Modulpubliseringsporten** i ruta (`item_archived`,
+422) står som før.
+
+**Slett krever arkivert:** `deleteCourse`, `deleteModule`, `deleteSection` og kaskadens analyse (`analyzeCourseCascade`, så
+forhåndsvisningen og slettingen svarer likt) → `400 delete_requires_archived`. Masseryddingen er unntaket (motsatt regel).
+
+**Unntak** (lov på et arkivert element): gjenoppretting (også med kurset), sletting, eksport og lesing, eierpanelet, «Forkast
+utkast», fjerne påmelding og klassetildeling. Et arkivert kurs følger versjonene av delte elementer som før (#1149; avgjort av
+produkteier 13.11.2026, #1151 punkt A). Hvert unntak står med grunn i `test/archived-is-readonly-guard.test.js`.
+
+**Rutene sender koden videre:** kriterier, `ensure`, `sync-blueprint`, ledetekst, flervalgssett, `module-versions` og eksempelsvar
+gjorde før alle feil om til en generell 400/500. Nå går en `AppError` videre med kode og status (`module_archived`,
+`503 content_busy`, `403 content_ownership`). Eksempelsvar-ruta fikk eierskapsvakt (den manglet).
+
+**Klienten (skive 3c):** sida tilbyr ikke det tjeneren avviser. Lov på et arkivert element: lese, «Eksporter», «Gjenopprett»,
+«Slett» og eierpanelet. «Dupliser» er IKKE lov (produkteier 13.11.2026); tjeneren kan ikke skille en kopi fra en import, så den
+sperren finnes bare her. Mønsteret er det arkiverte kurset (33d): linja under statusmerket, ingen Lagre/Avbryt, feltene i en
+`<fieldset disabled>`. Klassene `.archived-notice` og `.archived-lock` står i `shared.css`, felles med kursets.
+
+| Flate | Hvor | Hva |
+|---|---|---|
+| Modulsida | `moduleIsArchived`, `moduleArchivedNoticeHtml`, `applyModuleArchivedLock`, `archivedModuleActions`, `restoreArchivedModule`, `deleteArchivedModule` i `admin-content-shell.js`; `data-module-archived-lock` i `admin-content.html` | Sperren ligger RUNDT innholdet (`#previewContent` og `#settingsSummary`), så alt som tegnes inn der, er sperret uansett hvem som tegner det. Handlingsraden settes i `renderWorkspaceActions` (ett sted for alle flytene): bare «Eksporter», «Gjenopprett», «Slett» — ingen generering, «Be om endring», «Erstatt fra fil», Publiser/Avpubliser. `save.hidden` følger `archivedAt`. `?resumeEditing=1` lager ikke utkast. Gjenopprett laster modulen på nytt; Slett går til lista |
+| Modulsida, Innstillinger | `ctx.moduleArchived` i `admin-content-settings-tab.js` | Ingen Lagre, ingen «Gjenopprett» på eldre versjoner, instruksen og innsendingsskjemaet vises utfoldet og sperret (uten «Rediger»). Kriteriene er sperret (fieldseten) |
+| Seksjonsredigereren | `sectionCanManage` (eier/admin: livssyklusen) og `sectionCanEdit` (også ikke arkivert: Lagre, Oversett, Erstatt fra fil, Last opp bilde, feltene); `sectionArchivedNoticeHtml`, `data-section-archived-lock` i `admin-content-sections.js` | Gjenopprett/Slett/Eksporter står for eieren. Arkiver og gjenopprett i redigereren henter seksjonen på nytt (`renderEditorView`), så sperren følger |
+| Modulbiblioteket, seksjonslista | `actions` i `getListPage()` i `admin-content-library.js` og `admin-content-sections.js` | Arkiverte rader uten «Døp om» og «Dupliser». «Åpne» står og viser elementet skrivebeskyttet |
+| Masseoversettingen | `medHullAv` i `list-rename.js` | Hopper over arkiverte rader; tallet på knappen og runden leser samme liste |
+| Kurslista og det åpnede kurset | `cascadeDeleteBtn` i `getListPage()`, `courseDetailActions()` i `admin-content-courses.js` | «Slett med innhold» bare for et arkivert kurs, begge steder |
+| Kursimporten | `askImportChoice`, `importUpdateRejectedText` | Arkivert målkurs: «Kurset er arkivert», ingen «Oppdater dette kurset» (bildene ville blitt lastet opp før avslaget). Aktivt kurs med arkiverte moduler (`moduleArchivedAt`): en setning om at oppdateringen kan bli avvist. Seksjonene ser ikke klienten; avslaget (`course_archived`, `module_archived`, `section_archived`) får en egen melding: gjenopprett, eller importer som nytt kurs |
+| Kalibreringen | `admin-content-calibration.js` | Uendret: arkiverte moduler var alt filtrert bort fra velgeren (`status !== "archived"`), så tersklene kan ikke lagres for dem herfra |
+| Feilene | `isArchivedRejection` i `api-error.js` | Lagringen på modulsida og «Gjenopprett» på en eldre versjon tilbyr ikke «Prøv igjen» for de arkiverte kodene (kan ikke lykkes); `503 content_busy` får det fortsatt. Alle kodene vises gjennom `describeApiError` på brukerens språk |
+
+Tekstene: `shell.module.archivedNotice`, `shell.module.deleteConfirm`, `sections.archivedNotice`,
+`adminContent.courses.importChoice.archived*`, `adminContent.courses.importArchived*` i `public/i18n/admin-content-translations.js`
+(nb, nn, en-GB). Feilkodene står i `public/i18n/participant-translations.js`.
+
+**Betalte KI-kall** (`/generate/*`, `…/localize`) har ingen sperre på tjeneren. På en arkivert modul eller seksjon finnes ingen
+knapp som starter dem: genereringsdialogene og «Be om endring» står ikke i handlingsraden, «Generer på nytt fra planen» er sperret
+i fieldseten, seksjonens «Oversett» er borte, og masseoversettingen hopper over arkiverte rader.
+
+**Vakter:** `test/archived-is-readonly-guard.test.js` (hvert skrivested har vakt eller begrunnet unntak, gjenopprettingene kaller
+den ikke), `test/content-lock-write-guard.test.js` (kriterier, ledetekst og flervalgssett under innholdslåsen),
+`test/m2-archived-readonly-1151.test.ts` (rutene som tabell, med kontroll, slett, unntakene),
+`test/m2-archived-readonly-lock-1151.test.ts` (vakta etter låsen med forhåndssjekkene slått av),
+`test/e2e/admin-content-archived-readonly-1151.spec.ts` (klienten: hver flate arkivert med kontroll, eid/ikke eid seksjon,
+gjenopprett og slett fra modulsida, masseoversettingen, kursimporten, feilene fra lagringen, 390 px).

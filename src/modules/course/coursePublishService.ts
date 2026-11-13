@@ -9,6 +9,7 @@ import { listManageableContentIds } from "../content/contentOwnershipService.js"
 import { createCertificationRepository } from "../certification/index.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
 import { runContentWrite } from "../../db/contentLock.js";
+import { assertNotArchived, assertNotArchivedBeforeLock } from "../content/archivedGuard.js";
 import {
   applyCourseVersionChange,
   applyMinorVersionToCoursesContaining,
@@ -524,6 +525,8 @@ export async function publishCourseCascade(
   // ingen ny tekst uten versjon). #934 skive 4a: innholdslåsen er det første transaksjonen gjør.
   try {
     return await runContentWrite(async (tx) => {
+      // #1151: et arkivert kurs publiseres ikke. Ruta har forhåndssjekken; etter låsen avviser `publishCourse` under, og
+      // elementene som alt er publisert i transaksjonen, rulles tilbake.
       // To samtidige «Publiser kurs» kan begge ha sett forhåndsvisningen. Den andre venter på låsen; så leses det
       // upubliserte på nytt, og har den første publisert det, er svaret gitt på noe annet (409).
       const fresh = await getCoursePublishPreview(courseId, tx);
@@ -719,6 +722,8 @@ export async function publishCoursePendingVersions(
   // #934 skive 4b: `confirmEmailRecipients` — tallet dialogen viste da forfatteren sa ja til e-post til mange.
   input: { versionIds: string[]; supersedesEarlierPasses?: boolean; courseVersion?: CourseVersionChoice; confirmEmailRecipients?: number },
 ): Promise<{ publishedItems: PublishedItemRef[]; version: CourseVersionBump | null }> {
+  // #1151: forhåndssjekk, så et arkivert kurs svarer «arkivert» også når ingenting ligger klar. Sjekken som gjelder, står etter låsen.
+  await assertNotArchivedBeforeLock({ type: "COURSE", id: courseId });
   const pending = await getCoursePendingVersions(courseId, actor);
 
   // Det forfatteren så, er det som publiseres. Et annet sett (noen lagret en ny versjon, eller
@@ -744,6 +749,8 @@ export async function publishCoursePendingVersions(
   // ser det samme settet som det første. Seksjonsversjonene RETT FØR leses først i transaksjonen.
   try {
     return await runContentWrite(async (tx) => {
+      // #1151: «Publiser nye versjoner» virker ikke på et arkivert kurs. Gjenopprett det først.
+      await assertNotArchived(tx, { type: "COURSE", id: courseId });
       // To samtidige «Publiser» kan begge ha passert sjekken over. Låsen gjør at den andre venter; så leses
       // settet på nytt, og har den første publisert det, er svaret gitt på noe annet (409) — ikke en ny økning.
       // #934 skive 4a: også det andre sjekkene over avgjorde, sjekkes på nytt etter låsen.

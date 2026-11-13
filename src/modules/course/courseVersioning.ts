@@ -24,6 +24,7 @@ import type { ContentWriteTx } from "../../db/contentLock.js";
 import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { raiseModuleRequirementInCourse } from "../adminContent/moduleVersioning.js";
 import { assertNoCourseDraftBlocksWrite } from "./courseDraft.js";
+import { assertNotArchived } from "../content/archivedGuard.js";
 
 export type CourseVersionChoice = "major" | "minor";
 
@@ -155,6 +156,8 @@ export async function claimCourseRevision(
   // her når kurset har et utkast: `409 course_has_draft`, og ingenting er skrevet.
   options?: { publishingDraft?: boolean },
 ): Promise<number> {
+  // #1151: et arkivert kurs får ikke nye felt eller ny elementliste. Først, så svaret er «kurset er arkivert» og ikke noe annet.
+  await assertNotArchived(client, { type: "COURSE", id: courseId });
   if (!options?.publishingDraft) await assertNoCourseDraftBlocksWrite(client, courseId);
   if (expected === undefined) {
     const updated = await client.course.updateMany({ where: { id: courseId }, data: { contentRevision: { increment: 1 } } });

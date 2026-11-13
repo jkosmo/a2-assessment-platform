@@ -325,6 +325,8 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
     expect(filer).toHaveLength(6);
     for (const fil of filer) await expect(getAsset(fil)).resolves.toBeInstanceOf(Buffer);
 
+    // #1151: bare en arkivert seksjon kan slettes.
+    expect((await request(app).post(`/api/admin/content/sections/${sectionId}/archive`).set(adminHeaders)).status).toBe(200);
     const slettet = await request(app).delete(`/api/admin/content/sections/${sectionId}`).set(adminHeaders);
     expect(slettet.status).toBe(204);
     for (const fil of filer) await expect(getAsset(fil), fil).rejects.toThrow();

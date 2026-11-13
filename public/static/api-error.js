@@ -72,6 +72,17 @@ export function apiErrorCode(error) {
   return typeof code === "string" && code.length > 0 ? code : null;
 }
 
+/**
+ * #1151 skive 3c: avslag fordi elementet er arkivert (tjeneren sperrer alt som skriver, `assertNotArchived`). Et nytt
+ * forsøk kan ikke lykkes før elementet er gjenopprettet, så flatene tilbyr ikke «Prøv igjen» for disse.
+ */
+const ARCHIVED_ERROR_CODES = new Set(["course_archived", "module_archived", "section_archived"]);
+
+/** @returns {boolean} */
+export function isArchivedRejection(error) {
+  return ARCHIVED_ERROR_CODES.has(apiErrorCode(error));
+}
+
 // Kallernes `t()` returnerer nøkkelen uendret når den mangler (samme kontrakt i alle konsollene).
 // Vi må kunne skille «oversatt» fra «ingen oversettelse», ellers ville en ukjent kode gitt
 // `errors.api.thread_locked` som overskrift — verre enn den rå JSON-en vi prøver å bli kvitt.

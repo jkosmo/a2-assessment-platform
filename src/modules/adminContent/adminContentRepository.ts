@@ -91,6 +91,8 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           id: true,
           title: true,
           activeVersionId: true,
+          // #1151: «slett krever arkivert» (`deleteModule`).
+          archivedAt: true,
           _count: {
             select: {
               versions: true,
@@ -313,24 +315,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
-    createRubricVersion(data: {
-      moduleId: string;
-      versionNo: number;
-      criteriaJson: string;
-      scalingRuleJson: string;
-      active: boolean;
-    }) {
-      return client.rubricVersion.create({
-        data,
-        select: {
-          id: true,
-          moduleId: true,
-          versionNo: true,
-          active: true,
-          createdAt: true,
-        },
-      });
-    },
+    // #1151: skriverne av kriterier, ledetekst og flervalgssett står i `createAdminContentWriter` under (innholdslåsen).
 
     // #915: «Behold kriteriene» lager en NY rubrikkversjon (se syncActiveRubricBlueprintHash). Det
     // som sto her — `updateRubricVersionScalingRule`, en patch på stedet uten versionNo-bump — var
@@ -346,71 +331,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           criteriaJson: true,
           scalingRuleJson: true,
           active: true,
-        },
-      });
-    },
-
-    createPromptTemplateVersion(data: {
-      moduleId: string;
-      versionNo: number;
-      systemPrompt: string;
-      userPromptTemplate: string;
-      examplesJson: string;
-      active: boolean;
-    }) {
-      return client.promptTemplateVersion.create({
-        data,
-        select: {
-          id: true,
-          moduleId: true,
-          versionNo: true,
-          active: true,
-          createdAt: true,
-        },
-      });
-    },
-
-    createMcqSetVersion(data: {
-      moduleId: string;
-      versionNo: number;
-      title: string;
-      active: boolean;
-      questions: Array<{
-        moduleId: string;
-        stem: string;
-        optionsJson: string;
-        correctAnswer: string;
-        rationale?: string;
-        questionType: string;
-        answerKeyJson: string | null;
-        active: boolean;
-      }>;
-    }) {
-      return client.mCQSetVersion.create({
-        data: {
-          moduleId: data.moduleId,
-          versionNo: data.versionNo,
-          title: data.title,
-          active: data.active,
-          questions: {
-            create: data.questions,
-          },
-        },
-        select: {
-          id: true,
-          moduleId: true,
-          versionNo: true,
-          title: true,
-          active: true,
-          createdAt: true,
-          questions: {
-            select: {
-              id: true,
-              stem: true,
-              correctAnswer: true,
-              active: true,
-            },
-          },
         },
       });
     },
@@ -518,6 +438,91 @@ export const adminContentRepository = createAdminContentRepository();
  */
 export function createAdminContentWriter(client: ContentWriteTx) {
   return {
+    // #1151: kriterier, ledetekst og flervalgssett skrives under innholdslåsen, som resten av modulen (flyttet fra leserne over).
+    createRubricVersion(data: {
+      moduleId: string;
+      versionNo: number;
+      criteriaJson: string;
+      scalingRuleJson: string;
+      active: boolean;
+    }) {
+      return client.rubricVersion.create({
+        data,
+        select: {
+          id: true,
+          moduleId: true,
+          versionNo: true,
+          active: true,
+          createdAt: true,
+        },
+      });
+    },
+
+    createPromptTemplateVersion(data: {
+      moduleId: string;
+      versionNo: number;
+      systemPrompt: string;
+      userPromptTemplate: string;
+      examplesJson: string;
+      active: boolean;
+    }) {
+      return client.promptTemplateVersion.create({
+        data,
+        select: {
+          id: true,
+          moduleId: true,
+          versionNo: true,
+          active: true,
+          createdAt: true,
+        },
+      });
+    },
+
+    createMcqSetVersion(data: {
+      moduleId: string;
+      versionNo: number;
+      title: string;
+      active: boolean;
+      questions: Array<{
+        moduleId: string;
+        stem: string;
+        optionsJson: string;
+        correctAnswer: string;
+        rationale?: string;
+        questionType: string;
+        answerKeyJson: string | null;
+        active: boolean;
+      }>;
+    }) {
+      return client.mCQSetVersion.create({
+        data: {
+          moduleId: data.moduleId,
+          versionNo: data.versionNo,
+          title: data.title,
+          active: data.active,
+          questions: {
+            create: data.questions,
+          },
+        },
+        select: {
+          id: true,
+          moduleId: true,
+          versionNo: true,
+          title: true,
+          active: true,
+          createdAt: true,
+          questions: {
+            select: {
+              id: true,
+              stem: true,
+              correctAnswer: true,
+              active: true,
+            },
+          },
+        },
+      });
+    },
+
     archiveModule(moduleId: string, now: Date) {
       // I3: arkivering auto-avpubliserer (activeVersionId nullstilles) så «arkivert men
       // publisert» aldri oppstår. Gjenopprett (restoreModule) lander dermed i Utkast.

@@ -94,6 +94,8 @@ function mergeLocalized(storedRaw: string | null, patch: LocalizedText): Localiz
 
 export async function composeModuleVersion(input: ComposeModuleVersionInput, existingTx?: ContentWriteTx) {
   const run = async (tx: ContentWriteTx) => {
+    // #1151: en arkivert modul lagres ikke. Vakta står i det som skrives (navnet, komponentene, og `createModuleVersion`, som hver
+    // lagring ender i); detaljene under skrives i samme transaksjon og rulles tilbake når versjonen avvises.
     // The rename belongs to the same commitment. Saving it separately is how a failed version
     // used to leave a module renamed with nothing else to show for it.
     if (input.title !== undefined) {

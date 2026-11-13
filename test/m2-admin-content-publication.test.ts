@@ -325,6 +325,8 @@ describe("MVP admin content management and publication", () => {
 
     expect(createEmptyModuleResponse.status).toBe(201);
     const emptyModuleId = createEmptyModuleResponse.body.module.id as string;
+    // #1151: bare en arkivert modul kan slettes.
+    expect((await request(app).post(`/api/admin/content/modules/${emptyModuleId}/archive`).set(adminHeaders)).status).toBe(200);
 
     const deleteEmptyResponse = await request(app)
       .delete(`/api/admin/content/modules/${emptyModuleId}`)
@@ -356,6 +358,7 @@ describe("MVP admin content management and publication", () => {
       });
 
     expect(rubricResponse.status).toBe(201);
+    expect((await request(app).post(`/api/admin/content/modules/${protectedModuleId}/archive`).set(adminHeaders)).status).toBe(200);
 
     const blockedDeleteResponse = await request(app)
       .delete(`/api/admin/content/modules/${protectedModuleId}`)

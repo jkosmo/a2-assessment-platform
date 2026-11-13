@@ -367,6 +367,7 @@ describe("#934 5a-2: kravet følger kursets elementer", () => {
   it("sletting av kurset og modulen tar radene med seg", async () => {
     const a = await publishedModule();
     const courseId = await courseWith([a.moduleId]);
+    await prisma.course.update({ where: { id: courseId }, data: { archivedAt: new Date() } }); // #1151: slett krever arkivert.
     expect((await request(app).delete(`/api/admin/content/courses/${courseId}`).set(admin())).status).toBeLessThan(300);
     expect(await prisma.courseModuleRequirement.count({ where: { courseId } })).toBe(0);
     // Modulen tas i bruk i et nytt kurs, og slettes så slik rydd-veiene gjør det (versjonene først). Rutene for å slette en

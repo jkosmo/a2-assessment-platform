@@ -112,6 +112,7 @@ import { adminSectionsRouter } from "./adminSections.js";
 import { generateLimiter, extractLimiter, intentLogLimiter } from "../middleware/rateLimiting.js";
 import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
 import { assertContentOwnership } from "../modules/content/contentOwnershipService.js";
+import { assertArchivedBeforeLock } from "../modules/content/archivedGuard.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
 import { evaluateModulePublishGate } from "../modules/adminContent/modulePublishGate.js";
@@ -344,6 +345,8 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
 
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    // #1151 (G4): «slett krever arkivert» kommer før «ligger i et kurs», som i `deleteModule` (som sjekker på nytt etter låsen).
+    await assertArchivedBeforeLock({ type: "MODULE", id: request.params.moduleId });
     // #705: G2 use-lock — reuse the shared named-courses message (same as unpublish/archive) so the
     // three withdrawing actions read identically; keep the 409/`module_in_use`/`courseCount` shape.
     // #1149: sletting teller ALLE kurs, også arkiverte. Ligger modulen i et arkivert kurs, er koden
@@ -617,6 +620,11 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions", async (request, re
     // #1122: kriterier med én linje for hele skalaen — varsel, ikke stopp.
     response.status(201).json({ rubricVersion, rubricWarnings: rubricWarnings(data.criteria) });
   } catch (error) {
+    // #1151: en kjent feil (eierskap, `module_archived`, `503 content_busy`) går videre med koden sin.
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_rubric_version_failed", message: "Could not create rubric version." });
   }
 });
@@ -659,6 +667,11 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions/ensure", generateLim
     // #1122: en gjenbrukt rubrikk er alt vurdert; en ny (fra KI eller standardrubrikken) får varselet.
     response.status(result.reused ? 200 : 201).json({ ...result, rubricWarnings: result.reused ? [] : rubricWarnings(result.criteria) });
   } catch (err) {
+    // #1151: som over.
+    if (err instanceof AppError) {
+      respondWithAppError(response, err);
+      return;
+    }
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "ensure_rubric_failed", message });
   }
@@ -690,6 +703,11 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions/sync-blueprint", asy
     }
     response.json(result);
   } catch (err) {
+    // #1151: som over.
+    if (err instanceof AppError) {
+      respondWithAppError(response, err);
+      return;
+    }
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "sync_blueprint_failed", message });
   }
@@ -714,6 +732,11 @@ adminContentRouter.post("/modules/:moduleId/prompt-template-versions", async (re
     );
     response.status(201).json({ promptTemplateVersion });
   } catch (error) {
+    // #1151: som over.
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_prompt_template_version_failed", message: "Could not create prompt template version." });
   }
 });
@@ -737,6 +760,11 @@ adminContentRouter.post("/modules/:moduleId/mcq-set-versions", async (request, r
     );
     response.status(201).json({ mcqSetVersion });
   } catch (error) {
+    // #1151: som over.
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_mcq_set_version_failed", message: "Could not create MCQ set version." });
   }
 });
@@ -761,7 +789,8 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
     response.status(201).json({ moduleVersion });
   } catch (error) {
     // #934 skive 4a: innholdslåsen ga opp (503 content_busy) — det skal klienten få, ikke en valideringsfeil.
-    if (error instanceof AppError && error.code === "content_busy") {
+    // #1151: og alle andre kjente feil (eierskap, `module_archived`), med koden sin.
+    if (error instanceof AppError) {
       respondWithAppError(response, error);
       return;
     }
@@ -905,6 +934,9 @@ adminContentRouter.post("/modules/:moduleId/benchmark-example-versions", async (
   }
 
   try {
+    // #1151 (sidefunn): eksempelsvarene lager en ny ledetekstversjon på modulen, og var den ene skriveruta for en modul uten
+    // eierskapsvakt. Samme vakt som søstrene over.
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const benchmarkExampleVersion = await createBenchmarkExampleVersion({
       moduleId: request.params.moduleId,
       basePromptTemplateVersionId: data.basePromptTemplateVersionId,
@@ -915,6 +947,11 @@ adminContentRouter.post("/modules/:moduleId/benchmark-example-versions", async (
     });
     response.status(201).json({ benchmarkExampleVersion });
   } catch (error) {
+    // #1151: kjente feil (eierskap, `module_archived`, `503 content_busy`) med koden sin.
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_benchmark_example_version_failed", message: "Could not create benchmark example version." });
   }
 });

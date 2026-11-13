@@ -36,6 +36,7 @@ import { moduleExportPayloadSchema, sectionExportPayloadSchema } from "./adminCo
 import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "../course/assetCommands.js";
 import { AppError, ConflictError, DomainRuleError, ForbiddenError, ValidationError } from "../../errors/AppError.js";
 import { assertContentOwnership } from "../content/contentOwnershipService.js";
+import { assertNotArchived } from "../content/archivedGuard.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import type { AuditAction, AuditEntityType } from "../../observability/auditEvents.js";
@@ -303,6 +304,8 @@ async function importModulePayload(
     if (!existing) {
       throw new Error("Target module not found for replaceExisting.");
     }
+    // #1151: en arkivert modul får ingen ny versjon (og publiseres ikke med `autoPublish`), også fra kursets «Oppdater». Vakta
+    // står i det som skrives under (komponentene og modulversjonen), før noe publiseres.
     moduleId = options.targetModuleId;
   } else {
     const newModule = await createModule({
@@ -502,6 +505,8 @@ async function appendInactiveSectionVersion(
   targetSectionId: string,
   keepLiveTitle: boolean,
 ): Promise<{ sectionVersionId: string; versionNo: number }> {
+  // #1151: en arkivert seksjon får ingen ny versjon, verken fra seksjonsimporten eller fra kursets «Oppdater dette kurset».
+  await assertNotArchived(tx, { type: "SECTION", id: targetSectionId });
   const last = await tx.courseSectionVersion.findFirst({
     where: { sectionId: targetSectionId },
     orderBy: { versionNo: "desc" },
@@ -606,6 +611,7 @@ export async function importSectionFromEnvelope(
     if (!existing) {
       throw new Error("Target section not found for replaceExisting.");
     }
+    // #1151: en arkivert seksjon avvises i `appendInactiveSectionVersion`, etter låsen; bildene som alt er lastet opp, ryddes bort.
     targetSectionId = existing.id;
     keepLiveTitle = existing.activeVersionId !== null;
   }
@@ -913,6 +919,10 @@ export async function importCourseFromEnvelope(
     // partial versions, or a course with no final audit).
     return await runContentWrite(
       async (tx) => {
+        // #1151: et arkivert målkurs, rett etter låsen, før kursraden og elementene skrives.
+        if (options.mode !== "createNew" && options.targetCourseId) {
+          await assertNotArchived(tx, { type: "COURSE", id: options.targetCourseId });
+        }
         let courseId: string;
         let courseTextChanged = false;
         if (options.mode === "updateExisting" && updatePlan && planBasis !== null) {
@@ -1157,6 +1167,15 @@ export async function importCourseFromEnvelope(
             tx,
           );
           for (const replaced of summary.replacedUnownedIds) {
+            // #1151: et element som alt er arkivert (et gjenopprettet kurs kan ha et), røres ikke: en ny arkivering ville flyttet
+            // `archivedAt`, og dermed slettefristen (#1152).
+            const alreadyArchived = replaced.type === "SECTION"
+              ? (await tx.courseSection.findUnique({ where: { id: replaced.oldId }, select: { archivedAt: true } }))?.archivedAt
+              : (await tx.module.findUnique({ where: { id: replaced.oldId }, select: { archivedAt: true } }))?.archivedAt;
+            if (alreadyArchived) {
+              replaced.oldArchived = true;
+              continue;
+            }
             if (replaced.type === "SECTION") {
               if (usedElsewhere.sections.has(replaced.oldId)) continue;
               // #1150 skive 2a-2: importens arkivering setter ikke merket fra kursarkiveringen (nullstiller et som er blitt stående).

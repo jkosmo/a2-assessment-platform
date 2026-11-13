@@ -269,13 +269,16 @@ function getListPage() {
       // #1046 (produkteier 12.09): samme logikk som Moduler — Dupliser og Eksporter er lese-/kopihandlinger
       // og finnes også for den som ikke eier seksjonen. «Slett» er ute av lista (D3) og ligger inne på den
       // arkiverte seksjonen.
+      // #1151 skive 3c: en arkivert seksjon kan ikke endres (`section_archived`), og «Dupliser» er ikke lov på et arkivert
+      // element (produkteier 13.11). «Åpne» (`sections.edit`) står: redigereren viser den skrivebeskyttet.
+      const archived = lifecycle === "archived";
       return [
         // Først, så den står synlig og ikke under «Mer»: det er det forfatteren kom for.
         canManage ? publishNew : "",
         canManage ? `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>` : "",
         // #894: å døpe om er ikke å redigere innholdet, og skal ikke koste en tur gjennom editoren.
-        canManage ? `<button class="row-action-btn" data-action="rename" data-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
-        `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
+        canManage && !archived ? `<button class="row-action-btn" data-action="rename" data-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
+        archived ? "" : `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
         `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
         canManage ? publishToggle : "",
         canManage ? archiveToggle : "",
@@ -727,7 +730,12 @@ function getFormPage() {
     texts: sectionFormTexts,
     onBack: goBackFromEditor,
     title: () => (editing?.title?.[editing.editLocale] ?? "").trim() || pickLocalizedText(editing?.title ?? {}, currentLocale),
-    item: () => (editing?.id ? { lifecycle: editorSectionStatus() === "published" && editing.hasUnpublishedChanges ? "published_with_draft" : editorSectionStatus() } : null),
+    item: () => sectionHeaderItem(),
+    // #1151 skive 3c: merket som før, og for en arkivert seksjon linja om hvorfor den ikke kan endres (som kurset og modulen).
+    statusHtml: () => {
+      const item = sectionHeaderItem();
+      return item ? lifecycleBadge(item, tNav) + sectionArchivedNoticeHtml() : "";
+    },
     t: tNav,
     actions: () => sectionActions(),
     languages: {
@@ -747,7 +755,8 @@ function getFormPage() {
     },
     body: () => sectionEditorBodyHtml(),
     // Lagring krever eierskap: skjul knappen for den som ikke kan styre seksjonen (den ga 403).
-    save: { onSave: () => persistSection(), get hidden() { return editing?.canManage === false; } },
+    // #1151 skive 3c: og en arkivert seksjon lagres ikke (`section_archived`).
+    save: { onSave: () => persistSection(), get hidden() { return !sectionCanEdit(); } },
     afterRender: () => bindEditorHandlers(),
   });
   formPage.installGuards();
@@ -756,15 +765,42 @@ function getFormPage() {
 
 // Handlingsraden i hodet (F1/F2): det lista kan, kan det åpnede elementet også — pluss det som bare
 // finnes her (Oversett, Erstatt fra fil, Last opp bilde er inne i skjemaet).
+/**
+ * #1151 skive 3c: to spørsmål, ikke ett. «Kan styres» (eier eller administrator) gir livssyklusen — Gjenopprett, Slett,
+ * Arkiver, Publiser. «Kan redigeres» krever i tillegg at seksjonen ikke er arkivert — Lagre, Oversett, Erstatt fra fil,
+ * Last opp bilde, og feltene. Før sto begge på `canManage`, og en arkivert seksjon eieren har, må vise Gjenopprett og Slett
+ * uten å vise det som skriver.
+ */
+function sectionCanManage() {
+  return editing?.canManage !== false;
+}
+
+function sectionCanEdit() {
+  return sectionCanManage() && !editing?.archivedAt;
+}
+
+function sectionHeaderItem() {
+  if (!editing?.id) return null;
+  const status = editorSectionStatus();
+  return { lifecycle: status === "published" && editing.hasUnpublishedChanges ? "published_with_draft" : status };
+}
+
+function sectionArchivedNoticeHtml() {
+  if (!editing?.id || !editing.archivedAt) return "";
+  return `<p class="archived-notice" role="status" data-section-archived-notice>${escapeHtml(L("archivedNotice"))}</p>`;
+}
+
 function sectionActions() {
   if (!editing) return [];
-  const manage = editing.canManage !== false;
+  const manage = sectionCanManage();
+  const edit = sectionCanEdit();
   const status = editorSectionStatus();
   const id = editing.id ? escapeHtml(editing.id) : "";
   // Rekkefølge som i lista (D2): det man gjør ofte først, det farlige sist — tre vises, resten under «Mer».
   return [
     // «Oversett» lagrer oversatte figurer (krever eierskap) — ikke en lesehandling for en lagret seksjon.
-    !id || manage ? `<button type="button" class="row-action-btn" id="translateBtn" data-editor-action="translate">${escapeHtml(L("translate"))}</button>` : "",
+    // #1151 skive 3c: og ikke på en arkivert seksjon (betalte KI-kall, og figurene avvises med `section_archived`).
+    !id || edit ? `<button type="button" class="row-action-btn" id="translateBtn" data-editor-action="translate">${escapeHtml(L("translate"))}</button>` : "",
     id ? `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>` : "",
     // #1095: den nye versjonen redigereren viser, er ikke den deltakerne ser — publiser den.
     // Livssyklus og «Erstatt fra fil» bare for den som kan styre seksjonen (eier eller administrator) —
@@ -777,7 +813,7 @@ function sectionActions() {
         ? `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="unpublish">${escapeHtml(L("unpublish"))}</button>`
         : `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="publish">${escapeHtml(L("publish"))}</button>`)
       : "",
-    id && manage ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
+    id && edit ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
     id && manage && status ? (status === "archived"
       ? `<button type="button" class="row-action-btn" data-editor-action="restore">${escapeHtml(L("restore"))}</button>`
       : `<button type="button" class="row-action-btn" data-editor-action="archive">${escapeHtml(L("archive"))}</button>`) : "",
@@ -790,8 +826,13 @@ function sectionActions() {
 // Forhåndsvisning for seg, og Innstillinger med eierne.
 function sectionEditorBodyHtml() {
   const sectionId = editing?.id ?? null;
+  // #1151 skive 3c: en arkivert seksjon står sperret i en `<fieldset disabled>`, som det arkiverte kurset. En ikke-eier
+  // har fortsatt `readonly` (som før). Eierpanelet under Innstillinger står utenfor og lagrer for seg.
+  const archivedLock = Boolean(sectionId && editing.archivedAt);
+  const lockOpen = archivedLock ? `<fieldset class="archived-lock" disabled data-section-archived-lock>` : "";
+  const lockClose = archivedLock ? "</fieldset>" : "";
   return `
-    <div data-form-tab="rediger">
+    <div data-form-tab="rediger">${lockOpen}
       <div class="section-editor card">
         <div class="form-field">
           <label for="titleInput">${escapeHtml(L("titleLabel"))}${editing.editLocale === "nb" ? ` <span class="required-note">${escapeHtml(t("form.required"))}</span>` : ""}</label>
@@ -801,7 +842,7 @@ function sectionEditorBodyHtml() {
           <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
             <span>${escapeHtml(L("markdown"))} <span class="required-note">${escapeHtml(t("form.required"))}</span></span>
             <span data-form-untracked>
-              ${editing.canManage === false ? "" : `<button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px" ${editing.id ? "" : `disabled title="${escapeHtml(L("saveFirst"))}"`}>${escapeHtml(L("uploadImage"))}</button>`}
+              ${!sectionCanEdit() ? "" : `<button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px" ${editing.id ? "" : `disabled title="${escapeHtml(L("saveFirst"))}"`}>${escapeHtml(L("uploadImage"))}</button>`}
               <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />
             </span>
           </div>
@@ -810,7 +851,7 @@ function sectionEditorBodyHtml() {
         <input type="file" id="replaceFromFileInput" accept="${SECTION_FILE_ACCEPT}" hidden data-form-untracked />
         <span class="editor-status" id="editorStatus"></span>
       </div>
-    </div>
+    ${lockClose}</div>
     <div data-form-tab="forhandsvisning" hidden>
       <div class="card"><div class="preview-pane preview-pane--full" id="previewPane"></div></div>
     </div>
@@ -869,13 +910,17 @@ function bindEditorHandlers() {
 async function lifecycleInEditor(action, toastKey) {
   // #1154: svaret legges i seksjonen handlingen ble startet i. Hodet tegnes fra den som vises nå.
   const session = editing;
+  const stillHere = sameView();
   try {
     const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}/${action}`, getHeaders, { method: "POST" });
     session.archivedAt = data.section?.archivedAt ?? (action === "archive" ? new Date().toISOString() : null);
     session.activeVersionId = data.section?.activeVersionId ?? session.activeVersionId;
     session.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
     showToast(L(toastKey));
-    refreshSectionLifecycleUI();
+    // #1151 skive 3c: arkivering og gjenoppretting endrer hele skjemaet (sperren, Lagre, Oversett, bildeknappen), ikke
+    // bare hodet. Seksjonen hentes på nytt: forfatteren har alt svart på «forlate uten å lagre?» (bindHeaderActions), så
+    // skjemaet viser det som er lagret, og «Alt lagret».
+    if (stillHere()) await renderEditorView(session.id);
   } catch (err) {
     apiErrorToast(err);
   }

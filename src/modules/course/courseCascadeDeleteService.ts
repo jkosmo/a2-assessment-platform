@@ -9,6 +9,7 @@ import { createCourseRepository } from "./courseRepository.js";
 import { describeIssuedCertificateBlock, findAllCoursesContainingModule, findAllCoursesContainingSection, type LifecycleReader } from "./contentLifecycle.js";
 import { collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands.js";
 import { clearArchiveMarksForCourse } from "./courseArchive.js";
+import { deleteRequiresArchivedError } from "../content/archivedGuard.js";
 
 // #762 — ADMINISTRATOR-only destructive cleanup: delete a course together with the modules and
 // sections that ONLY that course owns, while never destroying real assessment/achievement records.
@@ -84,9 +85,14 @@ async function analyzeCourseCascade(courseId: string, reader: LifecycleReader = 
   const adminContentRepository = createAdminContentRepository(reader);
   const course = await reader.course.findUnique({
     where: { id: courseId },
-    select: { id: true, title: true },
+    select: { id: true, title: true, archivedAt: true },
   });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+  // #1151 (G4): bare et arkivert kurs kan slettes, også med innhold. Her, så forhåndsvisningen og slettingen svarer likt.
+  // Elementene som bare brukes i kurset, fulgte det vanligvis inn i arkivet (#1150). Ikke alltid: et kurs arkivert før 2.159.0,
+  // eller et element gjenopprettet for hånd mens kurset var arkivert. Da sletter kaskaden aktive elementer, som før (QA-porten
+  // #1151); forhåndsvisningen lister dem.
+  if (!course.archivedAt) throw deleteRequiresArchivedError({ type: "COURSE", id: courseId });
   const courseTitle = displayTitle(course.title);
 
   // #958: sletting må se ALT. Ville den arkiverte seksjonen ikke kommet med, ville den blitt stående
@@ -113,7 +119,7 @@ async function analyzeCourseCascade(courseId: string, reader: LifecycleReader = 
       title: courseTitle,
       reason:
         `Kurset har ${completionCount} fullføring${completionCount === 1 ? "" : "er"} (utstedte bevis). ` +
-        `Arkiver kurset i stedet for å beholde fullføringene.`,
+        `Det blir stående arkivert, med fullføringene.`,
     });
   }
 

@@ -95,6 +95,9 @@ async function makeCourse(
   const course = await prisma.course.create({
     data: {
       title: JSON.stringify({ "en-GB": "CCD Course", nb: "CCD Kurs", nn: "CCD Kurs" }),
+      // #1151: kaskaden krever et arkivert kurs (elementene som bare brukes i det, fulgte det inn i arkivet). Den som deler en
+      // modul, er også arkivert her: sletting teller alle kurs (#1149).
+      archivedAt: new Date(),
       items: {
         create: items.map((item, index) => ({
           itemType: item.itemType,

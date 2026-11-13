@@ -88,6 +88,8 @@ export default defineConfig({
       "test/course-draft-guard.test.js",
       // #1149: nekter en ny leser av «hvilke kurs bruker dette elementet» utenom contentLifecycle.ts.
       "test/content-in-use-guard.test.js",
+      // #1151: hvert skrivested til et kurs, en modul eller en seksjon har vakta mot arkivert, eller et begrunnet unntak.
+      "test/archived-is-readonly-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

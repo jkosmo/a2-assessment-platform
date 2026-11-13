@@ -4,6 +4,7 @@ import { prisma } from "../../db/prisma.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
 import { runContentWrite } from "../../db/contentLock.js";
 import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
+import { assertNotArchived, assertNotArchivedBeforeLock } from "../content/archivedGuard.js";
 import { putAsset, getAsset, deleteAsset } from "./assetStorage.js";
 import { canParticipantReadSection } from "./enrollmentService.js";
 import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations, isSvgReadableAsImage, svgDrawnWidth, svgMotionProblems } from "./svgSanitizer.js";
@@ -124,6 +125,9 @@ export async function createSectionAsset(input: {
       if (!stillThere) {
         throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
       }
+      // #1151: en arkivert seksjon får ingen nye bilder. Fila over ryddes bort i `catch` under. (Ingen forhåndssjekk før
+      // opplastingen: den ville bare spart en fil som ryddes bort uansett.)
+      await assertNotArchived(tx, { type: "SECTION", id: input.sectionId });
       return tx.sectionAsset.create({
         data: {
           sectionId: input.sectionId,
@@ -438,6 +442,8 @@ export async function localizeSectionAssets(
   if (!section) {
     throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
   }
+  // #1151: forhåndssjekk før de betalte kallene til språkmodellen. Sjekken som gjelder, står i transaksjonen under.
+  await assertNotArchivedBeforeLock({ type: "SECTION", id: sectionId });
 
   const assets = await prisma.sectionAsset.findMany({
     where: { sectionId, mimeType: SVG_MIME_TYPE },
@@ -514,12 +520,14 @@ export async function localizeSectionAssets(
     const newPaths = [...Object.values(localizedBlobPaths), ...[...otherLocalized.values()].flatMap((paths) => Object.values(paths))];
     let written: { count: number };
     try {
-      written = await runContentWrite((tx) =>
-        tx.sectionAsset.updateMany({
+      written = await runContentWrite(async (tx) => {
+        // #1151: arkivert mens språkmodellen arbeidet: ingenting skrives, og de nye filene ryddes bort i `catch` under.
+        await assertNotArchived(tx, { type: "SECTION", id: sectionId });
+        return tx.sectionAsset.updateMany({
           where: { id: asset.id },
           data: { sourceLocale, localizedBlobPaths, ...(otherLayouts.length > 0 ? { layoutVariants } : {}) },
-        }),
-      );
+        });
+      });
     } catch (error) {
       // Raden ble ikke skrevet (f.eks. 503 content_busy, QA-porten 2.131.0 runde 2): ingenting peker på de nye
       // filene. De ryddes bort, og feilen går videre.

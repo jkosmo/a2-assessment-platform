@@ -68,6 +68,31 @@ API:
 3. Klikk **Gjenopprett**
 4. Modulen gjenopprettes som kladd — publiser på nytt for å gjøre den tilgjengelig
 
+#### Hva du ser på en arkivert modul eller seksjon
+
+Et arkivert element kan åpnes og leses, men ikke endres (som et arkivert kurs). Linja under statusmerket sier «Modulen er
+arkivert og kan ikke endres. Gjenopprett den for å endre den.» (eller «Seksjonen …»). Lagre og Avbryt er borte, og feltene er
+sperret i alle fanene — også innstillingene, kriteriene, vurderingsinstruksen og innsendingsskjemaet, som står utfoldet så de
+kan leses.
+
+Du kan:
+- **Eksportere** elementet.
+- **Gjenopprette** det: i handlingsraden når elementet er åpnet, eller i lista. Etterpå kan det endres igjen.
+- **Slette** det for godt (bare et arkivert element kan slettes).
+- Endre **eierne** (under Innstillinger).
+
+Det som ikke tilbys før elementet er gjenopprettet: generering og «Be om endring», oversetting, «Erstatt fra fil», «Last opp
+bilde», publisering og avpublisering, å hente fram en eldre versjon, og i listene «Døp om» og **«Dupliser»**. «Oversett det
+som mangler» i listene hopper over arkiverte elementer, og tallet på knappen teller dem ikke.
+
+Et arkivert kurs følger fortsatt nye versjoner av moduler og seksjoner det deler med andre kurs.
+
+**Kursimport mot et arkivert kurs:** er kurset fila ble eksportert fra, arkivert, kan det ikke oppdateres. Dialogen sier det,
+og tilbyr bare «Importer som nytt kurs». Vil du oppdatere kurset, gjenoppretter du det først. Endrer fila en modul eller
+seksjon som er arkivert, avvises oppdateringen på samme måte.
+
+**«Slett kurs og ubrukt innhold»** (administratorer) står bare på et arkivert kurs.
+
 ### 4. Importere og eksportere modul-JSON
 
 Det finnes **to** steder, med bevisst ulik betydning:

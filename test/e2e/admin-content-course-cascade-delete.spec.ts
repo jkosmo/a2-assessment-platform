@@ -7,6 +7,10 @@ import { mockCommonApis, revealRowAction } from "./admin-content-helpers.js";
 // exclusively owns. The row action must be hidden for a SUBJECT_MATTER_OWNER and shown for an
 // ADMINISTRATOR; clicking it opens a confirmation dialog listing the preview (deleted / spared /
 // blockers); confirming fires the delete POST.
+//
+// #1151 skive 3b/3c: tjeneren sletter bare et arkivert kurs (`delete_requires_archived`), og handlingen står nå bare på
+// arkiverte kurs. Fiksturen er derfor arkivert, og lista byttes til «Alle» (standard er «Aktive»). At handlingen IKKE står
+// på et aktivt kurs, måles i admin-content-archived-readonly-1151.spec.ts.
 
 const DRAFT_COURSE = {
   id: "course-1",
@@ -16,9 +20,14 @@ const DRAFT_COURSE = {
   moduleCount: 1,
   updatedAt: "2026-04-18T12:00:00.000Z",
   publishedAt: null,
-  archivedAt: null,
+  archivedAt: "2026-04-17T12:00:00.000Z",
   modules: [],
 };
+
+async function openList(page: Page) {
+  await page.goto("/admin-content/courses");
+  await page.locator('.list-filters [data-filter="all"]').click();
+}
 
 const PREVIEW = {
   courseId: "course-1",
@@ -41,7 +50,7 @@ test.describe("course cascade delete (#762)", () => {
   test("the cascade-delete action is hidden for a SUBJECT_MATTER_OWNER", async ({ page }) => {
     await mockCommonApis(page, { courses: [{ ...DRAFT_COURSE }], meRoles: ["SUBJECT_MATTER_OWNER"] });
 
-    await page.goto("/admin-content/courses");
+    await openList(page);
     const row = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
     await expect(row).toBeVisible();
     await expect(row.locator('[data-action="cascade-delete"]')).toHaveCount(0);
@@ -69,7 +78,7 @@ test.describe("course cascade delete (#762)", () => {
       });
     });
 
-    await page.goto("/admin-content/courses");
+    await openList(page);
     const row = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
     await (await revealRowAction(page, row.locator('[data-action="cascade-delete"]'))).click();
 
@@ -110,7 +119,7 @@ test.describe("course cascade delete (#762)", () => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({}) });
     });
 
-    await page.goto("/admin-content/courses");
+    await openList(page);
     const row = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
     await (await revealRowAction(page, row.locator('[data-action="cascade-delete"]'))).click();
 

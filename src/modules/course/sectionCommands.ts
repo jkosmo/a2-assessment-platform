@@ -8,6 +8,7 @@ import { applyMinorVersionToCoursesContaining, sameLocalizedText } from "./cours
 import { randomUUID } from "node:crypto";
 import { stageSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs, type IncomingSectionAsset } from "./assetCommands.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
+import { assertNotArchived, deleteRequiresArchivedError } from "../content/archivedGuard.js";
 import {
   validateSectionTranslationCompleteness,
   type ValidationIssue,
@@ -228,6 +229,8 @@ export async function updateSectionTitle(sectionId: string, title: string, actor
   // #934 skive 4a: innholdslåsen først; kursene seksjonen ligger i, leses etter den.
   return runContentWrite(async (tx) => {
     await assertSectionExists(sectionId, tx);
+    // #1151: en arkivert seksjon får ikke nytt navn (også omdøping i lista).
+    await assertNotArchived(tx, { type: "SECTION", id: sectionId });
     const previous = await tx.courseSection.findUniqueOrThrow({ where: { id: sectionId }, select: { title: true } });
     const section = await tx.courseSection.update({
       where: { id: sectionId },
@@ -250,6 +253,8 @@ export async function updateSectionContent(sectionId: string, bodyMarkdown: stri
     if (!existing) {
       throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
     }
+    // #1151: en arkivert seksjon lagres ikke. Før fikk den en aktiv versjon her («arkivert og publisert», brudd på I3).
+    await assertNotArchived(client, { type: "SECTION", id: sectionId });
 
     // #916: door 3. Saving a section IS publishing it (latest-wins), so the gate belongs here too.
     // The version is always written — the author's text is never lost — but it only becomes the
@@ -346,18 +351,9 @@ async function publishSectionLocked(
   if (!section) {
     throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
   }
-  if (section.archivedAt) {
-    // ⚠️ #999: EGEN KODE, IKKE PROSA. En `ValidationError` gir koden `validation_error` uten
-    // `issues`, og da viser `api-error.js` serverens `message` ORDRETT — altså denne norske
-    // setningen midt i et engelsk forfattergrensesnitt.
-    //
-    // Samme retting som de fire livssyklusvaktene for kurs fikk (`content_in_use` m.fl.). Med en
-    // kode slår klienten den opp i sin egen tabell og rendrer på brukerens språk.
-    throw new DomainRuleError(
-      "section_archived_cannot_publish",
-      "Restore the section before publishing it.",
-    );
-  }
+  // #1151: den felles vakta (`section_archived`). Den erstatter `section_archived_cannot_publish` (#999); teksten til den gamle
+  // koden står igjen i klienten for faner fra før.
+  await assertNotArchived(reader, { type: "SECTION", id: sectionId });
   const latest = await reader.courseSectionVersion.findFirst({
     where: { sectionId },
     orderBy: { versionNo: "desc" },
@@ -423,6 +419,8 @@ export async function unpublishSection(sectionId: string, actorId?: string) {
   // #934 skive 4a: «ligger ikke i noe kurs» sjekkes etter innholdslåsen, i samme transaksjon som skrivingen.
   const updated = await runContentWrite(async (tx) => {
     await assertSectionExists(sectionId, tx);
+    // #1151: en arkivert seksjon er alt avpublisert (I3); en avpublisering ville bare skrevet en hendelse som ikke er sann.
+    await assertNotArchived(tx, { type: "SECTION", id: sectionId });
     await assertSectionNotInActiveCourse(sectionId, "avpubliseres", tx);
     const section = await tx.courseSection.update({
       where: { id: sectionId },
@@ -590,11 +588,13 @@ export async function deleteSection(sectionId: string, actorId?: string) {
     // modul-sletting, adminContentCommands.ts:376).
     const section = await tx.courseSection.findUnique({
       where: { id: sectionId },
-      select: { id: true, title: true },
+      select: { id: true, title: true, archivedAt: true },
     });
     if (!section) {
       throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
     }
+    // #1151 (G4): bare en arkivert seksjon kan slettes. Før sto regelen bare i klienten.
+    if (!section.archivedAt) throw deleteRequiresArchivedError({ type: "SECTION", id: sectionId });
     // G2, sletting: ALLE kurs teller, også arkiverte (#1149; `CourseItem` → seksjon er `onDelete: Restrict`).
     // Svaret navngir kursene, og sier hvilke som er arkiverte.
     await assertSectionNotInAnyCourse(sectionId, tx);

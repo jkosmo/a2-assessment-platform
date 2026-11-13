@@ -19,6 +19,7 @@ import {
 } from "/static/criteria-editor.js";
 import { LEGACY_STRING_LOCALE, mergeLocaleInto } from "./localized-value.js";
 import { moduleVersionNumber } from "./version-label.js";
+import { isArchivedRejection } from "/static/api-error.js";
 
 /**
  * @param {object} ctx  se toppen av fila. Tilstand leses og skrives via egenskapene; funksjonene er
@@ -425,9 +426,11 @@ export function createSettingsTab(ctx) {
     // save carries the PERSISTED content forward, so it would quietly drop whatever is in the
     // draft. Blocking with a reason beats a silent loss.
     const draftBlocks = !!ctx.sessionDraft;
-    const actionHtml = draftBlocks
-      ? `<p class="settings-empty">${escapeHtml(t("shell.settings.draftBlocks"))}</p>`
-      : `<button type="button" id="settingsSave" class="btn-primary">${escapeHtml(t("shell.settings.save"))}</button>`;
+    // #1151 skive 3c: en arkivert modul lagres ikke (tjeneren avviser med `module_archived`). Linja i hodet sier hvorfor.
+    const actionHtml = ctx.moduleArchived ? ""
+      : draftBlocks
+        ? `<p class="settings-empty">${escapeHtml(t("shell.settings.draftBlocks"))}</p>`
+        : `<button type="button" id="settingsSave" class="btn-primary">${escapeHtml(t("shell.settings.save"))}</button>`;
 
     // A group with nothing in it is not rendered: MCQ_ONLY has no submission schema and no
     // criteria, and an empty heading reads as something that failed to load.
@@ -859,8 +862,11 @@ export function createSettingsTab(ctx) {
     if (settingsSelectedMode() === "MCQ_ONLY") return "";
     const prompt = ctx.bundle.selectedConfiguration?.promptTemplateVersion ?? null;
     const localeLabel = escapeHtml(tf("shell.settings.editingInLocale", { locale: ctx.contentLocale }));
+    // #1151 skive 3c: en arkivert modul viser instruksen utfoldet og sperret, uten «Rediger»-knappen — knappen ville
+    // stått sperret i fieldseten, og instruksen ville ikke kunnet leses.
+    const archived = ctx.moduleArchived;
 
-    if (!settingsPromptExpanded) {
+    if (!settingsPromptExpanded && !archived) {
       return `<section class="settings-criteria-section">
         <div class="settings-criteria-head">
           <h3 class="settings-subsection-title">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
@@ -878,11 +884,11 @@ export function createSettingsTab(ctx) {
     return `<section class="settings-criteria-section">
       <div class="settings-criteria-head">
         <h3 class="settings-subsection-title">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
-        <button type="button" id="settingsPromptToggle" class="btn-secondary settings-criteria-toggle"
-          aria-expanded="true" aria-controls="settingsPromptEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>
+        ${archived ? "" : `<button type="button" id="settingsPromptToggle" class="btn-secondary settings-criteria-toggle"
+          aria-expanded="true" aria-controls="settingsPromptEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>`}
       </div>
       <div id="settingsPromptEditor" class="settings-criteria-editor">
-        <p class="settings-empty">${localeLabel}</p>
+        ${archived ? "" : `<p class="settings-empty">${localeLabel}</p>`}
         <label class="settings-field-label" for="settingsPromptSystem">${escapeHtml(t("shell.settings.promptSystem"))}</label>
         <textarea id="settingsPromptSystem" class="settings-textarea" rows="4">${sys}</textarea>
         <label class="settings-field-label" for="settingsPromptUser">${escapeHtml(t("shell.settings.promptUser"))}</label>
@@ -917,8 +923,10 @@ export function createSettingsTab(ctx) {
   function renderSubmissionSchemaSection() {
     if (!ctx.bundle) return "";
     const field = ctx.bundle.selectedConfiguration?.moduleVersion?.submissionSchema?.fields?.[0] ?? null;
+    // #1151 skive 3c: som instruksen — utfoldet og sperret for en arkivert modul, uten «Rediger».
+    const archived = ctx.moduleArchived;
 
-    if (!settingsSchemaExpanded) {
+    if (!settingsSchemaExpanded && !archived) {
       return `<section class="settings-criteria-section">
         <div class="settings-criteria-head">
           <h3 class="settings-group-title">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
@@ -934,11 +942,11 @@ export function createSettingsTab(ctx) {
     return `<section class="settings-criteria-section">
       <div class="settings-criteria-head">
         <h3 class="settings-group-title">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
-        <button type="button" id="settingsSchemaToggle" class="btn-secondary settings-criteria-toggle"
-          aria-expanded="true" aria-controls="settingsSchemaEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>
+        ${archived ? "" : `<button type="button" id="settingsSchemaToggle" class="btn-secondary settings-criteria-toggle"
+          aria-expanded="true" aria-controls="settingsSchemaEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>`}
       </div>
       <div id="settingsSchemaEditor" class="settings-criteria-editor">
-        <p class="settings-empty">${escapeHtml(tf("shell.settings.editingInLocale", { locale: ctx.contentLocale }))}</p>
+        ${archived ? "" : `<p class="settings-empty">${escapeHtml(tf("shell.settings.editingInLocale", { locale: ctx.contentLocale }))}</p>`}
         <label class="settings-field-label" for="settingsSchemaLabel">${escapeHtml(t("shell.settings.schemaLabel"))}</label>
         <input id="settingsSchemaLabel" class="settings-input" type="text" value="${label}" />
         <label class="settings-field-label" for="settingsSchemaPlaceholder">${escapeHtml(t("shell.settings.schemaPlaceholder"))}</label>
@@ -992,7 +1000,9 @@ export function createSettingsTab(ctx) {
       // No restore button on the version already loaded — it would copy the module onto itself.
       // aria-label carries the version number: a screen-reader user tabbing a list of five
       // identically-named "Restore" buttons has no way to tell which one goes where.
-      const action = isCurrent
+      // #1151 skive 3c: heller ingen på en arkivert modul. Å hente fram en eldre versjon lager en ny versjon, og tjeneren
+      // avviser den (`module_archived`). «Gjenopprett» i hodet gjelder modulen, ikke en versjon.
+      const action = isCurrent || ctx.moduleArchived
         ? ""
         : `<button type="button" class="btn-secondary version-restore" data-restore-version="${escapeHtml(version.id)}"
             aria-label="${escapeHtml(tf("shell.versions.restoreVersionAria", { versionNo: number ?? version.versionNo }))}">${
@@ -1080,7 +1090,8 @@ export function createSettingsTab(ctx) {
       // The click disabled every restore button to stop a double-click. A success path reloads and
       // re-renders them; a failure has to put them back by hand, or the list is dead until reload.
       document.querySelectorAll("[data-restore-version]").forEach((button) => { button.disabled = false; });
-      logResolveSlot(slot, () => `${escapeHtml(t("shell.versions.restoreError"))}${escapeHtml(errMsg)}`, [
+      // #1151 skive 3c: modulen ble arkivert i mellomtiden — et nytt forsøk kan ikke lykkes, så meldingen står alene.
+      logResolveSlot(slot, () => `${escapeHtml(t("shell.versions.restoreError"))}${escapeHtml(errMsg)}`, isArchivedRejection(err) ? [] : [
         // Same key: a retry after a lost response must not create a second version.
         { labelKey: "shell.action.retry", action: () => restoreModuleVersionInBackground(sourceVersionId, key) },
       ]);

@@ -1564,6 +1564,16 @@ dialog::backdrop {
 .form-field textarea { resize: vertical; min-height: 72px; }
 .form-field input:focus, .form-field textarea:focus, .form-field select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
 .form-field input:disabled, .form-field textarea:disabled { background: var(--color-bg); color: var(--color-meta); }
+/* #1150 skive 2b / #1151 skive 3c: det åpnede elementet er arkivert (kurs, modul, seksjon). Linja under statusmerket,
+   i samme nøytrale tone som utkastlinja, og skjemaet i en `<fieldset disabled>` som skal se ut som før: ingen ramme,
+   og ingen min-content-bredde som skyver over på en telefon. Flyttet hit fra kurssida da modul og seksjon fikk det samme
+   (kursets klassenavn står som før). */
+.course-archived-notice, .archived-notice { flex-basis: 100%; order: 1; margin: 0; font-size: 13px; border-radius: var(--radius-card); padding: 7px 10px; overflow-wrap: anywhere; color: #8a5a00; background: #fff5e6; border: 1px solid #e3c58a; }
+.course-archived-lock, .archived-lock { border: 0; padding: 0; margin: 0; min-width: 0; min-inline-size: 0; display: contents; }
+/* Felt med egen hvit bakgrunn ser ut som de andre sperrede feltene (`.form-field input:disabled` over). */
+.course-archived-lock select:disabled, .course-archived-lock .combobox-input:disabled,
+.archived-lock input:disabled, .archived-lock textarea:disabled, .archived-lock select:disabled { background: var(--color-bg); color: var(--color-meta); }
+.archived-lock input:disabled, .archived-lock textarea:disabled, .archived-lock select:disabled { border-color: var(--color-border-soft); }
 .required-note { font-size: 12px; color: var(--color-meta); margin-left: 4px; font-weight: 400; }
 .form-field .field-hint { font-size: 12px; color: var(--color-meta); margin: 4px 0 0; }
 /* «Mer»-menyen (#1046 D5): <details> så åpne/lukke virker uten skript og med tastatur. */

@@ -66,6 +66,7 @@ import { requestLocale } from "../i18n/requestLocale.js";
 import { packageCueWarnings } from "../modules/adminContent/mcqCueWarnings.js";
 import { packageRubricWarnings } from "../modules/adminContent/rubricWarnings.js";
 import { packageAltTextWarnings } from "../modules/adminContent/altTextWarnings.js";
+import { assertNotArchivedBeforeLock } from "../modules/content/archivedGuard.js";
 
 const adminCoursesRouter = Router();
 
@@ -839,6 +840,9 @@ adminCoursesRouter.post("/:courseId/publish",requireContentOwnership("COURSE", "
   const publishItems = parsed.data.publishItems === true;
 
   try {
+    // #1151: forhåndssjekk, så et arkivert kurs svarer «arkivert» og ikke med elementene sine. Sjekken som gjelder, står etter
+    // låsen (`publishCourse`, `publishCourseCascade`).
+    await assertNotArchivedBeforeLock({ type: "COURSE", id: request.params.courseId });
     const preview = await getCoursePublishPreview(request.params.courseId);
 
     const askForCascade = (unpublishedItems: unknown, publishable: boolean) => {

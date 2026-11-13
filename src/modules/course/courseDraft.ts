@@ -15,6 +15,7 @@
 // rutene, og regelen kunne ikke se utkastene uten en tolking nummer to.
 import { z } from "zod";
 import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
+import { assertNotArchived } from "../content/archivedGuard.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
 import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -187,6 +188,8 @@ export async function saveCourseDraft(input: {
   return runContentWrite(async (tx) => {
     const course = await tx.course.findUnique({ where: { id: input.courseId }, select: { publishedAt: true, contentRevision: true } });
     if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    // #1151: et arkivert kurs er avpublisert (I3), og svaret skal si at det er arkivert, ikke be om å publisere.
+    await assertNotArchived(tx, { type: "COURSE", id: input.courseId });
     if (course.publishedAt == null) {
       throw new ConflictError(
         "course_draft_requires_published",
@@ -297,6 +300,8 @@ export async function publishCourseDraft<T>(input: {
   return runContentWrite(async (tx) => {
     const course = await tx.course.findUnique({ where: { id: input.courseId }, select: { publishedAt: true } });
     if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    // #1151: som ved lagring. (Arkiveringen forkaster utkastet, så dette gjelder bare et utkast fra før 2.159.0.)
+    await assertNotArchived(tx, { type: "COURSE", id: input.courseId });
     const existing = await findCourseDraft(tx, input.courseId);
     assertIsLoadedDraft(input.courseId, existing, input.loaded);
     if (course.publishedAt == null) {

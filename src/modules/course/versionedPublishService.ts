@@ -8,6 +8,7 @@
 // Bryteren leses i transaksjonen, etter låsen. Er den av: 409, og ingenting er skrevet.
 import type { ContentWriteTx } from "../../db/contentLock.js";
 import { runContentWrite } from "../../db/contentLock.js";
+import { assertNotArchived } from "../content/archivedGuard.js";
 import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { publishModuleVersion } from "../adminContent/adminContentCommands.js";
 import { findModulePlacements, type ModuleVersionKind } from "../adminContent/moduleVersioning.js";
@@ -119,6 +120,8 @@ export async function publishModuleVersioned(
   return runContentWrite(async (tx) => {
     const module = await tx.module.findUnique({ where: { id: moduleId }, select: { activeVersionId: true } });
     if (!module) throw new NotFoundError("Module", "module_not_found", "Module not found.");
+    // #1151: en arkivert modul publiseres ikke. Ruta har sjekket det før låsen (`item_archived`); dette er svaret som gjelder.
+    await assertNotArchived(tx, { type: "MODULE", id: moduleId });
     const affected = await findAffectedCourses(tx, [{ moduleId }]);
     const major = input.moduleVersion === "major";
     const given = input.courseVersions ?? {};
@@ -174,6 +177,8 @@ export async function publishCoursePendingVersioned(
   },
 ): Promise<{ publishedItems: PublishedItemRef[]; courses: CoursePublishOutcome[] }> {
   return runContentWrite(async (tx) => {
+    // #1151: «Publiser nye versjoner» virker ikke på et arkivert kurs. Først, før settet sammenlignes.
+    await assertNotArchived(tx, { type: "COURSE", id: courseId });
     const fresh = await getCoursePendingVersions(courseId, actor, tx);
     const now = fresh.items.map((item) => item.versionId ?? "").sort();
     const seen = [...new Set(input.versionIds)].sort();

@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.108.0 mot UTRULLET stage: #1119, skillets hint-kontroll på plattformen — varsel, ikke stopp. Lagring
 // og kursimport går gjennom, og svaret bærer funnene: stamme om kurset, absolutte ord bare blant de gale,
@@ -97,11 +98,18 @@ test("kursimport: går gjennom, og funnene meldes per test — også at svaret g
 });
 
 test.afterAll(async () => {
-  for (const id of tilstand.courseIds) noter(`slett kurs`, (await api("DELETE", `/api/admin/content/courses/${id}`)).status);
+  // #1151: bare arkivert innhold kan slettes.
+  for (const id of tilstand.courseIds) {
+    await arkiverKurs(api, id);
+    noter(`slett kurs`, (await api("DELETE", `/api/admin/content/courses/${id}`)).status);
+  }
   for (const id of [...tilstand.importedModuleIds, tilstand.moduleId].filter(Boolean)) {
     const slettet = await api("DELETE", `/api/admin/content/modules/${id}`);
     noter("slett modul", slettet.status);
     if (slettet.status !== 200) noter("arkiver modul", (await api("POST", `/api/admin/content/modules/${id}/archive`, {})).status);
   }
-  if (tilstand.sectionId) noter("slett seksjon", (await api("DELETE", `/api/admin/content/sections/${tilstand.sectionId}`)).status);
+  if (tilstand.sectionId) {
+    await api("POST", `/api/admin/content/sections/${tilstand.sectionId}/archive`);
+    noter("slett seksjon", (await api("DELETE", `/api/admin/content/sections/${tilstand.sectionId}`)).status);
+  }
 });

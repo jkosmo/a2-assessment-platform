@@ -1,14 +1,14 @@
 import { adminContentRepository, createAdminContentRepository, createAdminContentWriter } from "./adminContentRepository.js";
 import { questionTypeOf, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
-import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
+import { assertNotArchived, assertNotArchivedBeforeLock, deleteRequiresArchivedError } from "../content/archivedGuard.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 import type { AssessmentMode } from "@prisma/client";
 import { localizedTextCodec, type LocalizedText, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
-import { ConflictError, NotFoundError } from "../../errors/AppError.js";
+import { ConflictError, DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { assertModuleNotInActiveCourse, describeModuleDeleteBlock } from "../course/contentLifecycle.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import {
@@ -243,6 +243,8 @@ export async function updateModuleTitle(
     if (!existingModule) {
       throw new NotFoundError("Module", "module_not_found", "Module not found.");
     }
+    // #1151: en arkivert modul får ikke nytt navn (også omdøping i lista og lagringen i modulsida).
+    await assertNotArchived(tx, { type: "MODULE", id: moduleId });
     const title = resolveNextModuleTitle(existingModule.title, titlePatch);
     const repo = createAdminContentWriter(tx);
     const updated = await repo.updateModuleTitle(moduleId, title);
@@ -368,6 +370,9 @@ export async function deleteModule(moduleId: string, actorId: string) {
     if (!module) {
       throw new Error("Module not found.");
     }
+    // #1151 (G4): bare en arkivert modul kan slettes. Før sto regelen bare i klienten. (Masseryddingen av upubliserte
+    // moduler, `purgeUnpublishedModules`, er motsatt regel og går ikke hit.)
+    if (!module.archivedAt) throw deleteRequiresArchivedError({ type: "MODULE", id: moduleId });
 
     // G2, sletting: ALLE kurs teller, også arkiverte (#1149). Uten arkiverte kurs er svaret det ruta har gitt
     // siden #705 (`module_in_use`, 409, antall kurs); med et arkivert kurs er det `content_in_archived_course`.
@@ -445,21 +450,27 @@ async function getNextVersionNo(
   return (latest?.versionNo ?? 0) + 1;
 }
 
-export async function createRubricVersion(input: CreateRubricVersionInput, tx?: DbTransactionClient) {
+// #1151: kriterier, ledetekst og flervalgssett skrives under innholdslåsen, som resten av modulen. Før gikk de i en egen
+// transaksjon uten låsen, og en sjekk av `archivedAt` kunne ikke gjøres trygt. Oppslagene (finnes modulen, neste nummer) står
+// etter låsen, i samme transaksjon som skrivingen.
+async function prepareComponentWrite(client: ContentWriteTx, moduleId: string, model: "rubric" | "prompt" | "mcq") {
   // #796: reads run on the tx client when composing an import, so they see the just-created module.
-  const reader = tx ? createAdminContentRepository(tx) : adminContentRepository;
-  await ensureModuleExists(input.moduleId, reader);
-  const versionNo = await getNextVersionNo("rubric", input.moduleId, reader);
+  const reader = createAdminContentRepository(client);
+  await ensureModuleExists(moduleId, reader);
+  await assertNotArchived(client, { type: "MODULE", id: moduleId });
+  return getNextVersionNo(model, moduleId, reader);
+}
 
-  const run = async (client: DbTransactionClient) =>
-    createAdminContentRepository(client).createRubricVersion({
+export async function createRubricVersion(input: CreateRubricVersionInput, tx?: ContentWriteTx) {
+  const run = async (client: ContentWriteTx) =>
+    createAdminContentWriter(client).createRubricVersion({
       moduleId: input.moduleId,
-      versionNo,
+      versionNo: await prepareComponentWrite(client, input.moduleId, "rubric"),
       criteriaJson: JSON.stringify(input.criteria),
       scalingRuleJson: JSON.stringify(input.scalingRule),
       active: input.active,
     });
-  return tx ? run(tx) : runInTransaction(run);
+  return tx ? run(tx) : runContentWrite(run);
 }
 
 // Generic default rubric used as fallback when LLM-based generation fails or is not yet
@@ -551,6 +562,8 @@ export async function ensureRubricVersion(
   input: EnsureRubricVersionInput,
 ): Promise<EnsureRubricVersionResult> {
   await ensureModuleExists(input.moduleId);
+  // #1151: forhåndssjekk før det betalte kallet til språkmodellen. Sjekken som gjelder, står i `createRubricVersion`, etter låsen.
+  await assertNotArchivedBeforeLock({ type: "MODULE", id: input.moduleId });
 
   if (!input.force) {
     const existing = await adminContentRepository.findActiveRubricVersionForModule(input.moduleId);
@@ -637,53 +650,57 @@ export async function syncActiveRubricBlueprintHash(
   nextHash: string | null;
   scalingRule: Record<string, unknown>;
 } | null> {
-  await ensureModuleExists(moduleId);
-  const existing = options.rubricVersionId
-    ? await adminContentRepository.findRubricVersionById(options.rubricVersionId)
-    : await adminContentRepository.findActiveRubricVersionForModule(moduleId);
-  if (!existing || existing.moduleId !== moduleId) return null;
+  // #1151: under innholdslåsen, med oppslagene etter den. Før skrev den nye rubrikkversjonen med den globale klienten.
+  return runContentWrite(async (tx) => {
+    const reader = createAdminContentRepository(tx);
+    await ensureModuleExists(moduleId, reader);
+    await assertNotArchived(tx, { type: "MODULE", id: moduleId });
+    const existing = options.rubricVersionId
+      ? await reader.findRubricVersionById(options.rubricVersionId)
+      : await reader.findActiveRubricVersionForModule(moduleId);
+    if (!existing || existing.moduleId !== moduleId) return null;
 
-  let scalingRule: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(existing.scalingRuleJson);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      scalingRule = parsed as Record<string, unknown>;
+    let scalingRule: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(existing.scalingRuleJson);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        scalingRule = parsed as Record<string, unknown>;
+      }
+    } catch {
+      scalingRule = {};
     }
-  } catch {
-    scalingRule = {};
-  }
 
-  const previousHash =
-    typeof scalingRule.generated_from_blueprint_hash === "string"
-      ? (scalingRule.generated_from_blueprint_hash as string)
-      : null;
+    const previousHash =
+      typeof scalingRule.generated_from_blueprint_hash === "string"
+        ? (scalingRule.generated_from_blueprint_hash as string)
+        : null;
 
-  const nextScalingRule = { ...scalingRule };
-  if (blueprintHash) {
-    nextScalingRule.generated_from_blueprint_hash = blueprintHash;
-  } else {
-    delete nextScalingRule.generated_from_blueprint_hash;
-  }
+    const nextScalingRule = { ...scalingRule };
+    if (blueprintHash) {
+      nextScalingRule.generated_from_blueprint_hash = blueprintHash;
+    } else {
+      delete nextScalingRule.generated_from_blueprint_hash;
+    }
 
-  if (previousHash === blueprintHash) {
-    // Nothing to assert — the rubric already carries this hash. No new row for a no-op.
-    return {
-      rubricVersionId: existing.id,
-      previousRubricVersionId: existing.id,
-      versionNo: existing.versionNo,
-      previousHash,
-      nextHash: blueprintHash,
-      scalingRule: nextScalingRule,
-    };
-  }
+    if (previousHash === blueprintHash) {
+      // Nothing to assert — the rubric already carries this hash. No new row for a no-op.
+      return {
+        rubricVersionId: existing.id,
+        previousRubricVersionId: existing.id,
+        versionNo: existing.versionNo,
+        previousHash,
+        nextHash: blueprintHash,
+        scalingRule: nextScalingRule,
+      };
+    }
 
-  const versionNo = await getNextVersionNo("rubric", moduleId);
-  const created = await adminContentRepository.createRubricVersion({
-    moduleId,
-    versionNo,
-    criteriaJson: existing.criteriaJson,
-    scalingRuleJson: JSON.stringify(nextScalingRule),
-    active: true,
+    const versionNo = await getNextVersionNo("rubric", moduleId, reader);
+    const created = await createAdminContentWriter(tx).createRubricVersion({
+      moduleId,
+      versionNo,
+      criteriaJson: existing.criteriaJson,
+      scalingRuleJson: JSON.stringify(nextScalingRule),
+      active: true,
   });
 
   return {
@@ -694,34 +711,27 @@ export async function syncActiveRubricBlueprintHash(
     nextHash: blueprintHash,
     scalingRule: nextScalingRule,
   };
+  });
 }
 
-export async function createPromptTemplateVersion(input: CreatePromptTemplateVersionInput, tx?: DbTransactionClient) {
-  const reader = tx ? createAdminContentRepository(tx) : adminContentRepository;
-  await ensureModuleExists(input.moduleId, reader);
-  const versionNo = await getNextVersionNo("prompt", input.moduleId, reader);
-
-  const run = async (client: DbTransactionClient) =>
-    createAdminContentRepository(client).createPromptTemplateVersion({
+export async function createPromptTemplateVersion(input: CreatePromptTemplateVersionInput, tx?: ContentWriteTx) {
+  const run = async (client: ContentWriteTx) =>
+    createAdminContentWriter(client).createPromptTemplateVersion({
       moduleId: input.moduleId,
-      versionNo,
+      versionNo: await prepareComponentWrite(client, input.moduleId, "prompt"),
       systemPrompt: input.systemPrompt,
       userPromptTemplate: input.userPromptTemplate,
       examplesJson: JSON.stringify(input.examples),
       active: input.active ?? true,
     });
-  return tx ? run(tx) : runInTransaction(run);
+  return tx ? run(tx) : runContentWrite(run);
 }
 
-export async function createMcqSetVersion(input: CreateMcqSetVersionInput, tx?: DbTransactionClient) {
-  const reader = tx ? createAdminContentRepository(tx) : adminContentRepository;
-  await ensureModuleExists(input.moduleId, reader);
-  const versionNo = await getNextVersionNo("mcq", input.moduleId, reader);
-
-  const run = async (client: DbTransactionClient) =>
-    createAdminContentRepository(client).createMcqSetVersion({
+export async function createMcqSetVersion(input: CreateMcqSetVersionInput, tx?: ContentWriteTx) {
+  const run = async (client: ContentWriteTx) =>
+    createAdminContentWriter(client).createMcqSetVersion({
       moduleId: input.moduleId,
-      versionNo,
+      versionNo: await prepareComponentWrite(client, input.moduleId, "mcq"),
       title: input.title,
       active: input.active ?? true,
       questions: input.questions.map((question) => ({
@@ -735,7 +745,7 @@ export async function createMcqSetVersion(input: CreateMcqSetVersionInput, tx?: 
         active: true,
       })),
     });
-  return tx ? run(tx) : runInTransaction(run);
+  return tx ? run(tx) : runContentWrite(run);
 }
 
 export async function createModuleVersion(input: CreateModuleVersionInput, tx?: ContentWriteTx) {
@@ -749,6 +759,8 @@ async function createModuleVersionLocked(input: CreateModuleVersionInput, client
   // versions created earlier in the SAME transaction.
   const reader = createAdminContentRepository(client);
   await ensureModuleExists(input.moduleId, reader);
+  // #1151: en arkivert modul får ingen ny versjon (lagring, modulimport, kursets «Oppdater»).
+  await assertNotArchived(client, { type: "MODULE", id: input.moduleId });
   const versionNo = await getNextVersionNo("module", input.moduleId, reader);
 
   const isMcqOnly = input.assessmentMode === "MCQ_ONLY";
@@ -803,22 +815,7 @@ async function createModuleVersionLocked(input: CreateModuleVersionInput, client
 }
 
 export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampleVersionInput) {
-  await ensureModuleExists(input.moduleId);
   const benchmarkConfig = getBenchmarkExamplesConfig();
-
-  const basePromptTemplate = await adminContentRepository.findPromptTemplateSummary(input.basePromptTemplateVersionId);
-
-  if (!basePromptTemplate || basePromptTemplate.moduleId !== input.moduleId) {
-    throw new Error("Base prompt template version is missing or belongs to another module.");
-  }
-
-  if (input.linkedModuleVersionId) {
-    const linkedModuleVersion = await adminContentRepository.findModuleVersionSummary(input.linkedModuleVersionId);
-
-    if (!linkedModuleVersion || linkedModuleVersion.moduleId !== input.moduleId) {
-      throw new Error("Linked module version is missing or belongs to another module.");
-    }
-  }
 
   if (input.examples.length === 0) {
     throw new Error("At least one benchmark example is required.");
@@ -844,18 +841,33 @@ export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampl
     }
   }
 
-  const versionNo = await getNextVersionNo("prompt", input.moduleId);
-  const enrichedExamples = input.examples.map((example, index) => ({
-    ...example,
-    benchmarkExampleIndex: index + 1,
-    sourcePromptTemplateVersionId: input.basePromptTemplateVersionId,
-    sourceModuleVersionId: input.linkedModuleVersionId ?? null,
-    benchmarkVersionNo: versionNo,
-  }));
+  // #1151: under innholdslåsen, med oppslagene etter den (før: en egen transaksjon uten låsen, oppslagene før den).
+  const promptTemplateVersion = await runContentWrite(async (tx) => {
+    const reader = createAdminContentRepository(tx);
+    await ensureModuleExists(input.moduleId, reader);
+    await assertNotArchived(tx, { type: "MODULE", id: input.moduleId });
 
-  const promptTemplateVersion = await runInTransaction(async (tx) => {
-    const repo = createAdminContentRepository(tx);
-    const created = await repo.createPromptTemplateVersion({
+    const basePromptTemplate = await reader.findPromptTemplateSummary(input.basePromptTemplateVersionId);
+    if (!basePromptTemplate || basePromptTemplate.moduleId !== input.moduleId) {
+      throw new Error("Base prompt template version is missing or belongs to another module.");
+    }
+    if (input.linkedModuleVersionId) {
+      const linkedModuleVersion = await reader.findModuleVersionSummary(input.linkedModuleVersionId);
+      if (!linkedModuleVersion || linkedModuleVersion.moduleId !== input.moduleId) {
+        throw new Error("Linked module version is missing or belongs to another module.");
+      }
+    }
+
+    const versionNo = await getNextVersionNo("prompt", input.moduleId, reader);
+    const enrichedExamples = input.examples.map((example, index) => ({
+      ...example,
+      benchmarkExampleIndex: index + 1,
+      sourcePromptTemplateVersionId: input.basePromptTemplateVersionId,
+      sourceModuleVersionId: input.linkedModuleVersionId ?? null,
+      benchmarkVersionNo: versionNo,
+    }));
+
+    const created = await createAdminContentWriter(tx).createPromptTemplateVersion({
       moduleId: input.moduleId,
       versionNo,
       systemPrompt: basePromptTemplate.systemPrompt,
@@ -904,7 +916,8 @@ export async function archiveModule(moduleId: string, actorId: string) {
       throw new Error("Module not found.");
     }
     if (module.archivedAt) {
-      throw new Error("Module is already archived.");
+      // #1151: en kode, som for kurs og seksjon. Før en `Error`, som ruta ga videre som engelsk tekst.
+      throw new DomainRuleError("module_already_archived", "The module is already archived.");
     }
     // G2 (bruk-lås): en modul som ligger i et AKTIVT kurs (publisert eller utkast) kan ikke
     // arkiveres — den ville trekkes vekk under kurset. Dette tetter hullet der en publisert
@@ -936,7 +949,8 @@ export async function restoreModule(moduleId: string, actorId: string) {
       throw new Error("Module not found.");
     }
     if (!module.archivedAt) {
-      throw new Error("Module is not archived.");
+      // #1151: som over.
+      throw new DomainRuleError("module_not_archived", "The module is not archived, so it cannot be restored.");
     }
     const repo = createAdminContentWriter(tx);
     const restored = await repo.restoreModule(moduleId);
@@ -999,6 +1013,8 @@ export async function restoreModuleWithCourse(tx: ContentWriteTx, moduleId: stri
 export async function unpublishModule(moduleId: string, actorId: string) {
   const result = await runContentWrite(async (tx) => {
     await ensureModuleExists(moduleId, createAdminContentRepository(tx));
+    // #1151: en arkivert modul er alt avpublisert (I3); en avpublisering ville bare skrevet en hendelse som ikke er sann.
+    await assertNotArchived(tx, { type: "MODULE", id: moduleId });
     // G2 (bruk-lås): kan ikke avpublisere en modul som ligger i et aktivt kurs — det ville gi en
     // blindvei i kurset. Fjern den fra kursene først. #934 skive 4a: etter innholdslåsen.
     // #1149: et arkivert kurs stopper ikke avpubliseringen.
@@ -1054,6 +1070,10 @@ export async function publishModuleVersion(
     // #796: the read runs on the tx client when composing an import, so it sees the just-created module.
     // #934 skive 4a: og etter innholdslåsen, så «hva var aktiv før» er det som faktisk byttes ut.
     const module = await ensureModuleExists(moduleId, createAdminContentRepository(client));
+    // #1151: en arkivert modul publiseres ikke (knappen, modulimporten med `autoPublish`, kaskaden, «Publiser nye versjoner»).
+    // Her i kommandoen, ikke i skriveren: skriveren er felles (gjenopprettingen med kurset bruker den også, etter at den har
+    // nullstilt `archivedAt`, `restoreModuleWithCourse`), og vakta hører til de veiene en forfatter starter.
+    await assertNotArchived(client, { type: "MODULE", id: moduleId });
     const result = await createAdminContentWriter(client).publishModuleVersion(
       moduleId,
       moduleVersionId,
@@ -1121,6 +1141,8 @@ export async function restoreModuleVersion(input: {
   return runContentWrite(async (tx) => {
     const reader = createAdminContentRepository(tx);
     await ensureModuleExists(input.moduleId, reader);
+    // #1151: en eldre versjon av en arkivert modul hentes ikke fram som nytt utkast før modulen er gjenopprettet.
+    await assertNotArchived(tx, { type: "MODULE", id: input.moduleId });
 
     const sourceVersion = await reader.findActiveModuleVersionForClone(input.sourceModuleVersionId);
     if (!sourceVersion) {
@@ -1183,6 +1205,8 @@ export async function appendMcqQuestions(input: {
   return runContentWrite(async (tx) => {
     const reader = createAdminContentRepository(tx);
     await ensureModuleExists(input.moduleId, reader);
+    // #1151: påfyllingen (også fra agent-API-et) lager en ny modulversjon; ikke på en arkivert modul.
+    await assertNotArchived(tx, { type: "MODULE", id: input.moduleId });
     const module = await reader.findModuleActiveVersion(input.moduleId);
     const sourceVersion = module?.activeVersion ?? (await reader.findLatestModuleVersionRow(input.moduleId));
     if (!sourceVersion) {
@@ -1271,6 +1295,8 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
   const { published } = await runContentWrite(async (tx) => {
     const reader = createAdminContentRepository(tx);
     const module = await ensureModuleExists(input.moduleId, reader);
+    // #1151: før sjekken av aktiv versjon, så svaret er «arkivert» og ikke en feil uten kode (en arkivert modul har ingen).
+    await assertNotArchived(tx, { type: "MODULE", id: input.moduleId });
 
     if (!module.activeVersionId) {
       throw new Error("Module has no active version to base thresholds on.");

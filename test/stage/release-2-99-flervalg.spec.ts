@@ -213,5 +213,9 @@ test.afterAll(async () => {
     noter("slett testmodul", slettet.status);
     if (slettet.status !== 200) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${moduleId}/archive`, {})).status);
   }
-  if (tilstand.sectionId) noter("slett testseksjon", (await api("DELETE", `/api/admin/content/sections/${tilstand.sectionId}`)).status);
+  if (tilstand.sectionId) {
+    // #1151: bare arkivert innhold kan slettes.
+    await api("POST", `/api/admin/content/sections/${tilstand.sectionId}/archive`);
+    noter("slett testseksjon", (await api("DELETE", `/api/admin/content/sections/${tilstand.sectionId}`)).status);
+  }
 });

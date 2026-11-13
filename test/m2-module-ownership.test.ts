@@ -46,7 +46,8 @@ describe("API-002: Module ownership isolation for SUBJECT_MATTER_OWNER", () => {
       .set(smoBHeaders);
     expect(deleteBRes.status).toBe(403);
 
-    // SMO-A can delete their own module
+    // SMO-A can delete their own module (#1151: once it is archived)
+    expect((await request(app).post(`/api/admin/content/modules/${moduleId}/archive`).set(smoAHeaders)).status).toBe(200);
     const deleteARes = await request(app)
       .delete(`/api/admin/content/modules/${moduleId}`)
       .set(smoAHeaders);
@@ -126,7 +127,8 @@ describe("API-002: Module ownership isolation for SUBJECT_MATTER_OWNER", () => {
     // ContentOwner row) is "unowned" → admin-only (was the createdById-era "legacy_module" code).
     expect(smoRes.body.error).toBe("content_unowned");
 
-    // Admin can delete legacy module
+    // Admin can delete legacy module (#1151: once it is archived)
+    expect((await request(app).post(`/api/admin/content/modules/${legacy.id}/archive`).set(adminHeaders)).status).toBe(200);
     const adminRes = await request(app)
       .delete(`/api/admin/content/modules/${legacy.id}`)
       .set(adminHeaders);

@@ -1,6 +1,7 @@
 import { escapeHtml } from "/static/html-escape.js";
 import { LEGACY_STRING_LOCALE } from "/static/localized-value.js";
 import { supportedLocales } from "/static/i18n/participant-translations.js";
+import { lifecycleOf } from "/static/content-status-badge.js";
 
 /**
  * #894: omdøping direkte i lista, og hvilke språk tittelen mangler.
@@ -88,9 +89,15 @@ export function spraakMerkeHtml(item, tf) {
   return `<span class="lang-gap" title="${escapeHtml(tf("ui.lang.gapTitle"))}">${escapeHtml(tf("ui.lang.gap", { locales: koder }))}</span>`;
 }
 
-/** Radene som mangler minst ett språk, og som denne forfatteren får endre. */
+/**
+ * Radene som mangler minst ett språk, og som denne forfatteren får endre.
+ *
+ * #1151 skive 3c: ikke arkiverte rader. Tjeneren avviser tittelen på et arkivert element (`module_archived`,
+ * `section_archived`), og oversettingen er et betalt KI-kall som ellers ville blitt gjort for ingenting. Tallet på knappen
+ * og runden leser begge denne, så de kan ikke si noe forskjellig.
+ */
 export function medHullAv(synlige) {
-  return (synlige ?? []).filter((item) => item.canManage !== false && manglendeSpraak(item).length > 0);
+  return (synlige ?? []).filter((item) => item.canManage !== false && lifecycleOf(item) !== "archived" && manglendeSpraak(item).length > 0);
 }
 
 /**

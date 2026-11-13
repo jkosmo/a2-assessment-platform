@@ -154,11 +154,11 @@ describe("#1149: et arkivert kurs stopper ikke avpublisering og arkivering", () 
         expect(blocked.body.error).toBe("content_in_use");
         expect(blocked.body.details).toEqual({ count: 1, courseTitles: [course.title] });
       }
+      // #1151: «slett krever arkivert» kommer før «ligger i et kurs». Hvordan «ligger i et aktivt kurs» svarer ved sletting av
+      // et arkivert element: testen under med et aktivt og et arkivert kurs.
       const deleted = await del(sectionPath(sectionId));
       expect(deleted.status).toBe(400);
-      // Ingen arkiverte kurs: svaret er det gamle, uten noe om arkivering.
-      expect(deleted.body.error).toBe("content_in_use");
-      expect(deleted.body.details).toEqual({ count: 1, courseTitles: [course.title] });
+      expect(deleted.body.error).toBe("delete_requires_archived");
 
       const row = await sectionRow(sectionId);
       expect(row?.archivedAt).toBeNull();
@@ -175,12 +175,10 @@ describe("#1149: et arkivert kurs stopper ikke avpublisering og arkivering", () 
         expect(blocked.body.error).toBe("content_in_use");
         expect(blocked.body.details).toEqual({ count: 1, courseTitles: [course.title] });
       }
-      // Sletting av en modul i et aktivt kurs svarer som før #1149 (#705): 409 `module_in_use` og `courseCount`.
+      // #1151: «slett krever arkivert» kommer først (også i ruta, foran forhåndssjekken av kursene).
       const deleted = await del(modulePath(moduleId));
-      expect(deleted.status).toBe(409);
-      expect(deleted.body.error).toBe("module_in_use");
-      expect(deleted.body.courseCount).toBe(1);
-      expect(deleted.body.message).toContain(`«${course.title}»`);
+      expect(deleted.status).toBe(400);
+      expect(deleted.body.error).toBe("delete_requires_archived");
 
       const row = await moduleRow(moduleId);
       expect(row?.archivedAt).toBeNull();
@@ -246,6 +244,10 @@ describe("#1149: sletting stoppes av alle kurs, og svaret sier hvilke som er ark
     const moduleId = await createPublishedModule(tag("modul i begge, slettes"));
     const archived = await createCourse("arkivert kurs", "archived", { sectionIds: [sectionId], moduleIds: [moduleId] });
     const active = await createCourse("aktivt kurs", "draft", { sectionIds: [sectionId], moduleIds: [moduleId] });
+    // #1151: slett krever arkivert. Et arkivert element i et aktivt kurs oppstår når et kurs gjenopprettes med et element som ble
+    // arkivert for seg; tilstanden skrives direkte.
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { archivedAt: new Date(), activeVersionId: null } });
+    await prisma.module.update({ where: { id: moduleId }, data: { archivedAt: new Date(), activeVersionId: null } });
 
     for (const path of [sectionPath(sectionId), modulePath(moduleId)]) {
       const deleted = await del(path);
@@ -277,7 +279,8 @@ describe("#1149: kaskadeslettingen og masseryddingen teller fortsatt arkiverte k
     const sharedModule = await createPublishedModule(tag("modul delt med arkivert kurs"));
     const ownSection = await createPublishedSection(tag("seksjon bare i dette kurset"));
     await createCourse("arkivert kurs", "archived", { sectionIds: [sharedSection], moduleIds: [sharedModule] });
-    const course = await createCourse("kurs som slettes", "draft", { sectionIds: [sharedSection, ownSection], moduleIds: [sharedModule] });
+    // #1151: kaskaden krever et arkivert kurs.
+    const course = await createCourse("kurs som slettes", "archived", { sectionIds: [sharedSection, ownSection], moduleIds: [sharedModule] });
 
     const preview = await request(app).get(coursePath(course.id, "/cascade-delete-preview")).set(ADMIN);
     expect(preview.status, JSON.stringify(preview.body).slice(0, 300)).toBe(200);

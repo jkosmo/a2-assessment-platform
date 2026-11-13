@@ -1029,7 +1029,8 @@ function getListPage() {
         : "";
       // #762: ADMINISTRATOR-only destructive cleanup — slett kurset + moduler/seksjoner som kun brukes
       // her. Delt innhold beholdes. Skjult for ikke-ADMINISTRATOR (rollen løses fra /api/me).
-      const cascadeDeleteBtn = isAdministrator()
+      // #1151 skive 3b/3c: bare for et arkivert kurs — tjeneren krever det (`delete_requires_archived`), som for «Slett».
+      const cascadeDeleteBtn = isAdministrator() && lifecycle === "archived"
         ? `<button class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>`
         : "";
       return [
@@ -1112,6 +1113,8 @@ async function handleImportCoursePackageFile(event) {
   const target = event.target;
   const file = target?.files?.[0] ?? null;
   if (!file) return;
+  // #1151 skive 3c: hvilket valg forfatteren tok, for meldingen når oppdateringen avvises.
+  let chosen = null;
   try {
     const text = await file.text();
     let payload;
@@ -1126,6 +1129,7 @@ async function handleImportCoursePackageFile(event) {
     const originCourseId = payload?.course?.course?.origin?.courseId;
     const existing = originCourseId ? await findImportTargetCourse(originCourseId) : null;
     const choice = existing ? await askImportChoice(existing) : "createNew";
+    chosen = choice;
     if (choice === "cancel") return;
     if (choice === "updateExisting") {
       // 2.101.2: en kursimport kan ta minutter — vis at det jobbes, og sperr siden imens.
@@ -1183,6 +1187,11 @@ async function handleImportCoursePackageFile(event) {
     }
     window.location.href = `/admin-content/courses/${encodeURIComponent(result.courseId)}`;
   } catch (error) {
+    const rejected = chosen === "updateExisting" ? importUpdateRejectedText(error) : null;
+    if (rejected) {
+      showToast(rejected, "error");
+      return;
+    }
     const d = describeImportError(error, {
       notAnEnvelope: t("adminContent.courses.importNotAnEnvelope"),
     }, t);
@@ -1190,6 +1199,18 @@ async function handleImportCoursePackageFile(event) {
   } finally {
     target.value = "";
   }
+}
+
+/**
+ * #1151 skive 3c: «Oppdater dette kurset» avvist fordi kurset, eller en modul eller seksjon fila ville endret, er arkivert.
+ * Den felles setningen sier «gjenopprett det først»; her finnes også en vei til — fila kan importeres som nytt kurs, og
+ * det sier meldingen. Null for alle andre avslag (de går gjennom `describeImportError` som før).
+ */
+function importUpdateRejectedText(error) {
+  const code = apiErrorCode(error);
+  if (code === "course_archived") return t("adminContent.courses.importArchivedCourse");
+  if (code === "module_archived" || code === "section_archived") return t("adminContent.courses.importArchivedItem");
+  return null;
 }
 
 // #1119: «3 tester har spørsmål som … — Tittel: Spørsmål 2 … Tittel: …», eller "" når ingen har funn.
@@ -1221,12 +1242,33 @@ async function findImportTargetCourse(courseId) {
   }
 }
 
-/** Spør forfatteren: oppdater kurset fila hører til, importer som nytt, eller avbryt. */
+/**
+ * Spør forfatteren: oppdater kurset fila hører til, importer som nytt, eller avbryt.
+ *
+ * #1151 skive 3c: et arkivert kurs kan ikke oppdateres (tjeneren avviser med `course_archived`, men først etter at bildene i
+ * fila er lastet opp). Da står ikke «Oppdater dette kurset» i dialogen; teksten sier hvorfor og hva som går: gjenopprett
+ * kurset, eller importer som nytt. Har et aktivt kurs arkiverte moduler, sier dialogen at oppdateringen kan bli avvist
+ * (tjeneren avviser hele importen hvis fila endrer en av dem). Seksjonene ser ikke klienten her; avslaget dekker dem
+ * (`importUpdateRejectedText`).
+ */
 function askImportChoice(course) {
   const dialog = document.getElementById("courseImportChoiceDialog");
   if (!dialog || typeof dialog.showModal !== "function") return Promise.resolve("createNew");
+  const title = localizedText(course.title) || course.id;
+  const archived = lifecycleOf(course) === "archived";
+  const titleEl = document.getElementById("courseImportChoiceTitle");
+  if (titleEl) titleEl.textContent = t(archived ? "adminContent.courses.importChoice.archivedTitle" : "adminContent.courses.importChoice.title");
   const textEl = document.getElementById("courseImportChoiceText");
-  if (textEl) textEl.textContent = tf("adminContent.courses.importChoice.text", { title: localizedText(course.title) || course.id });
+  if (textEl) {
+    const archivedModules = archived ? 0 : (course.modules ?? []).filter((m) => m?.moduleArchivedAt).length;
+    textEl.textContent = archived
+      ? tf("adminContent.courses.importChoice.archivedText", { title })
+      : [
+        tf("adminContent.courses.importChoice.text", { title }),
+        archivedModules > 0 ? t("adminContent.courses.importChoice.archivedItems") : "",
+      ].filter(Boolean).join(" ");
+  }
+  setHidden(document.getElementById("courseImportUpdateBtn"), archived);
   return new Promise((resolve) => {
     const done = (value) => {
       dialog.removeEventListener("close", onClose);
@@ -2297,7 +2339,8 @@ function courseDetailActions() {
       ? `<button type="button" class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.restore"))}</button>`
       : `<button type="button" class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.archive"))}</button>`,
     lifecycle === "archived" ? `<button type="button" class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
-    isAdministrator() ? `<button type="button" class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>` : "",
+    // #1151 skive 3b/3c: «Slett med innhold» bare for et arkivert kurs, som i lista (tjeneren: `delete_requires_archived`).
+    isAdministrator() && lifecycle === "archived" ? `<button type="button" class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>` : "",
   ];
 }
 

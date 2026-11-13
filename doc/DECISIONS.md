@@ -1814,3 +1814,37 @@ Planen (`doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, etappe 2) og produktei
 `lockLearnersInContentWrite` (`db/contentLock.ts`), `discardCourseDraftOnArchive` (`courseDraft.ts`); vaktene i
 `test/content-in-use-guard.test.js` og `test/course-draft-guard.test.js`; `test/m2-course-archive-follow-1150.test.ts`.
 **Sak:** #1150 · **Dato:** 2026-11-13 · **Status:** valgt under byggingen av skive 2a-2; ikke avklart med produkteier
+
+## Arkivert er urørlig, og slett krever arkivert, på tjeneren (#1151 skive 3a og 3b, 2026-11-13)
+
+Saken og planen (kommentarene i #1151, «Planen etter uavhengig gjennomlesing») sa hva; dette er valgene som ikke sto der.
+
+- **Én vakt, i samlepunktene, etter låsen.** `assertNotArchived` (`src/modules/content/archivedGuard.ts`) leser `archivedAt` på
+  transaksjonen som holder innholdslåsen. Finnes ikke raden, sier den ingenting: kallerne har sine egne svar for «finnes ikke».
+- **Koder:** `course_archived` (fantes for tildeling, generell tekst nå), `module_archived`, `section_archived` (erstatter
+  `section_archived_cannot_publish`; den gamle teksten står for gamle faner), `module_already_archived`, `module_not_archived`,
+  `delete_requires_archived` (`details.itemType`). Alle `400`, som de andre domenereglene.
+- **Modulpubliseringsporten i ruta svarer som før** (`422 publish_blocked_by_validation` med `item_archived`). Den sjekker før
+  låsen; `module_archived` er svaret etter låsen, og nås bare hvis modulen arkiveres i mellomtiden.
+- **Forhåndssjekker** før de betalte kallene til språkmodellen (figuroversetting, `ensure`) og foran «Publiser kurs» og «Publiser nye versjoner», så et
+  arkivert kurs svarer «arkivert» og ikke med elementene sine eller et tomt sett. De er forslag; vakta etter låsen gjelder.
+- **Kriterier, ledetekst og flervalgssett skrives nå under innholdslåsen** (før: egen transaksjon, uten lås), med oppslagene
+  etter låsen. Skrivemetodene er flyttet fra leser- til skriverrepoet. KI-kallet i `ensure` står fortsatt før låsen.
+- **«Oppdater dette kurset» røres ikke et alt arkivert element** når det byttes ut med en kopi: en ny arkivering ville flyttet
+  `archivedAt` og dermed slettefristen i #1152. Får et arkivert element forfatteren eier ny versjon fra fila, avvises hele
+  importen (`section_archived`/`module_archived`).
+- **Et arkivert kurs følger fortsatt versjonene av delte elementer** (#1149; **avgjort av produkteier 13.11.2026**, #1151 A).
+  Et kurs som gjenopprettes, stiller dermed de samme kravene som de andre kursene modulen ligger i. «Stå stille» ville bare
+  fryst kursets versjonsnummer, kravet og e-postene — innholdet kan ikke fryses, fordi `CourseItem` peker på modulen.
+- **«Dupliser» er ikke lov på et arkivert element** (produkteier 13.11.2026). Tjeneren kan ikke skille en kopi fra en vanlig
+  import, så knappen skjules i klienten; eksport er lov.
+- **Kaskadeslettingen krever at kurset er arkivert**, i forhåndsvisningen og slettingen. **Masseryddingen** av upubliserte
+  moduler er motsatt regel og står som unntak. `course_has_completions` og kaskadens stoppgrunn sier ikke lenger «arkiver i
+  stedet» (kurset er alt arkivert).
+- **Sidefunn rettet:** eksempelsvar-ruta (`benchmark-example-versions`) manglet eierskapsvakt. Rutene for komponentene sender nå
+  en `AppError` videre med kode og status i stedet for en generell 400/500.
+
+**Håndheves:** `src/modules/content/archivedGuard.ts`; `test/archived-is-readonly-guard.test.js` (hvert skrivested har vakt eller et
+begrunnet unntak), `test/content-lock-write-guard.test.js`, `test/m2-archived-readonly-1151.test.ts`,
+`test/m2-archived-readonly-lock-1151.test.ts`.
+**Sak:** #1151 · **Dato:** 2026-11-13 · **Status:** valgt under byggingen; punkt A og «Dupliser» avgjort av produkteier 13.11.2026

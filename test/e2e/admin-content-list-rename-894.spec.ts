@@ -224,8 +224,14 @@ test.describe("#894 — omdøping i seksjonslista", () => {
 
     // ⚠️ Et filterklikk tegner BARE tabellen. Uten kroken som oppdaterer hodet ville tallet stått
     // igjen på 2, og knappen ville oversatt et annet sett enn det den sier.
+    // #1151 skive 3c: en arkivert rad oversettes ikke (tjeneren avviser tittelen, `section_archived`), så under
+    // «Arkiverte» er tallet 0 og knappen av. Før sto det 1 her. At tallet fortsatt følger filteret, måles nå med to bytter:
+    // til «Arkiverte» (2 → 0) og til «Alle» (0 → 2, den arkiverte telles ikke der heller).
     await page.getByRole("button", { name: "Arkiverte" }).click();
-    await expect(knapp).toHaveText("Oversett det som mangler (1)");
+    await expect(knapp).toHaveText("Oversett det som mangler (0)");
+    await expect(knapp).toBeDisabled();
+    await page.getByRole("button", { name: "Alle", exact: true }).click();
+    await expect(knapp).toHaveText("Oversett det som mangler (2)");
   });
 
   test("⚠️ samlet oversetting bærer de lagrede språkene videre — ellers ville de blitt slettet", async ({ page }) => {

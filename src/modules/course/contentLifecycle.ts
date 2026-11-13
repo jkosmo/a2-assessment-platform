@@ -366,7 +366,7 @@ async function assertNotInIssuedCertificate(
     throw new DomainRuleError(
       "content_in_issued_certificate",
       `${noun} kan ikke ${verb} fordi den inngår i ${count} utstedt${count === 1 ? "" : "e"} kursbevis. `
-      + "Arkiver den i stedet — et kursbevis må kunne vise hva det dekket.",
+      + "Den blir stående arkivert — et kursbevis må kunne vise hva det dekket.",
       { count },
     );
   }
@@ -454,7 +454,7 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
     throw new DomainRuleError(
       "content_in_legacy_certificate",
       `Seksjonen kan ikke ${verb} fordi den inngår i ${covered} kursbevis utstedt før `
-      + "øyeblikksbildet ble innført. Arkiver den i stedet — et kursbevis må kunne vise hva det dekket.",
+      + "øyeblikksbildet ble innført. Den blir stående arkivert — et kursbevis må kunne vise hva det dekket.",
       { count: covered },
     );
   }

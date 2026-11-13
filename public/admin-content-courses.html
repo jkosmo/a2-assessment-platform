@@ -214,13 +214,8 @@
       /* Et element i utkastet som ikke kan publiseres: grunnen på egen linje i raden. */
       .form-row.is-blocked { flex-wrap: wrap; border-color: #f5c0bb; background: #fdf0ef; }
       .form-row-note { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--color-error); }
-      /* #1150 skive 2b: det åpnede kurset er arkivert. Samme linje som utkastet, i nøytral tone. Skjemaet er sperret
-         (fieldset disabled), men skal se ut som før: ingen ramme, og ingen min-content-bredde som skyver over på en telefon. */
-      .course-archived-notice { flex-basis: 100%; order: 1; margin: 0; font-size: 13px; border-radius: var(--radius-card); padding: 7px 10px; overflow-wrap: anywhere; color: #8a5a00; background: #fff5e6; border: 1px solid #e3c58a; }
-      .course-archived-lock { border: 0; padding: 0; margin: 0; min-width: 0; min-inline-size: 0; display: contents; }
-      /* Nedtrekket og søkefeltet har egen hvit bakgrunn; i det sperrede skjemaet ser de ut som de andre sperrede feltene
-         (shared.css, `.form-field input:disabled`). */
-      .course-archived-lock select:disabled, .course-archived-lock .combobox-input:disabled { background: var(--color-bg); color: var(--color-meta); }
+      /* #1150 skive 2b: det åpnede, arkiverte kurset — linja (`.course-archived-notice`) og sperren (`.course-archived-lock`)
+         står i shared.css, felles med modul og seksjon (#1151 skive 3c). */
       /* #1150 skive 2b: dialogene for «Arkiver» og «Gjenopprett». Dialogen er aldri høyere enn skjermen (nettleserens egen
          grense), og lista krymper og ruller inne i den, så tittelen og knappene alltid ses, også med lange titler på en telefon. */
       .course-lifecycle-dialog { max-width: min(560px, calc(100vw - 24px)); }

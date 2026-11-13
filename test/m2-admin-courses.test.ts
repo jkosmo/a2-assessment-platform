@@ -192,6 +192,8 @@ describe("Admin course management", () => {
     await prisma.courseCompletion.create({
       data: { userId: learner.id, courseId: completedCourseId, moduleSnapshotJson: "[]" },
     });
+    // #1151: bare et arkivert kurs kan slettes. (Arkiveringen gjennom ruta er målt andre steder; her gjelder slettevernet.)
+    await prisma.course.update({ where: { id: completedCourseId }, data: { archivedAt: new Date() } });
 
     const blocked = await request(app)
       .delete(`/api/admin/content/courses/${completedCourseId}`)
@@ -207,6 +209,7 @@ describe("Admin course management", () => {
       .set(adminHeaders)
       .send({ title: { "en-GB": `Deletable Course ${stamp}`, nb: "x", nn: "x" } });
     const deletableId = deletable.body.course.id as string;
+    expect((await request(app).post(`/api/admin/content/courses/${deletableId}/archive`).set(adminHeaders)).status).toBe(200);
     const ok = await request(app).delete(`/api/admin/content/courses/${deletableId}`).set(adminHeaders);
     expect(ok.status).toBe(204);
     expect(await prisma.course.findUnique({ where: { id: deletableId } })).toBeNull();

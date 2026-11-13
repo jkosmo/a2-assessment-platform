@@ -59,6 +59,8 @@ describe("Admin course-section management", () => {
     expect(titleResponse.status).toBe(200);
     expect(titleResponse.body.section.title).toContain("Renamed section");
 
+    // #1151: bare en arkivert seksjon kan slettes.
+    expect((await request(app).post(`/api/admin/content/sections/${sectionId}/archive`).set(adminHeaders)).status).toBe(200);
     const deleteResponse = await request(app)
       .delete(`/api/admin/content/sections/${sectionId}`)
       .set(adminHeaders);
@@ -125,11 +127,15 @@ describe("Admin course-section management", () => {
     await prisma.courseItem.create({
       data: { courseId: course.id, itemType: "SECTION", sectionId, sortOrder: 0 },
     });
+    // #1151: slett krever arkivert, så seksjonen arkiveres for at «ligger i et kurs» skal kunne måles. Et arkivert element i et
+    // aktivt kurs oppstår når et kurs gjenopprettes med et element som ble arkivert for seg; tilstanden skrives direkte.
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { archivedAt: new Date(), activeVersionId: null } });
 
     const blocked = await request(app)
       .delete(`/api/admin/content/sections/${sectionId}`)
       .set(adminHeaders);
     expect(blocked.status).toBe(400);
+    expect(blocked.body.error).toBe("content_in_use");
 
     // cleanup (course cascade removes the CourseItem, then section is deletable)
     await prisma.course.delete({ where: { id: course.id } });

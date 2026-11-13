@@ -5,6 +5,7 @@ import { ConflictError, DomainRuleError, NotFoundError } from "../../errors/AppE
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { clearArchiveMarksForCourse } from "./courseArchive.js";
+import { assertNotArchived, deleteRequiresArchivedError } from "../content/archivedGuard.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import { setCourseThemes } from "./courseThemeService.js";
 import { assignCourseSlugIfMissing } from "./courseSlug.js";
@@ -28,6 +29,8 @@ export function courseFormOutdatedError() {
 }
 
 async function claimRevisionForItemWrite(client: ContentWriteTx, courseId: string, revision?: CourseRevisionCheck) {
+  // #1151: før sjekken av gammel fane, så et arkivert kurs svarer «arkivert» (et kurs som har vært ute, har delingslenke).
+  await assertNotArchived(client, { type: "COURSE", id: courseId });
   if (revision?.expected === undefined && revision?.requireUnlessDraft && (await isCourseEverPublished(client, courseId))) {
     throw courseFormOutdatedError();
   }
@@ -257,6 +260,8 @@ export async function publishCourse(courseId: string, actorId: string | undefine
     include: { _count: { select: { items: true } } },
   });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+  // #1151: et arkivert kurs publiseres ikke («arkivert og publisert» skal aldri finnes, I3). Gjenopprett først.
+  await assertNotArchived(tx, { type: "COURSE", id: courseId });
   if (course._count.items === 0) {
     // ⚠️ EGEN KODE, ikke bare en setning (#972/#999). `ValidationError` gir `validation_error`
     // uten `issues`, og da viser `api-error.js` serverens `message` ordrett — altså denne engelske
@@ -297,6 +302,8 @@ export async function unpublishCourse(courseId: string, actorId?: string) {
   return runContentWrite(async (tx) => {
     const course = await tx.course.findUnique({ where: { id: courseId }, select: { id: true } });
     if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    // #1151: et arkivert kurs er alt avpublisert (I3); en avpublisering ville bare skrevet en hendelse som ikke er sann.
+    await assertNotArchived(tx, { type: "COURSE", id: courseId });
     const updated = await tx.course.update({
       where: { id: courseId },
       data: { publishedAt: null },
@@ -321,13 +328,15 @@ export async function unpublishCourse(courseId: string, actorId?: string) {
 export async function deleteCourse(courseId: string, actorId?: string) {
   // #803: delete + audit commit atomically. #934 skive 4a: innholdslåsen først, så sjekkene.
   await runContentWrite(async (tx) => {
-    const course = await tx.course.findUnique({ where: { id: courseId }, select: { id: true } });
+    const course = await tx.course.findUnique({ where: { id: courseId }, select: { id: true, archivedAt: true } });
     if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    // #1151 (G4): bare et arkivert kurs kan slettes. Før sto regelen bare i klienten.
+    if (!course.archivedAt) throw deleteRequiresArchivedError({ type: "COURSE", id: courseId });
 
     // #660: CourseCompletion.course is onDelete: Restrict (issued certificates are achievement
     // records we never silently destroy). Without this guard, course.delete fails with a raw FK
-    // violation and the route surfaces a generic 500. Block with a clear message and point the
-    // author at archiving (the soft-delete) instead.
+    // violation and the route surfaces a generic 500. Block with a clear message.
+    // #1151: kurset er alt arkivert her, så rådet «arkiver i stedet» er borte. Det blir stående arkivert, med kursbevisene.
     const completionCount = await tx.courseCompletion.count({ where: { courseId } });
     if (completionCount > 0) {
       // ⚠️ ANTALLET SOM FELT, ikke som interpolert prosa — klienten skal kunne si «3 kursbevis» på
@@ -335,7 +344,7 @@ export async function deleteCourse(courseId: string, actorId?: string) {
       throw new DomainRuleError(
         "course_has_completions",
         `Cannot delete a course that has ${completionCount} completion${completionCount === 1 ? "" : "s"} ` +
-          `(issued certificates). Archive the course instead to keep the completion records.`,
+          `(issued certificates). The course stays archived and keeps the completion records.`,
         { count: completionCount },
       );
     }

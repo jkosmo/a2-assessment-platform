@@ -356,8 +356,9 @@ describe("Section asset upload + serve", () => {
     expect(blobPaths.length).toBeGreaterThanOrEqual(3); // png + svg base + ≥1 variant
     for (const p of blobPaths) await expect(getAsset(p)).resolves.toBeInstanceOf(Buffer);
 
-    // Delete via the real route (deleteSection → reclaimAssetBlobs).
-    const del = await request(app).delete(`/api/admin/content/sections/${sectionId}`).set(adminHeaders);
+    // Delete via the real route (deleteSection → reclaimAssetBlobs). #1151: archive first — only archived content is deleted.
+    expect((await request(app).post(`/api/admin/content/sections/${sectionId}/archive`).set(adminHeaders)).status).toBe(200);
+    const del =await request(app).delete(`/api/admin/content/sections/${sectionId}`).set(adminHeaders);
     expect(del.status).toBe(204);
 
     // Rows cascaded AND blobs physically reclaimed.

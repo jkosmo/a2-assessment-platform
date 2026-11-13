@@ -246,8 +246,11 @@ function getListPage() {
         canManage ? `<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>` : "",
         // #894: omdøping er en langt vanligere handling enn innholdsredigering, og krever ingen av
         // trinnene rundt. Egen knapp, ikke klikk på navnet — et klikk i raden åpner elementet.
-        canManage ? `<button class="row-action-btn" data-action="rename" data-module-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
-        `<button class="row-action-btn" data-action="duplicate" data-module-id="${id}">${escapeHtml(t("ui.action.duplicate"))}</button>`,
+        // #1151 skive 3c: ikke på en arkivert modul. Tjeneren avviser omdøpingen (`module_archived`), og «Dupliser» er
+        // ikke lov på et arkivert element (produkteier 13.11) — tjeneren kan ikke skille en kopi fra en import, så sperren
+        // er her. «Åpne» står: modulsida viser den arkiverte modulen skrivebeskyttet.
+        canManage && !isArchived ? `<button class="row-action-btn" data-action="rename" data-module-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
+        isArchived ? "" : `<button class="row-action-btn" data-action="duplicate" data-module-id="${id}">${escapeHtml(t("ui.action.duplicate"))}</button>`,
         `<button class="row-action-btn" data-action="export" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.export"))}</button>`,
         canManage && isPublished ? `<button class="row-action-btn" data-action="unpublish" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.unpublish"))}</button>` : "",
         // #705-UX: Slett vises kun for arkiverte moduler (terminal steg etter arkivering).

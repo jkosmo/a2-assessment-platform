@@ -494,9 +494,14 @@
         <!-- Preview pane -->
         <section class="card preview-pane" aria-label="Modulforhåndsvisning">
           <div id="previewShows" class="small preview-shows" hidden style="display:none"></div>
-          <div id="previewContent">
-            <p class="preview-empty">Ingen modul valgt.</p>
-          </div>
+          <!-- #1151 skive 3c: en arkivert modul kan ikke endres. Sperren ligger RUNDT innholdet, ikke i det: skjemaet,
+               spørsmålene og kriteriene tegnes på nytt mange steder, og alt som tegnes inn her, arver `disabled`
+               (admin-content-shell.js, `applyModuleArchivedLock`). Samme sperre som det arkiverte kurset. -->
+          <fieldset class="archived-lock" data-module-archived-lock data-lock-shared-with-preview>
+            <div id="previewContent">
+              <p class="preview-empty">Ingen modul valgt.</p>
+            </div>
+          </fieldset>
         </section>
 
         <div id="shellStatusAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -515,7 +520,10 @@
       <div id="moduleOwnerPanelHost" class="card" hidden style="margin-bottom:var(--space-2)" data-settings-panel></div>
       <section class="card" id="tabPanelSettings" role="tabpanel" aria-labelledby="tabSettings" style="display:none">
         <h2 style="margin-top:0;font-size:16px" data-i18n="shell.settings.title">Innstillinger</h2>
-        <div id="settingsSummary"></div>
+        <!-- #1151 skive 3c: samme sperre som over. Eierpanelet (moduleOwnerPanelHost) står utenfor og lagrer for seg. -->
+        <fieldset class="archived-lock" data-module-archived-lock>
+          <div id="settingsSummary"></div>
+        </fieldset>
       </section>
 
       <!-- Produkteier 13.09: samtalen erstattes av to dialoger. «Generer innhold» tar kildemateriale

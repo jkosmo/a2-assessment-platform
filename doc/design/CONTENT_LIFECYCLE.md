@@ -46,7 +46,7 @@ Knappene veksler etter status: Publisert viser **Avpubliser**, Utkast viser **Pu
 Aktiv viser **Arkiver**, Arkivert viser **Gjenopprett**. **Slett vises bare på arkiverte elementer**
 (vedtatt v1.6.1, se G4), og er vaktet.
 
-## 3. Fire vakter (de gjenkjennbare reglene)
+## 3. Fem vakter (de gjenkjennbare reglene)
 
 ### G1 — Fullstendighet ved publisering
 Kan ikke publisere ufullstendig innhold.
@@ -108,6 +108,12 @@ innholdslåsen (`runContentWrite`), og sjekken gjøres på den låste transaksjo
 sist, ser hva den første gjorde: enten stoppes arkiveringen av det nå aktive kurset, eller kurset
 gjenopprettes med et arkivert element og kan ikke publiseres før det er ryddet.
 
+**G5 gjelder kursets egne felt og elementliste, ikke de delte elementene (#1151).** Et arkivert kurs kan ikke endres, men en
+modul eller seksjon som også ligger i et aktivt kurs, kan fortsatt lagres, avpubliseres og arkiveres. Får den en ny versjon,
+følger det arkiverte kurset med som før (ny mindre versjon, og ved en hovedversjon hevet krav og e-post som venter til kurset er
+publisert igjen). Valgt i #1149 og bekreftet av produkteier 13.11.2026 (#1151, punkt A): et gjenopprettet kurs stiller
+de samme kravene som de andre kursene modulen ligger i.
+
 Regelen bor ett sted: `src/modules/course/contentLifecycle.ts`. De to svarene har hvert sitt navn,
 `findActiveCoursesContaining…` og `findAllCoursesContaining…`, og `test/content-in-use-guard.test.js`
 nekter en ny leser som svarer på spørsmålet utenom fila.
@@ -148,13 +154,40 @@ arkivering peker derfor på Avpubliser som alternativet. (Aktivitets-signalet er
 ikke ved å trekke en påmelding — så en hard lås på avpublisering ville vært en blindvei.)
 
 ### G4 — Slett-vern (historikk)
-**Slett vises kun for arkiverte elementer** (vedtatt v1.6.1): sletting er det terminale steget
-*etter* arkivering, likt for kurs/modul/seksjon. Aktive rader viser Arkiver i stedet. I tillegg
-kan man ikke slette hvis det ødelegger bevarte registre — arkiver i stedet.
-- **Kurs:** har `CourseCompletion` (utstedte sertifikat) → «Arkiver kurset i stedet».
+**Bare et arkivert element kan slettes** (vedtatt v1.6.1 i klienten; **håndheves på tjeneren fra #1151**): sletting er det
+terminale steget *etter* arkivering, likt for kurs/modul/seksjon. Aktive rader viser Arkiver i stedet. `DELETE` på et kurs, en
+modul eller en seksjon som ikke er arkivert, svarer `400 delete_requires_archived` (`details.itemType`), før de andre vaktene.
+Kaskadeslettingen (#762, administrator) krever at **kurset** er arkivert, i forhåndsvisningen og i slettingen; innholdet som
+bare brukes i kurset, fulgte det inn i arkivet (#1150) — men ikke for kurs arkivert før 2.159.0, eller når et element er
+gjenopprettet for hånd mens kurset var arkivert: da sletter kaskaden aktive elementer, som den alltid har gjort (bare
+administrator, og forhåndsvisningen lister dem). **Unntak:** masseryddingen av upubliserte moduler («Rydd stage») er
+motsatt regel: den sletter bare moduler som *ikke* er arkivert. I tillegg kan man ikke slette hvis det ødelegger bevarte
+registre — da blir elementet stående arkivert.
+- **Kurs:** har `CourseCompletion` (utstedte sertifikat) → `course_has_completions`, kurset blir stående arkivert.
 - **Modul:** har versjoner/forsøk/sertifiseringsstatus, eller er i et kurs, også et arkivert (G2).
 - **Seksjon:** er i et kurs, også et arkivert (G2) — dekker også leshistorikk (kun kurs-koblede
   seksjoner har lesinger) — eller inngår i et utstedt kursbevis (#938).
+
+### G5 — Arkivert er urørlig (#1151)
+Et arkivert kurs, en arkivert modul og en arkivert seksjon kan ikke endres eller brukes før de er gjenopprettet. **Lov** på et
+arkivert element: gjenopprette (også med kurset, #1150), slette (G4), eksportere og lese, og endre eiere (eierpanelet, #1150
+2b). For et arkivert kurs også: forkaste et utkast, fjerne en påmelding og fjerne en klassetildeling (opprydding, #1035).
+
+**Alt annet avvises på tjeneren** med `400 course_archived`, `module_archived` eller `section_archived`, og ingenting er
+skrevet: navn, innhold og innstillinger, nye versjoner (modulversjon, kriterier, ledetekst, flervalgssett, eksempelsvar, påfyll
+av flervalg, gjenoppretting av en eldre versjon), publisering og avpublisering (også kaskaden, «Publiser nye versjoner» og
+kalibreringen), kursets elementliste og kursutkast, bilder og figuroversetting, og import inn i et arkivert mål
+(`replaceExisting`, `updateExisting`). Tildeling og påmelding sa det før (`course_archived`).
+
+**Én vakt** for alle tre typene: `assertNotArchived` i `src/modules/content/archivedGuard.ts`. Den leser `archivedAt` på
+transaksjonen som holder innholdslåsen; arkiveringen tar samme lås, så den som kommer sist av en arkivering og en skriving, ser
+den andres resultat. Vakta står i samlepunktene (kurs: `claimCourseRevision`, `publishCourse`, publiseringene, utkastet, importen;
+modul: kommandoene, ikke skriveren gjenopprettingen bruker; seksjon: kommandoene og `appendInactiveSectionVersion`). En
+**forhåndssjekk** (`assertNotArchivedBeforeLock`) står foran de betalte kallene til språkmodellen og foran «Publiser
+kurs»; den er et forslag, ikke svaret. Modulpubliseringsporten i ruta svarer som før med `item_archived` (422).
+
+`test/archived-is-readonly-guard.test.js` finner hvert skrivested til et kurs, en modul eller en seksjon og krever vakta eller et
+begrunnet unntak.
 
 ## 4. Invarianter
 
@@ -192,7 +225,8 @@ kan man ikke slette hvis det ødelegger bevarte registre — arkiver i stedet.
           ◀───────────────
             gjenopprett  (→ Utkast)
 
-   Slett (G4): terminal, fra hvilken som helst tilstand når vaktene tillater det.
+   Slett (G4): terminal, bare fra Arkivert, når vaktene tillater det (#1151).
+   Arkivert (G5): ingen endring før Gjenopprett.
 ```
 
 ## 6. Hva endres i koden (oppsummering)

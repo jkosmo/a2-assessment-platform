@@ -24,7 +24,8 @@ const recordAuditEvent = vi.fn();
 vi.mock("../../src/db/prisma.js", () => ({
   // #934 skive 3: en modul publisert fra egen side gir kursene den ligger i en mindre versjon — her ligger den i ingen.
   // #934 skive 4a: innholdslåsen tas med rå SQL først i transaksjonen (runContentWrite).
-  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ course: { findMany: async () => [] }, $executeRaw: async () => 0, $executeRawUnsafe: async () => 0 })) },
+  // #1151: vakta mot arkivert leser modulen på transaksjonen.
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ course: { findMany: async () => [] }, module: { findUnique: async () => ({ archivedAt: null }) }, $executeRaw: async () => 0, $executeRawUnsafe: async () => 0 })) },
 }));
 
 const adminContentRepositoryMock = {
@@ -326,6 +327,8 @@ describe("admin content service", () => {
       id: "module-1",
       title: "Module One",
       activeVersionId: null,
+      // #1151: bare en arkivert modul kan slettes.
+      archivedAt: new Date("2026-11-01T00:00:00Z"),
       _count: {
         versions: 0,
         submissions: 0,
@@ -366,6 +369,7 @@ describe("admin content service", () => {
       id: "module-1",
       title: "Module One",
       activeVersionId: "module-version-1",
+      archivedAt: new Date("2026-11-01T00:00:00Z"),
       _count: {
         versions: 1,
         submissions: 0,

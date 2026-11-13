@@ -2,6 +2,76 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.160.0 - 2026-11-14
+
+Etappe 3 av #1148: **arkivert er urørlig** (#1151). Et arkivert kurs, en arkivert modul eller seksjon kan leses, eksporteres,
+gjenopprettes og slettes, men ikke endres. Og bare arkivert innhold kan slettes. Tre skiver rulles ut samlet: 3a alene ville
+latt klienten vise knapper tjeneren avviser, 3b alene ville stoppet stage-testene som sletter uten å arkivere først. Plan og
+gjennomlesing: `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`. Ingen migrering.
+
+**Hva forfatterne merker, samlet:** et arkivert element åpnes skrivebeskyttet med en linje om at det er arkivert, og
+«Gjenopprett» og «Slett» står i hodet. «Døp om» og «Dupliser» finnes ikke på arkiverte rader. «Slett» på noe som ikke er
+arkivert sier «arkiver først». «Slett med innhold» finnes bare på arkiverte kurs.
+
+**Avgjort av produkteier 13.11.2026** (`doc/DECISIONS.md`): et arkivert kurs følger fortsatt versjonene av delte elementer,
+som før; «Dupliser» er ikke lov på arkiverte elementer.
+
+### Skive 3a: tjeneren avviser endringer i arkivert innhold
+
+- **Én vakt**, `assertNotArchived(tx, { type, id })` i `src/modules/content/archivedGuard.ts`, leser `archivedAt` på
+  transaksjonen som holder innholdslåsen. Koder: `course_archived` (ny, generell tekst), nye `module_archived` og
+  `section_archived` (erstatter `section_archived_cannot_publish`; den gamle teksten står for gamle faner). Modul får
+  `module_already_archived` / `module_not_archived` som kurs og seksjon.
+- **Kurs:** lagring, elementliste, publisering (også kaskade og «Publiser nye versjoner»), avpublisering, utkast (lagre og
+  publisere) og kursimport mot et arkivert målkurs.
+- **Modul:** tittel, ny versjon, kriterier, ledetekst, flervalgssett, eksempelsvar, gjenoppretting av eldre versjon, flere
+  flervalgsspørsmål, publisering (også med versjonsvalg og kalibrering), avpublisering og import med `replaceExisting`.
+- **Seksjon:** tittel, innhold, publiser, avpubliser, bilder, figuroversetting og ny inaktiv versjon (seksjons- og kursimport).
+- **Kriterier, ledetekst og flervalgssett skrives nå under innholdslåsen** (før: egen transaksjon uten lås), så vakta kan
+  leses trygt der. KI-kallet for kriteriene står fortsatt før låsen.
+- **Sju ruter sender feilkodene videre** (kriterier, `ensure`, `sync-blueprint`, ledetekst, flervalgssett,
+  `module-versions`, eksempelsvar); før ble alt en generell 400/500, så `module_archived` og `503 content_busy` nådde
+  ikke klienten. Ruta for eksempelsvar sjekker nå eierskap.
+- **Unntak, hvert med grunn i dekningsvakta:** arkivering og gjenoppretting (også med kurset), sletting, masseryddingen av
+  upubliserte, forkasting av utkast, eierpanelet, påmelding og klassetildeling, vedlikeholdsskriptene, importens arkivering av
+  utbyttede elementer, lesing, eksport og forhåndsvisning.
+
+### Skive 3b: slett krever arkivert
+
+- `400 delete_requires_archived` (med `details.itemType`) for kurs, modul, seksjon og kaskadesletting. Sjekken står i
+  analysen, så forhåndsvisningen og slettingen svarer likt. Tekstene som sa «arkiver i stedet» er skrevet om.
+- 11 integrasjonsfiler, 3 enhetsfiler og stage-testene `release-2-108-hint` og `release-2-99-flervalg` arkiverer nå før de
+  sletter.
+
+### Skive 3c: klienten
+
+- **Modulsida:** linja «Modulen er arkivert …», ingen Lagre/Avbryt, bare Eksporter/Gjenopprett/Slett i hodet. Rediger og
+  Innstillinger er sperret (`fieldset[data-module-archived-lock]`), ingen «Gjenopprett» på eldre versjoner. Eierpanelet er
+  åpent. Forhåndsvisningen er ikke sperret, så øvelsene kan prøves som en deltaker.
+- **Seksjonsredigereren:** samme linje, sperrede felt, ingen Lagre/Oversett/Erstatt fra fil/Last opp bilde. Gjenopprett,
+  Slett og Eksporter står for eieren; en ikke-eier ser ingen av dem.
+- **Listene:** arkiverte rader har «Åpne», men ikke «Døp om» eller «Dupliser». Masseoversettingen hopper over arkiverte.
+  «Slett med innhold» bare på arkiverte kurs.
+- **Kursimporten:** et arkivert målkurs gir ikke «Oppdater dette kurset»; «Importer som nytt kurs» går. Et aktivt kurs med
+  arkivert innhold får en merknad om at oppdateringen kan bli avvist, og avvisningen sier hva som går.
+- **Feilene** vises på brukerens språk (`isArchivedRejection` i `api-error.js`), uten «Prøv igjen» når det ikke hjelper.
+- Tekstene på nb, nn og en-GB.
+
+### Tester og gjennomgang
+
+- **Nye:** `test/m2-archived-readonly-1151.test.ts` (52) og `test/m2-archived-readonly-lock-1151.test.ts` (8): hvert kall
+  mot et arkivert element gir riktig kode og skriver ingenting, med samme kall mot et aktivt element som kontroll.
+  Dekningsvakta `test/archived-is-readonly-guard.test.js` går over skrivestedene; komponentmodellene er lagt til i
+  `content-lock-write-guard`. Nettleser: `test/e2e/admin-content-archived-readonly-1151.spec.ts` (23).
+- **Mutasjonssjekk:** tjeneren 42 mutasjoner, 40 røde (to overlevde først, testene rettet). De to som overlever er forhåndssjekker før låsen (bilde og
+  seksjonsimport), der den samme sjekken etter låsen tar det. Klienten 30 av 30, og forhåndsvisningens sperre to av to.
+- **QA-porten** (Claude; Codex nådde forbruksgrensen): tjeneren GO, klienten GO. Rettet: forhåndsvisningen var sperret,
+  nynorsk «henne» om seksjonen, anførselstegn i engelsk, og dokumentasjonen av A og kaskaden.
+- **Kjent:** et kurs arkivert før 2.159.0 har ikke tatt elementene med seg inn i arkivet, så kaskadeslettingen kan slette
+  aktive elementer i det (bare administrator, og forhåndsvisningen lister dem). Føres videre til #1152. Dekningsvakta ser
+  skrivesteder gjennom typesjekken; en skriver som går utenom `ContentWriteTx`, ser den ikke. «Foreslå nye kriterier» kan
+  stå igjen som melding når modulen arkiveres i en annen fane (eksisterende).
+
 ## 2.159.0 - 2026-11-13
 
 Etappe 2 av #1148 (arkivering som følger med nedover, #1150), i tre skiver som rulles ut samlet: 2a-1 alene ville fått

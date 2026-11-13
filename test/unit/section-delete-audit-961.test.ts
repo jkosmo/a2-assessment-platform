@@ -69,7 +69,8 @@ warmModuleGraph(async () => {
 describe("#961 deleteSection leaves an audit trail", () => {
   beforeEach(() => {
     recordAuditEvent.mockReset().mockResolvedValue(undefined);
-    sectionFindUnique.mockReset().mockResolvedValue({ id: "section-1", title: "Arbeidsmiljøloven" });
+    // #1151: bare en arkivert seksjon kan slettes.
+    sectionFindUnique.mockReset().mockResolvedValue({ id: "section-1", title: "Arbeidsmiljøloven", archivedAt: new Date("2026-11-01T00:00:00Z") });
     assertSectionNotInAnyCourse.mockReset().mockResolvedValue(undefined);
     assertSectionNotInIssuedCertificate.mockReset().mockResolvedValue(undefined);
     collectSectionAssetBlobPaths.mockReset().mockResolvedValue([]);

@@ -24,9 +24,9 @@ import {
   resolveRoleSwitchState,
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
-import { flushQueuedToast, showToast } from "/static/toast.js";
+import { flushQueuedToast, queueToast, showToast } from "/static/toast.js";
 import { describeCueWarnings, describeRubricWarnings } from "/static/mcq-cue-warnings.js";
-import { apiErrorCodeText, apiIssueLines, describeApiError } from "/static/api-error.js";
+import { apiErrorCodeText, apiIssueLines, describeApiError, isArchivedRejection } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { localizeValueForLocale, buildPreviewHtml, hydratePreviewMarkdown } from "/static/admin-content-preview.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
@@ -914,6 +914,8 @@ async function refreshBlueprintHash() {
 
 function renderPreview() {
   const opts = { locale: contentLocale, t, tf };
+  // #1151 skive 3c: hver ny modul (eller ingen) tegnes herfra, så sperren følger den lastede modulen.
+  applyModuleArchivedLock();
 
   if (!bundle && !sessionDraft && !previewDraft) {
     previewContent.innerHTML = buildPreviewHtml({ emptyText: t("adminContent.status.noneTitle") }, opts);
@@ -2479,7 +2481,11 @@ async function saveDraftBundleInBackground(options = {}) {
     const issuesHtml = issueLines.length
       ? `<div class="save-error-issues">${issueLines.map((line) => escapeHtml(line)).join("<br>")}</div>`
       : "";
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}${issuesHtml}`, [
+    // #1151 skive 3c: modulen ble arkivert mens forfatteren skrev (i en annen fane, eller av en medeier). «Prøv igjen»
+    // kan ikke lykkes; det som er skrevet, står i skjemaet, så det kan kopieres før sida lastes på nytt. Meldingen
+    // står i en toast. `503 content_busy` (kriteriene, ledeteksten og flervalgssettet tas under innholdslåsen) får
+    // fortsatt «Prøv igjen»: der hjelper det å vente.
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}${issuesHtml}`, isArchivedRejection(err) ? [] : [
       { labelKey: "shell.action.retry", action: () => saveDraftBundleInBackground(options) },
     ]);
   }
@@ -2579,7 +2585,8 @@ async function loadModule(moduleId, options = {}) {
   await refreshBlueprintHash();
 
   // `resumeEditing`: the module list and old links use it to mean "open this module ready to edit".
-  const resumedIntoDraft = resumeEditing && createSessionDraftFromLoadedModule();
+  // #1151 skive 3c: ikke for en arkivert modul — et utkast der står som «ulagret» uten noe sted å lagre det.
+  const resumedIntoDraft = resumeEditing && !moduleIsArchived() && createSessionDraftFromLoadedModule();
   renderPreview();
   // QA round 6: reloading on `?tab=settings` selected the tab, drew the panel before the module
   // had arrived — "load a module to see the settings" — and then never drew it again. The author
@@ -3514,7 +3521,90 @@ function moduleStatusBadgesHtml() {
     ? `<span class="status-chip">${escapeHtml(t("adminContent.lifecycle.newerDraft"))}</span>`
     : lifecycleBadge({ lifecycle: "draft" }, t));
   else if (liveNo == null && bundle) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
-  return parts.join(" ");
+  return parts.join(" ") + moduleArchivedNoticeHtml();
+}
+
+// ---------------------------------------------------------------------------
+// #1151 skive 3c: en arkivert modul er urørlig. Tjeneren avviser alt som skriver (`module_archived`, doc/design/
+// CONTENT_LIFECYCLE.md G5); sida tilbyr det derfor ikke. Samme mønster som det arkiverte kurset (#1150 skive 2b,
+// `courseIsArchived` i admin-content-courses.js): linja under merket, ingen Lagre/Avbryt, feltene i en `<fieldset
+// disabled>` i alle fanene, og i handlingsraden bare det som er lov — «Eksporter», «Gjenopprett» og «Slett».
+// Eierpanelet står utenfor sperren (det lagrer for seg).
+// ---------------------------------------------------------------------------
+
+/** Er den lastede modulen arkivert? Leses hver gang (hodet, handlingsraden, «ulagret»), aldri lagret for seg. */
+function moduleIsArchived() {
+  return Boolean(bundle?.module?.archivedAt);
+}
+
+function moduleArchivedNoticeHtml() {
+  if (!moduleIsArchived()) return "";
+  return `<p class="archived-notice" role="status" data-module-archived-notice>${escapeHtml(t("shell.module.archivedNotice"))}</p>`;
+}
+
+/**
+ * Sperren ligger RUNDT innholdet i Rediger/Forhåndsvisning og Innstillinger (`data-module-archived-lock` i
+ * admin-content.html), ikke i det som tegnes: skjemaet, spørsmålene og kriteriene tegnes på nytt fra mange steder, og alt
+ * som havner inni en sperret `<fieldset>`, er sperret uten at noen av dem må huske det.
+ */
+function applyModuleArchivedLock() {
+  const on = moduleIsArchived();
+  // Rediger og Forhåndsvisning deler boksen. I Forhåndsvisning skal forfatteren prøve øvelsene («Sjekk deg selv») slik en
+  // deltaker gjør — det skriver ingenting (QA-porten #1151). `renderPreview` kalles ved hvert bytte inn og ut av Forhåndsvisning.
+  for (const lock of document.querySelectorAll("[data-module-archived-lock]")) {
+    lock.disabled = on && !(activeTab === "preview" && lock.hasAttribute("data-lock-shared-with-preview"));
+  }
+}
+
+/** Handlingsraden for en arkivert modul: lese og ta med seg, gjenopprette, slette. Ikke «Dupliser» (produkteier 13.11). */
+function archivedModuleActions() {
+  return [
+    { key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
+    { key: "restore", labelKey: "ui.action.restore", action: () => restoreArchivedModule() },
+    { key: "delete", labelKey: "ui.action.delete", destructive: true, action: () => deleteArchivedModule() },
+  ];
+}
+
+// Én livssyklushandling om gangen: et dobbeltklikk skal ikke sende to kall.
+let moduleLifecycleBusy = false;
+
+function moduleLifecycleErrorToast(err) {
+  const { headline, detail } = describeApiError(err, t);
+  showToast(headline, "error", detail);
+}
+
+/** «Gjenopprett»: modulen lastes på nytt, og sida blir redigerbar igjen (sperren og handlingene følger `archivedAt`). */
+async function restoreArchivedModule() {
+  const moduleId = selectedModuleId;
+  if (!moduleId || moduleLifecycleBusy) return;
+  moduleLifecycleBusy = true;
+  try {
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/restore`, getHeaders, { method: "POST" });
+    showToast(t("library.restored"), "success");
+    await loadModule(moduleId);
+  } catch (err) {
+    moduleLifecycleErrorToast(err);
+  } finally {
+    moduleLifecycleBusy = false;
+  }
+}
+
+/** «Slett»: bare for en arkivert modul (tjeneren krever det, `delete_requires_archived`). Etterpå er lista stedet. */
+async function deleteArchivedModule() {
+  const moduleId = selectedModuleId;
+  if (!moduleId || moduleLifecycleBusy) return;
+  const title = localizeValue(bundle?.module?.title) || moduleId;
+  if (!window.confirm(tf("shell.module.deleteConfirm", { title }))) return;
+  moduleLifecycleBusy = true;
+  try {
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}`, getHeaders, { method: "DELETE" });
+    // I kø, ikke vist: sida byttes i neste linje (som modulimporten, #1119).
+    queueToast(t("library.deleted"), "success");
+    window.location.href = "/admin-content";
+  } catch (err) {
+    moduleLifecycleErrorToast(err);
+    moduleLifecycleBusy = false;
+  }
 }
 
 function createModuleFormPage() {
@@ -3529,8 +3619,9 @@ function createModuleFormPage() {
     title: moduleHeaderTitle,
     statusHtml: moduleStatusBadgesHtml,
     t,
+    // `data-ws-key`: hvilken handling knappen er (testene og #1151 leser den); klikket slås fortsatt opp på indeksen.
     actions: () => workspaceActionChoices.map((choice, i) =>
-      `<button type="button" class="row-action-btn workspace-action-btn" data-ws-action="${i}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
+      `<button type="button" class="row-action-btn workspace-action-btn${choice.destructive ? " destructive" : ""}" data-ws-action="${i}" data-ws-key="${escapeHtml(choice.key ?? "")}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
     languages: { locales: supportedLocales, labels: localeLabels, current: () => contentLocale, onChange: switchContentLocale },
     tabs: {
       label: t("shell.tab.listLabel"),
@@ -3540,7 +3631,8 @@ function createModuleFormPage() {
     },
     // Lagre-flyten kjøres av skallet (saveFromHeader); «false» lar form-page.js la tilstanden stå til
     // skallet melder fra gjennom isDirty.
-    save: { onSave: async () => { saveFromHeader(); return false; }, onDiscard: discardFromHeader },
+    // #1151 skive 3c: en arkivert modul har ingen Lagre/Avbryt. Leses hver gang hodet tegnes (som kursets).
+    save: { onSave: async () => { saveFromHeader(); return false; }, onDiscard: discardFromHeader, get hidden() { return moduleIsArchived(); } },
     isDirty: () => moduleDirtyKind() !== null,
     body: () => "",
   });
@@ -3608,6 +3700,14 @@ document.addEventListener("change", (event) => {
 // Rekkefølgen i raden: det som endrer hva deltakerne ser først (Publiser/Avpubliser), så resten.
 const WS_ACTION_ORDER = ["publish", "unpublish", "generateContent", "resumeChatEdit", "revise", "generateMcq", "export", "import"];
 function renderWorkspaceActions(actions) {
+  // #1151 skive 3c: for en arkivert modul er raden alltid den samme, uansett hvilken flyt som tegner den (modulen lastet,
+  // et utkast klart, språkbytte). Ett sted, så ingen vei inn kan tegne «Publiser» eller «Erstatt fra fil» på den.
+  if (moduleIsArchived()) {
+    workspaceActionChoices = archivedModuleActions();
+    formPage?.refreshHeader();
+    refreshModuleHeaderState();
+    return;
+  }
   // saveDraft og restart er Lagre og Avbryt i hodet.
   const live = (actions ?? []).filter(Boolean).filter((a) => a.key !== "saveDraft" && a.key !== "restart");
   live.sort((a, b) => {
@@ -5062,6 +5162,8 @@ const settingsTab = createSettingsTab({
   get previewDraft() { return previewDraft; }, set previewDraft(v) { previewDraft = v; },
   get latestSavedModuleVersionId() { return latestSavedModuleVersionId; }, set latestSavedModuleVersionId(v) { latestSavedModuleVersionId = v; },
   get formPage() { return formPage; },
+  // #1151 skive 3c: Innstillinger for en arkivert modul — lesbare, uten Lagre og uten «Gjenopprett» på versjonene.
+  get moduleArchived() { return moduleIsArchived(); },
   get newModulePlaceholder() { return newModulePlaceholder; }, set newModulePlaceholder(v) { newModulePlaceholder = v; },
   get LEVEL_SCOPE_DEFAULTS() { return LEVEL_SCOPE_DEFAULTS; },
   get CERTIFICATION_LEVELS() { return CERTIFICATION_LEVELS; },
