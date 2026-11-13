@@ -6,6 +6,14 @@ This document tracks release versions and what each version includes.
 
 Første etappe av #1148 (arkivering og sletting som rydder), og et tydeligere merke i modulhodet.
 
+**På stage 13.11.2026 kl. 12:27** (dev 039b9083). `test/stage/release-2-158-arkiverte-kurs.spec.ts` mot ekte data, 6 av 6
+grønne: et kurs som arkiveres, er borte fra «Brukt i kurs» og kursfilteret for seksjonen og modulen i det; begge kan
+avpubliseres og arkiveres; sletting svarer `content_in_archived_course` og forfatteren ser setningen uten rådet om å ta
+innholdet ut; kurset gjenopprettes som utkast, og publiseringen stoppes av `item_archived`; modulhodet viser
+«Publisert v1.0» og «Nyere utkast». Kontroll: i et aktivt kurs stoppes arkivering av seksjonen som før. Testdataene er
+arkivert. Sett i bildet: med ett kurs står kursnavnet to ganger i slettemeldingen («ligger i 1 kurs: X. Arkiverte kurs
+(1): X.»). Riktig, men tungt.
+
 ### Arkiverte kurs teller ikke som bruk (#1149)
 
 Produkteier 13.11.2026, meldt fra prod: arkiverte kurs sto fortsatt i kursfilteret i seksjonslista, og innholdet i dem
