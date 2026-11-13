@@ -8,6 +8,7 @@ import { createAdminContentRepository } from "../adminContent/adminContentReposi
 import { createCourseRepository } from "./courseRepository.js";
 import { describeIssuedCertificateBlock, findAllCoursesContainingModule, findAllCoursesContainingSection, type LifecycleReader } from "./contentLifecycle.js";
 import { collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands.js";
+import { clearArchiveMarksForCourse } from "./courseArchive.js";
 
 // #762 — ADMINISTRATOR-only destructive cleanup: delete a course together with the modules and
 // sections that ONLY that course owns, while never destroying real assessment/achievement records.
@@ -285,6 +286,8 @@ export async function cascadeDeleteCourse(
     // 4. Delete the course. Remaining Cascade relations (enrollments, section reads, group
     //    assignments, discussion threads) are removed by the DB; CourseCompletion is Restrict but
     //    guaranteed empty by the blocker check above.
+    // #1150 skive 2a-2: elementer som overlever, og som fulgte kurset inn i arkivet, skal ikke peke på et kurs som ikke finnes.
+    await clearArchiveMarksForCourse(tx, courseId);
     await tx.course.delete({ where: { id: courseId } });
 
     // #803: the cascade-delete audit (one summary event for the course + a per-module deleted event,

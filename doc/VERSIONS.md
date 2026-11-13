@@ -8,6 +8,41 @@ Etappe 2 av #1148 (arkivering som følger med nedover, #1150), i tre skiver. **S
 2a-1 alene gjør at arkiveringssperren (G3) stopper flere kurs enn før, til 2a-2 gjør sperren om til en bekreftelse. Plan:
 `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`.
 
+### Skive 2a-2: kursarkiveringen tar innholdet med seg, og gjenopprettingen setter det tilbake
+
+- **Arkivering av et kurs** (`POST …/archive` med `expected` fra forhåndsvisningen) arkiverer også modulene og seksjonene
+  som ikke brukes andre steder, også dem forfatteren ikke eier. Hvert element husker kurset (`archivedWithCourseId`) og
+  versjonen som var publisert (`activeVersionIdBeforeArchive`); additiv migrering `20261113120000_archived_with_course`.
+  Deltakere midt i er en bekreftelse, ikke en sperre. Uten `expected` arkiveres bare et kurs der ingenting følger med og
+  ingen er midt i: ellers `400 course_has_active_participants` (som før) eller `409 course_archive_needs_confirmation`
+  (en gammel fane får beskjed om å laste sida på nytt). Er lista endret siden forhåndsvisningen, eller er FLERE midt i enn
+  bekreftet: `409 course_archive_preview_changed`. Færre enn bekreftet går gjennom.
+- **Manglende kursbevis** utstedes i samme transaksjon før kurset arkiveres, når kurset er publisert (samme utstedelse som
+  ellers, #933). Låsene tas i fast rekkefølge: innholdslåsen, deltakerlåsene (bare for dem som mangler bevis, sortert),
+  revisjonssporet. `lockLearnersInContentWrite` stopper hvis revisjonssporets lås alt er tatt.
+- **Kursets eget utkast** forkastes ved arkivering (`course_draft_discarded`, `reason: "course_archived"`).
+- **Gjenoppretting** (`GET …/restore-preview`, `POST …/restore`): elementene som fulgte kurset inn, og som fortsatt ligger i
+  det, kommer tilbake publisert med samme versjon og nummer (modulen gjennom skriverens `publishModuleVersion`: ingen port,
+  ingen e-post, ingen endring i andre kurs). Kurset lander som utkast. Publiseres det igjen, blir det ingen ny hovedversjon,
+  ingen e-post, og lesinger og beståtte står (målt gjennom rutene). Det som er arkivert for hånd, av importen, med et annet
+  kurs, eller før denne funksjonen fantes, blir stående og vises i `staysArchived`.
+- Kurs gir nå `400 course_already_archived` og `400 course_not_archived`. Enkeltgjenoppretting, importens arkivering,
+  sletting og kaskadesletting nullstiller merkene.
+- **Tester:** `test/m2-course-archive-follow-1150.test.ts` (21), utvidede vakter (bare kursarkiveringen setter merkene; alle
+  andre veier nullstiller; skrivere som arkiverer flere elementer fanges). Mutasjonssjekket 33 veier, alle røde. Full
+  runde: enhet 3242, DOM 109, integrasjon 1225, nettleser 1008.
+- **QA-porten:** GO. Rettet: en nedgang i antallet midt i krevde ny bekreftelse (nå bare en økning), og en uklar formulering
+  om hvilken `publishModuleVersion` gjenopprettingen bruker.
+- **Kjente mangler:**
+  - En import som oppdaterer et ARKIVERT kurs, og lagring av elementlista i et arkivert kurs, avvises med
+    `course_item_archived` når elementene fulgte kurset inn. Gjenopprett kurset først. Ingenting skrives.
+  - Et kurs arkivert med et lagret utkast FØR denne skiven, får utkastet tilbake ved gjenoppretting (kurset er da et utkast
+    med et utkast som sperrer annen lagring; «Forkast utkast» virker). Kan bare finnes på stage: kursutkast og denne skiven
+    kommer til prod samtidig.
+  - Vaktene: ingen vakt krever at en ny slettevei for kurs nullstiller merkene (#1152), og en skriving med `data: <variabel>`
+    ses ikke.
+  - Stage-testene som rydder med `POST …/archive` uten `expected`, får 409 når kurset har eget innhold (rettes med 2b).
+
 ### Skive 2a-1: arkivering ser utkastene, og «midt i» telles som i «Mine kurs»
 
 - **Hva forfatterne merker:** en modul eller seksjon som står i et lagret utkast til et annet aktivt kurs, kan ikke lenger

@@ -112,9 +112,18 @@ Regelen bor ett sted: `src/modules/course/contentLifecycle.ts`. De to svarene ha
 `findActiveCoursesContaining…` og `findAllCoursesContaining…`, og `test/content-in-use-guard.test.js`
 nekter en ny leser som svarer på spørsmålet utenom fila.
 
-### G3 — Aktivitets-lås (kurs med påbegynt deltaker)  ⟵ *vedtatt: blokker hvis påbegynt*
-Et kurs som har minst én deltaker som har **påbegynt men ikke fullført** kan ikke **arkiveres**
-(pensjoneres).
+### G3 — Aktivitets-bekreftelse (kurs med påbegynt deltaker)  ⟵ *vedtatt: bekreft tallet (#1150)*
+Et kurs som har minst én deltaker som har **påbegynt men ikke fullført** arkiveres (pensjoneres)
+bare når forfatteren har **bekreftet tallet** (produkteier 13.11.2026). Før #1150 skive 2a-2 var det en
+sperre. Forhåndsvisningen (`GET …/archive-preview`) viser `inProgressCount`; `POST …/archive` sender
+det forfatteren så (`expected`), og arkiveringen regner tallet på nytt under innholdslåsen og svarer
+`409 course_archive_preview_changed` hvis det er endret. Uten `expected` (en gammel fane, et direkte
+kall) sperrer G3 som før: `400 course_has_active_participants`. Lesehistorikk, besvarelser og beståtte
+beholdes; gjenopprettes og publiseres kurset, står fremdriften der.
+
+En deltaker som har gjort alle stegene uten kursbevis, er ikke midt i. Arkiveringen utsteder de
+manglende bevisene før kurset arkiveres (når kurset er publisert), ellers ville de aldri kommet: utstedelsen
+hopper over arkiverte kurs.
 
 **«Midt i» er det «Mine kurs» viser som «I gang» (#1150 skive 2a-1).** Deltakeren er midt i når hen
 - ikke har kursbevis for kursets **nåværende** hovedversjon (et bevis for en eldre hovedversjon gjør
@@ -154,11 +163,20 @@ kan man ikke slette hvis det ødelegger bevarte registre — arkiver i stedet.
   publiseringsporten (`item_archived`), som stopper et gjenopprettet kurs med et arkivert element
   (#1149). «Ikke tilgjengelig»-visningen i deltaker-UI (#502-followup) blir et rent sikkerhetsnett.
 - **I2 — Symmetri:** Hver tilstand er reversibel én tilbake: Publiser↔Avpubliser,
-  Arkiver↔Gjenopprett. Slett er den eneste terminale handlingen, og er vaktet (G4).
+  Arkiver↔Gjenopprett. Slett er den eneste terminale handlingen, og er vaktet (G4). #1150: en
+  kursarkivering tar modulene og seksjonene som ikke brukes andre steder med seg, og gjenopprettingen av
+  kurset setter nøyaktig dem tilbake (de som fortsatt ligger i kurset og fortsatt er arkivert). Det
+  husker elementet selv (`archivedWithCourseId`, `activeVersionIdBeforeArchive`). Elementer arkivert
+  for hånd, av importen eller med et annet kurs, gjenopprettes hver for seg.
 - **I3 — Arkivert ⇒ Utkast:** Å arkivere **auto-avpubliserer** atomisk (fjerner
   `activeVersionId`/`publishedAt` samtidig som `archivedAt` settes). Gjenopprett lander i
   **Utkast** — forfatteren re-publiserer bevisst. Dermed finnes ikke tilstanden «arkivert men
   fortsatt publisert».
+  **Unntak (#1150, produkteier 13.11.2026):** en modul eller seksjon som fulgte et kurs inn i arkivet,
+  kommer tilbake med kurset **publisert med samme versjon og samme nummer**. Kurset selv lander som utkast,
+  og forfatteren trykker «Publiser»; ingenting er endret, så det blir ingen ny hovedversjon, og lesinger
+  og beståtte teller som før. Gjenopprettes elementet alene, lander det som utkast som før. Finnes ikke
+  versjonen lenger, lander det også som utkast, og svaret sier det.
 
 ## 5. Tilstandsdiagram (likt for alle tre)
 
@@ -182,8 +200,10 @@ kan man ikke slette hvis det ødelegger bevarte registre — arkiver i stedet.
 **Backend**
 - Modul: `unpublishModule` + `archiveModule` får G2-vakt (slett har den alt). Arkiver
   auto-avpubliserer (I3).
-- Kurs: ny `unpublishCourse`; **kun `archiveCourse` får G3-vakt** — avpublisering er bevisst unntatt
+- Kurs: ny `unpublishCourse`; **kun `archiveCourse` får G3** — avpublisering er bevisst unntatt
   fra G3 (se §3, justert v1.5.1). Arkiver auto-avpubliserer (I3). Slett beholder G4 (completions).
+  #1150 skive 2a-2: `archiveCourse` og `restoreCourse` bor i `courseArchive.ts` og tar innholdet med
+  seg (se `doc/FEATURE_SURFACE_MAP.md` §33c).
 - Seksjon: nye `publishSection`/`unpublishSection`/`archiveSection`/`restoreSection`; G2-vakt
   på avpubliser/arkiver/slett.
 - Delt hjelper (`contentLifecycle.ts`, #1149): `findActiveCoursesContainingModule/Section` (aktive

@@ -31,6 +31,7 @@
 // Samme merke-tanke som over: funksjonene som skriver det deltakeren har gjort, tar bare imot `LearnerTx`.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "../errors/AppError.js";
+import { AUDIT_CHAIN_LOCK_KEY } from "../services/auditService.js";
 import { runInTransaction, type DbTransactionClient, type RunInTransactionOptions } from "./transaction.js";
 
 /** Én fast nøkkel for hele plattformen. Revisjonssporet bruker 8_040_804. */
@@ -252,6 +253,37 @@ export function runLearnerWrite<T>(
       ),
     ),
   );
+}
+
+/**
+ * #1150 skive 2a-2: deltakerlåsen for FLERE deltakere, inne i en transaksjon som alt holder innholdslåsen EKSKLUSIVT. Bare
+ * arkiveringen av et kurs bruker den: den utsteder manglende kursbevis før kurset arkiveres (courseCompletionService.ts), og
+ * utstedelsen skal måle bestått og lest uten at et vedtak kommer midt i, som ellers (`runContentReadForLearner`).
+ *
+ * Rekkefølgen er den faste: innholdslåsen, deltakerlåsene, revisjonssporets lås. Derfor:
+ *   - Låsene tas i sortert rekkefølge, alle før den første utstedelsen. Utstedelsen skriver i revisjonssporet, og en deltakerlås
+ *     tatt etter det ville stått i kø bak et vedtak som selv venter på revisjonssporets lås: vranglås.
+ *   - Holder transaksjonen revisjonssporets lås alt, stopper den her (500) i stedet for å risikere det. Det er en
+ *     programmeringsfeil, og sjekken spør databasen, ikke en hukommelse.
+ *   - Ingen annen transaksjon tar mer enn én deltakerlås, og ingen kan ta innholdslåsen mens denne holder den. To slike kan
+ *     derfor ikke vente på hverandre.
+ * Venter én deltaker lenger enn `LEARNER_LOCK_WAIT_MS`, gir hele arkiveringen opp med 503 `content_busy`; ingenting er skrevet.
+ */
+export async function lockLearnersInContentWrite(tx: ContentWriteTx, userIds: readonly string[]): Promise<ContentWriteTx & LearnerTx> {
+  const held = await tx.$queryRaw<Array<{ held: bigint }>>`
+    SELECT count(*)::bigint AS held FROM pg_locks
+    WHERE locktype = 'advisory' AND pid = pg_backend_pid() AND objsubid = 1
+      AND ((classid::bigint << 32) | objid::bigint) = ${AUDIT_CHAIN_LOCK_KEY}::bigint`;
+  if (Number(held[0]?.held ?? 0) > 0) {
+    throw new AppError(
+      "internal_error",
+      500,
+      "Learner locks must be taken before anything is written to the audit trail in this transaction (lock order: content, learner, audit).",
+    );
+  }
+  let locked: DbTransactionClient = tx;
+  for (const userId of [...new Set(userIds)].sort()) locked = await withLearnerLock(locked, userId);
+  return locked as ContentWriteTx & LearnerTx;
 }
 
 /** Bare for vakttesten og integrasjonstestene: står koden nå inne i en innholdstransaksjon? */

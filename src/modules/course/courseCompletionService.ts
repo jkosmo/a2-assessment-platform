@@ -3,7 +3,7 @@ import { createCourseRepository } from "./courseRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { AppError } from "../../errors/AppError.js";
-import { runContentReadForLearner, type LearnerContentTx } from "../../db/contentLock.js";
+import { lockLearnersInContentWrite, runContentReadForLearner, type ContentWriteTx, type LearnerContentTx } from "../../db/contentLock.js";
 
 type CourseRepo = ReturnType<typeof createCourseRepository>;
 
@@ -104,12 +104,14 @@ async function findCompletionToIssue(
 //   - Innholdslåsen: en ny versjon av kurset står enten ferdig, og da gjelder beviset den, eller venter til beviset er
 //     skrevet, og da teller den personen som mottaker av e-posten.
 //   - Deltakerlåsen: en anke eller en lesing kan ikke komme midt i målingen. Bestått og lest var oppfylt samtidig.
-async function evaluateCourseCompletionLocked(locked: LearnerContentTx, userId: string, courseId: string): Promise<void> {
+// #1150 skive 2a-2: svarer om et bevis ble utstedt (eller et registrert oppgradert). Arkiveringen teller dem; de andre kallerne
+// ser bort fra svaret.
+async function evaluateCourseCompletionLocked(locked: LearnerContentTx, userId: string, courseId: string): Promise<boolean> {
   const repo = createCourseRepository(locked);
   const course = await repo.findCourseById(courseId);
-  if (!course) return;
+  if (!course) return false;
   const gate = await findCompletionToIssue(repo, userId, course);
-  if (!gate) return;
+  if (!gate) return false;
 
   if (gate.upgradeCompletionId) {
     const upgraded = await repo.upgradeExternalCourseCompletion(locked, {
@@ -118,7 +120,7 @@ async function evaluateCourseCompletionLocked(locked: LearnerContentTx, userId: 
       moduleSnapshotJson: JSON.stringify(gate.moduleIds),
       sectionSnapshotJson: JSON.stringify(gate.requiredSectionIds),
     });
-    if (upgraded.count === 0) return;
+    if (upgraded.count === 0) return false;
     const row = await repo.findCourseCompletion(userId, course.id, course.versionMajor);
     await recordAuditEvent(
       {
@@ -130,7 +132,7 @@ async function evaluateCourseCompletionLocked(locked: LearnerContentTx, userId: 
       },
       locked,
     );
-    return;
+    return true;
   }
 
   // #933: begge halvdelene av regelen lagres nå. `requiredSectionIds` er nettopp «seksjonene kurset
@@ -154,6 +156,30 @@ async function evaluateCourseCompletionLocked(locked: LearnerContentTx, userId: 
     },
     locked,
   );
+  return true;
+}
+
+/**
+ * #1150 skive 2a-2 (QA-porten for 2a-1, funn 1): kursbevisene som mangler, utstedt i arkiveringens egen transaksjon, før kurset
+ * arkiveres. En deltaker som har gjort alle steg uten å ha fått beviset (utstedelsen glapp, eller forfatteren tok ut steget hen
+ * manglet), får det ellers aldri: avstemmingen når «Mine kurs» åpnes, hopper over arkiverte kurs.
+ *
+ * `userIds` er et forslag (`findCourseInProgressParticipants`, «fullført uten kursbevis»). Hver av dem måles på nytt med den ENE
+ * veien til et kursbevis (`evaluateCourseCompletionLocked`), under deltakerlåsen, akkurat som ellers. Et kurs som ikke er
+ * publisert, utsteder ingenting (#933); de får beviset hvis kurset gjenopprettes og publiseres.
+ *
+ * Låsene: arkiveringen holder innholdslåsen EKSKLUSIVT, som stenger ute all annen utstedelse, lesing og innlevering. Det som
+ * kan komme midt i, er et vedtak (`runLearnerWrite`), og derfor tas deltakerlåsene, alle sammen og sortert, før noe skrives
+ * (`lockLearnersInContentWrite`, som også stopper hvis revisjonssporets lås alt er tatt). Svarer med dem som fikk bevis.
+ */
+export async function issueMissingCompletionsBeforeArchive(locked: ContentWriteTx, courseId: string, userIds: readonly string[]): Promise<string[]> {
+  if (userIds.length === 0) return [];
+  const learners = await lockLearnersInContentWrite(locked, userIds);
+  const issued: string[] = [];
+  for (const userId of [...new Set(userIds)].sort()) {
+    if (await evaluateCourseCompletionLocked(learners, userId, courseId)) issued.push(userId);
+  }
+  return issued;
 }
 
 /**

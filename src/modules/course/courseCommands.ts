@@ -4,7 +4,7 @@ import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { ConflictError, DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
-import { assertCourseHasNoInProgressParticipants } from "./contentLifecycle.js";
+import { clearArchiveMarksForCourse } from "./courseArchive.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import { setCourseThemes } from "./courseThemeService.js";
 import { assignCourseSlugIfMissing } from "./courseSlug.js";
@@ -315,59 +315,8 @@ export async function unpublishCourse(courseId: string, actorId?: string) {
   });
 }
 
-export async function archiveCourse(courseId: string, actorId?: string) {
-  // I3: arkivering auto-avpubliserer (publishedAt nullstilles) så «arkivert men publisert» aldri
-  // oppstår. Gjenopprett (restoreCourse) lander dermed i Utkast.
-  // #803: archive + audit commit atomically. #934 skive 4a: innholdslåsen først, så sjekkene.
-  return runContentWrite(async (tx) => {
-    const course = await tx.course.findUnique({ where: { id: courseId }, select: { id: true } });
-    if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
-    // G3 (aktivitets-lås): blokker arkivering så lenge noen har en påbegynt, ufullført gjennomføring.
-    await assertCourseHasNoInProgressParticipants(courseId, "arkiveres", tx);
-    const updated = await tx.course.update({
-      where: { id: courseId },
-      data: { archivedAt: new Date(), publishedAt: null },
-    });
-    await recordAuditEvent(
-      {
-        entityType: auditEntityTypes.course,
-        entityId: courseId,
-        action: auditActions.course.archived,
-        actorId,
-        metadata: { courseId },
-      },
-      tx,
-    );
-    return updated;
-  });
-}
-
-// #673: gjenopprett et arkivert kurs (nullstill archivedAt). Motstykke til archiveCourse.
-export async function restoreCourse(courseId: string, actorId?: string) {
-  // #803: restore + audit commit atomically.
-  return runContentWrite(async (tx) => {
-    // I3: et gjenopprettet kurs er ALLTID et utkast. Før sto det bare på at arkiveringen hadde nullstilt
-    // `publishedAt`. Det holder ikke for et kurs arkivert før arkivering avpubliserte (#705), eller publisert
-    // fra en gammel fane etter arkiveringen (`publishCourse` sjekker ikke `archivedAt`). Etter #1149 kan innholdet
-    // i et arkivert kurs være arkivert eller avpublisert, så et kurs som gikk rett ut til deltakerne ved
-    // gjenoppretting, ville gått forbi publiseringsporten (QA-porten 2.158.0).
-    const updated = await tx.course.update({
-      where: { id: courseId },
-      data: { archivedAt: null, publishedAt: null },
-    });
-    await recordAuditEvent(
-      {
-        entityType: auditEntityTypes.course,
-        entityId: courseId,
-        action: auditActions.course.restored,
-        actorId,
-        metadata: { courseId },
-      },
-      tx,
-    );
-    return updated;
-  });
-}
+// #1150 skive 2a-2: `archiveCourse` og `restoreCourse` bor i courseArchive.ts. Arkiveringen tar innholdet med seg, og
+// gjenopprettingen setter det tilbake; begge i én transaksjon under innholdslåsen.
 
 export async function deleteCourse(courseId: string, actorId?: string) {
   // #803: delete + audit commit atomically. #934 skive 4a: innholdslåsen først, så sjekkene.
@@ -391,6 +340,9 @@ export async function deleteCourse(courseId: string, actorId?: string) {
       );
     }
 
+    // #1150 skive 2a-2: elementer som fulgte kurset inn i arkivet, peker på det. Merket er et merke, ikke et eierskap: det
+    // nullstilles, og elementene blir stående arkivert.
+    await clearArchiveMarksForCourse(tx, courseId);
     await tx.course.delete({ where: { id: courseId } });
     await recordAuditEvent(
       {

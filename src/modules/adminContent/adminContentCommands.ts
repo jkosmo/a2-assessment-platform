@@ -956,6 +956,46 @@ export async function restoreModule(moduleId: string, actorId: string) {
   return result;
 }
 
+/**
+ * #1150 skive 2a-2: modulen følger kurset inn i arkivet. Kalles bare fra `archiveCourse` (courseArchive.ts), i dens transaksjon,
+ * etter at analysen (`analyzeCourseArchive`, regelen «brukes andre steder») har sagt at modulen ikke brukes andre steder, og
+ * forfatteren har bekreftet lista. Derfor ingen egen sjekk her (test/content-in-use-guard.test.js passer på kallerne). Samme
+ * hendelse som «Arkiver», med kurset i metadata.
+ */
+export async function archiveModuleWithCourse(tx: ContentWriteTx, moduleId: string, courseId: string, actorId: string, now: Date) {
+  const archived = await createAdminContentWriter(tx).archiveModuleWithCourse(moduleId, courseId, now);
+  await recordAuditEvent(
+    {
+      entityType: auditEntityTypes.module,
+      entityId: moduleId,
+      action: auditActions.adminContent.moduleArchived,
+      actorId,
+      metadata: { moduleId, archivedWithCourseId: courseId, activeVersionIdBeforeArchive: archived.activeVersionIdBeforeArchive },
+    },
+    tx,
+  );
+  return archived;
+}
+
+/**
+ * #1150 skive 2a-2: modulen kommer tilbake med kurset, publisert med versjonen den hadde (se skriveren). Kalles bare fra
+ * `restoreCourse` (courseArchive.ts), for en modul som fortsatt ligger i kurset, er arkivert og har merket som peker på det.
+ */
+export async function restoreModuleWithCourse(tx: ContentWriteTx, moduleId: string, courseId: string, actorId: string, now: Date) {
+  const restored = await createAdminContentWriter(tx).restoreModuleWithCourse(moduleId, actorId, now);
+  await recordAuditEvent(
+    {
+      entityType: auditEntityTypes.module,
+      entityId: moduleId,
+      action: auditActions.adminContent.moduleRestored,
+      actorId,
+      metadata: { moduleId, restoredWithCourseId: courseId, activeVersionId: restored.activeVersionId, ...(restored.asDraft ? { asDraft: restored.asDraft } : {}) },
+    },
+    tx,
+  );
+  return restored;
+}
+
 export async function unpublishModule(moduleId: string, actorId: string) {
   const result = await runContentWrite(async (tx) => {
     await ensureModuleExists(moduleId, createAdminContentRepository(tx));

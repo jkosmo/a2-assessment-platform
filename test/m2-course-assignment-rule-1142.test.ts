@@ -7,6 +7,7 @@ import { findStartedOrCompletedCourseIds, getClassAssignedCourseDueDates, getUse
 import { filterVisibleCourseIds } from "../src/modules/course/enrollmentService.js";
 import { courseRepository } from "../src/modules/course/courseRepository.js";
 import { SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "../src/modules/course/classRepository.js";
+import { archiveCourseConfirmed } from "./support/courseArchive.js";
 
 // #1142 skive 1: regelen «hvem har kurset nå» (`eligibleAssignmentPairs`, doc/design/PLAN_1142.md, punkt 2).
 //
@@ -144,7 +145,8 @@ describe("(a) kursgrunnlaget: regelen gir det «Mine kurs» viser fra vanlige kl
     await assignCourse(empty, noMembers.courseId);
 
     await post(`/api/admin/content/courses/${unpublished.courseId}/unpublish`);
-    await post(`/api/admin/content/courses/${archived.courseId}/archive`);
+    // #1150 skive 2a-2: innholdet som bare ligger i kurset, følger med, så lista bekreftes.
+    expect((await archiveCourseConfirmed(archived.courseId, adminHeaders)).response.status).toBe(200);
     // Arkivering avpubliserer (`archiveCourse`). Et arkivert kurs med `publishedAt` lages direkte, så vilkåret om arkivert
     // kurs måles for seg og ikke gjennom avpubliseringen.
     await prisma.course.update({ where: { id: archivedStillPublished.courseId }, data: { archivedAt: new Date() } });

@@ -1,6 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import type { AssessmentMode } from "@prisma/client";
 import type { ContentWriteTx } from "../../db/contentLock.js";
+import { AppError } from "../../errors/AppError.js";
 import { resolvePublishNumber, type ModuleVersionKind } from "./moduleVersioning.js";
 
 type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseItem" | "contentOwner">;
@@ -520,19 +521,66 @@ export function createAdminContentWriter(client: ContentWriteTx) {
     archiveModule(moduleId: string, now: Date) {
       // I3: arkivering auto-avpubliserer (activeVersionId nullstilles) så «arkivert men
       // publisert» aldri oppstår. Gjenopprett (restoreModule) lander dermed i Utkast.
+      // #1150 skive 2a-2: arkivering for hånd og importens arkivering setter IKKE merket fra kursarkiveringen. Det nullstilles
+      // her: et merke som gammel kode lot stå etter en gjenoppretting, skal ikke få kurset til å ta modulen tilbake.
       return client.module.update({
         where: { id: moduleId },
-        data: { archivedAt: now, activeVersionId: null },
+        data: { archivedAt: now, activeVersionId: null, archivedWithCourseId: null, activeVersionIdBeforeArchive: null },
         select: { id: true, title: true, archivedAt: true },
       });
     },
 
+    // #1150 skive 2a-2: gjenopprettet alene lander modulen som utkast (I3), og merkene nullstilles.
     restoreModule(moduleId: string) {
       return client.module.update({
         where: { id: moduleId },
-        data: { archivedAt: null },
+        data: { archivedAt: null, archivedWithCourseId: null, activeVersionIdBeforeArchive: null },
         select: { id: true, title: true },
       });
+    },
+
+    /**
+     * #1150 skive 2a-2: modulen følger kurset inn i arkivet. Som `archiveModule` (I3: ingen aktiv versjon), men kurset og
+     * versjonen som var publisert, huskes, så gjenopprettingen av kurset kan sette den tilbake. Den ENE skriveren som setter
+     * merkene til noe annet enn null (test/content-in-use-guard.test.js); kalles bare fra `archiveModuleWithCourse` i
+     * adminContentCommands.ts.
+     */
+    async archiveModuleWithCourse(moduleId: string, courseId: string, now: Date) {
+      const current = await client.module.findUniqueOrThrow({ where: { id: moduleId }, select: { activeVersionId: true } });
+      return client.module.update({
+        where: { id: moduleId },
+        data: { archivedAt: now, archivedWithCourseId: courseId, activeVersionIdBeforeArchive: current.activeVersionId, activeVersionId: null },
+        select: { id: true, title: true, archivedAt: true, activeVersionIdBeforeArchive: true },
+      });
+    },
+
+    /**
+     * #1150 skive 2a-2: modulen kommer tilbake med kurset den fulgte inn i arkivet, PUBLISERT med samme versjon og samme nummer
+     * (produkteier 13.11.2026, unntak fra I3 bare for elementer som fulgte et kurs). Merkene nullstilles alltid.
+     *
+     * Versjonen settes live gjennom `publishModuleVersion` (det ene stedet en modulversjon settes live, og der den får nummer):
+     * med «mindre» får en versjon som alt har nummer, beholde det. Avviser den (versjonen tilhører en eldre hovedversjon enn den
+     * høyeste), eller finnes ikke versjonen lenger, lander modulen som utkast, og svaret sier hvorfor.
+     */
+    async restoreModuleWithCourse(moduleId: string, actorId: string, now: Date): Promise<{ activeVersionId: string | null; asDraft?: "was_unpublished" | "version_missing" }> {
+      const current = await client.module.findUniqueOrThrow({ where: { id: moduleId }, select: { activeVersionIdBeforeArchive: true } });
+      await client.module.update({
+        where: { id: moduleId },
+        data: { archivedAt: null, archivedWithCourseId: null, activeVersionIdBeforeArchive: null },
+      });
+      const versionId = current.activeVersionIdBeforeArchive;
+      if (versionId === null) return { activeVersionId: null, asDraft: "was_unpublished" };
+      const version = await client.moduleVersion.findUnique({ where: { id: versionId }, select: { moduleId: true } });
+      if (!version || version.moduleId !== moduleId) return { activeVersionId: null, asDraft: "version_missing" };
+      try {
+        await createAdminContentWriter(client).publishModuleVersion(moduleId, versionId, actorId, now, "minor");
+      } catch (error) {
+        if (error instanceof AppError && (error.code === "module_version_outdated" || error.code === "module_version_number_fixed")) {
+          return { activeVersionId: null, asDraft: "version_missing" };
+        }
+        throw error;
+      }
+      return { activeVersionId: versionId };
     },
 
     createModule(data: {

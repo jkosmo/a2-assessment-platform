@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { setCourseItems, updateCourse } from "../src/modules/course/index.js";
+import { archiveCourseConfirmed } from "./support/courseArchive.js";
 
 // #1140 etappe 2, skive 2a (doc/design/PLAN_1140_E2.md): utkastet til et publisert kurs.
 //   - Utkast for kurs er alltid på: det finnes ingen bryter (produkteier 2026-11-12).
@@ -614,9 +615,12 @@ describe("#1140 etappe 2: låsen — med utkast skriver ingenting annet i den pu
     const c = await publishedCourse("fortsatt-lov");
     await saveFirstDraft(c.courseId, { title: L("står"), items: [{ type: "MODULE", moduleId: c.moduleId }] });
     expect((await request(app).post(`${base(c.courseId)}/unpublish`).set(ADMIN)).status).toBe(200);
-    const archived = await request(app).post(`${base(c.courseId)}/archive`).set(ADMIN);
+    // #1150 skive 2a-2: arkiveringen forkaster kursets eget utkast (planen, «Kursets eget utkast»), og forhåndsvisningen sier det.
+    const { response: archived, preview } = await archiveCourseConfirmed(c.courseId, ADMIN);
+    expect(preview.hasDraft).toBe(true);
     expect(archived.status, JSON.stringify(archived.body).slice(0, 300)).toBe(200);
-    expect(await draftRow(c.courseId)).not.toBeNull();
+    expect(archived.body.draftDiscarded).toBe(true);
+    expect(await draftRow(c.courseId)).toBeNull();
   });
 });
 

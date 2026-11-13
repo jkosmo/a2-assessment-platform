@@ -1,5 +1,6 @@
 import request from "supertest";
 import { withRevision } from "./support/courseRevision.js";
+import { archiveCourseConfirmed } from "./support/courseArchive.js";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { auditActions, auditEntityTypes } from "../src/observability/auditEvents.js";
@@ -129,9 +130,8 @@ describe("Admin course management", () => {
     expect(publishResponse.status).toBe(200);
     expect(publishResponse.body.course.publishedAt).toBeTruthy();
 
-    const archiveResponse = await request(app)
-      .post(`/api/admin/content/courses/${courseId}/archive`)
-      .set(adminHeaders);
+    // #1150 skive 2a-2: modulene ligger bare i dette kurset og følger det inn i arkivet, så lista må bekreftes.
+    const { response: archiveResponse } = await archiveCourseConfirmed(courseId, adminHeaders);
     expect(archiveResponse.status).toBe(200);
     expect(archiveResponse.body.course.archivedAt).toBeTruthy();
 

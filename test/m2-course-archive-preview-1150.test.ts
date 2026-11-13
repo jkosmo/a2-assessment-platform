@@ -4,6 +4,7 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { withRevision } from "./support/courseRevision.js";
 import { recordFixturePass } from "./support/modulePassFixture.js";
+import { archiveCourseConfirmed } from "./support/courseArchive.js";
 
 // #1150 skive 2a-1 (doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md, etappe 2): bare lesing på tjeneren.
 //
@@ -157,8 +158,9 @@ async function courseWithDraft(name: string, state: "published" | "archived", in
   const own = await createSection(tag(`${name} egen seksjon`));
   const course = await createCourse(name, "published", { sectionIds: [own] });
   await saveDraft(course.id, { moduleIds: inDraft.moduleIds, sectionIds: [own, ...(inDraft.sectionIds ?? [])] });
-  // Arkivert: gjennom ruta, slik forfatteren gjør (ingen deltakere midt i). Utkastet blir liggende i 2a-1.
-  if (state === "archived") expect((await post(coursePath(course.id, "/archive"))).status).toBe(200);
+  // Arkivert MED utkastet liggende: tilstanden data arkivert før 2a-2 kan ha. Fra 2a-2 forkaster arkiveringen gjennom ruta kursets
+  // utkast, så fiksturen skriver feltene direkte (arkivert = archivedAt satt, publishedAt null, I3).
+  if (state === "archived") await prisma.course.update({ where: { id: course.id }, data: { archivedAt: new Date(), publishedAt: null } });
   return course;
 }
 
@@ -417,7 +419,8 @@ describe("#1150: GET …/archive-preview — hva som følger kurset inn i arkive
     const response = await preview(course.id);
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
-      courseId: course.id, courseTitle: course.title, archived: true, inProgressCount: 0, pendingReviewCount: 0, hasDraft: false,
+      courseId: course.id, courseTitle: course.title, archived: true, published: false, inProgressCount: 0, completedWithoutCertificateCount: 0,
+      pendingReviewCount: 0, hasDraft: false,
       follows: [], stays: [], alreadyArchived: [],
     });
   });
@@ -500,7 +503,8 @@ describe("#1150: deltakere midt i kurset telles som «Mine kurs», og G3 og forh
     // lestEn, gammeltBevisIgang, deltModul.
     expect(response.body.inProgressCount).toBe(3);
 
-    // G3 i `archiveCourse` sperrer fortsatt i 2a-1, med det samme tallet.
+    // G3 i `archiveCourse`: uten bekreftelse (en gammel fane) stopper det, med det samme tallet. (2a-2: med `expected` er det en
+    // bekreftelse; se test/m2-course-archive-follow-1150.test.ts.)
     const blocked = await post(coursePath(C.id, "/archive"));
     expect(blocked.status, JSON.stringify(blocked.body).slice(0, 300)).toBe(400);
     expect(blocked.body.error).toBe("course_has_active_participants");
@@ -519,7 +523,9 @@ describe("#1150: deltakere midt i kurset telles som «Mine kurs», og G3 og forh
     await prisma.courseSectionRead.create({ data: { userId: ferdig, courseId: course.id, sectionId: S, readAt: new Date() } });
     const response = await preview(course.id);
     expect(response.body.inProgressCount).toBe(0);
-    expect((await post(coursePath(course.id, "/archive"))).status).toBe(200);
+    // 2a-2: hen har fullført uten kursbevis, og seksjonen følger kurset inn i arkivet (lista bekreftes).
+    expect(response.body.completedWithoutCertificateCount).toBe(1);
+    expect((await archiveCourseConfirmed(course.id, ADMIN)).response.status).toBe(200);
   });
 });
 

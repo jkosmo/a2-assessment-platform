@@ -4,6 +4,7 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { deleteModule } from "../src/modules/adminContent/index.js";
 import { withRevision } from "./support/courseRevision.js";
+import { archiveCourseConfirmed } from "./support/courseArchive.js";
 
 // #1149 (samlesak #1148): arkiverte kurs teller ikke som bruk. Produkteier 13.11.2026.
 //
@@ -371,7 +372,11 @@ describe("#1149: et arkivert kurs gjenopprettes med et element som er arkivert i
     const course = await createCourse("kurs som gjenopprettes", "published", { sectionIds: [sectionId], moduleIds: [moduleId] });
 
     // Kurset arkiveres (ingen deltakere midt i, så G3 slipper det), og så elementene.
-    expect((await post(coursePath(course.id, "/archive"))).status).toBe(200);
+    // #1150 skive 2a-2: elementene ligger bare i dette kurset og følger det inn i arkivet. For å få «arkivert i mellomtiden»
+    // gjenopprettes de hver for seg (merket nullstilles) og arkiveres for hånd. Da blir de stående når kurset gjenopprettes.
+    expect((await archiveCourseConfirmed(course.id, ADMIN)).response.status).toBe(200);
+    expect((await post(sectionPath(sectionId, "/restore"))).status).toBe(200);
+    expect((await post(modulePath(moduleId, "/restore"))).status).toBe(200);
     expect((await post(sectionPath(sectionId, "/archive"))).status).toBe(200);
     expect((await post(modulePath(moduleId, "/archive"))).status).toBe(200);
 

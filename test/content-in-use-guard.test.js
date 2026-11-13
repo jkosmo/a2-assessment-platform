@@ -22,6 +22,10 @@ import { describe, expect, it } from "vitest";
 //   2. De to svarene har hvert sitt navn, og det finnes ingen funksjon uten «Active» eller «All».
 //   3. Handlingene spør om riktig svar: avpubliser og arkiver om aktive, slett om alle.
 //
+// #1150 skive 2a-2 (nederst): hvert sted som arkiverer en modul eller seksjon, også flere på én gang, går gjennom regelen
+// «brukes andre steder»; unntakene står per metode med kallerne sine; bare kursarkiveringen setter merkene
+// (`archivedWithCourseId`, `activeVersionIdBeforeArchive`), og hver gjenoppretting og annen arkivering nullstiller dem.
+//
 // Vakta leser `src/`. Klienten viser det tjeneren sender (`courses`, `courseCount`), og spør ikke selv.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -119,6 +123,112 @@ function countReads(text) {
 function topLevelFunctions(text) {
   const starts = [...text.matchAll(/^(?:export )?(?:async )?function (\w+)\s*\(/gm)].map((m) => ({ name: m[1], at: m.index }));
   return new Map(starts.map((s, i) => [s.name, text.slice(s.at, i + 1 < starts.length ? starts[i + 1].at : text.length)]));
+}
+
+/**
+ * Toppnivå-funksjonene, og for skriverne (`create…Writer`, et objekt med metoder) hver metode for seg, som «funksjon.metode».
+ * QA-porten for 2a-1: unntaket gjaldt før hele `createAdminContentWriter`, så en ny metode som arkiverer, slapp gjennom.
+ */
+function functionsWithMethods(rel, text) {
+  const out = new Map();
+  for (const [name, body] of topLevelFunctions(text)) {
+    if (!/^create\w*Writer$/.test(name)) {
+      out.set(name, body);
+      continue;
+    }
+    const starts = [...body.matchAll(/^ {4}(?:async )?(\w+)\s*\(/gm)].map((m) => ({ name: m[1], at: m.index }));
+    if (starts.length === 0) out.set(name, body);
+    starts.forEach((s, i) => out.set(`${name}.${s.name}`, body.slice(s.at, i + 1 < starts.length ? starts[i + 1].at : body.length)));
+  }
+  return out;
+}
+
+const ARCHIVE_PATTERNS = [
+  /\.archive\w*(Module|Section)\w*\(/,
+  /\b(module|courseSection)\s*\.\s*(update|updateMany|upsert)\(\s*\{[^;]{0,400}?\barchivedAt\s*:(?!\s*null\b)/,
+];
+// Regelen «brukes andre steder», direkte, gjennom vaktene for arkivering for hånd, eller gjennom analysen av kursarkiveringen
+// (som spør regelen med transaksjonen, sjekket i testen under).
+const GOES_THROUGH_RULE = /\bfindActiveUsesOfItems\(|\bassert(Module|Section)NotInActiveCourse\([^)]*"arkiveres"|\banalyzeCourseArchive(ForWrite)?\(/;
+// Skrivere som arkiverer uten å spørre selv. Kallerne må stå her, og de må spørre.
+const ARCHIVE_EXEMPT = {
+  "modules/adminContent/adminContentRepository.ts:createAdminContentWriter.archiveModule": {
+    why: "skriveren bak «Arkiver» i biblioteket og importens arkivering; kallerne spør regelen",
+    callers: ["modules/adminContent/adminContentCommands.ts:archiveModule", "modules/adminContent/contentImportService.ts:importCourseFromEnvelope"],
+  },
+  "modules/adminContent/adminContentRepository.ts:createAdminContentWriter.archiveModuleWithCourse": {
+    why: "skriveren som setter merket fra kursarkiveringen; kalles bare av kommandoen under",
+    callers: ["modules/adminContent/adminContentCommands.ts:archiveModuleWithCourse"],
+  },
+  "modules/adminContent/adminContentCommands.ts:archiveModuleWithCourse": {
+    why: "modulen følger kurset inn i arkivet; kursarkiveringen har spurt regelen gjennom analysen, med transaksjonen",
+    callers: ["modules/course/courseArchive.ts:archiveCourse"],
+  },
+  "modules/course/sectionCommands.ts:archiveSectionWithCourse": {
+    why: "seksjonen følger kurset inn i arkivet; kursarkiveringen har spurt regelen gjennom analysen, med transaksjonen",
+    callers: ["modules/course/courseArchive.ts:archiveCourse"],
+  },
+};
+
+function archivingFunctions() {
+  const found = [];
+  for (const file of files) {
+    for (const [name, body] of functionsWithMethods(file.rel, file.text)) {
+      if (ARCHIVE_PATTERNS.some((pattern) => pattern.test(body))) found.push({ where: `${file.rel}:${name}`, body });
+    }
+  }
+  return found;
+}
+
+// #1150 skive 2a-2: merkene fra kursarkiveringen (`archivedWithCourseId`, `activeVersionIdBeforeArchive`). Bare disse to setter dem
+// til noe annet enn null:
+const MARK_SETTERS = [
+  "modules/adminContent/adminContentRepository.ts:createAdminContentWriter.archiveModuleWithCourse",
+  "modules/course/sectionCommands.ts:archiveSectionWithCourse",
+];
+
+/** Indeksen der den balanserte blokken som starter på `start`, slutter. */
+function closingIndex(text, start) {
+  const open = text[start];
+  const close = { "(": ")", "{": "}" }[open];
+  let depth = 0;
+  for (let i = start; i < text.length; i += 1) {
+    if (text[i] === open) depth += 1;
+    else if (text[i] === close) {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return text.length - 1;
+}
+
+/** Skrivingene til modul og seksjon i en fil, med det `data` setter: merket, og om det er en gjenoppretting. */
+function markWritesIn(rel, text) {
+  const out = [];
+  for (const [fn, body] of functionsWithMethods(rel, text)) {
+    for (const match of body.matchAll(/\b(module|courseSection)\s*\.\s*(create|createMany|update|updateMany|upsert)\s*\(/g)) {
+      const open = match.index + match[0].length - 1;
+      const args = body.slice(open, closingIndex(body, open) + 1);
+      const data = [...args.matchAll(/\b(data|create|update)\s*:\s*\{/g)].map((m) => {
+        const at = m.index + m[0].length - 1;
+        return args.slice(at, closingIndex(args, at) + 1);
+      }).join(" ");
+      out.push({
+        rel,
+        fn,
+        setsMark: /\b(archivedWithCourseId|activeVersionIdBeforeArchive)\s*:(?!\s*null\b)/.test(data),
+        restores: /\barchivedAt\s*:\s*null\b/.test(data),
+        archives: /\barchivedAt\s*:(?!\s*null\b)/.test(data),
+        clearsCourse: /\barchivedWithCourseId\s*:\s*null\b/.test(data),
+        clearsVersion: /\bactiveVersionIdBeforeArchive\s*:\s*null\b/.test(data),
+      });
+    }
+  }
+  return out;
+}
+
+function markWrites() {
+  return files.flatMap((file) => markWritesIn(file.rel, file.text));
 }
 
 describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycle.ts", () => {
@@ -240,37 +350,124 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
   });
 
   it("#1150: hvert sted som arkiverer en modul eller seksjon, går gjennom regelen «brukes andre steder»", () => {
-    // Formene en arkivering av en modul eller seksjon har: et kall til skriveren `archiveModule`, eller en `update` som setter
+    // Formene en arkivering av en modul eller seksjon har: et kall til en skriver som heter archive…Module…/archive…Section…
+    // (`archiveModule`, `archiveModules`, `archiveModuleWithCourse` …), eller en `update`/`updateMany`/`upsert` som setter
     // `archivedAt` til noe annet enn null. Vakta finner dem selv; en ny vei inn blir rød den dagen den skrives.
-    const ARCHIVES = [/\.archiveModule\(/, /\b(module|courseSection)\s*\.\s*update(Many)?\(\s*\{[^;]{0,300}?\barchivedAt:(?!\s*null\b)/];
-    // Unntak: skriveren selv. Den kalles bare fra steder vakta ser (over).
-    const EXEMPT = { "modules/adminContent/adminContentRepository.ts:createAdminContentWriter": "selve skriveren `archiveModule`; kallerne sjekkes" };
-    const GOES_THROUGH_RULE = /\bfindActiveUsesOfItems\(|\bassert(Module|Section)NotInActiveCourse\([^)]*"arkiveres"/;
-
-    const found = [];
-    for (const file of files) {
-      for (const [name, body] of topLevelFunctions(file.text)) {
-        if (ARCHIVES.some((pattern) => pattern.test(body))) found.push({ where: `${file.rel}:${name}`, body });
-      }
-    }
-    // KONTROLL: de tre veiene inn som finnes i dag (biblioteket, seksjonslista, importen) og skriveren.
+    // QA-porten for 2a-1: før så vakta bare `.archiveModule(` og en `update`, ikke en skriver som arkiverer FLERE.
+    const ARCHIVES = ARCHIVE_PATTERNS;
+    const found = archivingFunctions();
     const where = found.map((f) => f.where);
+
+    // KONTROLL: veiene inn som finnes i dag (biblioteket, seksjonslista, importen, kursarkiveringen) og skriverne.
     expect(where).toEqual(expect.arrayContaining([
       "modules/adminContent/adminContentCommands.ts:archiveModule",
+      "modules/adminContent/adminContentCommands.ts:archiveModuleWithCourse",
       "modules/course/sectionCommands.ts:archiveSection",
-      "modules/adminContent/adminContentRepository.ts:createAdminContentWriter",
+      "modules/course/sectionCommands.ts:archiveSectionWithCourse",
+      "modules/adminContent/adminContentRepository.ts:createAdminContentWriter.archiveModule",
+      "modules/adminContent/adminContentRepository.ts:createAdminContentWriter.archiveModuleWithCourse",
     ]));
     expect(where.some((w) => w.startsWith("modules/adminContent/contentImportService.ts:")), where.join("\n")).toBe(true);
-    // KONTROLL: gjenoppretting (archivedAt: null) er ikke en arkivering.
+    // KONTROLL: skriveren deles opp per metode. `restoreModule` arkiverer ikke, og står derfor ikke i lista.
+    expect(where).not.toContain("modules/adminContent/adminContentRepository.ts:createAdminContentWriter");
+    expect(where).not.toContain("modules/adminContent/adminContentRepository.ts:createAdminContentWriter.restoreModule");
+    // KONTROLL: gjenoppretting (archivedAt: null) er ikke en arkivering; en arkivering av én eller flere er det.
     expect(ARCHIVES.some((p) => p.test("tx.courseSection.update({ where: { id }, data: { archivedAt: null } })"))).toBe(false);
     expect(ARCHIVES.some((p) => p.test("tx.courseSection.update({ where: { id }, data: { archivedAt: new Date() } })"))).toBe(true);
+    expect(ARCHIVES.some((p) => p.test("await tx.module.updateMany({ where: { id: { in: ids } }, data: { archivedAt: now } });"))).toBe(true);
+    expect(ARCHIVES.some((p) => p.test("await writer.archiveModules(ids, now);"))).toBe(true);
+    expect(ARCHIVES.some((p) => p.test("await writer.archiveSectionsWithCourse(ids, courseId, now);"))).toBe(true);
+    expect(ARCHIVES.some((p) => p.test("await tx.course.update({ where: { id }, data: { archivedAt: now } });"))).toBe(false);
 
     const problems = found
-      .filter((f) => !(f.where in EXEMPT))
+      .filter((f) => !(f.where in ARCHIVE_EXEMPT))
       .filter((f) => !GOES_THROUGH_RULE.test(f.body))
-      .map((f) => `${f.where} arkiverer en modul eller seksjon uten å spørre findActiveUsesOfItems (eller assert…NotInActiveCourse med «arkiveres»).`);
+      .map((f) => `${f.where} arkiverer en modul eller seksjon uten å spørre findActiveUsesOfItems (eller assert…NotInActiveCourse med «arkiveres», eller analyzeCourseArchive…).`);
     expect(problems, `\n${problems.join("\n")}\n`).toEqual([]);
-    expect(Object.keys(EXEMPT).filter((k) => !where.includes(k)), "EXEMPT peker på noe som ikke arkiverer lenger").toEqual([]);
+    expect(Object.keys(ARCHIVE_EXEMPT).filter((k) => !where.includes(k)), "ARCHIVE_EXEMPT peker på noe som ikke arkiverer lenger").toEqual([]);
+  });
+
+  it("#1150: skriverne som er unntatt, kalles bare fra de oppførte stedene, og de går gjennom regelen", () => {
+    // Unntak per metode og per funksjon, ikke for hele `createAdminContentWriter` (QA-porten for 2a-1). Hver har en liste over
+    // hvem som får kalle den; vakta finner kallerne selv og krever nøyaktig den lista.
+    for (const [key, entry] of Object.entries(ARCHIVE_EXEMPT)) {
+      expect(entry.why.length, `${key} uten grunn`).toBeGreaterThan(20);
+      const name = key.split(/[:.]/).pop();
+      const isMethod = key.includes("createAdminContentWriter.");
+      const pattern = isMethod ? new RegExp(`\\.${name}\\(`, "g") : new RegExp(`(?<![.\\w])${name}\\(`, "g");
+      const callers = [];
+      for (const file of files) {
+        for (const [fn, body] of functionsWithMethods(file.rel, file.text)) {
+          if (`${file.rel}:${fn}` === key) continue;
+          // Definisjonen er ikke et kall: `function navn(` og en metode `async navn(…) {` i en skriver.
+          const bodyWithoutDecl = body
+            .replace(new RegExp(`function ${name}\\s*\\(`), "")
+            .replace(new RegExp(`^\\s*(?:async\\s+)?${name}\\s*\\([^\\n]*\\{\\s*$`, "gm"), "");
+          if (pattern.test(bodyWithoutDecl)) callers.push(`${file.rel}:${fn}`);
+          pattern.lastIndex = 0;
+        }
+      }
+      expect(callers.sort(), `${key} kalles fra steder som ikke står i lista`).toEqual([...entry.callers].sort());
+      for (const caller of entry.callers) {
+        if (caller in ARCHIVE_EXEMPT) continue;
+        const [rel, fn] = caller.split(":");
+        const body = functionsWithMethods(rel, textOf(rel)).get(fn);
+        expect(body, `fant ikke ${caller}`).toBeTruthy();
+        expect(GOES_THROUGH_RULE.test(body), `${caller} kaller ${key} uten å gå gjennom regelen «brukes andre steder»`).toBe(true);
+      }
+    }
+    // Og analysen kursarkiveringen går gjennom, spør regelen (med transaksjonen).
+    expect(topLevelFunctions(textOf("modules/course/courseArchivePreview.ts")).get("analyzeCourseArchiveForWrite"))
+      .toContain("findActiveUsesOfItems({ moduleIds: idsOf(\"MODULE\"), sectionIds: idsOf(\"SECTION\") }, { excludeCourseId: courseId, locale }, reader)");
+  });
+
+  it("#1150: bare kursarkiveringen setter merkene; alle gjenopprettinger nullstiller dem", () => {
+    const writes = markWrites();
+    const where = (w) => `${w.rel}:${w.fn}`;
+    // KONTROLL: vakta ser skriverne som setter merkene, og gjenopprettingene.
+    const setters = writes.filter((w) => w.setsMark).map(where).sort();
+    expect(setters).toEqual([...MARK_SETTERS].sort());
+    const restores = writes.filter((w) => w.restores).map(where);
+    expect(restores).toEqual(expect.arrayContaining([
+      "modules/adminContent/adminContentRepository.ts:createAdminContentWriter.restoreModule",
+      "modules/adminContent/adminContentRepository.ts:createAdminContentWriter.restoreModuleWithCourse",
+      "modules/course/sectionCommands.ts:restoreSection",
+      "modules/course/sectionCommands.ts:restoreSectionWithCourse",
+    ]));
+    // Hver gjenoppretting (archivedAt: null på en modul eller seksjon) nullstiller begge merkene i samme skriving.
+    const missing = writes.filter((w) => w.restores && !(w.clearsCourse && w.clearsVersion)).map(where);
+    expect(missing, "En gjenoppretting som lar merket fra kursarkiveringen stå").toEqual([]);
+    // Og hver annen arkivering (for hånd, importen) nullstiller dem: et merke som gammel kode lot stå, skal ikke få kurset til å
+    // ta elementet tilbake. Bare de to skriverne over setter dem.
+    const archives = writes.filter((w) => w.archives).map(where);
+    expect(archives).toEqual(expect.arrayContaining([
+      "modules/adminContent/adminContentRepository.ts:createAdminContentWriter.archiveModule",
+      "modules/course/sectionCommands.ts:archiveSection",
+      "modules/adminContent/contentImportService.ts:importCourseFromEnvelope",
+    ]));
+    const leaves = writes.filter((w) => w.archives && !w.setsMark && !(w.clearsCourse && w.clearsVersion)).map(where);
+    expect(leaves, "En arkivering som lar et gammelt merke stå").toEqual([]);
+    // Ingen rå SQL rører kolonnene.
+    const raw = files.filter((f) => /\$(executeRaw|queryRaw)[\s\S]{0,300}"(archivedWithCourseId|activeVersionIdBeforeArchive)"/.test(f.text)).map((f) => f.rel);
+    expect(raw).toEqual([]);
+
+    // KONTROLLCASE: en ny skriver som setter merket, og en gjenoppretting som glemmer det, blir begge funnet.
+    const probe = markWritesIn("modules/probe.ts", [
+      "export async function probeSet(tx) {",
+      "  await tx.module.update({ where: { id }, data: { archivedAt: now, archivedWithCourseId: courseId } });",
+      "}",
+      "export async function probeRestore(tx) {",
+      "  await tx.courseSection.updateMany({ where: { id: { in: ids } }, data: { archivedAt: null, archivedWithCourseId: null } });",
+      "}",
+      "export async function probeClear(tx) {",
+      "  await tx.module.updateMany({ where: { archivedWithCourseId: courseId }, data: { archivedWithCourseId: null, activeVersionIdBeforeArchive: null } });",
+      "}",
+    ].join("\n"));
+    expect(probe.map((w) => [w.fn, w.setsMark, w.restores, w.clearsCourse && w.clearsVersion])).toEqual([
+      ["probeSet", true, false, false],
+      ["probeRestore", false, true, false],
+      ["probeClear", false, false, true],
+    ]);
   });
 
   it("#1150: regelen «brukes andre steder» har bare de kjente brukerne, og de bruker ikke svaret uten utkastene", () => {
@@ -303,7 +500,12 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
   it("#1150: G3, kurslista og forhåndsvisningen teller deltakere midt i kurset med samme funksjon", () => {
     const owner = topLevelFunctions(textOf(OWNER));
     expect(owner.get("countCourseInProgressParticipants")).toContain("findCourseInProgressParticipants(courseId, reader)");
-    expect(owner.get("assertCourseHasNoInProgressParticipants")).toContain("countCourseInProgressParticipants(courseId, reader)");
+    // #1150 skive 2a-2: G3 er en bekreftelse. Arkiveringen tar tallet fra analysen den alt har regnet på transaksjonen (samme
+    // utregning som forhåndsvisningen), og kaster G3-feilen med det når forfatteren ikke har bekreftet.
+    const archive = topLevelFunctions(textOf("modules/course/courseArchive.ts"));
+    expect(archive.get("archiveCourse")).toContain("await analyzeCourseArchiveForWrite(courseId, actor, options.locale ?? \"nb\", tx)");
+    expect(archive.get("assertArchiveConfirmed")).toContain("courseHasActiveParticipantsError(preview.inProgressCount)");
+    expect(topLevelFunctions(textOf("modules/course/courseArchivePreview.ts")).get("analyzeCourseArchiveForWrite")).toContain("findCourseInProgressParticipants(courseId, reader)");
     // Ingen andre steder teller selv: den gamle formen (lesinger, innleveringer og bevis, uten «Mine kurs»-regelen) er borte.
     const counting = files.filter((f) => /\b(countCourseInProgressParticipants|findCourseInProgressParticipants)\(/.test(f.text)).map((f) => f.rel).sort();
     expect(counting).toEqual([OWNER, "modules/course/courseArchivePreview.ts", "routes/adminCourses.ts"].sort());

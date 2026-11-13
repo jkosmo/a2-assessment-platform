@@ -260,6 +260,30 @@ export async function discardCourseDraft(courseId: string, loaded: LoadedCourseD
 }
 
 /**
+ * #1150 skive 2a-2 (planen, «Kursets eget utkast»): arkiveringen av kurset forkaster kursets utkast, i sin egen transaksjon. Uten
+ * det ville kurset etter en gjenoppretting stått upublisert med et utkast som verken kan lagres eller publiseres, og som stopper
+ * all annen lagring av kurset. Ingen sjekk av hvilket utkast fana lastet: dialogen har vist at utkastet forkastes (`hasDraft` i
+ * forhåndsvisningen), og arkiveringen spør ikke om innholdet. Bare `archiveCourse` (courseArchive.ts) kaller denne
+ * (test/course-draft-guard.test.js). Svarer med utkastet som ble forkastet, eller `null`.
+ */
+export async function discardCourseDraftOnArchive(tx: ContentWriteTx, courseId: string, actorId?: string): Promise<{ draftId: string; revision: number } | null> {
+  const existing = await findCourseDraft(tx, courseId);
+  if (!existing) return null;
+  await tx.courseDraft.delete({ where: { id: existing.id } });
+  await recordAuditEvent(
+    {
+      entityType: auditEntityTypes.course,
+      entityId: courseId,
+      action: auditActions.course.draftDiscarded,
+      actorId,
+      metadata: { courseId, draftId: existing.id, revision: existing.revision, reason: "course_archived" },
+    },
+    tx,
+  );
+  return { draftId: existing.id, revision: existing.revision };
+}
+
+/**
  * Publiserer utkastet: `apply` skriver det til kurset (ruta leser `payloadText` gjennom skjemaet og kaller `updateCourse`
  * med `publishingDraft`, det ene unntaket fra låsen), og raden slettes i SAMME transaksjon. Feiler noe, står både kurset
  * og utkastet som før. Krever et publisert kurs og utkastet fana lastet.

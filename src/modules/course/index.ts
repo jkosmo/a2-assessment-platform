@@ -8,7 +8,8 @@
 // nudge toward a shared kernel. See doc/design/ARCHITECTURE_REVIEW_2026-07-19.md.
 export { checkAndIssueCourseCompletions, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "./courseCompletionService.js";
 export { getCourseReport, getCourseLearnerReport } from "./courseReport.js";
-export { createCourse, updateCourse, publishCourse, unpublishCourse, archiveCourse, restoreCourse, setCourseModules, setCourseItems, deleteCourse } from "./courseCommands.js";
+export { createCourse, updateCourse, publishCourse, unpublishCourse, setCourseModules, setCourseItems, deleteCourse } from "./courseCommands.js";
+export { archiveCourse, restoreCourse } from "./courseArchive.js";
 export type { CourseItemInput } from "./courseCommands.js";
 export { courseFormOutdatedError, assertCourseItemsUsable } from "./courseCommands.js";
 export { getCoursePublishPreview, publishCourseCascade, publishCourseChecked, getCoursePendingVersions, publishCoursePendingVersions } from "./coursePublishService.js";

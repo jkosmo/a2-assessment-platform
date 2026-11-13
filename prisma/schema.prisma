@@ -257,6 +257,11 @@ model Module {
   validTo                DateTime?
   activeVersionId        String?
   archivedAt             DateTime?
+  // #1150 skive 2a-2: satt BARE når modulen fulgte et kurs inn i arkivet (`archiveCourse`, courseArchive.ts): kurset, og
+  // versjonen som var publisert. Gjenopprettingen av kurset setter den tilbake. Alle gjenopprettinger nullstiller begge.
+  // Ingen fremmednøkkel: merket er et merke, ikke et eierskap (vakt: test/content-in-use-guard.test.js).
+  archivedWithCourseId          String?
+  activeVersionIdBeforeArchive  String?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
   versions               ModuleVersion[]         @relation("ModuleVersions")
@@ -271,6 +276,8 @@ model Module {
   // #934 skive 5a-2: beståtte per innlevering, og den laveste hovedversjonen som teller per kurs.
   modulePasses           ModulePass[]
   courseRequirements     CourseModuleRequirement[]
+
+  @@index([archivedWithCourseId])
 }
 
 // Whether a module bundles a free-text submission (LLM-graded) plus MCQ, or is MCQ-only
@@ -1038,6 +1045,9 @@ model CourseSection {
   title           String // lokalisert JSON: {"en-GB":"...","nb":"...","nn":"..."}
   activeVersionId String?
   archivedAt      DateTime?
+  // #1150 skive 2a-2: som på `Module`. Satt bare når seksjonen fulgte et kurs inn i arkivet; nullstilt ved all gjenoppretting.
+  archivedWithCourseId         String?
+  activeVersionIdBeforeArchive String?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   versions        CourseSectionVersion[] @relation("CourseSectionVersions")
@@ -1045,6 +1055,8 @@ model CourseSection {
   courseItems     CourseItem[]
   reads           CourseSectionRead[]
   assets          SectionAsset[]
+
+  @@index([archivedWithCourseId])
 }
 
 // Media-asset (bilde) for en læringsseksjon (#483/F4). Binæren ligger i Azure Blob

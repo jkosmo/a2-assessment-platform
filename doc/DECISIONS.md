@@ -1769,3 +1769,48 @@ Planen (`doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, etappe 2) sa hva; dett
 `src/modules/course/contentLifecycle.ts`; `test/content-in-use-guard.test.js`, `test/course-draft-guard.test.js`;
 `test/m2-course-archive-preview-1150.test.ts`.
 **Sak:** #1150 · **Dato:** 2026-11-13 · **Status:** valgt under byggingen av skive 2a-1; ikke avklart med produkteier
+
+## Kursarkiveringen tar innholdet med seg, og gjenopprettingen setter det tilbake (#1150 skive 2a-2, 2026-11-13)
+
+Planen (`doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, etappe 2) og produkteiers svar sa hva; dette er valgene som ikke sto der.
+
+- **Manglende kursbevis utstedes i arkiveringens egen transaksjon** (QA-porten for 2a-1, funn 1). Med den ene utstedelsesveien
+  (`evaluateCourseCompletionLocked`), slik «Mine kurs» ville gjort. Låsene: arkiveringen holder innholdslåsen eksklusivt, som
+  stenger ute all annen utstedelse, lesing og innlevering; det som kan komme midt i, er et vedtak (`runLearnerWrite`, bare
+  deltakerlåsen). Derfor tas deltakerlåsene for alle det gjelder, sortert, **før noe skrives i revisjonssporet**
+  (`lockLearnersInContentWrite`). En deltakerlås tatt etter revisjonssporets lås kunne stått i kø bak et vedtak som selv venter
+  på revisjonssporets lås. Funksjonen spør databasen (`pg_locks`) og nekter hvis revisjonssporets lås alt er tatt. Alternativet
+  (stoppe arkiveringen til bevisene er utstedt) ble ikke nødvendig.
+- **Et kurs som ikke er publisert, utsteder ingen bevis ved arkivering** (#933: «bare hvis kurset er publisert»). Tallet
+  `completedWithoutCertificateCount` vises likevel, og `published` sier om de får beviset nå. Gjenopprettes og publiseres kurset,
+  får de det når «Mine kurs» åpnes.
+- **«Fullført uten kursbevis» er dem «Mine kurs» viser som Fullført uten bevis for nåværende hovedversjon.** Et registrert bevis
+  (tatt utenfor plattformen, #1145) for nåværende hovedversjon regnes som bevis, som i tellingen av «midt i».
+- **`completedWithoutCertificateCount` er ikke en del av `expected`.** Tallet stopper ingenting, og bevisene er riktige å utstede
+  uansett når det endres.
+- **`course_has_active_participants` er fortsatt `400`** (en `DomainRuleError`, som før), og kommer før
+  `course_archive_needs_confirmation` når begge gjelder. Det er svaret en gammel fane har fått før. De to nye kodene for
+  bekreftelsen er `409`.
+- **Kursets eget utkast forkastes uten å spørre hvilket utkast fana lastet.** Dialogen har vist at det forkastes (`hasDraft`), og
+  arkiveringen ser ikke på innholdet. Hendelsen er `course_draft_discarded` med `reason: "course_archived"`.
+- **Modulen settes tilbake gjennom skriverens `publishModuleVersion` (`createAdminContentWriter`, ikke kommandoen i
+  `adminContentCommands.ts`) som «mindre»** — ingen port, ingen e-post, ingen varsler, ingen endring i andre kurs. Det er det ene stedet en modulversjon settes live. En versjon som
+  har nummer, beholder det. Avviser den (versjonen tilhører en eldre hovedversjon enn den høyeste), lander modulen som utkast med
+  `asDraft: "version_missing"`, som når versjonen er borte. Et element som var et utkast da det fulgte kurset inn, lander som
+  utkast igjen (`asDraft: "was_unpublished"`). Seksjoner settes tilbake direkte, uten ny versjon av noe kurs: ingenting er endret.
+- **Merket nullstilles også av arkivering for hånd og importens arkivering**, ikke bare av gjenopprettingene. Gammel kode kunne
+  gjenopprette et element uten å nullstille; et merke som blir stående, ville ellers fått kurset til å ta et håndarkivert element
+  tilbake. Sletting av kurset (vanlig og kaskade) nullstiller merket på elementene som pekte på det; elementene blir arkivert.
+- **«Ikke arkivert» og «allerede arkivert» for kurs er `400`** (`course_not_archived`, `course_already_archived`), som for seksjoner.
+  Før kunne et kurs arkiveres to ganger (ny `archivedAt`), og et kurs som ikke var arkivert, «gjenopprettes» (avpublisert).
+- **Svarene er utvidet, ikke byttet:** `POST …/archive` gir `{ course, followed, certificatesIssued, draftDiscarded }` og
+  `POST …/restore` `{ course, returns, staysArchived }`. Klienten i dag leser bare `course`.
+- **Forhåndsvisningen av gjenopprettingen viser bare elementer som ligger i kurset.** Et element med merket som er tatt ut av kurset,
+  står ikke der; gjenopprettingen nullstiller merket, og det blir arkivert.
+- **Arkiveringen og gjenopprettingen bor i `src/modules/course/courseArchive.ts`** (flyttet fra `courseCommands.ts`), med 20 sekunder
+  arbeidstid i transaksjonen. Utstedelse og ett element om gangen kan ta mer enn standarden på 5; det skjer sjelden.
+
+**Håndheves:** `src/modules/course/courseArchive.ts`, `issueMissingCompletionsBeforeArchive` (`courseCompletionService.ts`),
+`lockLearnersInContentWrite` (`db/contentLock.ts`), `discardCourseDraftOnArchive` (`courseDraft.ts`); vaktene i
+`test/content-in-use-guard.test.js` og `test/course-draft-guard.test.js`; `test/m2-course-archive-follow-1150.test.ts`.
+**Sak:** #1150 · **Dato:** 2026-11-13 · **Status:** valgt under byggingen av skive 2a-2; ikke avklart med produkteier

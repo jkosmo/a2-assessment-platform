@@ -36,10 +36,11 @@ const EXPECTED = new Map([
   // Kursets publisering og arkivering.
   ["modules/course/courseCommands.ts#publishCourse Course.publishedAt", [1, "vei 3a–3d: «Publiser kurs» med og uten kaskade, importen med replaceExisting, publisert igjen — alle går hit"]],
   ["modules/course/courseCommands.ts#unpublishCourse Course.publishedAt", [1, "fjerner: avpublisering"]],
-  ["modules/course/courseCommands.ts#archiveCourse Course.publishedAt", [1, "fjerner: arkivering avpubliserer"]],
-  ["modules/course/courseCommands.ts#archiveCourse Course.archivedAt", [1, "fjerner: arkivering"]],
-  ["modules/course/courseCommands.ts#restoreCourse Course.archivedAt", [1, "ingen vei inn alene: kurset lander upublisert, e-post først ved publisering (3d)"]],
-  ["modules/course/courseCommands.ts#restoreCourse Course.publishedAt", [1, "fjerner: gjenoppretting avpubliserer alltid (2.158.0). Det er dette som gjør raden over sann også for et kurs som var arkivert OG publisert (eldre data)"]],
+  // #1150 skive 2a-2: arkiveringen og gjenopprettingen er flyttet til courseArchive.ts (de tar innholdet med seg). Samme skrivinger.
+  ["modules/course/courseArchive.ts#archiveCourse Course.publishedAt", [1, "fjerner: arkivering avpubliserer"]],
+  ["modules/course/courseArchive.ts#archiveCourse Course.archivedAt", [1, "fjerner: arkivering"]],
+  ["modules/course/courseArchive.ts#restoreCourse Course.archivedAt", [1, "ingen vei inn alene: kurset lander upublisert, e-post først ved publisering (3d)"]],
+  ["modules/course/courseArchive.ts#restoreCourse Course.publishedAt", [1, "fjerner: gjenoppretting avpubliserer alltid (2.158.0). Det er dette som gjør raden over sann også for et kurs som var arkivert OG publisert (eldre data)"]],
   ["modules/course/courseCommands.ts#updateCourse Course (ukjent innhold)", [1, "`data: fields` er typet uten publishedAt og archivedAt (tittel, beskrivelse, nivå, tilgang, diskusjon, plassering)"]],
   ["modules/adminContent/contentImportService.ts#importCourseFromEnvelope Course.publishedAt", [1, "fjerner: importen avpubliserer et kurs med tilbakeholdt innhold (#996). Publiseringen går gjennom publishCourse"]],
   // Klassens arkivering.

@@ -9,6 +9,9 @@ import { describe, expect, it } from "vitest";
 //   - Den fila importeres bare av kursbyggerens ruter, av låsesjekken i `claimCourseRevision`, og (#1150 skive 2a-1) av
 //     regelen «brukes andre steder» i contentLifecycle.ts (elementlista i utkastene) og forhåndsvisningen av kursarkiveringen
 //     (om kurset har et utkast). Innholdet i utkastet tolkes ETT sted, `readCourseDraftPayload` i courseDraft.ts.
+//     #1150 skive 2a-2: og av arkiveringen av kurset (courseArchive.ts), som forkaster kursets eget utkast med
+//     `discardCourseDraftOnArchive`. Bare den gjør det; alle andre forkaster gjennom `discardCourseDraft`, som sjekker hvilket
+//     utkast fana lastet.
 //   - Utkastet leses fra databasen ved hvert kall og mellomlagres ikke: app og worker må være enige. (Bryteren fra skive
 //     2a og 2b er fjernet; utkast er alltid på.)
 //   - Låsen har ETT unntak (`publishingDraft: true`), og det gis ETT sted: i ruta som publiserer utkastet, inne i
@@ -25,12 +28,15 @@ const DRAFT_FILE = "modules/course/courseDraft.ts";
 const DRAFT_IMPORTERS = [
   // #1150: `findCourseDraftItemLists` for regelen «brukes andre steder».
   "modules/course/contentLifecycle.ts",
+  // #1150 skive 2a-2: `discardCourseDraftOnArchive`, arkiveringen av kurset forkaster kursets eget utkast.
+  "modules/course/courseArchive.ts",
   // #1150: `findCourseIdsWithDraft` for `hasDraft` i forhåndsvisningen av kursarkiveringen.
   "modules/course/courseArchivePreview.ts",
   "modules/course/courseVersioning.ts",
   "routes/adminCourses.ts",
 ];
 const PUBLISH_ROUTE_FILE = "routes/adminCourses.ts";
+const ARCHIVE_FILE = "modules/course/courseArchive.ts";
 // Hvor ordet `publishingDraft` står, og hvor mange ganger (kommentarer ikke medregnet):
 const PUBLISHING_DRAFT_USES = {
   // valget i signaturen til `claimCourseRevision`, og sjekken av det
@@ -86,6 +92,11 @@ function violationsIn(file, rawText) {
   if (/\bpublishCourseDraft\(/.test(text) && file !== DRAFT_FILE && file !== PUBLISH_ROUTE_FILE) {
     out.push(`${file} publiserer et kursutkast. Bare ruta POST …/draft/publish gjør det`);
   }
+  // #1150 skive 2a-2: forkasting uten å sjekke hvilket utkast fana lastet, er bare for arkiveringen av kurset (dialogen har vist
+  // at utkastet forkastes). Alle andre forkaster gjennom `discardCourseDraft`, som sjekker det.
+  if (/\bdiscardCourseDraftOnArchive\(/.test(text) && file !== DRAFT_FILE && file !== ARCHIVE_FILE) {
+    out.push(`${file} forkaster et kursutkast uten å sjekke hvilket fana lastet. Bare arkiveringen av kurset (${ARCHIVE_FILE}) gjør det`);
+  }
   return out;
 }
 
@@ -139,6 +150,9 @@ describe("#1140 etappe 2: vakt for utkastet til et kurs", () => {
     expect(caught("await tx.course.update({ where: { id }, data: { courseDraft: { delete: true } } });")).toHaveLength(1);
     expect(caught("const has = course.courseDraft != null;")).toHaveLength(1);
     expect(caught("await publishCourseDraft({ courseId, loaded, apply });")).toHaveLength(1);
+    // #1150 skive 2a-2: forkastingen ved arkivering, utenfor arkiveringen.
+    expect(caught("await discardCourseDraftOnArchive(tx, courseId, actorId);", "routes/adminCourses.ts").filter((v) => /forkaster/.test(v))).toHaveLength(1);
+    expect(caught("await discardCourseDraftOnArchive(tx, courseId, actorId);", ARCHIVE_FILE)).toEqual([]);
     // #1150: en tolking nummer to av den lagrede teksten, også gjennom en rad fra en lovlig funksjon.
     expect(caught("const items = JSON.parse(draft.payloadText).items;")).toHaveLength(1);
     // (I ruta teller også regelen for `publishingDraft`, som sier fra når ordet mangler; bare regelen for teksten måles her.)

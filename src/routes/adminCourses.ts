@@ -58,7 +58,7 @@ import {
   type CourseDraftRow,
 } from "../modules/course/courseDraft.js";
 import { courseBodySchema, courseItemListSchema } from "../modules/course/courseSchemas.js";
-import { analyzeCourseArchive } from "../modules/course/courseArchivePreview.js";
+import { analyzeCourseArchive, analyzeCourseRestore } from "../modules/course/courseArchivePreview.js";
 import { prisma } from "../db/prisma.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
@@ -962,8 +962,8 @@ adminCoursesRouter.post("/:courseId/unpublish", requireContentOwnership("COURSE"
 
 // #1150 skive 2a-1: hva en arkivering av kurset ville gjort — deltakere midt i, besvarelser som venter på vurdering, kursets
 // utkast, og hvilke moduler og seksjoner som følger med eller blir stående. Bare lesing, på den globale klienten: et forslag.
-// Arkiveringen selv er uendret i denne skiven (G3 sperrer fortsatt), og 2a-2 regner analysen på nytt under låsen. Samme
-// tilgang som `POST …/archive`. Agent-tokenet når den ikke (ikke i hvitelista).
+// Arkiveringen (2a-2) regner analysen på nytt under låsen og sammenligner med `expected`. Samme tilgang som `POST …/archive`.
+// Agent-tokenet når den ikke (ikke i hvitelista).
 adminCoursesRouter.get("/:courseId/archive-preview", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
     const preview = await analyzeCourseArchive(
@@ -977,20 +977,53 @@ adminCoursesRouter.get("/:courseId/archive-preview", requireContentOwnership("CO
   }
 });
 
+// #1150 skive 2a-2: arkiveringen tar med seg modulene og seksjonene som ikke brukes andre steder (courseArchive.ts). `expected` er
+// det forfatteren så i forhåndsvisningen; uten det arkiveres bare et kurs der ingen er midt i og ingenting følger med.
+const archiveCourseBodySchema = z.object({
+  expected: z
+    .object({
+      follows: z.object({
+        moduleIds: z.array(z.string().min(1)).max(1000),
+        sectionIds: z.array(z.string().min(1)).max(1000),
+      }),
+      inProgressCount: z.number().int().min(0),
+    })
+    .optional(),
+});
+
 adminCoursesRouter.post("/:courseId/archive", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = archiveCourseBodySchema.safeParse(request.body ?? {});
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
   try {
-    const course = await archiveCourse(request.params.courseId, request.context?.userId);
-    response.json({ course });
+    const result = await archiveCourse(
+      request.params.courseId,
+      { userId: request.context?.userId ?? "", roles: request.context?.roles ?? [] },
+      { expected: parsed.data.expected, locale: requestLocale(request) },
+    );
+    response.json(result);
   } catch (error) {
     next(error);
   }
 });
 
-// #673: gjenopprett et arkivert kurs.
+// #1150 skive 2a-2: hva en gjenoppretting av kurset setter tilbake (`returns`), og hva som blir arkivert (`staysArchived`). Bare
+// lesing. Samme tilgang som `POST …/restore`.
+adminCoursesRouter.get("/:courseId/restore-preview", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  try {
+    response.json(await analyzeCourseRestore(request.params.courseId, requestLocale(request)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #673: gjenopprett et arkivert kurs. #1150 skive 2a-2: med innholdet som fulgte det inn i arkivet.
 adminCoursesRouter.post("/:courseId/restore", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
-    const course = await restoreCourse(request.params.courseId, request.context?.userId);
-    response.json({ course });
+    const result = await restoreCourse(request.params.courseId, request.context?.userId ?? "", { locale: requestLocale(request) });
+    response.json(result);
   } catch (error) {
     next(error);
   }

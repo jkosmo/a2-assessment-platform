@@ -11,7 +11,7 @@ import { computeCourseStatus } from "./courseQueries.js";
 
 // Enhetlig innholds-livssyklus — delte vakter for kurs/modul/seksjon.
 // Se doc/design/CONTENT_LIFECYCLE.md. G2 = bruk-lås (se «Hvilke kurs bruker dette elementet» under).
-// G3 = aktivitets-lås (kurs med påbegynt-ufullført deltaker kan ikke arkiveres).
+// G3 = aktivitets-bekreftelse (kurs med påbegynt-ufullført deltaker arkiveres bare når forfatteren har bekreftet tallet, #1150).
 // Feilmeldinger navngir kursene/teller deltakerne på norsk.
 
 const MSG_LOCALE = "nb" as const;
@@ -481,12 +481,17 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
 // retningen: forfatteren får heller vite om én for mye enn én for lite.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Deltakerne som er midt i kurset, og modulene som er steg i det (for `countCoursePendingReviews`). */
-export type CourseInProgress = { courseId: string; userIds: string[]; moduleIds: string[] };
+/**
+ * Deltakerne som er midt i kurset, og modulene som er steg i det (for `countCoursePendingReviews`).
+ * #1150 skive 2a-2: `completedWithoutCertificateUserIds` er dem som har gjort alle stegene uten å ha kursbevis for kursets
+ * nåværende hovedversjon («Mine kurs» viser Fullført, men beviset mangler). De er ikke midt i. Arkiveringen utsteder bevisene
+ * (`issueMissingCompletionsBeforeArchive`), og forhåndsvisningen viser tallet. Lista er et forslag: utstedelsen måler på nytt.
+ */
+export type CourseInProgress = { courseId: string; userIds: string[]; moduleIds: string[]; completedWithoutCertificateUserIds: string[] };
 
 /** DEN ENE tellingen av deltakere midt i kurset. G3 (`archiveCourse`), kurslista og forhåndsvisningen spør her. */
 export async function findCourseInProgressParticipants(courseId: string, reader: LifecycleReader = prisma): Promise<CourseInProgress> {
-  const none: CourseInProgress = { courseId, userIds: [], moduleIds: [] };
+  const none: CourseInProgress = { courseId, userIds: [], moduleIds: [], completedWithoutCertificateUserIds: [] };
   const course = await reader.course.findUnique({ where: { id: courseId }, select: { versionMajor: true } });
   if (!course) return none;
   const repo = createCourseRepository(reader);
@@ -522,13 +527,18 @@ export async function findCourseInProgressParticipants(courseId: string, reader:
     readsByUser.set(row.userId, (readsByUser.get(row.userId) ?? new Set()).add(row.sectionId));
   }
 
-  const userIds = candidates.filter((userId) => {
+  const userIds: string[] = [];
+  const completedWithoutCertificateUserIds: string[] = [];
+  for (const userId of candidates) {
     const readCount = readsByUser.get(userId)?.size ?? 0;
     const passed = moduleIds.filter((moduleId) => progress.passedModuleIds(userId, courseId).has(moduleId)).length;
     const hasStarted = submitted.has(userId) || readCount > 0;
-    return computeCourseStatus(passed + readCount, total, hasStarted) === "IN_PROGRESS";
-  });
-  return { courseId, userIds, moduleIds };
+    const status = computeCourseStatus(passed + readCount, total, hasStarted);
+    if (status === "IN_PROGRESS") userIds.push(userId);
+    // Alle steg gjort, og (fra `candidates`) uten kursbevis for nåværende hovedversjon.
+    else if (status === "COMPLETED") completedWithoutCertificateUserIds.push(userId);
+  }
+  return { courseId, userIds, moduleIds, completedWithoutCertificateUserIds };
 }
 
 /** Antallet deltakere midt i kurset. Kurslista og G3. */
@@ -563,17 +573,17 @@ export async function countCoursePendingReviews(inProgress: CourseInProgress, re
   });
 }
 
-// G3: et kurs med minst én påbegynt-ufullført deltaker kan ikke arkiveres (pensjoneres). Avpublisering
-// er bevisst unntatt (reversibel «myk» nedtaking) — derfor peker meldingen på Avpubliser som alternativ.
-export async function assertCourseHasNoInProgressParticipants(courseId: string, verb: string, reader: LifecycleReader = prisma): Promise<void> {
-  const count = await countCourseInProgressParticipants(courseId, reader);
-  if (count > 0) {
-    const deltaker = count === 1 ? "1 deltaker er" : `${count} deltakere er`;
-    throw new DomainRuleError(
-      "course_has_active_participants",
-      `Kurset kan ikke ${verb} fordi ${deltaker} midt i en gjennomføring. ` +
-        `Avpubliser kurset i stedet (skjuler det uten å pensjonere det), eller vent til de er ferdige.`,
-      { count },
-    );
-  }
+// G3: et kurs med minst én påbegynt-ufullført deltaker arkiveres (pensjoneres) ikke uten at forfatteren har bekreftet tallet.
+// Avpublisering er bevisst unntatt (reversibel «myk» nedtaking) — derfor peker meldingen på Avpubliser som alternativ.
+// #1150 skive 2a-2: fra sperre til bekreftelse (produkteier 13.11.2026). `archiveCourse` (courseArchive.ts) kaster denne når
+// kallet ikke sender det forfatteren så (`expected`), og tallet kommer fra analysen den alt har regnet
+// (`analyzeCourseArchive` → `findCourseInProgressParticipants`), så det er det samme tallet forhåndsvisningen viste.
+export function courseHasActiveParticipantsError(count: number): AppError {
+  const deltaker = count === 1 ? "1 deltaker er" : `${count} deltakere er`;
+  return new DomainRuleError(
+    "course_has_active_participants",
+    `Kurset kan ikke arkiveres fordi ${deltaker} midt i en gjennomføring. ` +
+      `Avpubliser kurset i stedet (skjuler det uten å pensjonere det), eller vent til de er ferdige.`,
+    { count },
+  );
 }

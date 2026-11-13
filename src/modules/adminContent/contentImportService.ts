@@ -1159,7 +1159,8 @@ export async function importCourseFromEnvelope(
           for (const replaced of summary.replacedUnownedIds) {
             if (replaced.type === "SECTION") {
               if (usedElsewhere.sections.has(replaced.oldId)) continue;
-              await tx.courseSection.update({ where: { id: replaced.oldId }, data: { archivedAt: now, activeVersionId: null } });
+              // #1150 skive 2a-2: importens arkivering setter ikke merket fra kursarkiveringen (nullstiller et som er blitt stående).
+              await tx.courseSection.update({ where: { id: replaced.oldId }, data: { archivedAt: now, activeVersionId: null, archivedWithCourseId: null, activeVersionIdBeforeArchive: null } });
               await recordAuditEvent({ entityType: auditEntityTypes.courseSection, entityId: replaced.oldId, action: auditActions.section.archived, actorId: options.actorId, metadata: { sectionId: replaced.oldId } }, tx);
             } else {
               if (usedElsewhere.modules.has(replaced.oldId)) continue;

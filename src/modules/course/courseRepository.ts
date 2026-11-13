@@ -370,8 +370,9 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
         where: { courseId },
         orderBy: { sortOrder: "asc" },
         include: {
-          module: { select: { id: true, title: true, archivedAt: true } },
-          section: { select: { id: true, title: true, archivedAt: true } },
+          // #1150 skive 2a-2: merkene fra kursarkiveringen, for gjenopprettingen av kurset (`analyzeCourseRestore`).
+          module: { select: { id: true, title: true, archivedAt: true, archivedWithCourseId: true, activeVersionIdBeforeArchive: true } },
+          section: { select: { id: true, title: true, archivedAt: true, archivedWithCourseId: true, activeVersionIdBeforeArchive: true } },
         },
       });
     },

@@ -462,9 +462,10 @@ export async function archiveSection(sectionId: string, actorId?: string) {
     }
     // #1149: bare aktive kurs stopper arkiveringen.
     await assertSectionNotInActiveCourse(sectionId, "arkiveres", tx);
+    // #1150 skive 2a-2: arkivering for hånd setter IKKE merket fra kursarkiveringen, og nullstiller et som gammel kode lot stå.
     const section = await tx.courseSection.update({
       where: { id: sectionId },
-      data: { archivedAt: new Date(), activeVersionId: null },
+      data: { archivedAt: new Date(), activeVersionId: null, archivedWithCourseId: null, activeVersionIdBeforeArchive: null },
       include: { activeVersion: true },
     });
     await recordAuditEvent(
@@ -496,9 +497,10 @@ export async function restoreSection(sectionId: string, actorId?: string) {
       // #999: se forklaringen over.
       throw new DomainRuleError("section_not_archived", "The section is not archived.");
     }
+    // #1150 skive 2a-2: gjenopprettet alene lander seksjonen som utkast (I3), og merkene fra kursarkiveringen nullstilles.
     const section = await tx.courseSection.update({
       where: { id: sectionId },
-      data: { archivedAt: null },
+      data: { archivedAt: null, archivedWithCourseId: null, activeVersionIdBeforeArchive: null },
       include: { activeVersion: true },
     });
     await recordAuditEvent(
@@ -514,6 +516,69 @@ export async function restoreSection(sectionId: string, actorId?: string) {
     return section;
   });
   return updated;
+}
+
+/**
+ * #1150 skive 2a-2: seksjonen følger kurset inn i arkivet. Som «Arkiver» (I3: ingen aktiv versjon), men kurset og versjonen som
+ * var publisert, huskes. Den ENE skriveren for seksjoner som setter merkene til noe annet enn null. Kalles bare fra
+ * `archiveCourse` (courseArchive.ts), i dens transaksjon, etter at analysen har sagt at seksjonen ikke brukes andre steder og
+ * forfatteren har bekreftet lista (test/content-in-use-guard.test.js passer på kallerne).
+ */
+export async function archiveSectionWithCourse(tx: ContentWriteTx, sectionId: string, courseId: string, actorId: string | undefined, now: Date) {
+  const current = await tx.courseSection.findUniqueOrThrow({ where: { id: sectionId }, select: { activeVersionId: true } });
+  const section = await tx.courseSection.update({
+    where: { id: sectionId },
+    data: { archivedAt: now, archivedWithCourseId: courseId, activeVersionIdBeforeArchive: current.activeVersionId, activeVersionId: null },
+    select: { id: true, activeVersionIdBeforeArchive: true },
+  });
+  await recordAuditEvent(
+    {
+      entityType: auditEntityTypes.courseSection,
+      entityId: sectionId,
+      action: auditActions.section.archived,
+      actorId,
+      metadata: { sectionId, archivedWithCourseId: courseId, activeVersionIdBeforeArchive: section.activeVersionIdBeforeArchive },
+    },
+    tx,
+  );
+  return section;
+}
+
+/**
+ * #1150 skive 2a-2: seksjonen kommer tilbake med kurset den fulgte inn i arkivet, PUBLISERT med samme versjon (produkteier
+ * 13.11.2026, unntak fra I3 bare for elementer som fulgte et kurs). Ingen ny versjon av noe kurs: ingenting er endret, og
+ * seksjonen lå bare i dette kurset da den ble arkivert (et arkivert element kan ikke legges inn i et kurs eller et utkast).
+ * Finnes ikke versjonen lenger, eller hører den ikke til seksjonen, lander seksjonen som utkast. Merkene nullstilles alltid.
+ * Kalles bare fra `restoreCourse` (courseArchive.ts).
+ */
+export async function restoreSectionWithCourse(
+  tx: ContentWriteTx,
+  sectionId: string,
+  courseId: string,
+  actorId: string | undefined,
+): Promise<{ activeVersionId: string | null; asDraft?: "was_unpublished" | "version_missing" }> {
+  const current = await tx.courseSection.findUniqueOrThrow({ where: { id: sectionId }, select: { activeVersionIdBeforeArchive: true } });
+  const versionId = current.activeVersionIdBeforeArchive;
+  const version = versionId ? await tx.courseSectionVersion.findUnique({ where: { id: versionId }, select: { sectionId: true } }) : null;
+  const usable = versionId !== null && version?.sectionId === sectionId;
+  const result: { activeVersionId: string | null; asDraft?: "was_unpublished" | "version_missing" } = usable
+    ? { activeVersionId: versionId }
+    : { activeVersionId: null, asDraft: versionId === null ? "was_unpublished" : "version_missing" };
+  await tx.courseSection.update({
+    where: { id: sectionId },
+    data: { archivedAt: null, archivedWithCourseId: null, activeVersionIdBeforeArchive: null, activeVersionId: result.activeVersionId },
+  });
+  await recordAuditEvent(
+    {
+      entityType: auditEntityTypes.courseSection,
+      entityId: sectionId,
+      action: auditActions.section.restored,
+      actorId,
+      metadata: { sectionId, restoredWithCourseId: courseId, activeVersionId: result.activeVersionId, ...(result.asDraft ? { asDraft: result.asDraft } : {}) },
+    },
+    tx,
+  );
+  return result;
 }
 
 export async function deleteSection(sectionId: string, actorId?: string) {

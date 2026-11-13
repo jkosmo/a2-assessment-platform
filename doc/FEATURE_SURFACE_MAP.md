@@ -1593,3 +1593,41 @@ seksjon — funnet av vakta, ikke listet — går gjennom den; regelen har bare 
 utkastene; utkastene leses for «i bruk» bare av regelen; G3, kurslista og forhåndsvisningen teller med samme funksjon).
 `test/course-draft-guard.test.js` (importørene av courseDraft.ts står oppført med grunn; `payloadText` leses bare i
 courseDraft.ts). Gjennom rutene: `test/m2-course-archive-preview-1150.test.ts`.
+
+### 33c. Kursarkiveringen tar innholdet med seg, og gjenopprettingen setter det tilbake (#1150 skive 2a-2)
+
+Plan: `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, etappe 2. `POST …/courses/:id/archive` arkiverer modulene og seksjonene
+i kurset som ikke brukes andre steder (33b), i samme transaksjon som kurset, og merker dem. `POST …/courses/:id/restore` setter
+dem tilbake, publisert med versjonen de hadde. Begge bor i `src/modules/course/courseArchive.ts`.
+
+**Merkene** på `Module` og `CourseSection`: `archivedWithCourseId` (kurset elementet fulgte) og `activeVersionIdBeforeArchive`
+(versjonen som var publisert). Ingen fremmednøkkel.
+
+| Hvem | Hva med merkene |
+|---|---|
+| `archiveModuleWithCourse` (skriveren i `adminContentRepository.ts`, kalt av kommandoen med samme navn) og `archiveSectionWithCourse` (`sectionCommands.ts`) | **setter** dem. De eneste; kalles bare fra `archiveCourse` |
+| `restoreCourse` → `restoreModuleWithCourse` / `restoreSectionWithCourse` | nullstiller, og setter versjonen tilbake (modul gjennom `publishModuleVersion` som «mindre»: samme nummer) |
+| `restoreCourse` → `clearArchiveMarksForCourse` | nullstiller på elementer som pekte på kurset uten å komme tilbake (tatt ut av kurset; gjenopprettet av gammel kode) |
+| «Gjenopprett» modul / seksjon (`restoreModule`, `restoreSection`) | nullstiller; elementet lander som utkast (I3) |
+| «Arkiver» modul / seksjon for hånd, importens arkivering | nullstiller (setter ikke merket; et merke gammel kode lot stå, skal ikke få kurset til å ta elementet tilbake) |
+| `deleteCourse`, `cascadeDeleteCourse` | nullstiller (`clearArchiveMarksForCourse`) før kurset slettes; elementene blir arkivert |
+
+**Bekreftelsen:** uten `expected` arkiveres bare et kurs der ingen er midt i (`400 course_has_active_participants`) og ingenting
+følger med (`409 course_archive_needs_confirmation`). Med `expected` som ikke stemmer med analysen under låsen:
+`409 course_archive_preview_changed`. Analysen er den samme funksjonen som forhåndsvisningen (`analyzeCourseArchiveForWrite` i
+`courseArchivePreview.ts`), med transaksjonen.
+
+**Før kurset arkiveres:** manglende kursbevis utstedes (`issueMissingCompletionsBeforeArchive`, `courseCompletionService.ts`,
+gjennom den ene utstedelsesveien), og kursets eget utkast forkastes (`discardCourseDraftOnArchive`, `courseDraft.ts`).
+Låsene: innholdslåsen eksklusivt, så deltakerlåsene sortert (`lockLearnersInContentWrite`, `db/contentLock.ts`, som nekter hvis
+revisjonssporets lås alt er tatt), så revisjonssporet.
+
+**Setningene:** `errors.api.course_archive_needs_confirmation`, `…course_archive_preview_changed`, `…course_already_archived`,
+`…course_not_archived` i `public/i18n/participant-translations.js` (nb, nn, en-GB). Klienten (dialogene) kommer i skive 2b.
+
+**Vakter:** `test/content-in-use-guard.test.js`: hvert sted som arkiverer en modul eller seksjon (også flere på én gang:
+`archiveModules`, `updateMany` på `archivedAt`) går gjennom regelen; skriveren deles opp per metode, og unntakene står per
+metode med en liste over hvem som får kalle dem; bare de to skriverne setter merkene, og hver gjenoppretting (`archivedAt: null`)
+nullstiller begge. `test/course-draft-guard.test.js`: `courseArchive.ts` står blant importørene, og bare den forkaster med
+`discardCourseDraftOnArchive`. `test/course-assignment-ways-in-guard.test.js`: kursets skrivinger av `archivedAt`/`publishedAt`
+står i `courseArchive.ts`. Gjennom rutene: `test/m2-course-archive-follow-1150.test.ts`.

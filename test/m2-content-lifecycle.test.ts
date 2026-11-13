@@ -3,7 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { archiveModule, unpublishModule } from "../src/modules/adminContent/adminContentCommands.js";
-import { archiveCourse, unpublishCourse, deleteCourse } from "../src/modules/course/courseCommands.js";
+import { unpublishCourse, deleteCourse } from "../src/modules/course/courseCommands.js";
+// #1150 skive 2a-2: arkiveringen av et kurs bor i courseArchive.ts, og tar med seg innholdet som ikke brukes andre steder.
+import { archiveCourse } from "../src/modules/course/courseArchive.js";
+import { analyzeCourseArchive } from "../src/modules/course/courseArchivePreview.js";
 import {
   archiveSection,
   unpublishSection,
@@ -155,7 +158,7 @@ describe("Unified content lifecycle (#705)", () => {
       },
     });
 
-    await expect(archiveCourse(courseId, ACTOR)).rejects.toMatchObject({
+    await expect(archiveCourse(courseId, { userId: ACTOR, roles: ["ADMINISTRATOR"] })).rejects.toMatchObject({
       code: "course_has_active_participants",
       details: { count: 1 },
     });
@@ -306,14 +309,23 @@ describe("Unified content lifecycle (#705)", () => {
     // (alle steg gjort), så kurset har en modul til: deltakeren har gjort ett av to steg.
     const archCourseId = await makeCourse({ moduleId: await makePublishedModule(), sectionId, published: true });
     await prisma.courseSectionRead.create({ data: { userId, courseId: archCourseId, sectionId } });
-    await expect(archiveCourse(archCourseId, ACTOR)).rejects.toThrow(/midt i en gjennomføring/);
+    const actor = { userId: ACTOR, roles: ["ADMINISTRATOR"] };
+    await expect(archiveCourse(archCourseId, actor)).rejects.toThrow(/midt i en gjennomføring/);
 
     // Fullført: deltakeren har kursbevis for kursets nåværende hovedversjon (1, begge stedene) → ikke lenger «midt i».
     await prisma.courseCompletion.create({ data: { userId, courseId: archCourseId, moduleSnapshotJson: "[]", versionMajor: 1 } });
 
-    const result = await archiveCourse(archCourseId, ACTOR);
-    expect(result.archivedAt).not.toBeNull();
-    expect(result.publishedAt).toBeNull(); // I3: arkivering auto-avpubliserer kurset
+    // #1150 skive 2a-2: modulen ligger bare i dette kurset og følger med, så arkiveringen krever at lista er bekreftet.
+    const preview = await analyzeCourseArchive(archCourseId, actor, "nb");
+    expect(preview.inProgressCount).toBe(0);
+    const result = await archiveCourse(archCourseId, actor, {
+      expected: {
+        follows: { moduleIds: preview.follows.filter((f) => f.type === "MODULE").map((f) => f.id), sectionIds: preview.follows.filter((f) => f.type === "SECTION").map((f) => f.id) },
+        inProgressCount: preview.inProgressCount,
+      },
+    });
+    expect(result.course.archivedAt).not.toBeNull();
+    expect(result.course.publishedAt).toBeNull(); // I3: arkivering auto-avpubliserer kurset
   });
 
   // Regresjonsvakt: seksjonslistas status-merkelapp trenger activeVersionId i list-responsen.

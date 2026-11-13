@@ -7,6 +7,11 @@ Denne siden dekker de to etappene der en feil ikke kan angres: **arkivering som 
 Status: forslag, andre utgave. Første utgave ble lest av en uavhengig agent 13.11.2026 (Codex var utilgjengelig); funnene
 er arbeidet inn og merket «(gjennomlesing)» der de endret planen. Produkteier har svart på alle spørsmålene (sist på siden).
 
+Etappe 2 bygges i tre skiver i 2.159.0: **2a-1** (lesing: «brukes andre steder» ser utkastene, «midt i» som «Mine kurs»,
+forhåndsvisningen) og **2a-2** (tjeneren: arkiveringen tar innholdet med seg, gjenopprettingen setter det tilbake, manglende
+kursbevis utstedes først) er bygget; **2b** (dialogene i klienten) gjenstår. Valgene som ikke står her: `doc/DECISIONS.md`
+(«Arkivering ser utkastene …» og «Kursarkiveringen tar innholdet med seg …»).
+
 ## Avgjort av produkteier 13.11.2026
 
 1. Et kurs med en deltaker midt i kan arkiveres med en bekreftelse som viser hvor mange det gjelder.
