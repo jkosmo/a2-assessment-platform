@@ -5,8 +5,7 @@ Denne siden dekker de to etappene der en feil ikke kan angres: **arkivering som 
 **sletting etter seks måneder** (#1152).
 
 Status: forslag, andre utgave. Første utgave ble lest av en uavhengig agent 13.11.2026 (Codex var utilgjengelig); funnene
-er arbeidet inn og merket «(gjennomlesing)» der de endret planen. Ingenting bygges før produkteier har svart på
-spørsmålene sist på siden.
+er arbeidet inn og merket «(gjennomlesing)» der de endret planen. Produkteier har svart på alle spørsmålene (sist på siden).
 
 ## Avgjort av produkteier 13.11.2026
 
@@ -118,8 +117,9 @@ bekrefter, skal komme fra samme lesere som «Mine kurs» bruker for «påbegynt�
 
 ### Eierskap
 
-Den som kan arkivere kurset, arkiverer også elementene som følger med, selv om en annen forfatter eier dem. Importen gjør
-det samme i dag. Lista i dialogen merker elementene forfatteren ikke eier. (Spørsmål 2 under.)
+Den som kan arkivere kurset, arkiverer også elementene som følger med, selv om en annen forfatter eier dem, **så sant de
+ikke brukes i andre kurs** (produkteier 13.11.2026). Det er samme regel som for egne elementer. Importen gjør det samme i
+dag. Lista i dialogen merker elementene forfatteren ikke eier, og de følger med tilbake ved gjenoppretting.
 
 ### Veier inn som må med
 
@@ -166,20 +166,25 @@ Sletting er bare for arkivert innhold. Et element kan slettes når det ikke har 
 
 | Type | Beholdes for alltid når | Slettes sammen med elementet |
 |---|---|---|
-| Kurs | noen har kursbevis for kurset, **noen har et bestått som teller i kurset, eller en deltaker har skrevet i kursets diskusjon** | påmeldinger og frister, klassetildelinger, lesehistorikk, kursutkast, versjonshistorikk, varsler, tema-koblinger |
+| Kurs | noen har kursbevis for kurset, eller har oppfylt kravet uten å ha fått beviset ennå | påmeldinger og frister, klassetildelinger, lesehistorikk, diskusjon, kursutkast, versjonshistorikk, varsler, tema-koblinger |
 | Modul | noen har levert på den, eller har en sertifiseringsstatus eller et bestått på den | versjoner, flervalgssett, kriterier, ledetekster |
 | Seksjon | den inngår i et utstedt kursbevis | versjoner, bilder, lesehistorikk |
 
 For moduler og seksjoner er dette vaktene som finnes i dag, med ett unntak: en arkivert modul med versjoner, men uten
 besvarelser, kan i dag ikke slettes i det hele tatt. Det rettes.
 
-**Kurs (gjennomlesing).** Dagens vakt for kurs er bare «noen har kursbevis». Det er for lite:
+**Kurs: bare kursbevis holder igjen (produkteier 13.11.2026).** «Kursbevis OK. Bestått en modul og diskusjon, ikke nok,
+slett.» Et kurs uten kursbevis slettes etter fristen, med påmeldinger, frister, klassetildelinger, lesehistorikk og
+diskusjon.
 
-- En deltaker som oppfyller kravet mens kurset er arkivert, har et bestått, men får ikke kursbevis (utstedelsen hopper
-  over arkiverte kurs). Kurset ville blitt slettet. Derfor teller også «et bestått som teller i kurset».
-- Diskusjonen er tekst deltakerne har skrevet, og slettes i databasen sammen med kurset. Skjemaets egen regel for
-  diskusjon er «aldri slett for godt». Derfor holder et innlegg fra en deltaker kurset igjen.
-- Påmeldinger med frist, klassetildelinger og lesehistorikk følger kurset ut. (Spørsmål 1 under.)
+- **Diskusjonen slettes med kurset.** Det er tekst deltakerne har skrevet, og skjemaets egen regel for diskusjon har
+  vært «aldri slett for godt». Avgjørelsen gjelder foran den regelen for kurs som slettes; `doc/DECISIONS.md` må si det.
+- **Et bestått holder ikke kurset igjen.** Modulen med besvarelsen beholdes uansett (egen vakt), så resultatet finnes.
+- **Ett tilfelle må ikke falle mellom to stoler (gjennomlesing):** en deltaker som oppfyller hele kurskravet mens kurset
+  er arkivert (en besvarelse som vurderes ferdig etterpå), får ikke kursbevis, fordi utstedelsen hopper over arkiverte
+  kurs. Hen har fortjent beviset. Jobben sjekker derfor kravet før den sletter: oppfyller noen det uten å ha beviset,
+  holdes kurset igjen på lik linje med et kurs med kursbevis. Dette er ikke «bestått en modul», men «har fullført
+  kurset». Si fra hvis også dette skal slettes.
 
 Et element som fortsatt ligger i et kurs, kan ikke slettes (databasen nekter). Rekkefølgen løser det: kurset slettes
 først, og da er elementene fri. Et arkivert element uten egen historikk som ligger i et arkivert kurs som **beholdes**, kan
@@ -225,8 +230,8 @@ være i prod før jobben får slette.
 
 ### Hva forfatteren ser
 
-- I listene, under «Arkiverte»: «Slettes 13.05.2027», eller «Beholdes» med grunnen: har besvarelser, har kursbevis, har
-  diskusjon, eller ligger i et kurs som beholdes.
+- I listene, under «Arkiverte»: «Slettes 13.05.2027», eller «Beholdes» med grunnen: har besvarelser, har kursbevis,
+  eller ligger i et kurs som beholdes.
 - «Slett» på et arkivert element virker for alt som kan slettes, også moduler. Forfatteren som ikke vil vente seks
   måneder, sletter selv.
 - Ingen e-post før sletting. Datoen står i lista.
@@ -274,14 +279,12 @@ være i prod før jobben får slette.
 
 Hver etappe er sin egen pakke og kan stå alene i prod.
 
-## Spørsmål til produkteier
+## Avgjort av produkteier 13.11.2026, andre runde
 
-1. **Hva holder et kurs igjen for alltid?** Forslaget: noen har kursbevis, noen har et bestått som teller i kurset, eller
-   en deltaker har skrevet i kursets diskusjon. Det som **ikke** holder igjen, og som slettes sammen med kurset:
-   påmeldinger og frister, klassetildelinger og lesehistorikk. Ellers blir nesten ingenting slettet, fordi også
-   forfatterens egen prøvelesing teller. Følgen er at kurset «xx» (én deltaker halvveis, ingen kursbevis og ingen bestått)
-   blir slettet seks måneder etter arkivering, med lesehistorikken.
-2. **Skal elementer forfatteren ikke eier, følge kurset inn i arkivet, og tilbake igjen ved gjenoppretting?** Forslaget er
-   ja, merket i lista. Alternativet er at de blir stående aktive uten kurs, og da er vi tilbake til rotet.
-3. **Skal «Slett» fortsatt være mulig med en gang for arkivert innhold uten deltakerhistorikk?** Forslaget er ja. Fristen
-   er for det ingen rydder; knappen er for den som rydder selv.
+1. **Hva holder et kurs igjen for alltid?** «Kursbevis OK. Bestått en modul og diskusjon, ikke nok, slett.» Bare
+   kursbevis. Se «Kurs: bare kursbevis holder igjen» over for det ene tilfellet planen legger til.
+2. **Elementer forfatteren ikke eier:** følger kurset inn i arkivet og tilbake, «så sant det ikke brukes i andre kurs».
+3. **«Slett» med en gang** for arkivert innhold som ikke holdes igjen: ja.
+4. **Gjenoppretting av et kurs setter modulene og seksjonene tilbake som publiserte, med samme versjon som før:** ja.
+
+Ingen åpne spørsmål. Etappe 2 kan bygges etter denne planen.
