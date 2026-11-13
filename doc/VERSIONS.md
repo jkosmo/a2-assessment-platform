@@ -2,6 +2,75 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.158.1 - 2026-11-13
+
+De to sakene fra QA-porten for 2.157.2: #1154 og #1155. Begge gjelder seksjons- og klassesiden, der lista og skjemaet
+tegner i samme element og bytter uten at sida lastes. Alt fantes fra før (siden 12.09.2026); produkteier ba om at det
+ble håndtert før neste prod-pakke.
+
+### En jobb skriver bare i visningen den startet i (#1154)
+
+- **Hva som kunne skje:** en jobb som ventet på tjeneren, ble ferdig etter at forfatteren hadde gått til en annen visning,
+  og skrev i det som da sto på skjermen.
+  - «Oversett» startet i seksjon A la nynorsk og engelsk fra A inn i seksjon B, og merket B som ulagret. Lagret
+    forfatteren B, fikk deltakere på to språk feil tekst. Ingenting sa fra.
+  - Et bilde lastet opp i A ble satt inn i teksten til B.
+  - En seksjon som lastet ferdig etter at en annen var åpnet, la innholdet sitt i den andre.
+  - «Avpubliser» eller «Arkiver» i A endret statusen som ble vist i B.
+  - Første lagring av en ny seksjon, og «Erstatt fra fil», tegnet skjemaet over lista.
+  - En jobb startet i lista («Avpubliser») tegnet lista over et skjema som var åpnet i mellomtiden. Ulagret tekst var borte.
+- **Rotårsak:** alle jobbene skrev til den felles `editing` og til skjermen etter `await`, uten å spørre om det fortsatt
+  var deres visning.
+- **Rettet:** hver visning får et nummer (`viewToken`). En jobb tar `sameView()` før den venter, legger svaret i sin egen
+  seksjon (`session`), og rører skjermen bare hvis visningen er den samme. Lista tegnes bare når adressen sier lista.
+  En lagring som er sendt, fullføres alltid; en oversetting stopper og starter ikke flere kall.
+- **Hvorfor testene ikke fanget det:** ingen test holdt et svar tilbake og byttet visning imens.
+- **Tester:** `test/e2e/section-jobs-stay-in-their-section-1154.spec.ts` (13). Hver holder et svar tilbake, bytter
+  visning og slipper svaret. Åtte var røde før rettingen. Mutasjonssjekket 13 veier, alle røde. To mutasjoner overlevde
+  første runde; testene åpnet ikke tilstandene (en klasse av feil: B måtte ha ulagret tekst for at forskjellen skulle
+  synes), og ble utvidet.
+
+### Skjemasida spør én gang, og spør der den før forkastet stille (#1155)
+
+- **Spurte for mye:** en lenke ut av et skjema med ulagret tekst ga sidas spørsmål, og etter OK nettleserens eget. Nå
+  husker sida svaret for den ene navigeringen (`form-page.js`). Gjelder alle fire skjemasidene.
+- **Spurte ikke:**
+  - Nettleserens tilbake- og fram-knapp fra et seksjons- eller klasseskjema med ulagret tekst gikk rett til lista. Nå
+    spør den som «← Tilbake»; ved Avbryt står skjemaet, teksten og adressen.
+  - Bytte av menyspråk hentet seksjonen på nytt og forkastet ulagret tekst. Nå tegnes skjemaet på nytt fra det som står
+    i det. For klasser ble klassen byttet ut med lista mens adressen sto igjen; nå står klassen.
+  - Klasser: å legge til eller fjerne en deltaker eller et kurs forkastet ulagret navn og beskrivelse. Nå overlever de
+    hentingen, og klassen står fortsatt som «Ulagrede endringer».
+- **Smått:** neste seksjon eller klasse åpner på første fane, også når forrige ble forlatt på «Innstillinger». En klasse
+  som laster ferdig etter at forfatteren har gått tilbake, tegnes ikke over lista. En arkivering startet i klasselista
+  tegner ikke lista over en klasse som er åpnet i mellomtiden.
+- **Tester:** `test/e2e/form-page-asks-once-1155.spec.ts` (17, med kontroller for at sida fortsatt spør når den skal, og
+  at et skjema uten endringer ikke spør). Mutasjonssjekket 19 veier, alle røde.
+- **QA-porten:** GO. Kjørte seksjoner, klasser, kurs og moduler i nettleser. To funn er rettet i pakken:
+  - **Regresjon i denne pakken:** språkbytte mens en klasse lastet, satte tomt navn inn i den (`reloadOpenClass` leste et
+    felt som ikke fantes). Konstruert, men min egen feil. Rettet, med test.
+  - **«← Tilbake til kurset»** (seksjon åpnet fra et kurs) spurte fortsatt to ganger, fordi sida forlates fra kode og
+    ikke med en lenke. Rettet, med test.
+- **Endret oppførsel i eldre tester:** tre tester brukte tilbake-knappen fra et ulagret skjema og må nå svare på
+  spørsmålet (`list-not-unsaved-after-form-page.spec.ts`, to i 1154-fila).
+- **Kjente mangler (flere fra QA-porten; #1155 står åpen for dem):**
+  - Klasser: en jobb som blir ferdig etter at forfatteren har gått videre, kan tegne klassen over lista («Fjern» på en
+    deltaker fulgt av «← Tilbake»; første lagring fulgt av tilbake-knappen), og en lagring av én klasse som blir ferdig
+    mens forfatteren skriver i en annen, merker den andre «Alt lagret». Samme feil som #1154 rettet for seksjoner.
+  - Seksjoner: lista kan fortsatt tegnes over et skjema ved tilbake og fram i samme øyeblikk som en treg liste lastes.
+  - Hopp-lenka «Hopp til hovedinnhold» utløser tilbake-lytteren (bare `#…` endres): seksjonen hentes på nytt, og med
+    ulagret tekst spør sida. Bedre enn før (da ble teksten forkastet uten spørsmål), men feil.
+  - Avbryt på FRAM-knappen fjerner «fram» fra historikken. Adressen og teksten står riktig.
+  - Etter OK på «← Tilbake» står skjemaet til lista er hentet; et menyklikk i det vinduet spør en gang til.
+  - Ctrl+klikk på en menylenke spør «forlate?» selv om lenka åpner i ny fane.
+  - Ikke målt: den ekte tilbake-knappen i Chrome etter Avbryt. Chrome kan hoppe over historikksteg en side legger til
+    uten et klikk. Prøves på stage.
+  - Svaret på «forlate sida?» huskes i to sekunder. Avbryter noe annet navigeringen etter OK, spør ikke nettleseren ved
+    lukking i de to sekundene.
+  - Forhåndsvisningen i en seksjon kan vise forrige seksjons tekst et øyeblikk hvis forfatteren bytter seksjon mens den
+    hentes. Den tegnes på nytt ved neste tastetrykk eller fanebytte.
+  - Kurs og moduler laster sida mellom liste og skjema og har ikke disse feilene; de får bare «ett spørsmål».
+
 ## 2.158.0 - 2026-11-13
 
 Første etappe av #1148 (arkivering og sletting som rydder), og et tydeligere merke i modulhodet.

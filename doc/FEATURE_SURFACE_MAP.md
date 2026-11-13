@@ -631,16 +631,25 @@ På **Seksjoner** og **Klasser** tegner lista (`list-page.js`) og skjemaet (`for
 bytter uten at sida lastes. Begge legger lyttere på elementet én gang, og de blir stående. Kurs og moduler laster sida
 mellom liste og skjema.
 
-Bare «ulagret» spør i dag «er det skjemaet som vises nå?». Kjente unntak (QA-porten 2.157.2, ikke rettet): en jobb som
-blir ferdig etter at man har byttet seksjon skriver inn i den nye (`translateFromCurrent`, `uploadImage`,
-`persistSection` leser den felles `editing`), lista kan tegnes over et åpent skjema når en listejobb blir ferdig, og valgt
-fane følger med til neste element som åpnes.
+Alt som venter på tjeneren og så skriver på skjermen eller i sidas felles tilstand, må spørre «er det fortsatt min visning
+som står der?». Tre ting spør i dag:
 
 | Oppførsel | Hvor regelen bor | Flatene |
 |---|---|---|
+| **En jobb skriver bare i visningen den startet i** (#1154, 2.158.1) | `sameView()` og `viewToken` i `admin-content-sections.js`; `viewToken` i `admin-content-classes.js`. Hver jobb tar svaret før den venter, og legger resultatet i SIN seksjon (`session`), ikke i den felles `editing` | Seksjoner: Oversett (tekst og bilder), bildeopplasting, lagring, henting av en seksjon, Erstatt fra fil, arkiver/publiser/avpubliser i skjemaet. Klasser: henting av en klasse |
+| **Lista tegnes bare når det er lista som vises** (#1154/#1155) | `renderListView` i begge filene ser på adressen | Jobber startet i lista (Avpubliser, Arkiver, Oversett det som mangler) som blir ferdige etter at et element er åpnet |
+| **Fanen starter på første fane når et ANNET element åpnes** (#1155) | `resetTab()` i `form-page.js`, kalt fra rutene (`renderRoute`, `goToClass`), ikke når samme element hentes på nytt | Seksjoner og Klasser |
 | **«Ulagrede endringer» gjelder bare mens skjemaet vises** | `isShown` i `form-page.js`; lest av spørsmålet før man forlater og av lukking av fanen | Seksjoner og Klasser (liste og skjema i samme sidelasting) |
 
-**Guard:** `test/e2e/list-not-unsaved-after-form-page.spec.ts` — åpner skjemaet og SÅ lista i samme sidelasting.
+**Guards:** `test/e2e/list-not-unsaved-after-form-page.spec.ts` (åpner skjemaet og SÅ lista i samme sidelasting),
+`test/e2e/section-jobs-stay-in-their-section-1154.spec.ts` (holder hvert svar tilbake, bytter visning, slipper svaret) og
+`test/e2e/form-page-asks-once-1155.spec.ts`.
+
+**Når skjemasida spør før ulagret arbeid går tapt (#1155, 2.158.1):** lenker ut av sida (ett spørsmål: sidas eget, ikke
+nettleserens etterpå), «← Tilbake» (også «← Tilbake til kurset», som forlater sida fra kode), handlingene i hodet, lukking av fanen, og nettleserens tilbake- og fram-knapp
+(`onPopState`; ved Avbryt settes adressen tilbake). Bytte av menyspråk spør ikke, men beholder det ulagrede. Klasser: å
+legge til eller fjerne en deltaker eller et kurs henter klassen på nytt og beholder ulagret navn og beskrivelse
+(`reloadOpenClass`).
 
 ### Telefonvisningen og «Mer»-menyen (#1080 / #1081)
 

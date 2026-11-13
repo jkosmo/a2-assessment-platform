@@ -114,18 +114,20 @@ test.describe("lista er ikke «ulagret» etter at et skjema har vært åpnet", (
     expect(dialoger).toHaveLength(1);
   });
 
-  test("seksjoner: nettleserens tilbake fra et skjema med ulagret tekst — lista spør ikke", async ({ page }) => {
+  test("seksjoner: nettleserens tilbake fra et skjema med ulagret tekst, besvart med OK — lista spør ikke en gang til", async ({ page }) => {
     await mockSeksjoner(page);
-    const dialoger = samleDialoger(page, "avbryt");
+    const dialoger = samleDialoger(page, "ok");
     await aapneSeksjonFraLista(page);
     await page.locator("#titleInput").fill("Ny tittel");
+    // 2.158.1 (#1155): tilbake-knappen spør nå, som «← Tilbake»-lenka. Før gikk den rett til lista uten et ord.
     await page.goBack();
     await expect(page.locator("#sectionsTableBody")).toContainText("Bestill og styr");
+    expect(dialoger).toHaveLength(1);
 
     expect(await sporVedLukking(page)).toBe(false);
     await page.locator("#navKurs").click();
     await expect(page).toHaveURL(/\/admin-content\/courses/);
-    expect(dialoger).toEqual([]);
+    expect(dialoger).toHaveLength(1);
   });
 
   test("kontroll, seksjoner: i skjemaet spør sida fortsatt — og etter lista og inn igjen virker det som før", async ({ page }) => {

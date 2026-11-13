@@ -399,6 +399,9 @@ async function oversettManglendeSeksjonstitler(seksjoner) {
 }
 
 async function renderListView() {
+  // #1154: kalles også av jobber startet i lista («Avpubliser», «Oversett det som mangler»), etter at de har ventet.
+  // Har forfatteren åpnet en seksjon i mellomtiden, ville lista blitt tegnet over skjemaet, og ulagret tekst var borte.
+  if (detectRoute().view === "editor") return;
   await getListPage().reload().catch(() => undefined);
 }
 
@@ -518,6 +521,9 @@ async function replaceSectionFromFile(input) {
 
   if (!window.confirm(L("replaceConfirm"))) return;
 
+  // #1154: erstatningen gjelder seksjonen forfatteren sto i da fila ble valgt.
+  const targetId = editing.id;
+  const stillHere = sameView();
   try {
     const text = await file.text();
     let payload;
@@ -539,12 +545,12 @@ async function replaceSectionFromFile(input) {
     // 2.101.2: vis at det jobbes, og sperr siden imens (work-dialog.js).
     await runWithWorkDialog(t("adminContent.work.importSection"), () => apiFetch("/api/admin/content/sections/import", getHeaders, {
       method: "POST",
-      body: JSON.stringify({ payload, mode: "replaceExisting", targetId: editing.id }),
+      body: JSON.stringify({ payload, mode: "replaceExisting", targetId }),
     }));
     showToast(L("replaced"));
     // Hent redigeringen på nytt, ellers står forfatteren igjen med det gamle innholdet på skjermen
     // og tror ingenting skjedde.
-    await renderEditorView(editing.id);
+    if (stillHere()) await renderEditorView(targetId);
   } catch (error) {
     // ⚠️ `L` som tredje argument: uten oversetteren faller `describeImportError` tilbake på sin
     // hardkodede engelske tekst, og en eierskapsfeil ville blitt engelsk på en trespråklig side.
@@ -681,6 +687,19 @@ let previewTimer = null;
 // ---------------------------------------------------------------------------
 
 let formPage = null;
+
+// #1154: lista og skjemaet tegner i samme element og bytter uten at sida lastes. En jobb som venter på tjeneren
+// (oversetting, opplasting, lagring, henting av en seksjon, en handling i lista), kan derfor bli ferdig ETTER at
+// forfatteren har gått til en annen visning. Den skrev da i det som sto på skjermen: «Oversett» fra seksjon A la
+// nynorsk og engelsk inn i seksjon B, og lista ble tegnet over et åpent skjema.
+//
+// Hver visning (lista, eller ett åpnet element) får et nytt nummer. En jobb tar `sameView()` før den venter, og
+// spør etterpå. Er svaret nei, lar den skjermen og `editing` være.
+let viewToken = 0;
+function sameView() {
+  const token = viewToken;
+  return () => token === viewToken;
+}
 
 function sectionFormTexts() {
   const opphav = detectRoute().returnTo;
@@ -848,11 +867,13 @@ function bindEditorHandlers() {
 }
 
 async function lifecycleInEditor(action, toastKey) {
+  // #1154: svaret legges i seksjonen handlingen ble startet i. Hodet tegnes fra den som vises nå.
+  const session = editing;
   try {
-    const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/${action}`, getHeaders, { method: "POST" });
-    editing.archivedAt = data.section?.archivedAt ?? (action === "archive" ? new Date().toISOString() : null);
-    editing.activeVersionId = data.section?.activeVersionId ?? editing.activeVersionId;
-    editing.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
+    const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}/${action}`, getHeaders, { method: "POST" });
+    session.archivedAt = data.section?.archivedAt ?? (action === "archive" ? new Date().toISOString() : null);
+    session.activeVersionId = data.section?.activeVersionId ?? session.activeVersionId;
+    session.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
     showToast(L(toastKey));
     refreshSectionLifecycleUI();
   } catch (err) {
@@ -861,19 +882,26 @@ async function lifecycleInEditor(action, toastKey) {
 }
 
 async function renderEditorView(sectionId) {
-  editing = { id: sectionId, title: { nb: "", nn: "", "en-GB": "" }, body: { nb: "", nn: "", "en-GB": "" }, editLocale: currentLocale, activeVersionId: null, archivedAt: null };
+  // #1154: også kalt direkte («Erstatt fra fil» henter seksjonen på nytt), så visningen telles her og ikke bare i ruta.
+  viewToken += 1;
+  const stillHere = sameView();
+  const session = { id: sectionId, title: { nb: "", nn: "", "en-GB": "" }, body: { nb: "", nn: "", "en-GB": "" }, editLocale: currentLocale, activeVersionId: null, archivedAt: null };
+  editing = session;
 
   if (sectionId) {
     try {
       const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}`, getHeaders);
-      editing.title = parseLocalized(data.section.title);
-      editing.body = parseLocalized(data.section.bodyMarkdown);
-      editing.activeVersionId = data.section.activeVersionId ?? null;
-      editing.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
+      // Åpnet forfatteren en annen seksjon mens denne lastet, ville svaret her havnet i den andres `editing`.
+      if (!stillHere()) return;
+      session.title = parseLocalized(data.section.title);
+      session.body = parseLocalized(data.section.bodyMarkdown);
+      session.activeVersionId = data.section.activeVersionId ?? null;
+      session.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
       // Uten merket (eldre svar) antas eierskap, som i lista: tjeneren vakter skrivingen uansett.
-      editing.canManage = data.section.canManage !== false;
-      editing.archivedAt = data.section.archivedAt ?? null;
+      session.canManage = data.section.canManage !== false;
+      session.archivedAt = data.section.archivedAt ?? null;
     } catch (err) {
+      if (!stillHere()) return;
       pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(apiErrorText(err))}</p></div>`;
       return;
     }
@@ -902,12 +930,14 @@ function refreshSectionLifecycleUI() {
 async function toggleSectionLifecycle(action, btn) {
   if (!editing?.id || !btn) return;
   btn.disabled = true;
+  // #1154: svaret legges i seksjonen handlingen ble startet i. Hodet tegnes fra den som vises nå.
+  const session = editing;
   try {
-    const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/${action}`, getHeaders, { method: "POST" });
-    const hadNewVersion = action === "publish" && editing.hasUnpublishedChanges && Boolean(editing.activeVersionId);
-    editing.activeVersionId = data.section?.activeVersionId ?? null;
-    editing.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
-    editing.archivedAt = data.section?.archivedAt ?? null;
+    const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}/${action}`, getHeaders, { method: "POST" });
+    const hadNewVersion = action === "publish" && session.hasUnpublishedChanges && Boolean(session.activeVersionId);
+    session.activeVersionId = data.section?.activeVersionId ?? null;
+    session.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
+    session.archivedAt = data.section?.archivedAt ?? null;
     showToast(L(action === "publish" ? (hadNewVersion ? "newVersionPublished" : "published") : "unpublished"));
     refreshSectionLifecycleUI();
   } catch (err) {
@@ -962,48 +992,58 @@ async function refreshPreview() {
 // the image upload can auto-save transparently without a confusing extra toast.
 async function persistSection({ silent } = {}) {
   captureInputs();
+  // #1154: lagringen gjelder seksjonen den ble startet i. Svaret legges i den, og skjermen røres bare hvis den
+  // fortsatt er den som vises.
+  const session = editing;
+  const stillHere = sameView();
   const status = document.getElementById("editorStatus");
-  const title = nonEmptyLocales(editing.title);
-  const bodyMarkdown = nonEmptyLocales(editing.body);
-  if (!hasSavableContent(editing.title, editing.body)) {
+  const title = nonEmptyLocales(session.title);
+  const bodyMarkdown = nonEmptyLocales(session.body);
+  if (!hasSavableContent(session.title, session.body)) {
     // Tjeneren krever både navn og innhold for en seksjonsversjon (createSectionSchema). Si det, og
     // sett markøren i det som mangler.
     showToast(L("needContent"), "error");
-    (Object.keys(nonEmptyLocales(editing.title)).length === 0 ? document.getElementById("titleInput") : document.getElementById("markdownInput"))?.focus();
+    (Object.keys(nonEmptyLocales(session.title)).length === 0 ? document.getElementById("titleInput") : document.getElementById("markdownInput"))?.focus();
     return false;
   }
   try {
     let heldBack = null;
     // #1128: bilder med en tittel som alt-tekst — lagret likevel, men kvitteringen sier det.
     let altWarnings = [];
-    if (!editing.id) {
+    if (!session.id) {
       const data = await apiFetch("/api/admin/content/sections", getHeaders, {
         method: "POST",
         body: JSON.stringify({ title, bodyMarkdown }),
       });
-      editing.id = data.section.id;
-      editing.activeVersionId = data.section.activeVersionId ?? null;
-      editing.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
-      editing.archivedAt = data.section.archivedAt ?? null;
+      session.id = data.section.id;
+      session.activeVersionId = data.section.activeVersionId ?? null;
+      session.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
+      session.archivedAt = data.section.archivedAt ?? null;
       heldBack = data.translationGate?.heldBack ? data.translationGate.issues : null;
       altWarnings = data.altWarnings ?? [];
-      history.replaceState({}, "", `/admin-content/sections?id=${encodeURIComponent(editing.id)}`);
+      // Forfatteren har gått videre: seksjonen er laget, men adressen og skjermen tilhører en annen visning nå.
+      // `false` og ikke `true`: skjemasida ville ellers merket visningen som står der NÅ, som «Alt lagret».
+      if (!stillHere()) return false;
+      history.replaceState({}, "", `/admin-content/sections?id=${encodeURIComponent(session.id)}`);
+      shownUrl = window.location.href;
       // Første lagring lager seksjonen: hodet får eierpanel, Eksporter osv. — tegn sida på nytt.
       getFormPage().render();
     } else {
-      await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/title`, getHeaders, {
+      await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}/title`, getHeaders, {
         method: "PATCH",
         body: JSON.stringify({ title }),
       });
-      const contentRes = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/content`, getHeaders, {
+      // Ingen sjekk mellom de to kallene: forfatteren ba om å lagre, og en halv lagring er verre enn en hel.
+      const contentRes = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}/content`, getHeaders, {
         method: "PUT",
         body: JSON.stringify({ bodyMarkdown }),
       });
       // Lagring publiserer (latest-wins) — oppdater status så merkelappen blir riktig.
-      editing.activeVersionId = contentRes.section?.activeVersionId ?? null;
-      editing.hasUnpublishedChanges = Boolean(contentRes.section?.hasUnpublishedChanges);
+      session.activeVersionId = contentRes.section?.activeVersionId ?? null;
+      session.hasUnpublishedChanges = Boolean(contentRes.section?.hasUnpublishedChanges);
       heldBack = contentRes.translationGate?.heldBack ? contentRes.translationGate.issues : null;
       altWarnings = contentRes.altWarnings ?? [];
+      if (!stillHere()) return false;
     }
     // #705: hold status-merkelappen + Publiser/Avpubliser-knappen i editoren i synk etter lagring.
     refreshSectionLifecycleUI();
@@ -1037,9 +1077,13 @@ async function saveSection() {
 // the other locales, which the author reviews/edits before saving.
 async function translateFromCurrent() {
   captureInputs();
-  const src = editing.editLocale;
-  const title = (editing.title[src] ?? "").trim();
-  const body = (editing.body[src] ?? "").trim();
+  // #1154: oversettelsen hører til seksjonen den ble startet i. Byttet forfatteren seksjon mens den jobbet, la
+  // svaret nynorsk og engelsk fra denne inn i den nye, og merket den som ulagret.
+  const session = editing;
+  const stillHere = sameView();
+  const src = session.editLocale;
+  const title = (session.title[src] ?? "").trim();
+  const body = (session.body[src] ?? "").trim();
   if (!title && !body) {
     showToast(L("needContent"), "error");
     return;
@@ -1081,16 +1125,18 @@ async function translateFromCurrent() {
         else structureChanged.push(target);
         continue;
       }
-      if (res.title) editing.title[target] = res.title;
-      if (res.bodyMarkdown) editing.body[target] = res.bodyMarkdown;
+      // Forfatteren har gått videre: ikke skriv, og ikke start flere kall (heller ikke bildene, som lagres på tjeneren).
+      if (!stillHere()) return;
+      if (res.title) session.title[target] = res.title;
+      if (res.bodyMarkdown) session.body[target] = res.bodyMarkdown;
     }
     // #657: also generate translated SVG-drawing variants for this section's SVG assets, so a
     // drawing's baked-in labels follow the same language as the surrounding text. Only possible on
     // a saved section (assets need a section id); non-fatal if it fails — text is already translated.
-    if (editing.id) {
+    if (session.id) {
       try {
         if (btn) btn.textContent = L("translatingImages");
-        const assetRes = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/assets/localize`, getHeaders, {
+        const assetRes = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}/assets/localize`, getHeaders, {
           method: "POST",
           body: JSON.stringify({ sourceLocale: src }),
         });
@@ -1099,6 +1145,8 @@ async function translateFromCurrent() {
         apiErrorToast(assetErr);
       }
     }
+    // Teksten ligger i `session`. Feltene og «ulagret» røres bare hvis det fortsatt er denne seksjonen som vises.
+    if (!stillHere()) return;
     const translatedSome = structureChanged.length + sourceNotDrawn.size < EDITOR_LOCALES.length - 1;
     if (sourceNotDrawn.size > 0) {
       const locales = [...sourceNotDrawn.keys()].map((code) => localeLabels[code] ?? code).join(", ");
@@ -1116,7 +1164,7 @@ async function translateFromCurrent() {
       getFormPage().markDirty();
     }
   } catch (err) {
-    apiErrorToast(err);
+    if (stillHere()) apiErrorToast(err);
   } finally {
     setLocked(false);
     if (btn) btn.textContent = L("translate");
@@ -1150,6 +1198,7 @@ async function uploadImage(file) {
   if (alt === null) return; // cancelled
   const btn = document.getElementById("uploadImageBtn");
   if (btn) btn.disabled = true;
+  const stillHere = sameView();
   try {
     const fd = new FormData();
     fd.append("file", file);
@@ -1157,6 +1206,9 @@ async function uploadImage(file) {
       method: "POST",
       body: fd,
     });
+    // #1154: bildet hører til seksjonen det ble lastet opp i. Byttet forfatteren seksjon i mellomtiden, ble
+    // lenka satt inn i teksten til den nye. Bildet ligger på den første seksjonen og kan settes inn derfra senere.
+    if (!stillHere()) return;
     insertAtCursor(`![${alt}](${res.asset.ref})`);
     captureInputs();
     schedulePreview();
@@ -1172,10 +1224,29 @@ async function uploadImage(file) {
 // Boot
 // ---------------------------------------------------------------------------
 
+// #1155: adressen til det som vises nå. Nettleserens tilbake-knapp har alt byttet adresse når vi får vite om den,
+// så dette er det eneste stedet den forrige står.
+let shownUrl = window.location.href;
+
 function renderRoute() {
+  viewToken += 1;
+  shownUrl = window.location.href;
   const route = detectRoute();
-  if (route.view === "editor") renderEditorView(route.sectionId);
-  else renderListView();
+  if (route.view === "editor") {
+    // Navigering til et element: start på første fane (form-page.js `resetTab`).
+    getFormPage().resetTab();
+    renderEditorView(route.sectionId);
+  } else renderListView();
+}
+
+// #1155: nettleserens tilbake- og fram-knapp gikk fra et skjema med ulagret tekst uten å spørre, og teksten var borte.
+// «← Tilbake»-lenka og menyene spør; nå gjør denne veien det også. Svarer forfatteren nei, settes adressen tilbake.
+function onPopState() {
+  if (formPage && !formPage.confirmLeave()) {
+    history.pushState({}, "", shownUrl);
+    return;
+  }
+  renderRoute();
 }
 
 function buildLocaleSelector() {
@@ -1185,6 +1256,13 @@ function buildLocaleSelector() {
     currentLocale = localeSelect.value;
     localStorage.setItem("participant.locale", currentLocale);
     if (_headerValues && typeof _headerValues === "object") _headerValues["x-locale"] = currentLocale;
+    // #1155: i et åpent skjema hentet språkbyttet seksjonen på nytt, og ulagret tekst var borte uten spørsmål.
+    // Innholdet avhenger ikke av menyspråket: tegn skjemaet på nytt fra `editing` (feltene fanges ved hvert tastetrykk).
+    // «Ulagret» står som det sto.
+    if (detectRoute().view === "editor" && editing && document.getElementById("titleInput")) {
+      getFormPage().render();
+      return;
+    }
     renderRoute();
   });
 }
@@ -1245,7 +1323,7 @@ async function init() {
     if (appVersionLabel) appVersionLabel.textContent = "unknown";
   }
 
-  window.addEventListener("popstate", renderRoute);
+  window.addEventListener("popstate", onPopState);
   renderRoute();
 }
 

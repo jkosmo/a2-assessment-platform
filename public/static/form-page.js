@@ -69,6 +69,11 @@ export function createFormPage(config) {
   const { host } = config;
   const state = { dirty: false, saving: false, busy: false, tab: config.tabs?.initial ?? null };
   let guardInstalled = false;
+  // #1155: forfatteren har nettopp svart OK på «forlate sida uten å lagre?» for en lenke. Nettleserens eget spørsmål
+  // kommer rett etterpå, når sida faktisk forlates, og er det samme spørsmålet en gang til. Svaret gjelder den ene
+  // navigeringen: blir det ikke noe av den, spør sida igjen etter et øyeblikk.
+  const LEAVE_ANSWER_MS = 2000;
+  let leaveAnsweredAt = 0;
 
   installRowMoreMenus();
 
@@ -226,6 +231,7 @@ export function createFormPage(config) {
       // Ikke `hasUnsaved()`: for sider med `isDirty` leste denne alltid det sist speilede svaret, og
       // det skal den fortsette med. Bare «vises skjemaet?» er nytt.
       if (!isShown() || !state.dirty) return;
+      if (Date.now() - leaveAnsweredAt < LEAVE_ANSWER_MS) return;
       event.preventDefault();
       event.returnValue = "";
     });
@@ -235,7 +241,8 @@ export function createFormPage(config) {
       // 2.126.0: en nedlastingslenke forlater ikke sida. Eksporten laster ned med en slik lenke, og
       // forfatteren med ulagrede endringer fikk spørsmålet to ganger — avbrøt hen det andre, kom ingen fil.
       if (!a || a.target === "_blank" || a.hasAttribute("download") || a.getAttribute("href")?.startsWith("#")) return;
-      if (!confirmLeave()) { event.preventDefault(); event.stopPropagation(); }
+      if (!confirmLeave()) { event.preventDefault(); event.stopPropagation(); return; }
+      if (state.dirty) leaveAnsweredAt = Date.now();
     }, true);
   }
 
@@ -245,7 +252,12 @@ export function createFormPage(config) {
     const back = target.closest("#formBackLink");
     if (back && !config.backHref) {
       event.preventDefault();
-      if (confirmLeave()) config.onBack?.();
+      if (confirmLeave()) {
+        // «← Tilbake til kurset» forlater sida fra kode (`location.href`), ikke med en lenke: husk svaret her også,
+        // ellers spør nettleseren en gang til (QA-porten 2.158.1).
+        if (state.dirty) leaveAnsweredAt = Date.now();
+        config.onBack?.();
+      }
       return;
     }
     const cancel = target.closest("#formCancelLink");
@@ -329,6 +341,11 @@ export function createFormPage(config) {
     confirmLeave,
     save,
     installGuards,
+    /**
+     * Et ANNET element åpnes: start på første fane. Uten dette åpnet neste seksjon på «Innstillinger» fordi forrige
+     * ble forlatt der, med navnefeltet skjult (#1155). Kalles før `render()`; samme element tegnet på nytt beholder fanen.
+     */
+    resetTab() { state.tab = config.tabs?.initial ?? null; },
     /** Bytt fane fra sida (f.eks. fra en lenke). */
     showTab(id) { if (config.tabs) selectTab(id); },
     get tab() { return state.tab; },

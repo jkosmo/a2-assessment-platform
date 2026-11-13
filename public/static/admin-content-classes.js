@@ -150,6 +150,9 @@ function getListPage() {
 }
 
 async function renderListView() {
+  // #1155: kalles også av jobber startet i lista, etter at de har ventet. Har forfatteren åpnet en klasse i
+  // mellomtiden, ville lista blitt tegnet over skjemaet.
+  if (classRouteOpen()) return;
   pageContent.innerHTML = `<div class="page-loading">${escapeHtml(tNav("ui.loading"))}</div>`;
   await getListPage().reload().catch(() => undefined);
 }
@@ -282,13 +285,50 @@ function classUrl(id) {
 function goToClass(id, { replace = false } = {}) {
   const url = classUrl(id);
   if (replace) history.replaceState({}, "", url); else history.pushState({}, "", url);
+  shownUrl = window.location.href;
+  getFormPage().resetTab();
   return openClass(id);
 }
 
 function goToList() {
   history.pushState({}, "", window.location.pathname);
+  shownUrl = window.location.href;
   openClassState = null;
   return renderListView();
+}
+
+// #1155: adressen til det som vises nå (nettleserens tilbake-knapp har alt byttet adresse når vi får vite om den),
+// og et nummer per visning, så en klasse som laster ferdig etter at forfatteren har gått videre, ikke tegnes over
+// det som står der (samme mønster som seksjonssiden, #1154).
+let shownUrl = window.location.href;
+let viewToken = 0;
+
+/** Står adressen på en klasse (åpen eller ny)? Da er det ikke lista som skal vises. */
+function classRouteOpen() {
+  const q = new URLSearchParams(window.location.search);
+  return q.has("new") || Boolean(q.get("id"));
+}
+
+// #1155: deltakere og kurs lagres hver for seg, og klassen hentes på nytt etterpå. Navn og beskrivelse som ikke er
+// lagret, forsvant da uten spørsmål. Nå overlever de hentingen, og klassen står fortsatt som «Ulagrede endringer».
+async function reloadOpenClass(id) {
+  // Bare når skjemaet faktisk står der. «Ulagret» fra en klasse man forlot med OK, lever til neste klasse er ferdig
+  // lastet; et språkbytte i det vinduet leste et navnefelt som ikke fantes, og satte tomt navn inn i den nye klassen
+  // (QA-porten 2.158.1).
+  const nameField = document.getElementById("className");
+  const unsaved = nameField && getFormPage().state.dirty
+    ? { name: nameField.value, description: document.getElementById("classDescription")?.value ?? "" }
+    : null;
+  await openClass(id);
+  if (!unsaved || (openClassState?.id ?? null) !== (id ?? null)) return;
+  const name = document.getElementById("className");
+  const description = document.getElementById("classDescription");
+  if (!name || !description) return;
+  name.value = unsaved.name;
+  description.value = unsaved.description;
+  const page = getFormPage();
+  page.refreshTitle();
+  page.markDirty();
 }
 
 const formTexts = () => formPageTexts(tNav, { back: tNav("classes.back"), typeLabel: tNav("classes.typeLabel"), untitled: tNav("classes.untitled") });
@@ -323,6 +363,8 @@ function getFormPage() {
 }
 
 async function openClass(id) {
+  viewToken += 1;
+  const token = viewToken;
   pageContent.innerHTML = `<div class="page-loading">${escapeHtml(tNav("ui.loading"))}</div>`;
   let klass = null, members = [], courses = [], allCourses = [];
   try {
@@ -337,9 +379,12 @@ async function openClass(id) {
       if (klass) klass.canManage = true;
     }
   } catch (err) {
+    if (token !== viewToken) return;
     pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(tNav("classes.loadOneError"))}</p><p class="empty-state-text">${escapeHtml(apiErrorText(err))}</p></div>`;
     return;
   }
+  // Forfatteren har gått videre mens klassen lastet: ikke tegn den over det som vises nå.
+  if (token !== viewToken) return;
   openClassState = { id: id ?? null, klass, members, courses, allCourses };
   const page = getFormPage();
   page.render();
@@ -497,7 +542,7 @@ function bindClassFormHandlers() {
     try {
       await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/members`, getHeaders, { method: "POST", body: JSON.stringify({ userId: li.dataset.addUser }) });
       showToast(tNav("classes.memberAdded"), "success");
-      openClass(id);
+      reloadOpenClass(id);
     } catch (err) { apiErrorToast(err); }
   });
   document.getElementById("memberChips")?.addEventListener("click", async (e) => {
@@ -505,7 +550,7 @@ function bindClassFormHandlers() {
     if (!btn) return;
     try {
       await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/members/${encodeURIComponent(btn.dataset.removeMember)}`, getHeaders, { method: "DELETE" });
-      openClass(id);
+      reloadOpenClass(id);
     } catch (err) { apiErrorToast(err); }
   });
 
@@ -519,7 +564,7 @@ function bindClassFormHandlers() {
     try {
       await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/courses`, getHeaders, { method: "POST", body: JSON.stringify(body) });
       showToast(tNav("classes.courseAssigned"), "success");
-      openClass(id);
+      reloadOpenClass(id);
     } catch (err) { apiErrorToast(err); }
   });
   document.getElementById("courseChips")?.addEventListener("click", async (e) => {
@@ -527,7 +572,7 @@ function bindClassFormHandlers() {
     if (!btn) return;
     try {
       await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/courses/${encodeURIComponent(btn.dataset.removeCourse)}`, getHeaders, { method: "DELETE" });
-      openClass(id);
+      reloadOpenClass(id);
     } catch (err) { apiErrorToast(err); }
   });
 }
@@ -555,7 +600,10 @@ function buildLocaleSelector() {
     // under henter på nytt — en åpen klasse lukkes, så ingen tittel blir stående på det gamle.
     if (_headerValues && typeof _headerValues === "object") _headerValues["x-locale"] = currentLocale;
     renderWorkspaceNavigation();
-    renderListView();
+    // #1155: en åpen klasse ble byttet ut med lista (adressen sto igjen på klassen), og ulagret navn og beskrivelse
+    // var borte. Nå hentes klassen på nytt på det nye språket, og det ulagrede står.
+    if (classRouteOpen()) reloadOpenClass(new URLSearchParams(window.location.search).get("id"));
+    else renderListView();
   });
 }
 
@@ -597,14 +645,25 @@ async function init() {
     if (appVersionLabel) appVersionLabel.textContent = "unknown";
   }
   await renderRoute();
-  window.addEventListener("popstate", () => { renderRoute(); });
+  // #1155: nettleserens tilbake- og fram-knapp gikk fra et skjema med ulagret tekst uten å spørre.
+  window.addEventListener("popstate", () => {
+    if (formPage && !formPage.confirmLeave()) {
+      history.pushState({}, "", shownUrl);
+      return;
+    }
+    renderRoute();
+  });
 }
 
 // #1046: ?id=… åpner klassen, ?new et tomt skjema, ellers lista.
 function renderRoute() {
+  shownUrl = window.location.href;
   const q = new URLSearchParams(window.location.search);
-  if (q.has("new")) return openClass(null);
-  if (q.get("id")) return openClass(q.get("id"));
+  if (q.has("new") || q.get("id")) {
+    getFormPage().resetTab();
+    return openClass(q.has("new") ? null : q.get("id"));
+  }
+  viewToken += 1;
   openClassState = null;
   return renderListView();
 }
