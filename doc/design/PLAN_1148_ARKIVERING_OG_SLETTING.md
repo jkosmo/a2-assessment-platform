@@ -180,11 +180,19 @@ diskusjon.
 - **Diskusjonen slettes med kurset.** Det er tekst deltakerne har skrevet, og skjemaets egen regel for diskusjon har
   vært «aldri slett for godt». Avgjørelsen gjelder foran den regelen for kurs som slettes; `doc/DECISIONS.md` må si det.
 - **Et bestått holder ikke kurset igjen.** Modulen med besvarelsen beholdes uansett (egen vakt), så resultatet finnes.
-- **Ett tilfelle må ikke falle mellom to stoler (gjennomlesing):** en deltaker som oppfyller hele kurskravet mens kurset
-  er arkivert (en besvarelse som vurderes ferdig etterpå), får ikke kursbevis, fordi utstedelsen hopper over arkiverte
-  kurs. Hen har fortjent beviset. Jobben sjekker derfor kravet før den sletter: oppfyller noen det uten å ha beviset,
-  holdes kurset igjen på lik linje med et kurs med kursbevis. Dette er ikke «bestått en modul», men «har fullført
-  kurset». Si fra hvis også dette skal slettes.
+- **Fullført uten kursbevis holder kurset igjen (produkteier 13.11.2026: «Ja … I så fall bør det gis beskjed om dette til
+  den som forsøker å slette»).** En deltaker som oppfyller hele kurskravet mens kurset er arkivert, får ikke kursbevis,
+  fordi utstedelsen hopper over arkiverte kurs. Det skjer når en besvarelse blir bestått etter arkiveringen: etter manuell
+  behandling, etter en anke, eller (sjelden, minutter) når den automatiske vurderingen var i gang da kurset ble arkivert.
+  - Slettingen sjekker kurskravet før den sletter. Oppfyller noen det uten å ha beviset, stoppes slettingen.
+  - **Den som trykker «Slett», får vite hvorfor:** hvor mange deltakere det gjelder, at de har fullført kurset etter at
+    det ble arkivert, og at kurset må gjenopprettes og publiseres for at de skal få kursbeviset. Egen feilkode, tekst på
+    tre språk.
+  - Lista over arkiverte sier det samme: «Beholdes: en deltaker har fullført uten kursbevis».
+  - Jobben hopper over kurset av samme grunn, og skriver det i revisjonsloggen første gang.
+  - Dette er ikke «bestått en modul», men «har fullført kurset».
+- **Arkiveringen sier fra på forhånd.** Forhåndsvisningen i etappe 2 viser også hvor mange besvarelser i kurset som
+  ligger til vurdering, manuell behandling eller anke. Da vet forfatteren at noen kan fullføre etter arkiveringen.
 
 Et element som fortsatt ligger i et kurs, kan ikke slettes (databasen nekter). Rekkefølgen løser det: kurset slettes
 først, og da er elementene fri. Et arkivert element uten egen historikk som ligger i et arkivert kurs som **beholdes**, kan
@@ -231,7 +239,7 @@ være i prod før jobben får slette.
 ### Hva forfatteren ser
 
 - I listene, under «Arkiverte»: «Slettes 13.05.2027», eller «Beholdes» med grunnen: har besvarelser, har kursbevis,
-  eller ligger i et kurs som beholdes.
+  en deltaker har fullført uten kursbevis, eller ligger i et kurs som beholdes.
 - «Slett» på et arkivert element virker for alt som kan slettes, også moduler. Forfatteren som ikke vil vente seks
   måneder, sletter selv.
 - Ingen e-post før sletting. Datoen står i lista.
@@ -282,7 +290,8 @@ Hver etappe er sin egen pakke og kan stå alene i prod.
 ## Avgjort av produkteier 13.11.2026, andre runde
 
 1. **Hva holder et kurs igjen for alltid?** «Kursbevis OK. Bestått en modul og diskusjon, ikke nok, slett.» Bare
-   kursbevis. Se «Kurs: bare kursbevis holder igjen» over for det ene tilfellet planen legger til.
+   kursbevis. I tillegg, bekreftet samme dag: et kurs der en deltaker har fullført alt uten å ha fått beviset (manuell
+   behandling eller anke etter arkiveringen), holdes igjen, og den som prøver å slette, får beskjed om hvorfor.
 2. **Elementer forfatteren ikke eier:** følger kurset inn i arkivet og tilbake, «så sant det ikke brukes i andre kurs».
 3. **«Slett» med en gang** for arkivert innhold som ikke holdes igjen: ja.
 4. **Gjenoppretting av et kurs setter modulene og seksjonene tilbake som publiserte, med samme versjon som før:** ja.
