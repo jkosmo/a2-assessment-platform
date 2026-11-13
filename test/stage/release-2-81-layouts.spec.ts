@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 import { drawFlowFigure } from "../../skills/a2-authoring-api/scripts/draw-flow-figure.mjs";
 
 // #1079 mot UTRULLET stage: en figur i bredt og smalt oppsett, hele kjeden med den ekte klienten
@@ -102,7 +103,7 @@ const TITTEL_START = "Stage-test figur i to oppsett ";
 async function slettKurs(id: string) {
   // Kurset først: en seksjon som står i et kurs, kan ikke slettes.
   await api("POST", `/api/admin/content/courses/${id}/unpublish`);
-  await api("POST", `/api/admin/content/courses/${id}/archive`);
+  await arkiverKurs(api, id);
   return api("DELETE", `/api/admin/content/courses/${id}`);
 }
 async function slettSeksjon(id: string) {

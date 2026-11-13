@@ -45,6 +45,9 @@ med en gang.
   og stoppes når kurset har et utkast. Publiser eller forkast utkastet først.
 - **Kurset er avpublisert, og det ligger et utkast igjen.** Publiser kurset igjen for å fortsette på utkastet, eller forkast
   utkastet. Til da kan kurset ikke lagres.
+- **Du arkiverer kurset.** Fra 2.159.0 forkastes utkastet når kurset arkiveres, og dialogen for «Arkiver» sier det før du
+  bekrefter. Et arkivert kurs kan ikke endres før det er gjenopprettet, og det kommer tilbake som utkast uten det gamle
+  utkastet (se `doc/roles/admin-content.md`, «Arkivere og gjenopprette et kurs»).
 
 ## Nye versjoner av moduler og seksjoner
 

@@ -9,7 +9,7 @@ er arbeidet inn og merket «(gjennomlesing)» der de endret planen. Produkteier 
 
 Etappe 2 bygges i tre skiver i 2.159.0: **2a-1** (lesing: «brukes andre steder» ser utkastene, «midt i» som «Mine kurs»,
 forhåndsvisningen) og **2a-2** (tjeneren: arkiveringen tar innholdet med seg, gjenopprettingen setter det tilbake, manglende
-kursbevis utstedes først) er bygget; **2b** (dialogene i klienten) gjenstår. Valgene som ikke står her: `doc/DECISIONS.md`
+kursbevis utstedes først) og **2b** (dialogene i klienten, `doc/FEATURE_SURFACE_MAP.md` §33d) er bygget. Valgene som ikke står her: `doc/DECISIONS.md`
 («Arkivering ser utkastene …» og «Kursarkiveringen tar innholdet med seg …»).
 
 ## Avgjort av produkteier 13.11.2026

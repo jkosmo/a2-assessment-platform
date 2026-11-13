@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.134.0 mot UTRULLET stage: #934 skive 5a-2, grunnmuren ved siden av dagens regel (doc/DESIGN_934.md, «5a-2»). Bare API,
 // med tjenestekontoen.
@@ -82,7 +83,7 @@ async function publiserOk(versjonId: string, body: object = {}) {
 test.afterAll(async () => {
   if (tilstand.kursId) {
     await api("POST", `/api/admin/content/courses/${tilstand.kursId}/unpublish`);
-    noter("arkiver testkurs", (await api("POST", `/api/admin/content/courses/${tilstand.kursId}/archive`)).status);
+    noter("arkiver testkurs", (await arkiverKurs(api, tilstand.kursId)).status);
   }
   if (tilstand.moduleId) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/archive`)).status);
 });

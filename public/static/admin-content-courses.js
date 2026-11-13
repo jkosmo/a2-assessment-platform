@@ -1286,21 +1286,248 @@ function handleListTableClick(event, btn = event.target.closest("[data-action]")
   }
 }
 
-// Archive (soft-delete) a course. Archiving is the alternative to deleting when a course has
-// completions/certificates that must be preserved (#660). Reversible, so a lightweight confirm.
+// ---------------------------------------------------------------------------
+// #1150 skive 2b: «Arkiver» og «Gjenopprett» (doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md, «Forløpet for forfatteren» og
+// «Gjenoppretting»). Arkivering er alternativet til sletting når kurset har fullføringer som skal bevares (#660).
+// ---------------------------------------------------------------------------
+//
+// Fra 2.159.0 tar arkiveringen med seg modulene og seksjonene som bare brukes i kurset, og gjenopprettingen setter dem tilbake.
+// Dialogen viser forhåndsvisningen, og bekreftelsen sender det forfatteren så (`expected`). Tjeneren regner på nytt under
+// innholdslåsen; er noe endret, svarer den 409 og har ikke skrevet noe, og dialogen tegnes på nytt med ferske tall. Samme form
+// som «Publiser nye versjoner» over. Kalt fra kurslista og fra handlingsraden i det åpnede kurset (`handleListTableClick`).
+//
+// Under utrullingen kan en ny klient møte en gammel tjener: da svarer forhåndsvisningen 404, og klienten gjør det den gjorde før.
+
+const courseApiPath = (courseId, suffix) => `/api/admin/content/courses/${encodeURIComponent(courseId)}/${suffix}`;
+
+/** Ett element i en av dialogenes lister: typemerke, tittel, merker og en forklaring på egen linje. */
+function courseLifecycleItemHtml(item, { chips = "", note = "" } = {}) {
+  const title = escapeHtml(localizedText(item.title) || item.id);
+  const badge = `<span class="item-type-badge">${escapeHtml(cascadeItemTypeLabel(item.type))}</span>`;
+  const noteHtml = note ? `<span class="course-lifecycle-note">${escapeHtml(note)}</span>` : "";
+  return `<li class="cascade-publish-item" data-item-id="${escapeHtml(item.id)}">${badge} <span class="cascade-publish-item-title">${title}</span>${chips}${noteHtml}</li>`;
+}
+
+/** Ett avsnitt: overskrift, eventuelt en liste, eventuelt en forklaring. `part` er kroken testene leser. */
+function courseLifecyclePartHtml(part, heading, { listHtml = "", text = "" } = {}) {
+  return `<section data-lifecycle-part="${part}">
+    <h3 class="cascade-delete-heading">${escapeHtml(heading)}</h3>
+    ${listHtml ? `<ul class="cascade-publish-list">${listHtml}</ul>` : ""}
+    ${text ? `<p class="dialog-text">${escapeHtml(text)}</p>` : ""}
+  </section>`;
+}
+
+function renderCourseArchivePreview(preview, { changedText = "" } = {}) {
+  const follows = Array.isArray(preview?.follows) ? preview.follows : [];
+  const stays = Array.isArray(preview?.stays) ? preview.stays : [];
+  const inProgress = Number(preview?.inProgressCount) || 0;
+  const pendingReview = Number(preview?.pendingReviewCount) || 0;
+  const completedWithout = Number(preview?.completedWithoutCertificateCount) || 0;
+  const parts = [];
+  if (changedText) parts.push(`<p class="course-version-notice" role="alert" data-lifecycle-changed>${escapeHtml(changedText)}</p>`);
+  if (follows.length > 0) {
+    parts.push(courseLifecyclePartHtml("follows", tf("courses.archiveDialog.follows", { count: follows.length }), {
+      listHtml: follows.map((item) => courseLifecycleItemHtml(item, {
+        // Elementer forfatteren ikke eier, følger med likevel (produkteier 13.11.2026). Merket sier det.
+        chips: item.owned === false ? ` <span class="status-chip" data-not-owned>${escapeHtml(t("courses.archiveDialog.notOwned"))}</span>` : "",
+      })).join(""),
+    }));
+  } else {
+    parts.push(courseLifecyclePartHtml("follows", tf("courses.archiveDialog.follows", { count: 0 }), { text: t("courses.archiveDialog.followsNone") }));
+  }
+  if (stays.length > 0) {
+    parts.push(courseLifecyclePartHtml("stays", tf("courses.archiveDialog.stays", { count: stays.length }), {
+      listHtml: stays.map((item) => {
+        const courses = (Array.isArray(item.usedBy) ? item.usedBy : []).map((use) =>
+          tf(use?.via === "draft" ? "courses.archiveDialog.usedInDraft" : "courses.archiveDialog.usedInCourse", { title: localizedText(use?.title) || use?.courseId || "" }));
+        return courseLifecycleItemHtml(item, { note: courses.length > 0 ? tf("courses.archiveDialog.usedBy", { courses: courses.join(", ") }) : "" });
+      }).join(""),
+    }));
+  }
+  if (inProgress > 0) {
+    parts.push(courseLifecyclePartHtml("inProgress", tf("courses.archiveDialog.inProgress", { count: inProgress }), { text: t("courses.archiveDialog.inProgressBody") }));
+  }
+  if (pendingReview > 0) {
+    parts.push(courseLifecyclePartHtml("pendingReview", tf("courses.archiveDialog.pendingReview", { count: pendingReview }), { text: t("courses.archiveDialog.pendingReviewBody") }));
+  }
+  if (completedWithout > 0) {
+    parts.push(courseLifecyclePartHtml("completedWithoutCertificate", tf("courses.archiveDialog.completedWithoutCertificate", { count: completedWithout }), {
+      text: preview?.published === true ? t("courses.archiveDialog.completedIssued") : t("courses.archiveDialog.completedNotIssued"),
+    }));
+  }
+  if (preview?.hasDraft === true) {
+    parts.push(`<p class="dialog-text" data-lifecycle-part="draft">${escapeHtml(t("courses.archiveDialog.draftDiscarded"))}</p>`);
+  }
+  return parts.join("");
+}
+
+let pendingCourseArchive = null; // { courseId, courseTitle, triggerButton, expected }
+
+/**
+ * 404 fra en forhåndsvisning betyr «tjeneren har ikke ruta» (eldre enn 2.159.0) — men ikke når koden er `course_not_found`: da
+ * har tjeneren ruta, og kurset finnes ikke (slettet imens). Det er en feil som skal vises, ikke en grunn til den gamle veien.
+ */
+function previewRouteMissing(err) {
+  return apiErrorStatus(err) === 404 && apiErrorCode(err) !== "course_not_found";
+}
+
+// QA-porten 2b: én åpning av dialogen om gangen. Hver henting får et nummer; et svar som kommer etter en nyere henting, eller
+// etter at dialogen er lukket (lukkingen teller opp), gjelder ikke lenger og vises ikke. Uten dette kunne to klikk mens
+// forhåndsvisningen lastet vise kurs B og så kurs A, og «Arkiver kurset» arkiverte A; og Esc mens dialogen hentet på nytt
+// etter 409 ble overstyrt av at dialogen åpnet seg igjen.
+let courseArchiveSeq = 0;
+
+/**
+ * Henter forhåndsvisningen og viser dialogen. Svarer `"legacy"` når tjeneren ikke har forhåndsvisningen (404), `"done"` når
+ * kurset allerede er arkivert eller dialogen står, `"stale"` når svaret ikke gjelder lenger, og `"failed"` ellers.
+ * `changedText`: teksten etter en 409.
+ */
+async function openCourseArchiveDialog(courseId, courseTitle, triggerButton, { changedText = "" } = {}) {
+  const dialog = document.getElementById("courseArchiveDialog");
+  if (!dialog || typeof dialog.showModal !== "function") return "legacy";
+  // Lukkes dialogen mens hentingen pågår (Esc under ny henting etter 409), teller lukkingen opp, og svaret er gammelt.
+  const seq = ++courseArchiveSeq;
+  const stale = () => seq !== courseArchiveSeq;
+  let preview;
+  try {
+    preview = await apiFetch(courseApiPath(courseId, "archive-preview"), getHeaders);
+  } catch (err) {
+    if (stale()) return "stale";
+    if (previewRouteMissing(err)) {
+      if (dialog.open) dialog.close();
+      return "legacy";
+    }
+    apiErrorToast(err);
+    // Står dialogen (en ny lesing etter 409 feilet), kan forfatteren prøve igjen.
+    const confirmBtn = document.getElementById("courseArchiveConfirmBtn");
+    if (confirmBtn) confirmBtn.disabled = false;
+    return "failed";
+  }
+  if (stale()) return "stale";
+  if (preview?.archived === true) {
+    // Arkivert av noen andre mens forfatteren så på lista.
+    if (dialog.open) dialog.close();
+    showToast(t("errors.api.course_already_archived"), "warning");
+    await refreshCourseView(courseId);
+    return "done";
+  }
+  const title = localizedText(preview?.courseTitle) || courseTitle || courseId;
+  const follows = Array.isArray(preview?.follows) ? preview.follows : [];
+  pendingCourseArchive = {
+    courseId,
+    courseTitle: title,
+    triggerButton,
+    // Nøyaktig det dialogen viser. Tjeneren sammenligner med sin egen utregning under låsen.
+    expected: {
+      follows: {
+        moduleIds: follows.filter((item) => item.type === "MODULE").map((item) => item.id),
+        sectionIds: follows.filter((item) => item.type === "SECTION").map((item) => item.id),
+      },
+      inProgressCount: Number(preview?.inProgressCount) || 0,
+    },
+  };
+  document.getElementById("courseArchiveTitle").textContent = tf("courses.archiveDialog.title", { title });
+  document.getElementById("courseArchiveText").textContent = t("courses.archiveDialog.intro");
+  document.getElementById("courseArchiveBody").innerHTML = renderCourseArchivePreview(preview, { changedText });
+  const confirmBtn = document.getElementById("courseArchiveConfirmBtn");
+  confirmBtn.textContent = t("courses.archiveDialog.confirm");
+  confirmBtn.disabled = false;
+  document.getElementById("courseArchiveCancelBtn").textContent = t("ui.action.cancel");
+  if (!dialog.open) dialog.showModal();
+  return "done";
+}
+
 async function archiveCourseInAdmin(courseId, courseTitle, triggerButton = null) {
-  if (!window.confirm(`Arkivere kurset «${courseTitle}»? Det skjules for deltakere, men beholdes med fullføringer.`)) {
+  if (triggerButton) triggerButton.disabled = true;
+  const outcome = await openCourseArchiveDialog(courseId, courseTitle, triggerButton);
+  // Et svar som ikke gjelder lenger: knappen virker igjen, med mindre den hører til dialogen som står nå.
+  if ((outcome === "failed" || outcome === "stale") && triggerButton && pendingCourseArchive?.triggerButton !== triggerButton) triggerButton.disabled = false;
+  if (outcome === "legacy") await archiveCourseWithoutPreview(courseId, courseTitle, triggerButton);
+}
+
+/** Etter at en dialog er lukket: knappen som åpnet den, virker igjen og får fokuset tilbake (den var slått av da dialogen åpnet). */
+function returnFocusTo(triggerButton) {
+  if (!triggerButton) return;
+  triggerButton.disabled = false;
+  if (triggerButton.isConnected) triggerButton.focus();
+}
+
+// En tjener uten forhåndsvisning (eldre enn 2.159.0): den enkle bekreftelsen og arkiveringen uten kropp, som før.
+async function archiveCourseWithoutPreview(courseId, courseTitle, triggerButton) {
+  if (!window.confirm(tf("courses.archiveDialog.legacyConfirm", { title: courseTitle }))) {
+    if (triggerButton) triggerButton.disabled = false;
     return;
   }
-  if (triggerButton) triggerButton.disabled = true;
   try {
-    await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/archive`, getHeaders, { method: "POST" });
+    await apiFetch(courseApiPath(courseId, "archive"), getHeaders, { method: "POST" });
     showToast(t("courses.archived"), "success");
     await refreshCourseView(courseId);
   } catch (err) {
     apiErrorToast(err);
     if (triggerButton) triggerButton.disabled = false;
   }
+}
+
+/** «2 moduler og 1 seksjon», med entall og flertall, og uten den delen som er 0. Minst ett av tallene er over 0. */
+function archivedItemsText(modules, sections) {
+  const count = (n, kind) => tf(`courses.archiveDialog.${kind}${n === 1 ? "One" : "Many"}`, { n });
+  if (modules > 0 && sections > 0) return tf("courses.archiveDialog.both", { modules: count(modules, "modules"), sections: count(sections, "sections") });
+  return modules > 0 ? count(modules, "modules") : count(sections, "sections");
+}
+
+async function confirmCourseArchive() {
+  const target = pendingCourseArchive;
+  if (!target) return;
+  const dialog = document.getElementById("courseArchiveDialog");
+  const confirmBtn = document.getElementById("courseArchiveConfirmBtn");
+  confirmBtn.disabled = true;
+  try {
+    const result = await apiFetch(courseApiPath(target.courseId, "archive"), getHeaders, {
+      method: "POST",
+      body: JSON.stringify({ expected: target.expected }),
+    });
+    pendingCourseArchive = null;
+    dialog?.close();
+    const modules = result?.followed?.moduleIds?.length ?? 0;
+    const sections = result?.followed?.sectionIds?.length ?? 0;
+    const certificates = Number(result?.certificatesIssued) || 0;
+    showToast(
+      modules + sections > 0 ? tf("courses.archiveDialog.done", { items: archivedItemsText(modules, sections) }) : t("courses.archived"),
+      "success",
+      certificates > 0 ? tf("courses.archiveDialog.certificatesIssued", { count: certificates }) : "",
+    );
+    await refreshCourseView(target.courseId);
+  } catch (err) {
+    const code = apiErrorCode(err);
+    if (code === "course_archive_preview_changed") {
+      // Ingenting er skrevet. Dialogen viser det som gjelder nå, og forfatteren bekrefter på nytt.
+      await openCourseArchiveDialog(target.courseId, target.courseTitle, target.triggerButton, { changedText: apiErrorText(err) });
+      return;
+    }
+    if (code === "course_already_archived") {
+      pendingCourseArchive = null;
+      dialog?.close();
+      showToast(apiErrorText(err), "warning");
+      await refreshCourseView(target.courseId);
+      return;
+    }
+    apiErrorToast(err);
+    confirmBtn.disabled = false;
+  }
+}
+
+function initCourseArchiveDialog() {
+  const dialog = document.getElementById("courseArchiveDialog");
+  document.getElementById("courseArchiveConfirmBtn")?.addEventListener("click", () => { confirmCourseArchive(); });
+  document.getElementById("courseArchiveCancelBtn")?.addEventListener("click", () => dialog?.close());
+  // Avbryt, Esc og lukking etter arkiveringen ender her. En henting som pågår, gjelder ikke lenger (nummeret telles opp), og
+  // knappen som åpnet dialogen virker igjen og får fokuset (står kurset der fortsatt).
+  dialog?.addEventListener("close", () => {
+    courseArchiveSeq += 1;
+    const trigger = pendingCourseArchive?.triggerButton ?? null;
+    pendingCourseArchive = null;
+    returnFocusTo(trigger);
+  });
 }
 
 // #705: avpubliser et kurs (motstykke til Publiser). G3-vakta (påbegynt deltaker) i backend gir
@@ -1320,17 +1547,155 @@ async function unpublishCourseInAdmin(courseId, courseTitle, triggerButton = nul
   }
 }
 
-// #673: gjenopprett et arkivert kurs (nullstill arkivering).
+// #673: gjenopprett et arkivert kurs. #1150 skive 2b: med en dialog som viser hva som kommer tilbake, og hva som blir arkivert.
+
+/** Hva som skjer med et element som kommer tilbake (forhåndsvisningen og svaret har samme form). */
+function courseRestoreReturnNote(item) {
+  if (item?.asDraft === "was_unpublished") return t("courses.restoreDialog.wasUnpublished");
+  if (item?.asDraft) return t(item.type === "SECTION" ? "courses.restoreDialog.versionMissing.section" : "courses.restoreDialog.versionMissing.module");
+  return item?.versionLabel ? tf("courses.restoreDialog.publishedVersion", { version: item.versionLabel }) : t("courses.restoreDialog.published");
+}
+
+function courseRestoreStayNote(item) {
+  return item?.reason === "archived_with_other_course"
+    ? t("courses.restoreDialog.archivedWithOtherCourse")
+    : t("courses.restoreDialog.archivedSeparately");
+}
+
+function renderCourseRestorePreview(preview) {
+  const returns = Array.isArray(preview?.returns) ? preview.returns : [];
+  const staysArchived = Array.isArray(preview?.staysArchived) ? preview.staysArchived : [];
+  const parts = [];
+  parts.push(returns.length > 0
+    ? courseLifecyclePartHtml("returns", tf("courses.restoreDialog.returns", { count: returns.length }), {
+      listHtml: returns.map((item) => courseLifecycleItemHtml(item, {
+        chips: item.versionLabel && !item.asDraft ? ` <span class="status-chip" data-version-label>${escapeHtml(`v${item.versionLabel}`)}</span>` : "",
+        note: courseRestoreReturnNote(item),
+      })).join(""),
+    })
+    : courseLifecyclePartHtml("returns", tf("courses.restoreDialog.returns", { count: 0 }), { text: t("courses.restoreDialog.returnsNone") }));
+  if (staysArchived.length > 0) {
+    parts.push(courseLifecyclePartHtml("staysArchived", tf("courses.restoreDialog.staysArchived", { count: staysArchived.length }), {
+      listHtml: staysArchived.map((item) => courseLifecycleItemHtml(item, { note: courseRestoreStayNote(item) })).join(""),
+      text: t("courses.restoreDialog.staysArchivedBody"),
+    }));
+  }
+  return parts.join("");
+}
+
+/** Meldingen etter gjenopprettingen, fra SVARET: forhåndsvisningen kan ikke nummerere eldre modulhistorikk, gjenopprettingen kan. */
+function courseRestoreResultDetail(result) {
+  const returns = Array.isArray(result?.returns) ? result.returns : [];
+  const staysArchived = Array.isArray(result?.staysArchived) ? result.staysArchived : [];
+  const name = (item) => localizedText(item?.title) || item?.id || "";
+  const published = returns.filter((item) => !item.asDraft).map((item) => (item.versionLabel ? `${name(item)} (${item.versionLabel})` : name(item)));
+  const asDraft = returns.filter((item) => item.asDraft).map(name);
+  return [
+    published.length > 0 ? tf("courses.restoreDialog.doneReturned", { items: published.join(", ") }) : "",
+    asDraft.length > 0 ? tf("courses.restoreDialog.doneAsDraft", { items: asDraft.join(", ") }) : "",
+    staysArchived.length > 0 ? tf("courses.restoreDialog.doneStays", { items: staysArchived.map(name).join(", ") }) : "",
+  ].filter(Boolean).join(" ");
+}
+
+let pendingCourseRestore = null; // { courseId, courseTitle, triggerButton }
+// Samme løpenummer som arkiveringen (`courseArchiveSeq`): bare den siste hentingen vises.
+let courseRestoreSeq = 0;
+
 async function restoreCourseInAdmin(courseId, courseTitle, triggerButton = null) {
   if (triggerButton) triggerButton.disabled = true;
+  const dialog = document.getElementById("courseRestoreDialog");
+  if (!dialog || typeof dialog.showModal !== "function") {
+    await restoreCourseWithoutPreview(courseId, courseTitle, triggerButton);
+    return;
+  }
+  const seq = ++courseRestoreSeq;
+  // Et svar som ikke gjelder lenger: knappen virker igjen, med mindre den hører til dialogen som står nå.
+  const dropStale = () => {
+    if (seq === courseRestoreSeq) return false;
+    if (triggerButton && pendingCourseRestore?.triggerButton !== triggerButton) triggerButton.disabled = false;
+    return true;
+  };
+  let preview;
   try {
-    await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/restore`, getHeaders, { method: "POST" });
-    showToast(`Kurset «${courseTitle}» ble gjenopprettet.`, "success");
+    preview = await apiFetch(courseApiPath(courseId, "restore-preview"), getHeaders);
+  } catch (err) {
+    if (dropStale()) return;
+    // En tjener uten forhåndsvisning (eldre enn 2.159.0): som før, uten spørsmål.
+    if (previewRouteMissing(err)) {
+      await restoreCourseWithoutPreview(courseId, courseTitle, triggerButton);
+      return;
+    }
+    apiErrorToast(err);
+    if (triggerButton) triggerButton.disabled = false;
+    return;
+  }
+  if (dropStale()) return;
+  if (preview?.archived === false) {
+    // Gjenopprettet av noen andre mens forfatteren så på lista.
+    showToast(t("errors.api.course_not_archived"), "warning");
+    await refreshCourseView(courseId);
+    return;
+  }
+  const title = localizedText(preview?.courseTitle) || courseTitle || courseId;
+  pendingCourseRestore = { courseId, courseTitle: title, triggerButton };
+  document.getElementById("courseRestoreTitle").textContent = tf("courses.restoreDialog.title", { title });
+  document.getElementById("courseRestoreText").textContent = t("courses.restoreDialog.intro");
+  document.getElementById("courseRestoreBody").innerHTML = renderCourseRestorePreview(preview);
+  const confirmBtn = document.getElementById("courseRestoreConfirmBtn");
+  confirmBtn.textContent = t("courses.restoreDialog.confirm");
+  confirmBtn.disabled = false;
+  document.getElementById("courseRestoreCancelBtn").textContent = t("ui.action.cancel");
+  if (!dialog.open) dialog.showModal();
+}
+
+async function restoreCourseWithoutPreview(courseId, courseTitle, triggerButton) {
+  try {
+    await apiFetch(courseApiPath(courseId, "restore"), getHeaders, { method: "POST" });
+    showToast(tf("courses.restored", { title: courseTitle }), "success");
     await refreshCourseView(courseId);
   } catch (err) {
     apiErrorToast(err);
     if (triggerButton) triggerButton.disabled = false;
   }
+}
+
+async function confirmCourseRestore() {
+  const target = pendingCourseRestore;
+  if (!target) return;
+  const dialog = document.getElementById("courseRestoreDialog");
+  const confirmBtn = document.getElementById("courseRestoreConfirmBtn");
+  confirmBtn.disabled = true;
+  try {
+    const result = await apiFetch(courseApiPath(target.courseId, "restore"), getHeaders, { method: "POST" });
+    pendingCourseRestore = null;
+    dialog?.close();
+    const detail = courseRestoreResultDetail(result);
+    const leftovers = (result?.returns ?? []).some((item) => item?.asDraft) || (result?.staysArchived ?? []).length > 0;
+    showToast(tf("courses.restoreDialog.done", { title: target.courseTitle }), leftovers ? "warning" : "success", detail);
+    await refreshCourseView(target.courseId);
+  } catch (err) {
+    if (apiErrorCode(err) === "course_not_archived") {
+      pendingCourseRestore = null;
+      dialog?.close();
+      showToast(apiErrorText(err), "warning");
+      await refreshCourseView(target.courseId);
+      return;
+    }
+    apiErrorToast(err);
+    confirmBtn.disabled = false;
+  }
+}
+
+function initCourseRestoreDialog() {
+  const dialog = document.getElementById("courseRestoreDialog");
+  document.getElementById("courseRestoreConfirmBtn")?.addEventListener("click", () => { confirmCourseRestore(); });
+  document.getElementById("courseRestoreCancelBtn")?.addEventListener("click", () => dialog?.close());
+  // Ingen ny henting mens denne dialogen står (den har ingen 409-runde), så lukkingen trenger ikke telle opp løpenummeret.
+  dialog?.addEventListener("close", () => {
+    const trigger = pendingCourseRestore?.triggerButton ?? null;
+    pendingCourseRestore = null;
+    returnFocusTo(trigger);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1669,8 +2034,12 @@ async function renderDetailView(courseId) {
 // Kroppen i skjemasida: kursdetaljer + innhold. Feltene beholder id-ene sine (title-nb, certLevel …).
 function courseDetailBodyHtml() {
   const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, discussionOwnerNotifications, sortOrder, availableThemes, themeIds } = courseDetail;
+  // #1150 skive 2b: et arkivert kurs kan ikke lagres (elementlista avvises med `course_item_archived` når innholdet fulgte kurset
+  // inn). Feltene, elementlista og innstillingene står sperret til kurset er gjenopprettet; eierpanelet lagrer for seg og er åpent.
+  const lockOpen = courseIsArchived() ? `<fieldset class="course-archived-lock" disabled data-course-archived-lock>` : "";
+  const lockClose = lockOpen ? "</fieldset>" : "";
   return `<div class="detail-layout">
-    <div data-form-tab="rediger">
+    <div data-form-tab="rediger">${lockOpen}
       <div class="detail-section">
         <h2 class="detail-section-title">${escapeHtml(t("courses.detailsTitle"))}</h2>
 
@@ -1726,14 +2095,14 @@ function courseDetailBodyHtml() {
           <button id="addItemBtn" class="btn btn-secondary" disabled>${escapeHtml(t("courses.addItem"))}</button>
         </div>
       </div>
-
+    ${lockClose}
     </div>
     <!-- #1094 (QA): utenfor fanepanelene, så meldingen ses fra «Innstillinger» også — en ugyldig plassering
          bytter dit, og feil fra tjeneren kan komme mens forfatteren står der. -->
     <div id="formErrorBanner" hidden></div>
     <div data-form-tab="innstillinger" hidden>
       ${courseId ? `<div class="detail-section" id="ownerPanelHost" data-form-untracked></div>` : ""}
-      <div class="detail-section">
+      ${lockOpen}<div class="detail-section">
         <h2 class="detail-section-title">${escapeHtml(t("ui.tab.settings"))}</h2>
         <div class="form-field">
           <label for="enrollmentPolicy">${escapeHtml(t("courses.visibility"))}</label>
@@ -1763,7 +2132,7 @@ function courseDetailBodyHtml() {
           ${courseShareLinkHtml(courseDetail.course?.slug)}
         </div>
         ${courseId ? "" : `<p class="small" style="margin:var(--space-2) 0 0">${escapeHtml(t("courses.saveFirstOwners"))}</p>`}
-      </div>
+      </div>${lockClose}
     </div>
     </div>`;
 }
@@ -1878,7 +2247,7 @@ function getCourseFormPage() {
     // #1140 etappe 2: med utkast «Publisert» + «Nyere utkast» (det felles merket), og linja om hvem som lagret det.
     statusHtml: () => {
       const course = courseDetail?.course ?? null;
-      return course ? lifecycleBadge(course, t) + courseVersionChipHtml(course) + courseDraftStateHtml(course) : "";
+      return course ? lifecycleBadge(course, t) + courseVersionChipHtml(course) + courseDraftStateHtml(course) + courseArchivedNoticeHtml() : "";
     },
     t,
     actions: () => courseDetailActions(),
@@ -1889,7 +2258,8 @@ function getCourseFormPage() {
     },
     tabs: { items: () => [{ id: "rediger", label: t("ui.tab.edit") }, { id: "innstillinger", label: t("ui.tab.settings") }], initial: "rediger" },
     body: () => courseDetailBodyHtml(),
-    save: { onSave: () => saveCourse(courseDetail?.courseId ?? null) },
+    // #1150 skive 2b: et arkivert kurs har ingen Lagre/Avbryt (se `courseIsArchived`). Leses hver gang hodet tegnes.
+    save: { onSave: () => saveCourse(courseDetail?.courseId ?? null), get hidden() { return courseIsArchived(); } },
     afterRender: () => bindCourseDetail(),
   });
   courseFormPage.installGuards();
@@ -1929,6 +2299,22 @@ function courseDetailActions() {
     lifecycle === "archived" ? `<button type="button" class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
     isAdministrator() ? `<button type="button" class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>` : "",
   ];
+}
+
+/**
+ * #1150 skive 2b: det åpnede kurset er arkivert. Da kan det ikke lagres: elementer som fulgte kurset inn i arkivet, gir
+ * `course_item_archived` på hver lagring av elementlista, og skjemaet sender alltid hele lista. Skjemaet er sperret, Lagre og
+ * Avbryt er borte, og linja under merket sier hvorfor. Tjeneren sperrer ikke (det er #1151); dette hindrer bare at forfatteren
+ * skriver inn noe som garantert avvises.
+ */
+function courseIsArchived() {
+  const course = courseDetail?.course;
+  return Boolean(course) && lifecycleOf(course) === "archived";
+}
+
+function courseArchivedNoticeHtml() {
+  if (!courseIsArchived()) return "";
+  return `<p class="course-archived-notice" role="status" data-course-archived-notice>${escapeHtml(t("courses.archivedNotice"))}</p>`;
 }
 
 // Etter en livssyklushandling: bli på kurset når man står i det, ellers lista.
@@ -1973,6 +2359,9 @@ function courseDraftItemToFormItem(item) {
  */
 function courseDraftStateHtml(course) {
   if (!courseDraft || !courseHasDraft(course)) return "";
+  // #1150 skive 2b: et arkivert kurs har sin egen linje (`courseArchivedNoticeHtml`), og rådet «publiser kurset igjen» gjelder
+  // ikke før det er gjenopprettet. «Forkast utkast» står fortsatt i handlingsraden (kurs arkivert med utkast før 2.159.0).
+  if (lifecycleOf(course) === "archived") return "";
   if (!isLiveLifecycle(lifecycleOf(course))) {
     return `<p class="course-draft-notice" role="status" data-course-draft-notice>${escapeHtml(t("courses.draft.notLiveNotice"))}</p>`;
   }
@@ -2879,6 +3268,8 @@ async function init() {
   initCascadePublishDialog();
   initPendingPublishDialog();
   initCascadeDeleteDialog();
+  initCourseArchiveDialog();
+  initCourseRestoreDialog();
 
   const route = detectRoute();
   translateStaticText();

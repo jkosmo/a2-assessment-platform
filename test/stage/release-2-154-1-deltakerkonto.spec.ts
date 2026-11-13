@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { readServiceAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.154.1 mot UTRULLET stage: deltakerflyten prøvd med en VANLIG DELTAKERKONTO, uten at et menneske logger inn.
 //
@@ -153,7 +154,7 @@ test.afterAll(async () => {
     // Deltakeren har bestått kursets eneste modul og har kursbevis: uten svar på versjonsspørsmålet gir tømmingen 400
     // `course_version_required`, og modulen blir liggende i kurset og kan ikke arkiveres. «minor» sender ingen e-post.
     noter("tøm testkurs", (await api("fagansvarlig", "PUT", `/api/admin/content/courses/${kursId}/items`, { items: [], expectedRevision: kurs.json.course?.contentRevision, version: "minor" })).status);
-    noter("arkiver testkurs", (await api("fagansvarlig", "POST", `/api/admin/content/courses/${kursId}/archive`)).status);
+    noter("arkiver testkurs", (await arkiverKurs((metode, sti, body) => api("fagansvarlig", metode, sti, body), kursId)).status);
   }
   for (const id of [tilstand.modulA, tilstand.modulB, tilstand.modulC]) {
     if (id) noter("arkiver testmodul", (await api("fagansvarlig", "POST", `/api/admin/content/modules/${id}/archive`)).status);

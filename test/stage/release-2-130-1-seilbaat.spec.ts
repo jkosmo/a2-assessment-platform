@@ -4,6 +4,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.130.1 mot UTRULLET stage, med ekte API og ekte klient:
 //   - favicon: filene serveres, og sidene lenker til dem;
@@ -64,7 +65,7 @@ const tilstand: { kursId?: string; seksjoner: string[] } = { seksjoner: [] };
 test.afterAll(async () => {
   if (tilstand.kursId) {
     await api("POST", `/api/admin/content/courses/${tilstand.kursId}/unpublish`);
-    noter("arkiver testkurs", (await api("POST", `/api/admin/content/courses/${tilstand.kursId}/archive`)).status);
+    noter("arkiver testkurs", (await arkiverKurs(api, tilstand.kursId)).status);
   }
   // QA 2.130.1: seksjonene ble stående publisert etter hver kjøring. Innhold i et kursbevis kan ikke
   // slettes, så de avpubliseres og arkiveres — også når testen stoppet før kurset ble laget.

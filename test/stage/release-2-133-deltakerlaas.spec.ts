@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.133.0 mot UTRULLET stage: #934 skive 5a-1 — deltakerlåsen, låst utstedelse, versjonen deltakeren så
 // (doc/DESIGN_934.md, «5a-1»).
@@ -81,7 +82,7 @@ async function publiserModulversjon(moduleId: string, oppgavenavn: string) {
 test.afterAll(async () => {
   if (tilstand.kursId) {
     await api("POST", `/api/admin/content/courses/${tilstand.kursId}/unpublish`);
-    noter("arkiver testkurs", (await api("POST", `/api/admin/content/courses/${tilstand.kursId}/archive`)).status);
+    noter("arkiver testkurs", (await arkiverKurs(api, tilstand.kursId)).status);
   }
   if (tilstand.moduleId) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/archive`)).status);
 });

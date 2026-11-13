@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.136.0 mot UTRULLET stage: #934 skive 5b (doc/DESIGN_934.md, «5b — bygget»). Bare API, med tjenestekontoen. Dialogene selv er testet i
 // test/e2e/admin-content-module-publish-934-5b.spec.ts og admin-content-course-pending-934-5b.spec.ts, mot falske API-er. Her måles det
@@ -83,7 +84,7 @@ test.afterAll(async () => {
   for (const id of [tilstand.kursId, tilstand.importert]) {
     if (!id) continue;
     await api("POST", `/api/admin/content/courses/${id}/unpublish`);
-    noter("arkiver testkurs", (await api("POST", `/api/admin/content/courses/${id}/archive`)).status);
+    noter("arkiver testkurs", (await arkiverKurs(api, id)).status);
   }
   if (tilstand.moduleId) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/archive`)).status);
 });

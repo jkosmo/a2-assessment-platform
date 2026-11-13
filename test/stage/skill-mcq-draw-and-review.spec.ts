@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 import { synthesizeModuleEnvelope } from "../../skills/a2-authoring-api/scripts/synthesize-envelopes.mjs";
 
 // Skillet (references/modules.md, «Practice: a draw and a review») lover at `assessmentPolicy.mcq` i importfila virker. Mot UTRULLET
@@ -98,7 +99,7 @@ async function gjennomgang(submissionId: string) {
 test.afterAll(async () => {
   for (const id of kursene) {
     await api("POST", `/api/admin/content/courses/${id}/unpublish`);
-    await api("POST", `/api/admin/content/courses/${id}/archive`);
+    await arkiverKurs(api, id);
   }
   for (const id of moduler) await api("POST", `/api/admin/content/modules/${id}/archive`);
 });

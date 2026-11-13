@@ -114,6 +114,34 @@ Velg etter hva du er ute etter: en kopi ved siden av, eller nytt innhold i modul
 6. Lagre
 7. Klikk **Publiser** når kurset er klart for deltakere
 
+#### Arkivere og gjenopprette et kurs (2.159.0)
+
+**Arkiver** (i kurslista, eller i handlingsraden når kurset er åpnet) viser først hva som skjer, og ingenting skjer før du
+bekrefter:
+
+- **Følger med inn i arkivet:** modulene og seksjonene som bare brukes i dette kurset. De arkiveres sammen med kurset, også
+  de du ikke eier selv (de er merket «Eies av en annen forfatter»).
+- **Blir stående:** det som brukes i et annet aktivt kurs, eller i et lagret utkast til et (merket «lagret utkast»). Det
+  røres ikke.
+- **Deltakere midt i kurset:** hvor mange. De beholder lesinger, besvarelser og beståtte moduler, men kurset forsvinner fra
+  «Mine kurs». Ingen får e-post.
+- **Besvarelser som venter på vurdering:** de vurderes ferdig etterpå. Den som fullfører kurset mens det er arkivert, får
+  kursbeviset først når kurset gjenopprettes og publiseres. Fullfører noen kurset da, kan kurset ikke slettes.
+- **Fullført uten kursbevis:** får beviset nå, når kurset er publisert. Et upublisert kurs gir ikke kursbevis.
+- **Utkastet:** har kurset et lagret utkast, forkastes det.
+
+Har noe endret seg mens dialogen sto åpen (en modul er lagt inn i et annet kurs, eller flere er kommet i gang), arkiveres
+ingenting: dialogen viser det som gjelder nå, og du bekrefter på nytt.
+
+Et arkivert kurs kan åpnes og leses, men ikke endres: feltene og innholdslista er sperret, og linja under statusmerket sier
+at kurset må gjenopprettes først. Eierne kan fortsatt endres.
+
+**Gjenopprett** viser hva som kommer tilbake. Modulene og seksjonene som fulgte kurset inn, blir publisert igjen med samme
+versjon som før. Var et element et utkast, eller finnes versjonen ikke lenger, kommer det tilbake som utkast og må
+publiseres før kurset. Elementer som ble arkivert for seg, arkivert før 2.159.0, eller arkivert sammen med et annet kurs,
+blir stående arkivert: gjenopprett dem hver for seg. Kurset selv kommer alltid tilbake som utkast. Publiser det når du er
+klar. Meldingen etterpå sier hva som faktisk kom tilbake.
+
 ### 6. Klasser: hva medlemmene får på e-post
 
 Når du gir en klasse et kurs, eller legger noen til i en klasse som har kurs, får medlemmene en e-post om de nye kursene.
@@ -155,5 +183,6 @@ Det kommer an på kurset:
 - **Slette** kan du ikke så lenge den ligger i et kurs, heller ikke et arkivert: det arkiverte kurset beholder innholdet sitt.
   Meldingen sier hvilke av kursene som er arkiverte. En egen vei for å slette arkivert innhold kommer (#1152).
 
-Gjenoppretter du et arkivert kurs der en modul eller seksjon er arkivert i mellomtiden, står kurset som utkast. Det kan
-ikke publiseres før elementet er gjenopprettet eller tatt ut av kurset.
+Gjenoppretter du et arkivert kurs der en modul eller seksjon er arkivert for seg (ikke sammen med kurset), står kurset som
+utkast. Det kan ikke publiseres før elementet er gjenopprettet eller tatt ut av kurset. Dialogen for «Gjenopprett» viser
+hvilke elementer det gjelder (se «Arkivere og gjenopprette et kurs» over).

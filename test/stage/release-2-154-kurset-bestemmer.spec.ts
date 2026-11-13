@@ -4,6 +4,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.154.0 mot UTRULLET stage: #1140 etappe 1 — hvilken versjon av en modul en deltaker får, avgjøres ett sted, og kurset modulen
 // åpnes fra, følger med (doc/DESIGN_1140.md, doc/design/PLAN_1140_E1.md).
@@ -111,7 +112,7 @@ test.afterAll(async () => {
     // begge ligge igjen med 400).
     const kurs = await api("GET", `/api/admin/content/courses/${tilstand.kursId}`);
     noter("tøm testkurs", (await api("PUT", `/api/admin/content/courses/${tilstand.kursId}/items`, { items: [], expectedRevision: kurs.json.course?.contentRevision })).status);
-    noter("arkiver testkurs", (await api("POST", `/api/admin/content/courses/${tilstand.kursId}/archive`)).status);
+    noter("arkiver testkurs", (await arkiverKurs(api, tilstand.kursId)).status);
   }
   for (const id of [tilstand.modulA, tilstand.modulB]) {
     if (id) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${id}/archive`)).status);

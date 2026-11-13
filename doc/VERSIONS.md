@@ -2,11 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
-## 2.159.0 - 2026-11-13 (under arbeid)
+## 2.159.0 - 2026-11-13
 
-Etappe 2 av #1148 (arkivering som følger med nedover, #1150), i tre skiver. **Skal ikke rulles ut før alle tre er med:**
-2a-1 alene gjør at arkiveringssperren (G3) stopper flere kurs enn før, til 2a-2 gjør sperren om til en bekreftelse. Plan:
-`doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`.
+Etappe 2 av #1148 (arkivering som følger med nedover, #1150), i tre skiver som rulles ut samlet: 2a-1 alene ville fått
+arkiveringssperren (G3) til å stoppe flere kurs enn før, og 2a-2 alene ville gjort at ingen kunne arkivere et kurs med
+innhold fra klienten. Plan: `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`.
+
+**Hva forfatterne merker, samlet:** «Arkiver» på et kurs viser hva som følger med inn i arkivet og hva som blir stående, og
+tar med seg innholdet ingen andre kurs bruker. «Gjenopprett» setter det tilbake slik det var. Et arkivert kurs kan åpnes,
+men ikke endres. En modul eller seksjon som står i et annet kurs' lagrede utkast, kan ikke arkiveres for hånd.
+
+### Skive 2b: dialogene for «Arkiver» og «Gjenopprett» på kurs
+
+- **«Arkiver»** (kurslista og det åpnede kurset) viser først hva som skjer: modulene og seksjonene som følger med inn i
+  arkivet (merket når en annen forfatter eier dem), det som blir stående fordi det brukes i et annet kurs eller et lagret
+  utkast, deltakere midt i, besvarelser som venter på vurdering (den som fullfører mens kurset er arkivert, får beviset når
+  kurset gjenopprettes og publiseres), fullført uten kursbevis (får beviset nå når kurset er publisert), og at kursets utkast
+  forkastes. Bekreft sender `expected`. Er noe endret imens (409), viser dialogen det nye og spør igjen. Meldingen etterpå:
+  «Kurset er arkivert, med 2 moduler og 1 seksjon», og antall kursbevis som ble utstedt.
+- **«Gjenopprett»** viser hva som kommer tilbake (med versjon, eller hvorfor som utkast) og hva som blir stående arkivert, og
+  hvorfor. Meldingen etterpå bygges fra tjenerens svar.
+- Svarer forhåndsvisningen 404 (gammel tjener under utrullingen), brukes den gamle bekreftelsen. `404 course_not_found` er en
+  feil og vises som det. Bare den siste åpningen vises (to klikk mens den laster), Esc mens dialogen henter på nytt lukker
+  den, og fokus går tilbake til knappen.
+- **Et arkivert kurs** kan åpnes, men ikke endres: linje under merket, Lagre/Avbryt borte, skjemaet sperret. Eierpanelet er
+  åpent. Tjeneren sperrer ikke (#1151).
+- Tekstene på nb, nn og en-GB; ingen faste norske tekster i klienten.
+- **Stage-testene** rydder kurs gjennom `test/stage/arkiver.ts` (forhåndsvisning + `expected`), 22 filer.
+  `release-2-158-arkiverte-kurs` B og D måler nå 2.159-oppførselen: elementene følger kurset inn, modulen kommer tilbake
+  publisert med samme versjon, og en seksjon arkivert for seg stopper publiseringen (`item_archived`) til den er gjenopprettet.
+- **Tester:** `test/e2e/admin-content-course-archive-dialog-1150.spec.ts` (27). Mutasjonssjekket 42 veier, alle røde (to
+  overlevde først: ordbryting og nynorsk; testene rettet). Runde: enhet 3242, DOM 109, integrasjon 1226 (før QA-rettingene,
+  tjeneren er ikke endret siden), nettleser 1035.
+- **QA-porten:** GO. Rettet: fokus etter lukking, gamle svar som kom etter nyere, Esc under ny henting, `course_not_found`
+  som gammel tjener, utkastlinja i et arkivert kurs, entall/flertall, teksten om kursbevis etter arkivering, ordbryting i
+  tittelen, grå felt i det sperrede skjemaet, og `release-2-158` B/D.
+- **Kjent:** svaret på `POST …/restore` bærer ikke nummeret gjenopprettingen gir eldre, unummererte moduler (meldingen viser
+  tittelen uten versjon). Elementer i kurset som alt er arkivert for seg, nevnes ikke i arkiver-dialogen; de vises i
+  gjenopprett-dialogen.
 
 ### Skive 2a-2: kursarkiveringen tar innholdet med seg, og gjenopprettingen setter det tilbake
 

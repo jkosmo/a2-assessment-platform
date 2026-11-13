@@ -4,6 +4,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.102.0 mot UTRULLET stage, med ekte API, ekte klient og ekte oversetter:
 //   - administrator lager et tema på bokmål, og nynorsk og engelsk fylles inn av oversetteren;
@@ -72,7 +73,7 @@ test.afterAll(async () => {
   if (temaId) noter("slett testtema", (await api("DELETE", `/api/admin/content/themes/${temaId}`)).status);
   if (kursId) {
     await api("POST", `/api/admin/content/courses/${kursId}/unpublish`);
-    await api("POST", `/api/admin/content/courses/${kursId}/archive`);
+    await arkiverKurs(api, kursId);
     noter("slett testkurs", (await api("DELETE", `/api/admin/content/courses/${kursId}`)).status);
   }
   if (seksjonId) {

@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.131.0 mot UTRULLET stage: #934 skive 4a — innholdslåsen og kursskjemaets teller (doc/DESIGN_934.md, «4a»).
 //   - kursdetaljen sender telleren (`contentRevision`), og en lagring med den går gjennom;
@@ -64,7 +65,7 @@ async function detalj() {
 test.afterAll(async () => {
   if (tilstand.kursId) {
     await api("POST", `/api/admin/content/courses/${tilstand.kursId}/unpublish`);
-    noter("arkiver testkurs", (await api("POST", `/api/admin/content/courses/${tilstand.kursId}/archive`)).status);
+    noter("arkiver testkurs", (await arkiverKurs(api, tilstand.kursId)).status);
   }
 });
 

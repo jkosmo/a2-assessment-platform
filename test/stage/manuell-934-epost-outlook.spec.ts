@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // Manuell kontroll mot UTRULLET stage: #934 skive 4b, en ekte e-post om ny hovedversjon i en ekte innboks. Kjøres bare med
 // MANUELL_EPOST=1 og COURSE_MAJOR_EMAIL_ENABLED=true på stage-workeren, med tokenet til kontoen som skal få e-posten
@@ -74,5 +75,5 @@ test("rydder: arkiverer kurset når e-posten er sett", async () => {
   test.skip(!process.env.RYDD_KURS, "bare med RYDD_KURS");
   const id = process.env.RYDD_KURS!;
   expect((await api("POST", `/api/admin/content/courses/${id}/unpublish`)).status).toBe(200);
-  expect((await api("POST", `/api/admin/content/courses/${id}/archive`)).status).toBe(200);
+  expect((await arkiverKurs(api, id)).status).toBe(200);
 });

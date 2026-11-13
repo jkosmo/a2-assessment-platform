@@ -4,6 +4,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.101.0 mot UTRULLET stage, med ekte API og ekte klient:
 //   - etter «Oppdater dette kurset» ligger den nye versjonen klar, kurssiden spør straks, og «Publiser
@@ -66,7 +67,7 @@ const seksjonIder: string[] = [];
 test.afterAll(async () => {
   for (const id of kursIder) {
     await api("POST", `/api/admin/content/courses/${id}/unpublish`);
-    await api("POST", `/api/admin/content/courses/${id}/archive`);
+    await arkiverKurs(api, id);
     const slettet = await api("DELETE", `/api/admin/content/courses/${id}`);
     noter("slett testkurs", slettet.status);
   }

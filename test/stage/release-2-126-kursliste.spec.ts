@@ -4,6 +4,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.126.0 mot UTRULLET stage, med ekte API og ekte klient:
 //   - kurslista i innholdsforvaltningen etter tema eller alfabetisk;
@@ -69,7 +70,7 @@ const tilstand: { moduleId?: string; versionId?: string; kursId?: string; submis
 test.afterAll(async () => {
   if (tilstand.kursId) {
     await api("POST", `/api/admin/content/courses/${tilstand.kursId}/unpublish`);
-    await api("POST", `/api/admin/content/courses/${tilstand.kursId}/archive`);
+    await arkiverKurs(api, tilstand.kursId);
     noter("slett testkurs", (await api("DELETE", `/api/admin/content/courses/${tilstand.kursId}`)).status);
   }
   if (tilstand.moduleId) {

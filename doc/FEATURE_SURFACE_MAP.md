@@ -1623,7 +1623,7 @@ Låsene: innholdslåsen eksklusivt, så deltakerlåsene sortert (`lockLearnersIn
 revisjonssporets lås alt er tatt), så revisjonssporet.
 
 **Setningene:** `errors.api.course_archive_needs_confirmation`, `…course_archive_preview_changed`, `…course_already_archived`,
-`…course_not_archived` i `public/i18n/participant-translations.js` (nb, nn, en-GB). Klienten (dialogene) kommer i skive 2b.
+`…course_not_archived` i `public/i18n/participant-translations.js` (nb, nn, en-GB). Klienten (dialogene) er skive 2b (33d).
 
 **Vakter:** `test/content-in-use-guard.test.js`: hvert sted som arkiverer en modul eller seksjon (også flere på én gang:
 `archiveModules`, `updateMany` på `archivedAt`) går gjennom regelen; skriveren deles opp per metode, og unntakene står per
@@ -1631,3 +1631,31 @@ metode med en liste over hvem som får kalle dem; bare de to skriverne setter me
 nullstiller begge. `test/course-draft-guard.test.js`: `courseArchive.ts` står blant importørene, og bare den forkaster med
 `discardCourseDraftOnArchive`. `test/course-assignment-ways-in-guard.test.js`: kursets skrivinger av `archivedAt`/`publishedAt`
 står i `courseArchive.ts`. Gjennom rutene: `test/m2-course-archive-follow-1150.test.ts`.
+
+### 33d. Dialogene for «Arkiver» og «Gjenopprett» på kurs (#1150 skive 2b)
+
+Begge knappene finnes **to steder**, og begge går gjennom samme funksjon (`handleListTableClick` i
+`public/static/admin-content-courses.js`):
+
+| Flate | Hvor |
+|---|---|
+| Kurslista, raden (eller «Mer») | `actions` i `getListPage()` |
+| Det åpnede kurset, handlingsraden i hodet | `courseDetailActions()` |
+
+| Del | Hvor | Hva |
+|---|---|---|
+| Arkiver-dialogen | `#courseArchiveDialog` i `public/admin-content-courses.html`; `openCourseArchiveDialog`, `renderCourseArchivePreview`, `confirmCourseArchive` | Henter `GET …/archive-preview` og viser `follows` (merket på `owned: false`), `stays` (med kursene, og «lagret utkast» for `via: "draft"`), og tallene `inProgressCount`, `pendingReviewCount`, `completedWithoutCertificateCount` bare når de ikke er 0, og `hasDraft`. Bekreft sender `expected` bygd fra det dialogen viste. `409 course_archive_preview_changed` → ny forhåndsvisning og en linje om at noe er endret; `400 course_already_archived` → visningen lastes på nytt |
+| Gjenopprett-dialogen | `#courseRestoreDialog`; `restoreCourseInAdmin`, `renderCourseRestorePreview`, `confirmCourseRestore` | Henter `GET …/restore-preview` og viser `returns` (versjonen, eller hvorfor det lander som utkast) og `staysArchived` (grunnen). Meldingen etterpå bygges fra **svaret** på `POST …/restore` (`courseRestoreResultDetail`), ikke fra forhåndsvisningen |
+| Gammel tjener | `archiveCourseWithoutPreview`, `restoreCourseWithoutPreview`, `previewRouteMissing` | 404 på forhåndsvisningen → den enkle bekreftelsen og `POST …/archive` uten kropp; gjenoppretting uten dialog, som før. Ikke når koden er `course_not_found` (tjeneren har ruta, kurset finnes ikke): da vises feilen |
+| Ett svar om gangen | `courseArchiveSeq`, `courseRestoreSeq` | Hver henting av forhåndsvisningen får et løpenummer; et svar som kommer etter en nyere henting, vises ikke (to klikk mens den laster). Lukking av arkiver-dialogen teller opp, så Esc mens den henter på nytt etter 409 ikke åpner den igjen |
+| Fokus | `returnFocusTo` | Knappen som åpnet dialogen, slås av mens den laster; når dialogen lukkes, virker den igjen og får fokuset tilbake |
+| Det åpnede, arkiverte kurset | `courseIsArchived`, `courseArchivedNoticeHtml`, `lockOpen` i `courseDetailBodyHtml`, `save.hidden` i `getCourseFormPage` | Linje under merket, Lagre/Avbryt borte, feltene, elementlista og innstillingene i en `<fieldset disabled>`. Eierpanelet står utenfor (lagrer for seg). Tjeneren sperrer ikke (#1151) |
+| Tekstene | `courses.archiveDialog.*`, `courses.restoreDialog.*`, `courses.restored`, `courses.archivedNotice` i `public/i18n/admin-content-translations.js` (nb, nn, en-GB) | Feilsetningene er de felles `errors.api.*` |
+| Stage-testenes rydding | `test/stage/arkiver.ts` (`arkiverKurs`) | Hver stage-fil som arkiverer et kurs, går gjennom den: forhåndsvisning, `expected`, én ny runde ved 409 |
+
+**Vakter:** `test/e2e/admin-content-course-archive-dialog-1150.spec.ts` (begge flatene for begge handlingene, 409-forløpet,
+Avbryt, kontroll med alle tall 0, 404-reserven for begge, det sperrede kurset med kontroll, tre språk, 390 px; og fra
+QA-porten: fokus etter lukking, to klikk med tilbakeholdt svar for begge dialogene, Esc under ny henting, `course_not_found`,
+og et arkivert kurs med et gammelt utkast). Den gamle
+`admin-content-workspaces.spec.ts` «course list can archive a course …» går nå gjennom 404-reserven (den statiske testtjeneren
+har ingen forhåndsvisning).

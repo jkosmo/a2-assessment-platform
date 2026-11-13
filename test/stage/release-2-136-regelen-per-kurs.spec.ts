@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.136.0 mot UTRULLET stage MED BRYTEREN PÅ: hele veien for regelen om beståtte per kurs, på ekte database og worker. Én modul i to kurs,
 // hovedversjon i A og mindre i B:
@@ -97,7 +98,7 @@ test.afterAll(async () => {
   for (const id of [t.a, t.b]) {
     if (!id) continue;
     await api("POST", `/api/admin/content/courses/${id}/unpublish`);
-    await api("POST", `/api/admin/content/courses/${id}/archive`);
+    await arkiverKurs(api, id);
   }
   if (t.moduleId) await api("POST", `/api/admin/content/modules/${t.moduleId}/archive`);
 });

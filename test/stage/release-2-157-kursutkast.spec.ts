@@ -4,6 +4,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { readServiceAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.157.0 mot UTRULLET stage: #1140 etappe 2 — et publisert kurs redigeres gjennom et utkast (doc/design/PLAN_1140_E2.md,
 // doc/COURSE_DRAFTS_GUIDE.md). Ingen bryter: utkast er alltid på.
@@ -118,7 +119,7 @@ test.afterAll(async () => {
     rydd("avpubliser testkurs", (await api("fagansvarlig", "POST", `${kurssti()}/unpublish`)).status);
     const kurs = await api("fagansvarlig", "GET", kurssti());
     rydd("tøm testkurs", (await api("fagansvarlig", "PUT", `${kurssti()}/items`, { items: [], expectedRevision: kurs.json.course?.contentRevision, version: "minor" })).status);
-    rydd("arkiver testkurs", (await api("fagansvarlig", "POST", `${kurssti()}/archive`)).status);
+    rydd("arkiver testkurs", (await arkiverKurs((metode, sti, body) => api("fagansvarlig", metode, sti, body), tilstand.kursId)).status);
   }
   for (const id of tilstand.seksjoner) {
     await api("fagansvarlig", "POST", `/api/admin/content/sections/${id}/unpublish`);

@@ -214,6 +214,24 @@
       /* Et element i utkastet som ikke kan publiseres: grunnen på egen linje i raden. */
       .form-row.is-blocked { flex-wrap: wrap; border-color: #f5c0bb; background: #fdf0ef; }
       .form-row-note { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--color-error); }
+      /* #1150 skive 2b: det åpnede kurset er arkivert. Samme linje som utkastet, i nøytral tone. Skjemaet er sperret
+         (fieldset disabled), men skal se ut som før: ingen ramme, og ingen min-content-bredde som skyver over på en telefon. */
+      .course-archived-notice { flex-basis: 100%; order: 1; margin: 0; font-size: 13px; border-radius: var(--radius-card); padding: 7px 10px; overflow-wrap: anywhere; color: #8a5a00; background: #fff5e6; border: 1px solid #e3c58a; }
+      .course-archived-lock { border: 0; padding: 0; margin: 0; min-width: 0; min-inline-size: 0; display: contents; }
+      /* Nedtrekket og søkefeltet har egen hvit bakgrunn; i det sperrede skjemaet ser de ut som de andre sperrede feltene
+         (shared.css, `.form-field input:disabled`). */
+      .course-archived-lock select:disabled, .course-archived-lock .combobox-input:disabled { background: var(--color-bg); color: var(--color-meta); }
+      /* #1150 skive 2b: dialogene for «Arkiver» og «Gjenopprett». Dialogen er aldri høyere enn skjermen (nettleserens egen
+         grense), og lista krymper og ruller inne i den, så tittelen og knappene alltid ses, også med lange titler på en telefon. */
+      .course-lifecycle-dialog { max-width: min(560px, calc(100vw - 24px)); }
+      .course-lifecycle-dialog[open] { display: flex; flex-direction: column; }
+      .course-lifecycle-dialog > .dialog-title, .course-lifecycle-dialog > .dialog-text, .course-lifecycle-dialog > .dialog-actions { flex: none; }
+      .course-lifecycle-dialog > .dialog-title { overflow-wrap: anywhere; }
+      .course-lifecycle-body { flex: 1 1 auto; min-height: 120px; overflow-y: auto; overflow-wrap: anywhere; }
+      .course-lifecycle-body .cascade-delete-heading:first-child { margin-top: 0; }
+      .course-lifecycle-body .cascade-publish-item-title { min-width: 0; }
+      .course-lifecycle-note { flex-basis: 100%; font-size: 12px; color: var(--color-meta); }
+      .course-lifecycle-body .dialog-text { margin-bottom: var(--space-1); }
       .cascade-delete-heading { font-size: 13px; font-weight: 700; margin: var(--space-2) 0 4px; }
       .cascade-delete-body .cascade-publish-blocker { display: block; color: var(--color-meta); font-size: 12px; }
 
@@ -349,6 +367,29 @@
       <div class="dialog-actions">
         <button type="button" id="cascadeDeleteConfirmBtn" class="btn btn-danger" style="display:none">Slett kurs og ubrukt innhold</button>
         <button type="button" class="dialog-cancel" id="cascadeDeleteCancelBtn">Avbryt</button>
+      </div>
+    </dialog>
+
+    <!-- #1150 skive 2b: «Arkiver» og «Gjenopprett» viser hva som skjer med innholdet og deltakerne før noe skrives
+         (GET …/archive-preview og …/restore-preview). Samme oppbygning som «Publiser nye versjoner»: tekstene settes når
+         dialogen åpnes, og en 409 tegner den på nytt med ferske tall. -->
+    <dialog id="courseArchiveDialog" class="course-lifecycle-dialog" aria-labelledby="courseArchiveTitle">
+      <h2 class="dialog-title" id="courseArchiveTitle"></h2>
+      <p class="dialog-text" id="courseArchiveText"></p>
+      <div id="courseArchiveBody" class="course-lifecycle-body"></div>
+      <div class="dialog-actions">
+        <button type="button" id="courseArchiveConfirmBtn" class="btn btn-primary"></button>
+        <button type="button" class="dialog-cancel" id="courseArchiveCancelBtn"></button>
+      </div>
+    </dialog>
+
+    <dialog id="courseRestoreDialog" class="course-lifecycle-dialog" aria-labelledby="courseRestoreTitle">
+      <h2 class="dialog-title" id="courseRestoreTitle"></h2>
+      <p class="dialog-text" id="courseRestoreText"></p>
+      <div id="courseRestoreBody" class="course-lifecycle-body"></div>
+      <div class="dialog-actions">
+        <button type="button" id="courseRestoreConfirmBtn" class="btn btn-primary"></button>
+        <button type="button" class="dialog-cancel" id="courseRestoreCancelBtn"></button>
       </div>
     </dialog>
 

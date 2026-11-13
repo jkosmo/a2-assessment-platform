@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.96.0 mot UTRULLET stage: steg for steg (#1075), skriv selv (#1076) og repetisjonskort (#1078) —
 // hele kjeden med den ekte tjeneren: importert, tegnet og renset av tjeneren, vist i forhåndsvisningen
@@ -86,7 +87,7 @@ const behold = process.env.STAGE_BEHOLD === "1";
 
 async function slettKurs(id: string) {
   await api("POST", `/api/admin/content/courses/${id}/unpublish`);
-  await api("POST", `/api/admin/content/courses/${id}/archive`);
+  await arkiverKurs(api, id);
   return api("DELETE", `/api/admin/content/courses/${id}`);
 }
 async function slettSeksjon(id: string) {

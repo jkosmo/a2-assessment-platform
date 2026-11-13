@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // Manuell kontroll mot UTRULLET stage: ekte e-poster fra 2.138.0 i en ekte innboks. Bilde, lenke og at en adresse i en tittel ikke blir
 // en lenke kan bare ses i e-postklienten. Kjøres med MANUELL_EPOST=1 og tokenet til kontoen som skal få e-postene (`npm run stage:auth`).
@@ -218,10 +219,14 @@ async function tilSensor(sensor: string) {
 test("rydder: arkiverer det testen laget, når e-postene er sett", async () => {
   test.skip(process.env.RYDD !== "1", "bare med RYDD=1");
   const { kursId, nyttKursId, classId, moduler } = JSON.parse(fs.readFileSync(LAGER, "utf8")) as { kursId: string; nyttKursId?: string; classId: string; moduler: string[] };
+  // #1150: modulene som bare lå i kurset, arkiveres sammen med det (2.159.0). De andre arkiveres for seg, som før.
+  const fulgte = new Set<string>();
   for (const id of [kursId, nyttKursId].filter((id): id is string => Boolean(id))) {
     await api("POST", `/api/admin/content/courses/${id}/unpublish`);
-    expect((await api("POST", `/api/admin/content/courses/${id}/archive`)).status).toBe(200);
+    const arkivert = await arkiverKurs(api, id);
+    expect(arkivert.status).toBe(200);
+    for (const fulgt of arkivert.fulgte) fulgte.add(fulgt);
   }
-  for (const moduleId of moduler) expect((await api("POST", `/api/admin/content/modules/${moduleId}/archive`)).status).toBe(200);
+  for (const moduleId of moduler.filter((id) => !fulgte.has(id))) expect((await api("POST", `/api/admin/content/modules/${moduleId}/archive`)).status).toBe(200);
   console.log(`klassen ${classId} står igjen, den har ingen arkivering her.`);
 });

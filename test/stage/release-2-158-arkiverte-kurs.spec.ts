@@ -4,13 +4,18 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { readServiceAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.158.0 mot UTRULLET stage, med ekte data (#1149 og «Nyere utkast»):
 //
 //   A. Et kurs som arkiveres, forsvinner fra «Brukt i kurs» og kursfilteret for seksjonen og modulen i det.
-//   B. Seksjonen og modulen kan avpubliseres og arkiveres mens de ligger i det arkiverte kurset.
+//   B. Fra 2.159.0 (#1150): seksjonen og modulen fulgte kurset inn i arkivet, merket med kurset (gjenopprettingen av kurset
+//      ville gitt dem tilbake). Til og med 2.158 målte B at de kunne arkiveres for hånd etterpå; det er ikke lenger noe å
+//      arkivere.
 //   C. De kan ikke slettes, og svaret sier at kurset er arkivert — uten rådet om å ta dem ut av kurset.
-//   D. Gjenopprettes kurset, er det et utkast, og publiseringen stoppes av de arkiverte elementene.
+//   D. Fra 2.159.0: seksjonen arkiveres om igjen for hånd (da er den «arkivert for seg»). Gjenopprettes kurset, kommer modulen
+//      tilbake publisert med samme versjon, seksjonen blir stående, kurset er et utkast, og publiseringen stoppes av den
+//      arkiverte seksjonen (`item_archived`). Kontroll: med seksjonen gjenopprettet og publisert, lykkes publiseringen.
 //   E. Modulhodet sier «Nyere utkast» når skjemaet viser en lagring oppå den publiserte.
 //
 // Det testen skriver på stage: ett kurs, to moduler og én seksjon («Stage-test 2.158.0 …»). Alt arkiveres etterpå, og
@@ -70,7 +75,9 @@ const SEKSJON = `Stage-test 2.158.0 seksjon ${stempel}`;
 
 const sporsmaal = { stem: L("Who receives an appeal?", "Hvem skal klagen sendes til?"), options: [L("The deciding body", "Vedtaksorganet"), L("The ombudsman", "Ombudet"), L("The county governor", "Statsforvalteren"), L("The court", "Domstolen")], correctAnswer: L("The deciding body", "Vedtaksorganet"), rationale: L("The body that made the decision.", "Organet som fattet vedtaket.") };
 
-const tilstand: { kurs?: string; modul?: string; modulUtkast?: string; seksjon?: string } = {};
+const tilstand: { kurs?: string; modul?: string; modulUtkast?: string; seksjon?: string; fulgte?: Set<string> } = {};
+/** Den publiserte versjonen av hver modul testen lager (#1150: gjenopprettingen skal gi den samme tilbake). */
+const publisertVersjon = new Map<string, string>();
 const kurssti = () => `/api/admin/content/courses/${tilstand.kurs}`;
 const modulsti = (id = tilstand.modul) => `/api/admin/content/modules/${id}`;
 const seksjonssti = () => `/api/admin/content/sections/${tilstand.seksjon}`;
@@ -87,9 +94,12 @@ async function lagModul(navn: string, medNyereLagring = false): Promise<string> 
   expect(første.status, første.tekst.slice(0, 300)).toBe(201);
   const publisert = await api("POST", `${modulsti(id)}/module-versions/${første.json.moduleVersion.id}/publish`, {});
   expect([200, 201], publisert.tekst.slice(0, 600)).toContain(publisert.status);
+  publisertVersjon.set(id, første.json.moduleVersion.id as string);
   if (medNyereLagring) expect((await versjon()).status).toBe(201);
   return id;
 }
+
+const sortert = (liste: string[]) => [...liste].sort();
 
 /** Slik listene ser elementene: `courses` og `courseCount`. */
 async function brukILister() {
@@ -110,11 +120,13 @@ test.afterAll(async () => {
     if (status >= 400) mislyktes.push(`${hva}: ${status}`);
   };
   if (tilstand.kurs) {
-    // Kurset kan stå gjenopprettet (utkast) eller arkivert, alt etter hvor langt testen kom. Tøm det og arkiver det.
+    // Kurset kan stå gjenopprettet (utkast eller, etter D, publisert) eller arkivert, alt etter hvor langt testen kom. Tøm det
+    // og arkiver det.
     await api("POST", `${kurssti()}/restore`);
+    await api("POST", `${kurssti()}/unpublish`);
     const kurs = await api("GET", kurssti());
     rydd("tøm testkurs", (await api("PUT", `${kurssti()}/items`, { items: [], expectedRevision: kurs.json.course?.contentRevision })).status);
-    rydd("arkiver testkurs", (await api("POST", `${kurssti()}/archive`)).status);
+    rydd("arkiver testkurs", (await arkiverKurs(api, tilstand.kurs)).status);
   }
   for (const [navn, id] of [["modul", tilstand.modul], ["modul med utkast", tilstand.modulUtkast]] as const) {
     if (!id) continue;
@@ -133,8 +145,9 @@ test.afterAll(async () => {
   expect(mislyktes, "ryddingen på stage feilet; se funn.jsonl og rydd for hånd").toEqual([]);
 });
 
-test("versjonen er minst 2.158.0", async () => {
-  noter("versjon", await forventMinstVersjon(BASE, "2.158.0"));
+// #1150: B og D måler oppførselen fra 2.159.0 (innholdet følger kurset inn i arkivet og tilbake).
+test("versjonen er minst 2.159.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.159.0"));
 });
 
 test("testdata: et kurs med en publisert modul og en publisert seksjon; kontroll: begge viser kurset som bruk", async () => {
@@ -163,7 +176,9 @@ test("testdata: et kurs med en publisert modul og en publisert seksjon; kontroll
 test("A: kurset arkiveres og er borte fra «Brukt i kurs» og fra kursfilteret", async ({ page }) => {
   test.setTimeout(240_000);
   test.skip(!tilstand.kurs, "testdataene ble ikke laget");
-  expect((await api("POST", `${kurssti()}/archive`)).status).toBe(200);
+  const arkivert = await arkiverKurs(api, tilstand.kurs!);
+  expect(arkivert.status, arkivert.tekst.slice(0, 300)).toBe(200);
+  tilstand.fulgte = arkivert.fulgte;
   const etter = await brukILister();
   noter("etter arkivering av kurset", etter);
   expect(etter).toEqual({ seksjon: { antall: 0, kurs: [] }, modul: { antall: 0, kurs: [] } });
@@ -180,14 +195,32 @@ test("A: kurset arkiveres og er borte fra «Brukt i kurs» og fra kursfilteret",
   expect(valg.length, "kursfilteret er tomt: lista ble ikke lastet").toBeGreaterThan(1);
 });
 
-test("B og C: elementene kan avpubliseres og arkiveres, men ikke slettes, og svaret sier at kurset er arkivert", async ({ page }) => {
+test("B og C: elementene fulgte kurset inn i arkivet, og kan ikke slettes; svaret sier at kurset er arkivert", async ({ page }) => {
   test.setTimeout(240_000);
   test.skip(!tilstand.kurs, "testdataene ble ikke laget");
-  const avpublisert = await api("POST", `${modulsti()}/unpublish`, {});
-  const modulArkivert = await api("POST", `${modulsti()}/archive`, {});
-  const seksjonArkivert = await api("POST", `${seksjonssti()}/archive`);
-  noter("B", { avpubliserModul: avpublisert.status, arkiverModul: modulArkivert.status, arkiverSeksjon: seksjonArkivert.status });
-  expect([avpublisert.status, modulArkivert.status, seksjonArkivert.status], `${avpublisert.tekst.slice(0, 200)} ${modulArkivert.tekst.slice(0, 200)} ${seksjonArkivert.tekst.slice(0, 200)}`).toEqual([200, 200, 200]);
+  // B (#1150): arkiveringen av kurset tok med seg begge, fordi de ikke brukes andre steder.
+  const modul = await api("GET", `${modulsti()}/export`);
+  const seksjon = await api("GET", seksjonssti());
+  const forhånd = await api("GET", `${kurssti()}/restore-preview`);
+  const kommerTilbake = (forhånd.json.returns ?? []).map((element: { id: string }) => element.id);
+  noter("B", {
+    fulgte: [...(tilstand.fulgte ?? [])],
+    modulArkivert: modul.json.moduleExport?.module?.archivedAt ?? null,
+    seksjonArkivert: seksjon.json.section?.archivedAt ?? null,
+    kommerTilbake,
+    blirStående: forhånd.json.staysArchived,
+  });
+  expect(sortert([...(tilstand.fulgte ?? [])])).toEqual(sortert([tilstand.modul!, tilstand.seksjon!]));
+  expect(modul.json.moduleExport?.module?.archivedAt, "modulen fulgte ikke kurset inn i arkivet").toBeTruthy();
+  expect(seksjon.json.section?.archivedAt, "seksjonen fulgte ikke kurset inn i arkivet").toBeTruthy();
+  // Merket peker på kurset: gjenopprettingen av kurset ville gitt begge tilbake, og ingenting blir stående.
+  expect(forhånd.status, forhånd.tekst.slice(0, 300)).toBe(200);
+  expect(sortert(kommerTilbake)).toEqual(sortert([tilstand.modul!, tilstand.seksjon!]));
+  expect(forhånd.json.staysArchived).toEqual([]);
+  // Kontroll: å arkivere seksjonen for hånd igjen gir «allerede arkivert», ikke 200 (det var 2.158-oppførselen).
+  const igjen = await api("POST", `${seksjonssti()}/archive`);
+  noter("B, arkiver seksjonen igjen", { status: igjen.status, error: igjen.json.error });
+  expect(igjen.json.error).toBe("section_already_archived");
 
   const slettSeksjon = await api("DELETE", seksjonssti());
   const slettModul = await api("DELETE", modulsti());
@@ -233,19 +266,45 @@ test("B og C: elementene kan avpubliseres og arkiveres, men ikke slettes, og sva
   expect((await api("GET", seksjonssti())).status).toBe(200);
 });
 
-test("D: kurset gjenopprettes som utkast, og publiseringen stoppes av de arkiverte elementene", async () => {
-  test.setTimeout(120_000);
+test("D: modulen kommer tilbake publisert, seksjonen arkivert for seg blir stående, og publiseringen stoppes av den", async () => {
+  test.setTimeout(180_000);
   test.skip(!tilstand.kurs, "testdataene ble ikke laget");
-  expect((await api("POST", `${kurssti()}/restore`)).status).toBe(200);
+  // Seksjonen gjenopprettes og arkiveres for hånd mens kurset er arkivert (#1149: et arkivert kurs stopper ikke det). Da er
+  // merket borte, og den er «arkivert for seg».
+  const forHåndInn = await api("POST", `${seksjonssti()}/restore`);
+  const forHåndUt = await api("POST", `${seksjonssti()}/archive`);
+  noter("D, seksjonen arkivert for seg", { gjenopprett: forHåndInn.status, arkiver: forHåndUt.status });
+  expect([forHåndInn.status, forHåndUt.status], `${forHåndInn.tekst.slice(0, 200)} ${forHåndUt.tekst.slice(0, 200)}`).toEqual([200, 200]);
+
+  const forhånd = await api("GET", `${kurssti()}/restore-preview`);
+  expect(forhånd.status, forhånd.tekst.slice(0, 300)).toBe(200);
+  expect(forhånd.json.returns.map((element: { id: string }) => element.id)).toEqual([tilstand.modul]);
+  expect(forhånd.json.staysArchived).toEqual([expect.objectContaining({ id: tilstand.seksjon, reason: "archived_separately" })]);
+
+  const gjenopprettet = await api("POST", `${kurssti()}/restore`);
+  noter("D, svaret på gjenopprettingen", { status: gjenopprettet.status, returns: gjenopprettet.json.returns, staysArchived: gjenopprettet.json.staysArchived });
+  expect(gjenopprettet.status, gjenopprettet.tekst.slice(0, 300)).toBe(200);
+  // Samme versjon som før arkiveringen, publisert (ikke et utkast).
+  expect(gjenopprettet.json.returns).toEqual([expect.objectContaining({ id: tilstand.modul, versionId: publisertVersjon.get(tilstand.modul!) })]);
+  expect(gjenopprettet.json.returns[0].asDraft).toBeUndefined();
+  expect(gjenopprettet.json.staysArchived).toEqual([expect.objectContaining({ id: tilstand.seksjon, reason: "archived_separately" })]);
   const kurs = (await api("GET", kurssti())).json.course;
   noter("kurset etter gjenoppretting", { lifecycle: kurs?.lifecycle, publishedAt: kurs?.publishedAt ?? null, archivedAt: kurs?.archivedAt ?? null });
   expect(kurs?.lifecycle).toBe("draft");
   expect(kurs?.publishedAt ?? null).toBeNull();
 
   const publiser = await api("POST", `${kurssti()}/publish`);
-  noter("publiser gjenopprettet kurs med arkiverte elementer", { status: publiser.status, svar: publiser.tekst.slice(0, 400) });
+  noter("publiser gjenopprettet kurs med en arkivert seksjon", { status: publiser.status, svar: publiser.tekst.slice(0, 400) });
   expect(publiser.status).toBeGreaterThanOrEqual(400);
   expect(publiser.tekst).toContain("item_archived");
+
+  // Kontroll: med seksjonen gjenopprettet og publisert stopper ingenting, og modulen trengte ingen ny publisering.
+  const seksjonInn = await api("POST", `${seksjonssti()}/restore`);
+  const seksjonUt = await api("POST", `${seksjonssti()}/publish`);
+  const publiserIgjen = await api("POST", `${kurssti()}/publish`);
+  noter("D, kontroll", { gjenopprettSeksjon: seksjonInn.status, publiserSeksjon: seksjonUt.status, publiserKurs: publiserIgjen.status, svar: publiserIgjen.tekst.slice(0, 300) });
+  expect([seksjonInn.status, seksjonUt.status], `${seksjonInn.tekst.slice(0, 200)} ${seksjonUt.tekst.slice(0, 200)}`).toEqual([200, 200]);
+  expect(publiserIgjen.status, publiserIgjen.tekst.slice(0, 300)).toBe(200);
 });
 
 test("E: modulhodet sier «Nyere utkast» ved siden av «Publisert v…»", async ({ page }) => {

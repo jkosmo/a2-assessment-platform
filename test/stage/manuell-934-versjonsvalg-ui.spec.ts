@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // #934 mot UTRULLET stage, gjennom de EKTE sidene — slik produkteier selv ville prøvd det (2026-11-02:
 // «Jeg tror du skal få teste dette selv»). Stage-specene for 2.127–2.129 gikk gjennom API-et; denne går
@@ -100,7 +101,7 @@ async function versjon() {
 test.afterAll(async () => {
   if (tilstand.kursId) {
     await api("POST", `/api/admin/content/courses/${tilstand.kursId}/unpublish`);
-    noter("arkiver testkurs", (await api("POST", `/api/admin/content/courses/${tilstand.kursId}/archive`)).status);
+    noter("arkiver testkurs", (await arkiverKurs(api, tilstand.kursId)).status);
   }
 });
 
