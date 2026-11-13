@@ -184,12 +184,25 @@ export function createFormPage(config) {
     config.tabs?.onChange?.(id);
   }
 
+  // ⚠️ Skjemaet eier ikke `host` alene: på Seksjoner og Klasser tegner LISTA i samme element, og
+  // lytterne under blir stående der. «Ulagret» gjelder derfor bare mens skjemaets hode står i
+  // `host`. Uten dette merket et tastetrykk i listas søkefelt sida som ulagret, og «ulagret» fra et
+  // skjema man hadde forlatt levde videre — lista spurte «forlate uten å lagre?» uten noe å lagre
+  // (prod 2.154.2, 13.11.2026).
+  function isShown() { return host.querySelector(".form-page-head") !== null; }
+
+  /** Er noe ulagret NÅ? Det ene stedet spørsmålet før man forlater sida leser fra. */
+  function hasUnsaved() {
+    if (!isShown()) state.dirty = false;
+    else if (config.isDirty) state.dirty = !!config.isDirty();
+    return state.dirty;
+  }
+
   function markDirty() { if (!state.dirty) { state.dirty = true; reflectDirty(); } }
   function markClean() { state.dirty = false; reflectDirty(); }
 
   function confirmLeave() {
-    if (config.isDirty) state.dirty = !!config.isDirty();
-    if (!state.dirty) return true;
+    if (!hasUnsaved()) return true;
     return window.confirm(texts().leaveConfirm);
   }
 
@@ -210,7 +223,9 @@ export function createFormPage(config) {
     if (guardInstalled) return;
     guardInstalled = true;
     window.addEventListener("beforeunload", (event) => {
-      if (!state.dirty) return;
+      // Ikke `hasUnsaved()`: for sider med `isDirty` leste denne alltid det sist speilede svaret, og
+      // det skal den fortsette med. Bare «vises skjemaet?» er nytt.
+      if (!isShown() || !state.dirty) return;
       event.preventDefault();
       event.returnValue = "";
     });

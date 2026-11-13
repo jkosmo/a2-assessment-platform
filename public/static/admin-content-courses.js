@@ -1549,33 +1549,10 @@ async function renderDetailView(courseId) {
     }
   }
 
-  // Load library modules for combobox
-  try {
-    const libData = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
-    // #440: only show PUBLISHED modules in the course picker. A course referring
-    // to an unpublished module creates latent failures (broken exports, broken
-    // course publish, broken participant view). Authors finalise modules first,
-    // then assemble courses.
-    allLibraryModules = (libData.modules ?? []).filter(m => m.status === "published");
-  } catch {
-    allLibraryModules = [];
-  }
-
-  // Load library sections for the section picker (#490)
-  //
-  // #992: arkiverte seksjoner filtreres bort — samme grep som modul-søsteren over gjør med
-  // upubliserte. Uten det tilbød nedtrekkslista noe `/items` avviser med 400, og fordi ruta skriver
-  // HELE sekvensen, feilet da ikke bare den ene raden: forfatteren mistet alle endringene i lagringen.
-  //
-  // ⚠️ Dette er ikke sannheten om regelen, bare høfligheten. Backend eier avslaget
-  // (`assertContentUsableInCourse`), og skal fortsette å gjøre det — en klient som filtrerer er en
-  // klient som kan bli utdatert. Poenget er å ikke by fram noe vi vet blir avvist.
-  try {
-    const secData = await apiFetch("/api/admin/content/sections", getHeaders);
-    allLibrarySections = (secData.sections ?? []).filter(s => !s.archivedAt);
-  } catch {
-    allLibrarySections = [];
-  }
+  // Det søket i kursbyggeren kan tilby. Feiler hentingen ved åpning, står lista tom.
+  try { allLibraryModules = await loadPickerModules(); } catch { allLibraryModules = []; }
+  try { allLibrarySections = await loadPickerSections(); } catch { allLibrarySections = []; }
+  bindPickerRefresh();
 
   // Init course item list from the mixed CourseItem sequence (#490).
   //
@@ -1735,8 +1712,10 @@ function courseDetailBodyHtml() {
         <!-- #935: ÉN velger for begge typene. Kurset er én ordnet liste av moduler og seksjoner, og
              forfatteren skal ikke lære to mønstre for én handling. Lista åpner ved fokus, så den
              kan blas i som nedtrekket kunne, og søkes i som kombiboksen kunne. -->
+        <!-- data-form-untracked: å SØKE er ikke en endring i kurset. Uten merket sto kurset som «Ulagrede
+             endringer» etter ett tastetrykk i søket. Å legge til et element merker selv (renderModuleList). -->
         <div class="form-add-row">
-          <div class="combobox-wrap" id="comboboxWrap">
+          <div class="combobox-wrap" id="comboboxWrap" data-form-untracked>
             <label for="comboboxInput" class="sr-only">${escapeHtml(t("courses.pickItem"))}</label>
             <input id="comboboxInput" type="text" class="combobox-input"
               placeholder="${escapeHtml(t("courses.itemSearchPlaceholder"))}"
@@ -2199,6 +2178,57 @@ function moveModule(idx, dir) {
 // ---------------------------------------------------------------------------
 // Searchable combobox
 // ---------------------------------------------------------------------------
+
+// #440: only show PUBLISHED modules in the course picker. A course referring to an unpublished module
+// creates latent failures (broken exports, broken course publish, broken participant view). Authors
+// finalise modules first, then assemble courses.
+//
+// ⚠️ «Publisert» = har en live versjon, også når det ligger en nyere, upublisert lagring oppå
+// (`published_with_draft`). Sjekken var `status === "published"`, og en live modul forsvant fra søket i
+// det øyeblikket forfatteren lagret en endring i den (prod 13.11.2026).
+async function loadPickerModules() {
+  const libData = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
+  return (libData.modules ?? []).filter(m => isLiveLifecycle(m.lifecycle));
+}
+
+// #490/#992: arkiverte seksjoner filtreres bort — samme grep som modul-søsteren over gjør med
+// upubliserte. Uten det tilbød nedtrekkslista noe `/items` avviser med 400, og fordi ruta skriver HELE
+// sekvensen, feilet da ikke bare den ene raden: forfatteren mistet alle endringene i lagringen.
+//
+// ⚠️ Dette er ikke sannheten om regelen, bare høfligheten. Backend eier avslaget
+// (`assertContentUsableInCourse`), og skal fortsette å gjøre det — en klient som filtrerer er en klient
+// som kan bli utdatert. Poenget er å ikke by fram noe vi vet blir avvist.
+async function loadPickerSections() {
+  const secData = await apiFetch("/api/admin/content/sections", getHeaders);
+  return (secData.sections ?? []).filter(s => !s.archivedAt);
+}
+
+// Forfatteren publiserer en modul i én fane og vil sette den inn i kurset i en annen. Lista ble hentet
+// da kurset ble åpnet, og kurset har gjerne ulagret arbeid — å laste sida på nytt er ikke en utvei.
+// Derfor hentes lista på nytt hver gang forfatteren kommer tilbake til fanen eller vinduet. Feiler
+// hentingen, står den forrige lista.
+let pickerRefreshBound = false;
+let pickerRefreshRunning = false;
+function bindPickerRefresh() {
+  if (pickerRefreshBound) return;
+  pickerRefreshBound = true;
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshPickerLibrary(); });
+  window.addEventListener("focus", () => refreshPickerLibrary());
+}
+
+async function refreshPickerLibrary() {
+  // Bare mens kursbyggeren vises, og én henting av gangen (fanebytte gir begge hendelsene over).
+  if (pickerRefreshRunning || !document.getElementById("comboboxInput")) return;
+  pickerRefreshRunning = true;
+  try {
+    const [modules, sections] = await Promise.allSettled([loadPickerModules(), loadPickerSections()]);
+    if (modules.status === "fulfilled") allLibraryModules = modules.value;
+    if (sections.status === "fulfilled") allLibrarySections = sections.value;
+    updateComboboxDropdown();
+  } finally {
+    pickerRefreshRunning = false;
+  }
+}
 
 // #935: moduler og seksjoner i én liste, alfabetisk, med typen som merke i raden. Det som alt
 // ligger i kurset, tilbys ikke igjen (samme regel begge veier — den fantes for begge før også).

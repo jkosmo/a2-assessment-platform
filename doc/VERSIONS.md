@@ -2,6 +2,82 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.157.2 - 2026-11-13
+
+To feil meldt av produkteier fra prod (2.154.2) samme dag. Begge er i klienten, begge har ligget der lenge.
+
+### En publisert modul med nyere utkast kunne ikke legges i et kurs
+
+- **Hva brukerne merket:** modulen «Test: Frihet under ansvar» var publisert, men kom ikke opp i søket «legg til innhold»
+  i kursbyggeren.
+- **Rotårsak:** velgeren slapp bare gjennom moduler med status nøyaktig `published` (`admin-content-courses.js`, #440).
+  En modul med en live versjon og en nyere, upublisert lagring står som `published_with_draft`. Den forsvant altså fra
+  søket i det øyeblikket forfatteren lagret en endring i den, og kom tilbake når endringen ble publisert.
+- **Siden når:** 2026-05-24 (v1.2.20), da statusen `published_with_draft` kom. Sjekken var fra fire dager før.
+- **Rettet:** velgeren bruker `isLiveLifecycle`, samme spørsmål som resten av kurssiden stiller. Tjeneren krevde aldri
+  mer enn «ikke arkivert», og deltakerne får den live versjonen.
+- **Hvorfor testene ikke fanget det:** alle testmodulene i velgeren hadde status `published`. Fiksturen sa ikke alt
+  regelen leser (CLAUDE.md, «Pre-flight» punkt 4).
+- **Tester:** `test/e2e/admin-content-course-picker-live-module.spec.ts`: live, live med utkast, aldri publisert, tomt
+  skall og arkivert; bare de to første tilbys. Rød før rettingen. Mutasjonssjekket tre veier (gammel sjekk, alt slipper
+  gjennom, alt uten arkiverte slipper gjennom).
+- **Omvei til rettingen er i prod:** publiser den nyeste lagringen av modulen (eller forkast utkastene), og last kurssiden
+  på nytt. Da står den som publisert og kommer opp i søket.
+- **To ting til i det samme søket, funnet da produkteier prøvde omveien:**
+  - **Lista ble hentet én gang, da kurset ble åpnet.** Modulen ble publisert i en annen fane, og kurset viste den ikke før
+    sida ble lastet på nytt (bekreftet av produkteier: F5 hjalp). Med ulagret arbeid i kurset er det ingen god utvei. Nå
+    hentes moduler og seksjoner på nytt når forfatteren kommer tilbake til fanen eller vinduet
+    (`refreshPickerLibrary`). Feiler hentingen, står den forrige lista. Søketeksten blir stående.
+  - **Å skrive i søket merket kurset «Ulagrede endringer».** Søkefeltet er ikke en del av kurset
+    (`data-form-untracked`). Å legge til et element merker fortsatt.
+- **Tester for disse:** samme fil, fire tester i alt. Mutasjonssjekket åtte veier, alle røde: de tre over, søkefeltet
+  uten merket, henting ved hver av de to hendelsene tatt ut, en feilet henting som tømmer lista, og lista som ikke
+  tegnes på nytt.
+- Alt i dette avsnittet kom til etter QA-porten under. Det er dekket av testene over og en ny full kjøring av
+  nettlesertestene, ikke av en ny gjennomgang.
+- **Rotårsak til at jeg forklarte feil først:** jeg fant én årsak (utkastet) og sa at den forklarte meldingen, uten å
+  spørre om kurssiden var lastet etter at modulen ble publisert. Én årsak funnet er ikke alle årsaker funnet.
+
+### Seksjonslista spurte om ulagrede endringer
+
+Seksjonslista spurte «Du har ulagrede endringer. Vil du forlate sida uten å lagre?» uten at det fantes noe å lagre.
+
+- **Hva brukerne merket:** en forfatter sto i lista over seksjoner, hadde arkivert noen og valgt et kurs i filteret, og
+  ville videre til «Kurs». Nettleseren spurte om å forlate sida uten å lagre. Lista har ingen Lagre-knapp. Ingenting gikk
+  tapt; spørsmålet var feil.
+- **Rotårsak:** skjemaet for én seksjon (`form-page.js`) og lista tegner i samme element på sida. Skjemaets lyttere blir
+  stående på elementet etter at lista er tegnet tilbake. To veier ga da «ulagret» i lista:
+  - et tastetrykk i søkefeltet, et valg i kursfilteret eller et kryss i «Bare de som mangler språk» ble regnet som en
+    endring i skjemaet, og
+  - «ulagret» fra skjemaet levde videre når forfatteren forlot det med OK eller med nettleserens tilbake.
+  Begge krever at en seksjon har vært åpnet siden sida sist ble lastet. Klasser har samme oppbygging og samme feil. Kurs og
+  moduler har det ikke: der lastes sida på nytt mellom liste og skjema.
+- **Siden når:** 2026-09-12, da den felles skjemasida kom (#1046 nivå to). Ikke en følge av #1140 eller av 2.154.2.
+- **Rettet:** «ulagret» gjelder bare mens skjemaets hode står på sida (`isShown` i `form-page.js`). Spørsmålet før man
+  forlater, og det ved lukking av fanen, leser gjennom den. Rettet i den felles skjemasida, så Seksjoner og Klasser får det
+  samme.
+- **Hvorfor testene ikke fanget det:** hver test åpnet enten lista eller skjemaet, aldri skjemaet og så lista i samme
+  sidelasting. Tilstanden «lista etter et skjema» ble aldri åpnet.
+- **Tester:** `test/e2e/list-not-unsaved-after-form-page.spec.ts` (5): filter og søk i lista, skjema forlatt med OK,
+  nettleserens tilbake, det samme i Klasser, og en kontroll på at skjemaet fortsatt spør. Fire var røde før rettingen.
+  Mutasjonssjekket: fire endringer i rettingen, alle gjør tester røde, også den som får skjemaet til aldri å spørre.
+- **QA-porten:** GO. Kjørte 19 forløp i nettleser; fant ingen vei der en forfatter nå mister arbeid uten spørsmål der hen
+  før ble spurt. Alle funnene under fantes fra før og er ikke rørt av rettingen.
+- **Kjente mangler, alle fra før:**
+  - «Oversett» i én seksjon kan skrive oversettelsen inn i en annen: trykk «Oversett», bruk nettleserens tilbake mens den
+    jobber, og åpne en annen seksjon før svaret kommer. Nynorsk og engelsk fra den første havner i den andre, som står som
+    ulagret. Sjelden, men stille. Bildeopplasting og lagring leser den samme felles tilstanden.
+  - En lenke ut av et skjema med ulagret tekst spør to ganger: først sidas spørsmål, og etter OK nettleserens eget.
+    Felles kode, så trolig også kurs og moduler. Ett ekstra klikk, ingenting tapt.
+  - Klasser: å legge til eller fjerne en deltaker eller et kurs henter klassen på nytt og forkaster ulagret navn og
+    beskrivelse uten spørsmål.
+  - Lista kan tegnes over et åpent seksjonsskjema når en jobb startet i lista («Oversett det som mangler», «Avpubliser»)
+    blir ferdig etter at skjemaet er åpnet. Ulagret tekst er da borte.
+  - Bytte av menyspråk i et seksjons- eller klasseskjema forkaster ulagret tekst uten spørsmål.
+  - Nettleserens tilbake-knapp fra et seksjons- eller klasseskjema med ulagret tekst går til lista uten å spørre, og
+    teksten er borte. «← Tilbake»-lenka og menyene spør.
+  - Valgt fane følger med: står man på «Innstillinger» i én seksjon og går tilbake, åpner den neste på «Innstillinger».
+
 ## 2.157.1 - 2026-11-12
 
 «Lagre» i modulens Innstillinger gjorde ingenting, uten melding. Meldt av produkteier fra prod (2.154.0) samme kveld.

@@ -625,6 +625,23 @@ pages — they are separate static JS/HTML files, so consistency is by conventio
 
 **Guards:** `test/e2e/admin-content-classes.spec.ts` "admin buttons + top nav render in prod-shaped config" (asserts a REAL i18n key resolves, not raw); `test/e2e/admin-content-workspaces.spec.ts` course archive (filter pill), unpublish, sections lifecycle; `test/e2e/admin-content-course-links-library-filter.spec.ts` course filter (modules + sections). When adding a column/filter to one list, mirror it where it applies and update this entry.
 
+### Liste og skjema i samme element (2.157.2)
+
+På **Seksjoner** og **Klasser** tegner lista (`list-page.js`) og skjemaet (`form-page.js`) i samme `pageContent`, og
+bytter uten at sida lastes. Begge legger lyttere på elementet én gang, og de blir stående. Kurs og moduler laster sida
+mellom liste og skjema.
+
+Bare «ulagret» spør i dag «er det skjemaet som vises nå?». Kjente unntak (QA-porten 2.157.2, ikke rettet): en jobb som
+blir ferdig etter at man har byttet seksjon skriver inn i den nye (`translateFromCurrent`, `uploadImage`,
+`persistSection` leser den felles `editing`), lista kan tegnes over et åpent skjema når en listejobb blir ferdig, og valgt
+fane følger med til neste element som åpnes.
+
+| Oppførsel | Hvor regelen bor | Flatene |
+|---|---|---|
+| **«Ulagrede endringer» gjelder bare mens skjemaet vises** | `isShown` i `form-page.js`; lest av spørsmålet før man forlater og av lukking av fanen | Seksjoner og Klasser (liste og skjema i samme sidelasting) |
+
+**Guard:** `test/e2e/list-not-unsaved-after-form-page.spec.ts` — åpner skjemaet og SÅ lista i samme sidelasting.
+
 ### Telefonvisningen og «Mer»-menyen (#1080 / #1081)
 
 Siden #1046 tegnes alle fire listene av `public/static/list-page.js`. To ting er likevel lette å
