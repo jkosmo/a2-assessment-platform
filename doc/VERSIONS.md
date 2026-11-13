@@ -8,6 +8,15 @@ Etappe 2 av #1148 (arkivering som følger med nedover, #1150), i tre skiver som 
 arkiveringssperren (G3) til å stoppe flere kurs enn før, og 2a-2 alene ville gjort at ingen kunne arkivere et kurs med
 innhold fra klienten. Plan: `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`.
 
+**På stage 13.11.2026 kl. 21:53** (dev 048436b9). Mot ekte data, alt grønt:
+`test/stage/release-2-158-arkiverte-kurs.spec.ts` (6/6, nå med 2.159-oppførselen) og
+`test/stage/release-2-159-arkivering-i-dialogene.spec.ts` (6/6, gjennom de ekte dialogene): kurs med egen modul, egen seksjon
+og en modul som også ligger i et annet kurs, og én deltaker midt i → dialogen viste riktig «følger med» / «blir stående» /
+«deltakere midt i (1)», og etter bekreftelsen var det eksklusive arkivert og den delte modulen urørt; det arkiverte kurset var
+sperret og borte fra deltakerens «Mine kurs»; gjenopprettingen ga modulen samme versjon, kurset ble utkast, og publisering
+etterpå ga 200 uten ny hovedversjon; tilbake-knappen spurte ved ulagret tekst og førte til seksjonslista etter lagring.
+Kurslista (85 kurs, 18 aktive): 0,5–1,7 s per henting. Ingen 5xx i stage-loggene de siste 36 timene.
+
 **Hva forfatterne merker, samlet:** «Arkiver» på et kurs viser hva som følger med inn i arkivet og hva som blir stående, og
 tar med seg innholdet ingen andre kurs bruker. «Gjenopprett» setter det tilbake slik det var. Et arkivert kurs kan åpnes,
 men ikke endres. En modul eller seksjon som står i et annet kurs' lagrede utkast, kan ikke arkiveres for hånd.
