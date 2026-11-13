@@ -37,11 +37,12 @@ test.describe("#934 skive 5b — modulsiden", () => {
 
   const LIVE = { id: "v1", versionNo: 5, versionMajor: 2, versionMinor: 1, publishedAt: "2026-09-18T10:00:00.000Z" };
 
-  test("hodet viser «Publisert v2.1», og et utkast uten nummer er bare et utkast", async ({ page }) => {
+  test("hodet viser «Publisert v2.1», og et utkast uten nummer er «Nyere utkast» uten tall", async ({ page }) => {
     await open(page, [{ id: "v2", versionNo: 6, versionMajor: null, versionMinor: null, publishedAt: null }, LIVE], "v1", "v2");
     const hode = page.locator("#moduleFormHead");
     await expect(hode).toContainText("Publisert v2.1");
-    await expect(hode).toContainText("Utkast");
+    // 2.158.0: «Nyere utkast», samme ord som kurs og seksjoner. Før sto det «Utkast».
+    await expect(hode.locator(".status-chip")).toHaveText("Nyere utkast");
     await expect(hode).not.toContainText("v6");
   });
 

@@ -144,3 +144,16 @@ Allerede leverte besvarelser ferdigbehandles. Ingen nye besvarelser kan leveres 
 
 **Kan jeg slette en modul som har besvarelser?**
 Nei. Moduler med besvarelser kan bare arkiveres, ikke slettes.
+
+**Kan jeg avpublisere, arkivere eller slette en modul eller seksjon som ligger i et kurs?**
+Det kommer an på kurset:
+
+- Ligger den i et **aktivt** kurs (publisert eller utkast), kan den verken avpubliseres, arkiveres eller slettes. Meldingen
+  sier hvilke kurs det gjelder. Ta den ut av kursene først.
+- Ligger den bare i **arkiverte** kurs, kan den avpubliseres og arkiveres. Arkiverte kurs teller ikke som bruk, og vises
+  heller ikke i kolonnen «Brukt i kurs» eller i kursfilteret.
+- **Slette** kan du ikke så lenge den ligger i et kurs, heller ikke et arkivert: det arkiverte kurset beholder innholdet sitt.
+  Meldingen sier hvilke av kursene som er arkiverte. En egen vei for å slette arkivert innhold kommer (#1152).
+
+Gjenoppretter du et arkivert kurs der en modul eller seksjon er arkivert i mellomtiden, står kurset som utkast. Det kan
+ikke publiseres før elementet er gjenopprettet eller tatt ut av kurset.

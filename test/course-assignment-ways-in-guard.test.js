@@ -39,6 +39,7 @@ const EXPECTED = new Map([
   ["modules/course/courseCommands.ts#archiveCourse Course.publishedAt", [1, "fjerner: arkivering avpubliserer"]],
   ["modules/course/courseCommands.ts#archiveCourse Course.archivedAt", [1, "fjerner: arkivering"]],
   ["modules/course/courseCommands.ts#restoreCourse Course.archivedAt", [1, "ingen vei inn alene: kurset lander upublisert, e-post først ved publisering (3d)"]],
+  ["modules/course/courseCommands.ts#restoreCourse Course.publishedAt", [1, "fjerner: gjenoppretting avpubliserer alltid (2.158.0). Det er dette som gjør raden over sann også for et kurs som var arkivert OG publisert (eldre data)"]],
   ["modules/course/courseCommands.ts#updateCourse Course (ukjent innhold)", [1, "`data: fields` er typet uten publishedAt og archivedAt (tittel, beskrivelse, nivå, tilgang, diskusjon, plassering)"]],
   ["modules/adminContent/contentImportService.ts#importCourseFromEnvelope Course.publishedAt", [1, "fjerner: importen avpubliserer et kurs med tilbakeholdt innhold (#996). Publiseringen går gjennom publishCourse"]],
   // Klassens arkivering.

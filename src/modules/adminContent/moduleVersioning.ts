@@ -263,7 +263,13 @@ export async function findShownModuleMajors(
   return rows.flatMap((row) => (row.shownModuleMajor === null ? [] : [{ courseId: row.courseId, moduleId: row.moduleId, shownModuleMajor: row.shownModuleMajor }]));
 }
 
-/** #934 skive 5a-3: hvilke av modulene som ligger i hvilke av kursene. Også arkiverte og avpubliserte teller. */
+/**
+ * #934 skive 5a-3: hvilke av modulene som ligger i hvilke av kursene. Også arkiverte og avpubliserte teller.
+ *
+ * #1149 endrer ikke dette, med vilje. «Arkiverte kurs teller ikke som bruk» gjelder hva forfatteren ser som bruk, og hva
+ * som stopper avpublisering og arkivering. Her er spørsmålet et annet: hvilke kurs en ny modulversjon gjelder i. Et arkivert
+ * kurs har fortsatt kursbevis og krav per modul, og skal ha riktig versjon når det gjenopprettes.
+ */
 export async function findModulePlacements(locked: ContentWriteTx, courseIds: string[], moduleIds: string[]): Promise<Array<{ courseId: string; moduleId: string }>> {
   const rows = await locked.courseItem.findMany({
     where: { courseId: { in: courseIds }, moduleId: { in: moduleIds } },

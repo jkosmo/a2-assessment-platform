@@ -3,7 +3,7 @@ import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { AppError, DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
-import { assertSectionNotInAnyCourse, assertSectionNotInIssuedCertificate } from "./contentLifecycle.js";
+import { assertSectionNotInActiveCourse, assertSectionNotInAnyCourse, assertSectionNotInIssuedCertificate } from "./contentLifecycle.js";
 import { applyMinorVersionToCoursesContaining, sameLocalizedText } from "./courseVersioning.js";
 import { randomUUID } from "node:crypto";
 import { stageSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs, type IncomingSectionAsset } from "./assetCommands.js";
@@ -417,12 +417,13 @@ async function publishSectionLocked(
   }
 }
 
-// Avpubliser: nullstill activeVersionId. G2 — kan ikke avpublisere en seksjon som ligger i et kurs.
+// Avpubliser: nullstill activeVersionId. G2 — kan ikke avpublisere en seksjon som ligger i et aktivt kurs
+// (#1149: et arkivert kurs stopper ikke).
 export async function unpublishSection(sectionId: string, actorId?: string) {
   // #934 skive 4a: «ligger ikke i noe kurs» sjekkes etter innholdslåsen, i samme transaksjon som skrivingen.
   const updated = await runContentWrite(async (tx) => {
     await assertSectionExists(sectionId, tx);
-    await assertSectionNotInAnyCourse(sectionId, "avpubliseres", tx);
+    await assertSectionNotInActiveCourse(sectionId, "avpubliseres", tx);
     const section = await tx.courseSection.update({
       where: { id: sectionId },
       data: { activeVersionId: null },
@@ -459,7 +460,8 @@ export async function archiveSection(sectionId: string, actorId?: string) {
       // #999: se forklaringen over.
       throw new DomainRuleError("section_already_archived", "The section is already archived.");
     }
-    await assertSectionNotInAnyCourse(sectionId, "arkiveres", tx);
+    // #1149: bare aktive kurs stopper arkiveringen.
+    await assertSectionNotInActiveCourse(sectionId, "arkiveres", tx);
     const section = await tx.courseSection.update({
       where: { id: sectionId },
       data: { archivedAt: new Date(), activeVersionId: null },
@@ -528,8 +530,9 @@ export async function deleteSection(sectionId: string, actorId?: string) {
     if (!section) {
       throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
     }
-    // G2: navngir kursene (konsistent med modul-sletting).
-    await assertSectionNotInAnyCourse(sectionId, "slettes", tx);
+    // G2, sletting: ALLE kurs teller, også arkiverte (#1149; `CourseItem` → seksjon er `onDelete: Restrict`).
+    // Svaret navngir kursene, og sier hvilke som er arkiverte.
+    await assertSectionNotInAnyCourse(sectionId, tx);
     // #938: G2 over dekker «ligger i et kurs NÅ». Denne dekker «sto i et kursbevis DA» — innhold
     // som er fjernet fra kurset, men som et utstedt diplom fortsatt hviler på.
     await assertSectionNotInIssuedCertificate(sectionId, "slettes", tx);

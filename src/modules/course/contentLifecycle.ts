@@ -1,14 +1,44 @@
 import { prisma } from "../../db/prisma.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
-import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
+import { type AppError, ConflictError, DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { localizeContentText } from "../../i18n/content.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
 
 // Enhetlig innholds-livssyklus — delte vakter for kurs/modul/seksjon.
-// Se doc/design/CONTENT_LIFECYCLE.md. G2 = bruk-lås (modul/seksjon i ETHVERT kurs kan ikke
-// avpubliseres/arkiveres/slettes). G3 = aktivitets-lås (kurs med påbegynt-ufullført deltaker
-// kan ikke avpubliseres/arkiveres). Feilmeldinger navngir kursene/teller deltakerne på norsk.
+// Se doc/design/CONTENT_LIFECYCLE.md. G2 = bruk-lås (se «Hvilke kurs bruker dette elementet» under).
+// G3 = aktivitets-lås (kurs med påbegynt-ufullført deltaker kan ikke arkiveres).
+// Feilmeldinger navngir kursene/teller deltakerne på norsk.
 
 const MSG_LOCALE = "nb" as const;
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// #1149: «Hvilke kurs bruker dette elementet?» har TO svar, og de har hvert sitt navn.
+//
+// Produkteier 13.11.2026 (doc/DECISIONS.md → «Arkiverte kurs teller ikke som bruk»):
+//
+//   AKTIVE kurs (archivedAt = null, publisert eller utkast)      findActiveCoursesContaining…
+//     - det som vises som «Brukt i kurs», i kursfilteret og i tematallet
+//     - det som stopper AVPUBLISERING og ARKIVERING                assert…NotInActiveCourse
+//
+//   ALLE kurs, også arkiverte                                     findAllCoursesContaining…
+//     - det som stopper SLETTING                                   assertSectionNotInAnyCourse, describeModuleDeleteBlock
+//     - kaskadeslettingens «delt med andre kurs»
+//
+// Sletting er unntatt fordi databasen ikke kan noe annet: `CourseItem` peker på modul og seksjon med
+// `onDelete: Restrict`. Raden i det arkiverte kurset holder elementet til kurset selv er borte.
+//
+// ⚠️ Det finnes med vilje ingen funksjon som bare heter «kursene som inneholder …». Et navn uten
+// «Active» eller «All» lar leseren velge feil uten å se det. `test/content-in-use-guard.test.js`
+// nekter nye lesere av `courseItem`/`courseItems` som svarer på dette spørsmålet utenom denne fila.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/** Et kurs som teller som bruk: ikke arkivert. Publisert eller utkast er det samme her. */
+export const activeCourseWhere = { archivedAt: null } as const;
+
+/** Et kurs som inneholder elementet. `archived` følger alltid med, så svaret «alle kurs» kan skille dem. */
+export type CourseUse = { id: string; title: string; archived: boolean };
+
+type ItemRef = { moduleId: string } | { sectionId: string };
 
 // #934 skive 4a: vaktene leser på klienten de får. En skriver kaller dem med transaksjonen som holder
 // innholdslåsen, så svaret gjelder til den har skrevet — sjekket på den globale klienten før låsen, kunne et
@@ -19,87 +49,175 @@ function courseDisplayTitle(rawTitle: string): string {
   return localizeContentText(MSG_LOCALE, rawTitle) ?? rawTitle;
 }
 
-async function coursesContaining(
-  itemWhere: { moduleId: string } | { sectionId: string },
-  reader: LifecycleReader = prisma,
-): Promise<Array<{ id: string; title: string }>> {
+// Det ENE stedet som svarer på «hvilke kurs». `scope` er ikke valgfritt: hver kaller må si hvilket svar den vil ha.
+async function coursesContaining(itemWhere: ItemRef, scope: "active" | "all", reader: LifecycleReader): Promise<CourseUse[]> {
   const rows = await reader.course.findMany({
-    where: { items: { some: itemWhere } },
-    select: { id: true, title: true },
+    where: { items: { some: itemWhere }, ...(scope === "active" ? activeCourseWhere : {}) },
+    select: { id: true, title: true, archivedAt: true },
     orderBy: { updatedAt: "desc" },
   });
-  return rows.map((row) => ({ id: row.id, title: courseDisplayTitle(row.title) }));
+  return rows.map((row) => ({ id: row.id, title: courseDisplayTitle(row.title), archived: row.archivedAt !== null }));
 }
 
-export function findCoursesContainingModule(moduleId: string, reader: LifecycleReader = prisma) {
-  return coursesContaining({ moduleId }, reader);
+/** AKTIVE kurs som inneholder modulen. Det som vises som bruk, og det som stopper avpublisering og arkivering. */
+export function findActiveCoursesContainingModule(moduleId: string, reader: LifecycleReader = prisma) {
+  return coursesContaining({ moduleId }, "active", reader);
 }
 
-export function findCoursesContainingSection(sectionId: string, reader: LifecycleReader = prisma) {
-  return coursesContaining({ sectionId }, reader);
+/** AKTIVE kurs som inneholder seksjonen. Det som vises som bruk, og det som stopper avpublisering og arkivering. */
+export function findActiveCoursesContainingSection(sectionId: string, reader: LifecycleReader = prisma) {
+  return coursesContaining({ sectionId }, "active", reader);
 }
 
-// #705-UX(G): batch — hvilke kurs bruker hver av disse seksjonene (for «Brukt i kurs»-kolonnen i
-// seksjonslista, med samme popover som modul-biblioteket). Ett spørsmål for alle seksjonene.
-export async function findCoursesForSections(
-  sectionIds: string[],
+/** ALLE kurs som inneholder modulen, også arkiverte (`archived` sier hvilke). Bare for sletting. */
+export function findAllCoursesContainingModule(moduleId: string, reader: LifecycleReader = prisma) {
+  return coursesContaining({ moduleId }, "all", reader);
+}
+
+/** ALLE kurs som inneholder seksjonen, også arkiverte (`archived` sier hvilke). Bare for sletting. */
+export function findAllCoursesContainingSection(sectionId: string, reader: LifecycleReader = prisma) {
+  return coursesContaining({ sectionId }, "all", reader);
+}
+
+// #705-UX(G), #1149: batch — hvilke AKTIVE kurs bruker hvert av disse elementene. For «Brukt i kurs»-kolonnen,
+// kursfilteret og popoveren i seksjonslista og modulbiblioteket. Ett spørsmål for alle elementene.
+// Et arkivert kurs er ikke med: det er ikke bruk (se toppen av fila).
+async function activeCoursesByItem(
+  key: "moduleId" | "sectionId",
+  ids: string[],
+  locale: SupportedLocale,
 ): Promise<Map<string, Array<{ id: string; title: string }>>> {
   const result = new Map<string, Array<{ id: string; title: string }>>();
-  if (sectionIds.length === 0) return result;
+  if (ids.length === 0) return result;
   const items = await prisma.courseItem.findMany({
-    where: { sectionId: { in: sectionIds }, itemType: "SECTION" },
-    select: { sectionId: true, course: { select: { id: true, title: true } } },
+    where:
+      key === "moduleId"
+        ? { moduleId: { in: ids }, course: activeCourseWhere }
+        : { sectionId: { in: ids }, itemType: "SECTION", course: activeCourseWhere },
+    select: { moduleId: true, sectionId: true, course: { select: { id: true, title: true } } },
   });
   for (const item of items) {
-    if (!item.sectionId || !item.course) continue;
-    const list = result.get(item.sectionId) ?? [];
-    // Unngå duplikater hvis en seksjon skulle forekomme flere ganger.
+    const itemId = item[key];
+    if (!itemId || !item.course) continue;
+    const list = result.get(itemId) ?? [];
+    // Unngå duplikater hvis et element skulle forekomme flere ganger i samme kurs.
     if (!list.some((c) => c.id === item.course.id)) {
-      list.push({ id: item.course.id, title: courseDisplayTitle(item.course.title) });
+      list.push({ id: item.course.id, title: localizeContentText(locale, item.course.title) ?? item.course.title });
     }
-    result.set(item.sectionId, list);
+    result.set(itemId, list);
   }
   return result;
 }
 
-// #705: exported so the module-delete route can reuse the exact G2 named-courses message
-// (keeping its own 409 status) instead of a divergent count-only message.
-export function inUseMessage(
+/** Seksjonslista (`GET /api/admin/content/sections`). Kurstitlene på bokmål, som før. */
+export function findActiveCoursesForSections(sectionIds: string[]) {
+  return activeCoursesByItem("sectionId", sectionIds, MSG_LOCALE);
+}
+
+/** Modulbiblioteket (`GET /api/admin/content/modules/library`). Kurstitlene på språket lista vises på. */
+export function findActiveCoursesForModules(moduleIds: string[], locale: SupportedLocale) {
+  return activeCoursesByItem("moduleId", moduleIds, locale);
+}
+
+function quoteCourseTitles(courses: Array<{ title: string }>): string {
+  return courses.map((c) => `«${c.title}»`).join(", ");
+}
+
+// #705: én setning for «i bruk», så avpubliser, arkiver og slett leses likt.
+function inUseMessage(
   subject: "Modulen" | "Seksjonen",
   verb: string,
   courses: Array<{ title: string }>,
 ): string {
-  const names = courses.map((c) => `«${c.title}»`).join(", ");
-  const plural = courses.length === 1 ? "kurs" : "kurs";
   return (
-    `${subject} kan ikke ${verb} fordi den er i bruk i ${courses.length} ${plural}: ${names}. ` +
+    `${subject} kan ikke ${verb} fordi den er i bruk i ${courses.length} kurs: ${quoteCourseTitles(courses)}. ` +
     `Fjern den fra kursene først (eller avpubliser kursene).`
   );
 }
 
-// G2: en modul som ligger i ethvert kurs (publisert eller utkast) kan ikke avpubliseres/
-// arkiveres/slettes. `verb` brukes i feilmeldingen, f.eks. "avpubliseres" | "arkiveres" | "slettes".
-export async function assertModuleNotInAnyCourse(moduleId: string, verb: string, reader: LifecycleReader = prisma): Promise<void> {
-  const courses = await findCoursesContainingModule(moduleId, reader);
-  if (courses.length > 0) {
-    // #999: koden er kontrakten. `courseTitles` foelger med saa klienten kan navngi kursene uten
-    // aa lese dem ut av setningen.
-    throw new DomainRuleError("content_in_use", inUseMessage("Modulen", verb, courses), {
-      count: courses.length,
-      courseTitles: courses.map((c) => c.title),
-    });
-  }
+function inActiveCourseError(subject: "Modulen" | "Seksjonen", verb: string, courses: CourseUse[]) {
+  // #999: koden er kontrakten. `courseTitles` følger med så klienten kan navngi kursene uten
+  // å lese dem ut av setningen.
+  return new DomainRuleError("content_in_use", inUseMessage(subject, verb, courses), {
+    count: courses.length,
+    courseTitles: courses.map((c) => c.title),
+  });
+}
+
+// G2, avpublisering og arkivering: en modul som ligger i et AKTIVT kurs (publisert eller utkast) kan ikke trekkes
+// vekk under det. Et arkivert kurs stopper ikke (#1149): blir det gjenopprettet, lander det som utkast, og
+// publiseringen stoppes av `item_archived` til elementet er gjenopprettet eller tatt ut.
+// `verb` brukes i feilmeldingen. Sletting har sin egen vakt under, og kan ikke bruke denne.
+export async function assertModuleNotInActiveCourse(
+  moduleId: string,
+  verb: "avpubliseres" | "arkiveres",
+  reader: LifecycleReader = prisma,
+): Promise<void> {
+  const courses = await findActiveCoursesContainingModule(moduleId, reader);
+  if (courses.length > 0) throw inActiveCourseError("Modulen", verb, courses);
 }
 
 // G2 for seksjoner — samme regel.
-export async function assertSectionNotInAnyCourse(sectionId: string, verb: string, reader: LifecycleReader = prisma): Promise<void> {
-  const courses = await findCoursesContainingSection(sectionId, reader);
-  if (courses.length > 0) {
-    throw new DomainRuleError("content_in_use", inUseMessage("Seksjonen", verb, courses), {
+export async function assertSectionNotInActiveCourse(
+  sectionId: string,
+  verb: "avpubliseres" | "arkiveres",
+  reader: LifecycleReader = prisma,
+): Promise<void> {
+  const courses = await findActiveCoursesContainingSection(sectionId, reader);
+  if (courses.length > 0) throw inActiveCourseError("Seksjonen", verb, courses);
+}
+
+// G2, SLETTING: alle kurs teller, også arkiverte (FK `Restrict`, se toppen av fila).
+//
+// Er minst ett av kursene arkivert, får svaret en egen kode, `content_in_archived_course`, og `details` sier
+// hvilke: forfatteren kan ikke «fjerne elementet fra kurset» slik `content_in_use` ber om, uten først å
+// gjenopprette kurset. Etter #1149 er dette den vanlige veien hit: «Slett» vises bare på arkiverte elementer,
+// og et element kan nå arkiveres mens det ligger i et arkivert kurs.
+//
+// Uten arkiverte kurs er svaret som før: seksjoner `content_in_use` (400), moduler `module_in_use` (409, #705).
+function deleteBlockedError(subject: "Modulen" | "Seksjonen", courses: CourseUse[]): AppError {
+  const archived = courses.filter((c) => c.archived);
+  if (archived.length > 0) {
+    return new DomainRuleError(
+      "content_in_archived_course",
+      `${subject} kan ikke slettes fordi den ligger i ${courses.length} kurs: ${quoteCourseTitles(courses)}. ` +
+        `Arkiverte kurs (${archived.length}): ${quoteCourseTitles(archived)}. ` +
+        // Ingen anvisning om å gjenopprette kurset og ta elementet ut (QA-porten 2.158.0): for en modul stopper
+        // slettingen likevel på versjonene, og for en seksjon i et utstedt kursbevis på beviset. Rådet kostet et
+        // endret arkivert kurs og førte nesten aldri til sletting. Veien som virker, kommer med #1152.
+        `Et arkivert kurs beholder innholdet sitt.`,
+      {
+        count: courses.length,
+        courseTitles: courses.map((c) => c.title),
+        archivedCount: archived.length,
+        archivedCourseTitles: archived.map((c) => c.title),
+      },
+    );
+  }
+  if (subject === "Modulen") {
+    return new ConflictError("module_in_use", inUseMessage(subject, "slettes", courses), {
+      courseCount: courses.length,
       count: courses.length,
       courseTitles: courses.map((c) => c.title),
     });
   }
+  return inActiveCourseError(subject, "slettes", courses);
+}
+
+/**
+ * Sletting av en modul: `null` når den ikke ligger i noe kurs, ellers feilen som skal kastes. Returnerer i stedet
+ * for å kaste fordi sletteruta (`DELETE /api/admin/content/modules/:id`) svarer med sin egen form (#705:
+ * `courseCount` øverst i kroppen) før den kaller `deleteModule`, som sjekker på nytt etter innholdslåsen.
+ */
+export async function describeModuleDeleteBlock(moduleId: string, reader: LifecycleReader = prisma) {
+  const courses = await findAllCoursesContainingModule(moduleId, reader);
+  return courses.length > 0 ? { error: deleteBlockedError("Modulen", courses), courseCount: courses.length } : null;
+}
+
+/** Sletting av en seksjon stoppes av ALLE kurs, også arkiverte. Avpublisering og arkivering: `assertSectionNotInActiveCourse`. */
+export async function assertSectionNotInAnyCourse(sectionId: string, reader: LifecycleReader = prisma): Promise<void> {
+  const courses = await findAllCoursesContainingSection(sectionId, reader);
+  if (courses.length > 0) throw deleteBlockedError("Seksjonen", courses);
 }
 
 // #938: innhold som står i et UTSTEDT kursbevis kan aldri slettes.

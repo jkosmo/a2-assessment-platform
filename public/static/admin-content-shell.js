@@ -3507,7 +3507,12 @@ function moduleStatusBadgesHtml() {
   const editingNo = moduleVersionNumber(loaded);
   if (sessionDraft && !loaded) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(t("stateRail.editing.workingDraft"))}</span>`);
   else if (editingNo != null && !loadedIsLive) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(tf("shell.header.draftVersion", { versionNo: editingNo }))}</span>`);
-  else if (loaded && !loadedIsLive) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
+  // Produkteier 13.11.2026: ved siden av «Publisert v1.2» sa «Utkast» for lite — forfatteren så ikke at skjemaet viste en
+  // nyere, upublisert lagring. Samme ord og samme brikke som kurs og seksjoner bruker: «Nyere utkast». Uten en live versjon
+  // er det fortsatt bare «Utkast».
+  else if (loaded && !loadedIsLive) parts.push(liveNo != null
+    ? `<span class="status-chip">${escapeHtml(t("adminContent.lifecycle.newerDraft"))}</span>`
+    : lifecycleBadge({ lifecycle: "draft" }, t));
   else if (liveNo == null && bundle) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
   return parts.join(" ");
 }

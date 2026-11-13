@@ -1,0 +1,239 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEKNINGSVAKT (#1149): «hvilke kurs bruker dette elementet?» svares ETT sted.
+//
+// Produkteier 13.11.2026 (doc/DECISIONS.md → «Arkiverte kurs teller ikke som bruk»):
+//   - «Brukt i kurs», kursfilteret, tematallet, avpublisering og arkivering: bare AKTIVE kurs teller.
+//   - Sletting: ALLE kurs teller, også arkiverte (`CourseItem` → modul/seksjon er `onDelete: Restrict`).
+//
+// De to svarene bor i `modules/course/contentLifecycle.ts`, med hvert sitt navn
+// (`findActiveCoursesContaining…` og `findAllCoursesContaining…`). Før #1149 hadde flere av dem som
+// spurte, sin egen spørring: modulbiblioteket en telling på relasjonen (`_count.courseItems`), importen en
+// `courseItem.count`, seksjonslista en `courseItem.findMany`. Ingen av dem kunne vite om regelen.
+//
+// Vakta har tre deler:
+//   1. Hver fil utenom contentLifecycle.ts som leser koblingen mellom kurs og element, står i LESERE
+//      med en grunn og et antall. En ny leser (eller en til i en fil som står der) gjør vakta rød.
+//      Svarer den på «er dette i bruk», skal den kalle contentLifecycle.ts i stedet.
+//   2. De to svarene har hvert sitt navn, og det finnes ingen funksjon uten «Active» eller «All».
+//   3. Handlingene spør om riktig svar: avpubliser og arkiver om aktive, slett om alle.
+//
+// Vakta leser `src/`. Klienten viser det tjeneren sender (`courses`, `courseCount`), og spør ikke selv.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SRC = fileURLToPath(new URL("../src", import.meta.url));
+const OWNER = "modules/course/contentLifecycle.ts";
+
+// Formene en lesning av «kurs ↔ element» kan ha:
+const READ_PATTERNS = [
+  // koblingstabellen direkte
+  /\.courseItem\s*\.\s*(findMany|findFirst|findFirstOrThrow|findUnique|findUniqueOrThrow|count|groupBy|aggregate)\b/g,
+  // relasjonen fra modul eller seksjon: `courseItems: { some … }`, `_count: { select: { courseItems: true } }`, `m._count.courseItems`.
+  // (`[...courseItems]` og `courseItems.map(…)` er en lokal variabel, ikke relasjonen.)
+  /\bcourseItems\s*:|(?<=[\w)\]])\.courseItems\b/g,
+  // kurs valgt ut fra elementene sine: `course.findMany({ where: { items: { some: { moduleId } } } })`
+  /\bitems\s*:\s*\{\s*(some|none|every)\b/g,
+  // rå SQL mot tabellen
+  /\b(FROM|JOIN)\s+"CourseItem"/gi,
+];
+
+/**
+ * Kjente lesere utenfor contentLifecycle.ts. Hver MÅ ha en grunn til at den ikke går gjennom
+ * `findActiveCoursesContaining…` / `findAllCoursesContaining…`, og antallet lesninger i fila.
+ */
+const LESERE = {
+  "modules/adminContent/adminContentCommands.ts": {
+    count: 5,
+    reason:
+      "Masseryddingen av upubliserte moduler (listUnpublishedPurgeCandidates, purgeUnpublishedModules). Den SLETTER, "
+      + "så alle kurs teller, også arkiverte: CourseItem → modul er onDelete: Restrict. Tellingen på relasjonen er riktig svar her.",
+  },
+  "modules/adminContent/adminContentRepository.ts": {
+    count: 1,
+    reason: "listPurgeCandidates: tellingen masseryddingen over bruker. Alle kurs, med vilje (sletting).",
+  },
+  "modules/adminContent/moduleVersioning.ts": {
+    count: 2,
+    reason:
+      "#934: findModulePlacements (hvilke kurs en ny modulversjon gjelder i — også arkiverte og avpubliserte, med vilje) og "
+      + "syncModuleRequirements (modulene i ETT kurs). Ikke «er modulen i bruk».",
+  },
+  "modules/course/courseAssignmentNotice.ts": {
+    count: 1,
+    reason:
+      "Rå SQL: har deltakeren levert på en modul i DETTE kurset (kurset er alt valgt som publisert og ikke arkivert). "
+      + "Deltakersiden, ikke «hvilke kurs bruker elementet».",
+  },
+  "modules/course/courseCommands.ts": {
+    count: 1,
+    reason: "setCourseModules leser seksjonsradene i ETT kurs for å bevare dem gjennom en omskriving. Kursets eget innhold.",
+  },
+  "modules/course/courseRepository.ts": {
+    count: 7,
+    reason:
+      "Dørene til kursets eget innhold (test/course-items-accessor-guard.test.js) og findPublishedCoursesContainingModule: "
+      + "hvilke PUBLISERTE, ikke-arkiverte kurs som skal vurderes for kursbevis etter et vedtak. Deltakersiden.",
+  },
+  "modules/course/courseVersioning.ts": {
+    count: 2,
+    reason:
+      "#934: findAffectedCourses og applyMinorVersionToCoursesContaining — hvilke kurs som får ny versjon når et element går live. "
+      + "Også arkiverte og avpubliserte kurs som har vært ute, med vilje: de har kursbevis, og skal ha riktig versjon når de gjenopprettes.",
+  },
+  "modules/course/enrollmentService.ts": {
+    count: 4,
+    reason:
+      "Deltakerens tilgang: hvilke publiserte, ikke-arkiverte kurs med modulen eller seksjonen deltakeren kan se, og om "
+      + "deltakeren har begynt på ETT kurs. Filtrerer selv på publisert og ikke arkivert.",
+  },
+  "modules/discussion/discussionService.ts": {
+    count: 2,
+    reason: "Sjekker at et kurselement hører til DETTE kurset før en diskusjonstråd leses eller skrives.",
+  },
+};
+
+function walk(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...walk(full));
+    else if (entry.endsWith(".ts")) out.push(full);
+  }
+  return out;
+}
+
+const withoutComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+const files = walk(SRC).map((file) => ({ rel: relative(SRC, file).replace(/\\/g, "/"), text: withoutComments(readFileSync(file, "utf8")) }));
+const textOf = (rel) => files.find((f) => f.rel === rel)?.text ?? "";
+
+/** Antall lesninger av «kurs ↔ element» i en tekst. */
+function countReads(text) {
+  return READ_PATTERNS.reduce((sum, pattern) => sum + [...text.matchAll(pattern)].length, 0);
+}
+
+/** Toppnivå-funksjoner: navn og kropp fram til neste toppnivå-funksjon. Samme deling som course-archive-entry-guard. */
+function topLevelFunctions(text) {
+  const starts = [...text.matchAll(/^(?:export )?(?:async )?function (\w+)\s*\(/gm)].map((m) => ({ name: m[1], at: m.index }));
+  return new Map(starts.map((s, i) => [s.name, text.slice(s.at, i + 1 < starts.length ? starts[i + 1].at : text.length)]));
+}
+
+describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycle.ts", () => {
+  it("KONTROLL: mønstrene treffer formene spørsmålet har vært stilt i, og ikke en lokal variabel", () => {
+    // De fire spørringene som fantes før #1149, og rå SQL. Treffer ikke mønstrene disse, måler vakta ingenting.
+    expect(countReads("await tx.courseItem.count({ where: { sectionId: replaced.oldId } });")).toBe(1);
+    expect(countReads("return client.courseItem\n  .findMany({ where: { moduleId } });")).toBe(1);
+    expect(countReads("_count: { select: { courseItems: true } },")).toBe(1);
+    expect(countReads("courseCount: module._count.courseItems,")).toBe(1);
+    expect(countReads("where: { module: { courseItems: { some: { courseId } } } }")).toBe(1);
+    expect(countReads("reader.course.findMany({ where: { items: { some: itemWhere } } })")).toBe(1);
+    expect(countReads('JOIN "CourseItem" ci ON ci."moduleId" = s."moduleId"')).toBe(1);
+    // En lokal variabel med samme navn er ikke en lesning.
+    expect(countReads("const courseItems = await repo.findAllCourseItems(courseId);\n[...courseItems].sort();\ncourseItems.map((i) => i.id);")).toBe(0);
+    // Skriving er ikke en lesning.
+    expect(countReads("await tx.courseItem.deleteMany({ where: { courseId } });")).toBe(0);
+  });
+
+  it("KONTROLL: vakta finner eierfila, og eierfila leser faktisk koblingen", () => {
+    expect(textOf(OWNER), `${OWNER} mangler — leter vakta riktig sted?`).not.toBe("");
+    expect(countReads(textOf(OWNER))).toBeGreaterThanOrEqual(2);
+  });
+
+  it("ingen leser koblingen mellom kurs og element utenom contentLifecycle.ts uten å stå i LESERE", () => {
+    const problems = [];
+    for (const file of files) {
+      if (file.rel === OWNER) continue;
+      const found = countReads(file.text);
+      const expected = LESERE[file.rel]?.count ?? 0;
+      if (found === expected) continue;
+      problems.push(
+        `${file.rel}: ${found} lesninger av koblingen mellom kurs og element, ventet ${expected}.\n`
+          + "    Svarer den nye lesningen på «hvilke kurs bruker dette elementet» (i bruk, brukt i kurs, kan arkiveres/slettes)?\n"
+          + `    Da skal den kalle findActiveCoursesContaining…/findAllCoursesContaining… i ${OWNER}.\n`
+          + "    Gjør den ikke det, før den opp i LESERE i test/content-in-use-guard.test.js med en grunn og riktig antall.",
+      );
+    }
+    expect(problems, `\n${problems.join("\n")}\n`).toEqual([]);
+  });
+
+  it("LESERE er ikke foreldet, og hver oppføring har en grunn", () => {
+    for (const [rel, entry] of Object.entries(LESERE)) {
+      expect(textOf(rel), `LESERE peker på en fil som ikke finnes: ${rel}`).not.toBe("");
+      expect(entry.count, `LESERE: ${rel} har antall 0 — ta oppføringen ut`).toBeGreaterThan(0);
+      expect(entry.reason.trim().length, `LESERE uten grunn: ${rel}`).toBeGreaterThan(40);
+    }
+  });
+
+  it("de to svarene har hvert sitt navn, og det finnes ingen funksjon uten «Active» eller «All»", () => {
+    const owner = textOf(OWNER);
+    for (const name of [
+      "findActiveCoursesContainingModule",
+      "findActiveCoursesContainingSection",
+      "findAllCoursesContainingModule",
+      "findAllCoursesContainingSection",
+      "findActiveCoursesForModules",
+      "findActiveCoursesForSections",
+    ]) {
+      expect(owner, `${name} mangler i ${OWNER}`).toMatch(new RegExp(`export function ${name}\\(`));
+    }
+    // Den ene spørringen tar valget som et påkrevd argument, og hvert kall sier det med en bokstavelig verdi.
+    expect(owner).toMatch(/async function coursesContaining\(itemWhere: ItemRef, scope: "active" \| "all", reader: LifecycleReader\)/);
+    const calls = [...owner.matchAll(/\bcoursesContaining\(([^)]*)\)/g)].map((m) => m[1]).filter((args) => !args.startsWith("itemWhere"));
+    expect(calls).toHaveLength(4);
+    expect(calls.filter((args) => /, "active", reader$/.test(args))).toHaveLength(2);
+    expect(calls.filter((args) => /, "all", reader$/.test(args))).toHaveLength(2);
+
+    // Navnene fra før #1149 sa ikke hvilket svar de ga. De skal ikke komme tilbake, i noen fil.
+    const ambiguous = /\b(findCoursesContaining(Module|Section)|findCoursesForSections|findCoursesForModules|assertModuleNotInAnyCourse|countModuleCourses)\b/;
+    const offenders = files.filter((f) => ambiguous.test(f.text)).map((f) => f.rel);
+    expect(offenders, `Et navn som ikke sier om arkiverte kurs teller:\n${offenders.join("\n")}`).toEqual([]);
+  });
+
+  it("avpubliser og arkiver spør om AKTIVE kurs, slett spør om ALLE", () => {
+    const sections = topLevelFunctions(textOf("modules/course/sectionCommands.ts"));
+    const modules = topLevelFunctions(textOf("modules/adminContent/adminContentCommands.ts"));
+    const ACTIVE = /\bassert(Module|Section)NotInActiveCourse\(|\bfindActiveCoursesContaining/;
+    const ALL = /\bassertSectionNotInAnyCourse\(|\bdescribeModuleDeleteBlock\(|\bfindAllCoursesContaining/;
+
+    const owner = topLevelFunctions(textOf(OWNER));
+
+    const expectations = [
+      // Vaktene selv: navnet lover et svar, og kroppen må spørre om det samme.
+      [owner, "assertModuleNotInActiveCourse", "findActiveCoursesContainingModule(moduleId, reader)", /\bfindAllCoursesContaining/],
+      [owner, "assertSectionNotInActiveCourse", "findActiveCoursesContainingSection(sectionId, reader)", /\bfindAllCoursesContaining/],
+      [owner, "describeModuleDeleteBlock", "findAllCoursesContainingModule(moduleId, reader)", /\bfindActiveCoursesContaining/],
+      [owner, "assertSectionNotInAnyCourse", "findAllCoursesContainingSection(sectionId, reader)", /\bfindActiveCoursesContaining/],
+      // Handlingene:
+      [sections, "unpublishSection", 'assertSectionNotInActiveCourse(sectionId, "avpubliseres", tx)', ALL],
+      [sections, "archiveSection", 'assertSectionNotInActiveCourse(sectionId, "arkiveres", tx)', ALL],
+      [sections, "deleteSection", "assertSectionNotInAnyCourse(sectionId, tx)", ACTIVE],
+      [modules, "unpublishModule", 'assertModuleNotInActiveCourse(moduleId, "avpubliseres", tx)', ALL],
+      [modules, "archiveModule", 'assertModuleNotInActiveCourse(moduleId, "arkiveres", tx)', ALL],
+      [modules, "deleteModule", "describeModuleDeleteBlock(moduleId, tx)", ACTIVE],
+    ];
+    for (const [fns, name, mustCall, mustNotMatch] of expectations) {
+      const body = fns.get(name);
+      expect(body, `fant ikke ${name}() — er den flyttet?`).toBeTruthy();
+      // Med `tx`: sjekken gjøres på transaksjonen som holder innholdslåsen (#934 skive 4a).
+      expect(body, `${name}() skal kalle ${mustCall}`).toContain(mustCall);
+      expect(mustNotMatch.test(body), `${name}() spør om feil svar (${mustNotMatch})`).toBe(false);
+    }
+  });
+
+  it("svaret «alle kurs» brukes bare av slettingene", () => {
+    // Sletting av en seksjon, sletting av en modul (kommandoen og ruta), og kaskadeslettingens «delt med andre kurs».
+    const ALLOWED = {
+      assertSectionNotInAnyCourse: ["modules/course/sectionCommands.ts"],
+      describeModuleDeleteBlock: ["modules/adminContent/adminContentCommands.ts", "routes/adminContent.ts"],
+      findAllCoursesContainingModule: ["modules/course/courseCascadeDeleteService.ts"],
+      findAllCoursesContainingSection: ["modules/course/courseCascadeDeleteService.ts"],
+    };
+    for (const [name, allowed] of Object.entries(ALLOWED)) {
+      const users = files.filter((f) => f.rel !== OWNER && new RegExp(`\\b${name}\\b`).test(f.text)).map((f) => f.rel).sort();
+      expect(users, `${name} gir svaret «alle kurs, også arkiverte». Det er bare for sletting`).toEqual([...allowed].sort());
+    }
+  });
+});

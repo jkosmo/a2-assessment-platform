@@ -43,7 +43,8 @@ Rediger/Åpne · Publiser ⇄ Avpubliser · Arkiver ⇄ Gjenopprett · Slett
 ```
 
 Knappene veksler etter status: Publisert viser **Avpubliser**, Utkast viser **Publiser**;
-Aktiv viser **Arkiver**, Arkivert viser **Gjenopprett**. Slett er alltid synlig (men vaktet).
+Aktiv viser **Arkiver**, Arkivert viser **Gjenopprett**. **Slett vises bare på arkiverte elementer**
+(vedtatt v1.6.1, se G4), og er vaktet.
 
 ## 3. Fire vakter (de gjenkjennbare reglene)
 
@@ -53,15 +54,53 @@ Kan ikke publisere ufullstendig innhold.
 - **Kurs:** minst én modul.
 - **Seksjon:** ikke-tomt innhold.
 
-### G2 — Bruk-lås (modul/seksjon i kurs)  ⟵ *vedtatt: ALLE kurs*
-En modul eller seksjon som ligger i **ethvert** kurs (publisert *eller* utkast) kan **ikke
-avpubliseres, arkiveres eller slettes**. Feilmeldingen navngir kursene:
+### G2 — Bruk-lås (modul/seksjon i kurs)  ⟵ *vedtatt: aktive kurs; sletting: alle kurs (#1149)*
+«I bruk» betyr at elementet ligger i et **aktivt** kurs: et kurs som ikke er arkivert, publisert
+*eller* utkast. **Arkiverte kurs teller ikke som bruk** (produkteier 13.11.2026, #1149,
+`doc/DECISIONS.md`). Sletting er unntatt:
+
+| Handling på en modul eller seksjon | Stoppes av |
+|---|---|
+| Vises som «Brukt i kurs», i kursfilteret og i tematallet | bare aktive kurs teller |
+| Avpublisere, arkivere | aktive kurs. Et arkivert kurs stopper ikke |
+| Slette | alle kurs, også arkiverte |
+
+**Hvorfor sletting er unntatt:** `CourseItem` peker på modul og seksjon med `onDelete: Restrict`.
+Så lenge raden i det arkiverte kurset finnes, kan databasen ikke slette elementet. Sletting av
+innhold i arkiverte kurs hører til #1152, der kurset og innholdet slettes samlet.
+
+Feilmeldingen navngir kursene. Avpublisering og arkivering (`content_in_use`):
 
 > «Modulen er i bruk i 2 kurs: «Arbeidsmiljø», «HMS-grunnkurs». Fjern den fra kursene
 > først (eller avpubliser kursene).»
 
-Dette gjør den eksisterende slett-vakta konsistent: alle tre tilbaketrekkende handlinger
-(avpubliser/arkiver/slett) er beskyttet likt, ikke bare slett.
+Sletting der minst ett av kursene er arkivert (`content_in_archived_course`) sier hvilke:
+
+> «Seksjonen kan ikke slettes fordi den ligger i 2 kurs: «Arbeidsmiljø», «HMS 2024». Arkiverte
+> kurs (1): «HMS 2024». Et arkivert kurs beholder innholdet sitt.»
+>
+> Meldingen ber ikke forfatteren gjenopprette kurset og ta elementet ut: for en modul stopper slettingen
+> likevel på versjonene (#1152), og det arkiverte kurset ville mistet innholdet det skulle beholde.
+
+Sletting uten arkiverte kurs svarer som før: `content_in_use` for seksjoner, `module_in_use` (409)
+for moduler.
+
+**Når et arkivert kurs gjenopprettes** med et element som er avpublisert eller arkivert i
+mellomtiden, lander kurset som utkast (I3). Et arkivert element stopper publiseringen
+(`item_archived`) til det er gjenopprettet eller tatt ut av kurset; en avpublisert seksjon
+publiseres sammen med kurset («Publiser kurs med innhold»). En avpublisert modul har vært ute før, så
+«Publiser kurs med innhold» svarer `409 course_publish_has_republished_modules`, og «Publiser nye versjoner»
+åpner seg for modulen. Deltakerne ser ingenting før kurset er publisert igjen: `restoreCourse` nullstiller
+også `publishedAt`, så et kurs som var arkivert og publisert (eldre data), ikke går rett ut.
+
+**Samtidighet:** arkivering av et element og gjenoppretting av et kurs skriver begge under
+innholdslåsen (`runContentWrite`), og sjekken gjøres på den låste transaksjonen. Den som kommer
+sist, ser hva den første gjorde: enten stoppes arkiveringen av det nå aktive kurset, eller kurset
+gjenopprettes med et arkivert element og kan ikke publiseres før det er ryddet.
+
+Regelen bor ett sted: `src/modules/course/contentLifecycle.ts`. De to svarene har hvert sitt navn,
+`findActiveCoursesContaining…` og `findAllCoursesContaining…`, og `test/content-in-use-guard.test.js`
+nekter en ny leser som svarer på spørsmålet utenom fila.
 
 ### G3 — Aktivitets-lås (kurs med påbegynt deltaker)  ⟵ *vedtatt: blokker hvis påbegynt*
 Et kurs som har minst én deltaker som har **påbegynt men ikke fullført** kan ikke **arkiveres**
@@ -79,14 +118,16 @@ ikke ved å trekke en påmelding — så en hard lås på avpublisering ville v�
 *etter* arkivering, likt for kurs/modul/seksjon. Aktive rader viser Arkiver i stedet. I tillegg
 kan man ikke slette hvis det ødelegger bevarte registre — arkiver i stedet.
 - **Kurs:** har `CourseCompletion` (utstedte sertifikat) → «Arkiver kurset i stedet».
-- **Modul:** har versjoner/forsøk/sertifiseringsstatus, eller er i et kurs (G2).
-- **Seksjon:** er i et kurs (G2) — dekker også leshistorikk (kun kurs-koblede seksjoner har lesinger).
+- **Modul:** har versjoner/forsøk/sertifiseringsstatus, eller er i et kurs, også et arkivert (G2).
+- **Seksjon:** er i et kurs, også et arkivert (G2) — dekker også leshistorikk (kun kurs-koblede
+  seksjoner har lesinger) — eller inngår i et utstedt kursbevis (#938).
 
 ## 4. Invarianter
 
 - **I1 — Integritet:** Et publisert kurs inneholder aldri en modul/seksjon som ikke er
-  tilgjengelig. Håndheves av G2 (innhold kan ikke trekkes vekk under et kurs). «Ikke
-  tilgjengelig»-visningen i deltaker-UI (#502-followup) blir et rent sikkerhetsnett.
+  tilgjengelig. Håndheves av G2 (innhold kan ikke trekkes vekk under et aktivt kurs) og av
+  publiseringsporten (`item_archived`), som stopper et gjenopprettet kurs med et arkivert element
+  (#1149). «Ikke tilgjengelig»-visningen i deltaker-UI (#502-followup) blir et rent sikkerhetsnett.
 - **I2 — Symmetri:** Hver tilstand er reversibel én tilbake: Publiser↔Avpubliser,
   Arkiver↔Gjenopprett. Slett er den eneste terminale handlingen, og er vaktet (G4).
 - **I3 — Arkivert ⇒ Utkast:** Å arkivere **auto-avpubliserer** atomisk (fjerner
@@ -120,9 +161,11 @@ kan man ikke slette hvis det ødelegger bevarte registre — arkiver i stedet.
   fra G3 (se §3, justert v1.5.1). Arkiver auto-avpubliserer (I3). Slett beholder G4 (completions).
 - Seksjon: nye `publishSection`/`unpublishSection`/`archiveSection`/`restoreSection`; G2-vakt
   på avpubliser/arkiver/slett.
-- Delt hjelper: `findCoursesContainingModule/Section` (id+tittel, alle publiseringstilstander)
-  for navngitte feilmeldinger, og `findCoursesForSections` (batch, for seksjonsliste-UI). Modul-slett
-  bruker samme navngitte-kurs-melding som avpubliser/arkiver (G2), ikke en avvikende telle-melding.
+- Delt hjelper (`contentLifecycle.ts`, #1149): `findActiveCoursesContainingModule/Section` (aktive
+  kurs: det som vises som bruk og stopper avpublisering og arkivering) og
+  `findAllCoursesContainingModule/Section` (alle kurs, også arkiverte: sletting). For listene:
+  `findActiveCoursesForSections` og `findActiveCoursesForModules` (batch). Modul-slett bruker samme
+  navngitte-kurs-melding som avpubliser/arkiver (G2), ikke en avvikende telle-melding.
 
 **Frontend (samkjør de tre listene)**
 - Felles status-merkelapp (Utkast/Publisert/Arkivert) med samme farger.

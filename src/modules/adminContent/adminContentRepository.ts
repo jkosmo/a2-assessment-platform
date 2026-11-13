@@ -35,6 +35,8 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    // #1149: «Brukt i kurs» hentes IKKE her. Lista spør `findActiveCoursesForModules` (contentLifecycle.ts),
+    // som bare teller aktive kurs — en telling på relasjonen her ville tatt med arkiverte kurs.
     listLibraryModules() {
       return client.module.findMany({
         orderBy: { title: "asc" },
@@ -52,16 +54,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
             orderBy: { versionNo: "desc" },
             take: 1,
             select: { id: true, versionNo: true, publishedAt: true },
-          },
-          _count: {
-            select: { courseItems: true },
-          },
-          courseItems: {
-            select: {
-              course: {
-                select: { id: true, title: true },
-              },
-            },
           },
         },
       });
@@ -138,13 +130,11 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       return latest?.modelAnswer ?? null;
     },
 
-    async countModuleCourses(moduleId: string) {
-      return client.courseItem.count({ where: { moduleId } });
-    },
-
     // v1.2.11: list purge candidates — moduler som aldri har vært publisert nå (activeVersionId
     // null), ikke arkivert, ingen submissions, ikke i noe kurs. Returnerer både id og title
     // pluss avhengighet-tellinger så caller kan vise en preview-liste til brukeren før purge.
+    // #1149: `_count.courseItems` teller ALLE kurs, også arkiverte, med vilje. Ryddingen sletter, og
+    // `CourseItem` → modul er `onDelete: Restrict`: en modul i et arkivert kurs kan ikke slettes.
     listPurgeCandidates() {
       return client.module.findMany({
         where: {

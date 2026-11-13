@@ -6,7 +6,7 @@ import { auditActions, auditEntityTypes } from "../../observability/auditEvents.
 import { localizeContentText } from "../../i18n/content.js";
 import { createAdminContentRepository } from "../adminContent/adminContentRepository.js";
 import { createCourseRepository } from "./courseRepository.js";
-import { describeIssuedCertificateBlock, findCoursesContainingModule, findCoursesContainingSection, type LifecycleReader } from "./contentLifecycle.js";
+import { describeIssuedCertificateBlock, findAllCoursesContainingModule, findAllCoursesContainingSection, type LifecycleReader } from "./contentLifecycle.js";
 import { collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands.js";
 
 // #762 — ADMINISTRATOR-only destructive cleanup: delete a course together with the modules and
@@ -15,6 +15,11 @@ import { collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands
 // Safety model (load-bearing — the FK order and the guards below mirror the proven bulk-purge path):
 //   - A module/section is EXCLUSIVE to course C when C is the only course that references it (via
 //     CourseItem). Shared items are SPARED — merely unlinked from C, never deleted.
+//     ⚠️ #1149: «andre kurs» er ALLE kurs her, også arkiverte (`findAllCoursesContaining…`). Dette er en
+//     SLETTING. Telte bare aktive kurs, ville et element som også ligger i et arkivert kurs se eksklusivt ut
+//     og bli forsøkt slettet under det arkiverte kurset (og stoppet av `CourseItem` → `onDelete: Restrict`,
+//     så hele kaskaden rullet tilbake). Regelen «arkiverte kurs teller ikke som bruk» gjelder visning,
+//     avpublisering og arkivering — ikke sletting. Sletting av innhold i arkiverte kurs hører til #1152.
 //   - PRESERVED records must never be destroyed: an exclusive module with submissions > 0 OR
 //     certificationStatuses > 0, or a course with completions > 0, become BLOCKERS.
 //   - The delete is ALL-OR-NOTHING: if any blocker exists the operation throws and deletes nothing.
@@ -115,7 +120,8 @@ async function analyzeCourseCascade(courseId: string, reader: LifecycleReader = 
     const summary = await adminContentRepository.findModuleDeleteSummary(moduleId);
     if (!summary) continue; // Referential integrity should make this impossible; skip defensively.
     const title = displayTitle(summary.title);
-    const otherCourses = (await findCoursesContainingModule(moduleId, reader)).filter((c) => c.id !== courseId);
+    // Alle kurs, også arkiverte: se «Safety model» øverst (#1149).
+    const otherCourses = (await findAllCoursesContainingModule(moduleId, reader)).filter((c) => c.id !== courseId);
 
     if (otherCourses.length > 0) {
       sparedModules.push({
@@ -150,7 +156,8 @@ async function analyzeCourseCascade(courseId: string, reader: LifecycleReader = 
     });
     if (!section) continue;
     const title = displayTitle(section.title);
-    const otherCourses = (await findCoursesContainingSection(sectionId, reader)).filter((c) => c.id !== courseId);
+    // Alle kurs, også arkiverte: se «Safety model» øverst (#1149).
+    const otherCourses = (await findAllCoursesContainingSection(sectionId, reader)).filter((c) => c.id !== courseId);
 
     if (otherCourses.length > 0) {
       sparedSections.push({

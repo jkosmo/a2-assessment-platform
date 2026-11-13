@@ -3,6 +3,7 @@ import { prisma } from "../../db/prisma.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText, localesPresent } from "../../i18n/content.js";
 import { deriveContentLifecycle } from "../content/lifecycle.js";
+import { findActiveCoursesForModules } from "../course/contentLifecycle.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
 import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
@@ -42,6 +43,8 @@ export async function listLibraryModules(
   // #787/#836: annotate each module with whether the viewer owns it, so the quality/calibration picker
   // can default to "my modules". Only queried when a viewer id is supplied (unauthenticated → all false).
   const ownedIds = viewerUserId ? await adminContentRepository.listModuleIdsOwnedBy(viewerUserId) : new Set<string>();
+  // #1149: «Brukt i kurs», kursfilteret og popoveren viser bare AKTIVE kurs. Samme spørsmål som seksjonslista stiller.
+  const coursesByModule = await findActiveCoursesForModules(modules.map((module) => module.id), locale);
 
   return modules.map((module) => ({
     id: module.id,
@@ -66,11 +69,8 @@ export async function listLibraryModules(
     // #787 slice 5: admin manages all; a non-admin manages only modules they own (unowned → admin-only).
     // Same rule as the ownership guard, so the library hides the edit/lifecycle actions that would 403.
     canManage: viewerIsAdmin || ownedIds.has(module.id),
-    courseCount: module._count.courseItems,
-    courses: module.courseItems.map((ci) => ({
-      id: ci.course.id,
-      title: localizeContentText(locale, ci.course.title) ?? ci.course.title,
-    })),
+    courseCount: coursesByModule.get(module.id)?.length ?? 0,
+    courses: coursesByModule.get(module.id) ?? [],
   }));
 }
 

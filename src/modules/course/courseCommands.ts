@@ -346,9 +346,14 @@ export async function archiveCourse(courseId: string, actorId?: string) {
 export async function restoreCourse(courseId: string, actorId?: string) {
   // #803: restore + audit commit atomically.
   return runContentWrite(async (tx) => {
+    // I3: et gjenopprettet kurs er ALLTID et utkast. Før sto det bare på at arkiveringen hadde nullstilt
+    // `publishedAt`. Det holder ikke for et kurs arkivert før arkivering avpubliserte (#705), eller publisert
+    // fra en gammel fane etter arkiveringen (`publishCourse` sjekker ikke `archivedAt`). Etter #1149 kan innholdet
+    // i et arkivert kurs være arkivert eller avpublisert, så et kurs som gikk rett ut til deltakerne ved
+    // gjenoppretting, ville gått forbi publiseringsporten (QA-porten 2.158.0).
     const updated = await tx.course.update({
       where: { id: courseId },
-      data: { archivedAt: null },
+      data: { archivedAt: null, publishedAt: null },
     });
     await recordAuditEvent(
       {

@@ -574,7 +574,7 @@ cascade policy (wording, an escape-hatch option, which items count as publishabl
 
 | Surface | Where | Notes |
 |---------|-------|-------|
-| Shared guards (source of truth) | `src/modules/course/contentLifecycle.ts` | G2 `assertModuleNotInAnyCourse`/`assertSectionNotInAnyCourse`; G3 `assertCourseHasNoInProgressParticipants` |
+| Shared guards (source of truth) | `src/modules/course/contentLifecycle.ts` | G2 (#1149, see §33): `assertModuleNotInActiveCourse`/`assertSectionNotInActiveCourse` for unpublish and archive, `describeModuleDeleteBlock`/`assertSectionNotInAnyCourse` for delete; G3 `assertCourseHasNoInProgressParticipants` |
 | Cascade-publish service | `src/modules/course/coursePublishService.ts` (`getCoursePublishPreview`, `publishCourseCascade`) | Inspects items + per-item publishability (module→`validateModuleVersionForPublish`, section→has content); publishes items then course; 422 if any item un-publishable (I1) |
 | Course publish route | `src/routes/adminCourses.ts` (`GET /:id/publish-preview`, `POST /:id/publish` `{publishItems}`) | 409 needs-confirm / 422 blocked / 200 `{course,publishedItems}`. Agent tokens denied (not in `agentTokenScope` allowlist) |
 | Cascade-publish dialog UI | `public/static/admin-content-courses.js` (`publishCourseInAdmin`→preview, `openCascadePublishDialog`) + `#cascadePublishDialog` in `admin-content-courses.html` | Lists unpublished items; confirm cascades; blocked mode hides confirm (`setHidden`). i18n `adminContent.courses.cascadePublish.*` |
@@ -599,7 +599,7 @@ reuses the proven bulk-purge FK order (`ModuleVersion` before its rubric/prompt/
 
 | Surface | Where | Notes |
 |---------|-------|-------|
-| Cascade-delete service | `src/modules/course/courseCascadeDeleteService.ts` (`getCourseCascadeDeletePreview`, `cascadeDeleteCourse`) | Exclusivity via `findCoursesContainingModule/Section`; preserved records via `adminContentRepository.findModuleDeleteSummary` (`_count.submissions`/`certificationStatuses`) + `courseCompletion.count`; one transaction, FK order load-bearing; audit `course_cascade_deleted` + per-module `module_deleted` |
+| Cascade-delete service | `src/modules/course/courseCascadeDeleteService.ts` (`getCourseCascadeDeletePreview`, `cascadeDeleteCourse`) | Exclusivity via `findAllCoursesContainingModule/Section` (archived courses count: this deletes, §33); preserved records via `adminContentRepository.findModuleDeleteSummary` (`_count.submissions`/`certificationStatuses`) + `courseCompletion.count`; one transaction, FK order load-bearing; audit `course_cascade_deleted` + per-module `module_deleted` |
 | Cascade-delete routes | `src/routes/adminCourses.ts` (`GET /:id/cascade-delete-preview`, `POST /:id/cascade-delete`) | **ADMINISTRATOR-only** per-route gate (403 otherwise); 400 `validation_error` w/ `details.blockers` when blocked; 200 summary otherwise |
 | Cascade-delete dialog UI | `public/static/admin-content-courses.js` (`isAdministrator`, row `data-action="cascade-delete"`, `openCascadeDeleteDialog`, `renderCascadeDeletePreview`) + `#cascadeDeleteDialog` in `admin-content-courses.html` | Row action gated on `/api/me` ADMINISTRATOR role (surface #12, never identityDefaults); dialog lists deleted/spared/blockers; confirm hidden when blockers (`setHidden`); hardcoded-Norwegian labels |
 
@@ -1484,3 +1484,65 @@ sletter raden etterpå). Skrivingen holder innholdslåsen: `test/content-lock-wr
 utkast er publisert.
 
 **Når en ny vei skriver kursets felt eller liste:** la den gå gjennom `claimCourseRevision`, så gjelder låsen.
+
+## 33. «Hvilke kurs bruker dette elementet?» — to svar med hvert sitt navn (#1149)
+
+Regelen (produkteier 13.11.2026, `doc/DECISIONS.md` → «Arkiverte kurs teller ikke som bruk», `doc/design/CONTENT_LIFECYCLE.md` G2):
+
+| Handling på en modul eller seksjon | Stoppes av |
+|---|---|
+| Vises som «Brukt i kurs», i kursfilteret og i tematallet | bare aktive kurs teller (`archivedAt = null`, publisert eller utkast) |
+| Avpublisere, arkivere | aktive kurs |
+| Slette | alle kurs, også arkiverte (`CourseItem` → modul/seksjon er `onDelete: Restrict`) |
+
+**Der svaret bor:** `src/modules/course/contentLifecycle.ts`. Én spørring (`coursesContaining`) med et påkrevd valg, og to navn
+utad: `findActiveCoursesContaining…` og `findAllCoursesContaining…`. Det finnes ingen funksjon uten «Active» eller «All».
+
+| Hvem spør | Funksjon | Svar |
+|---|---|---|
+| Seksjonslista (`GET /api/admin/content/sections`: `courses`, `courseCount`) | `findActiveCoursesForSections` | aktive |
+| Modulbiblioteket (`GET /api/admin/content/modules/library`: `courses`, `courseCount`) | `findActiveCoursesForModules` (fra `listLibraryModules` i `adminContentQueries.ts`) | aktive |
+| Temalista (`GET /api/admin/content/themes`: `courseCount`) | `listCourseThemes` (`courseThemeService.ts`), med `activeCourseWhere` fra contentLifecycle.ts | aktive |
+| Avpubliser og arkiver seksjon (`sectionCommands.ts`) | `assertSectionNotInActiveCourse` | aktive |
+| Avpubliser og arkiver modul (`adminContentCommands.ts`) | `assertModuleNotInActiveCourse` | aktive |
+| Kursimportens `updateExisting`: arkiver det utbyttede elementet når ingen andre kurs bruker det (`contentImportService.ts`) | `findActiveCoursesContainingModule/Section` | aktive (den arkiverer, sletter ikke) |
+| Slett seksjon (`deleteSection`) | `assertSectionNotInAnyCourse` | alle |
+| Slett modul (`deleteModule`, og forhåndssjekken i `DELETE /api/admin/content/modules/:id`) | `describeModuleDeleteBlock` | alle |
+| Kaskadeslettingens «delt med andre kurs» (`courseCascadeDeleteService.ts`) | `findAllCoursesContainingModule/Section` | alle |
+| Masseryddingen av upubliserte moduler (`listPurgeCandidates`, `purgeUnpublishedModules`) | egen telling, `_count.courseItems` | alle (den sletter) |
+
+**Spør om noe annet, og er uendret med vilje:** hvilke kurs en ny versjon gjelder i (#934: `findModulePlacements`,
+`findAffectedCourses`, `applyMinorVersionToCoursesContaining` — også arkiverte kurs), og alt på deltakersiden, som alt filtrerer
+på publisert og ikke arkivert (`enrollmentService.ts`, `findPublishedCoursesContainingModule`).
+
+**Klienten** viser det tjeneren sender: kolonnen, popoveren og kursfilteret bygges av `courses` og `courseCount`
+(`admin-content-sections.js`, `admin-content-library.js`, `list-page.js`), og temalista av `courseCount`
+(`admin-content-themes.js`). Ingen av dem spør selv.
+
+**Feilsvarene:** avpubliser og arkiver → `400 content_in_use` `{ count, courseTitles }` (bare aktive kurs). Slett med minst ett
+arkivert kurs → `400 content_in_archived_course` `{ count, courseTitles, archivedCount, archivedCourseTitles }`; uten arkiverte
+kurs som før (`content_in_use` for seksjoner, `409 module_in_use` for moduler). Setningene: `errors.api.content_in_use` og
+`errors.api.content_in_archived_course` i `public/i18n/participant-translations.js` (nb, nn, en-GB), vist av `apiErrorToast` der
+det slettes: seksjonen i editoren (`deleteSection` i `admin-content-sections.js`) og modulraden i biblioteket
+(`deleteModuleFromRow` i `admin-content-library.js`).
+
+**Følgen forfatteren møter:** «Slett» vises bare på arkiverte elementer. Et element som bare ligger i et arkivert kurs, vises
+som ubrukt (0 kurs) og kan arkiveres, men ikke slettes. Meldingen ved sletting er derfor den som forklarer hvorfor.
+
+**Når en ny flate skal vise eller sjekke bruk:** kall en av funksjonene over, og velg svaret etter handlingen (sletter den, er
+det «alle»). Ikke tell på relasjonen (`_count.courseItems`) og ikke spør `courseItem` direkte.
+
+**Vakter:** `test/content-in-use-guard.test.js` (hver leser av koblingen mellom kurs og element utenom contentLifecycle.ts står
+oppført med grunn og antall; navnene uten «Active»/«All» finnes ikke; avpubliser og arkiver spør om aktive og slett om alle;
+svaret «alle» brukes bare av slettingene). Gjennom rutene: `test/m2-archived-courses-not-in-use-1149.test.ts` (med kontroll i
+aktivt kurs, listene, gjenopprett-forløpet og importen). Meldingen i nettleseren:
+`test/e2e/admin-content-delete-archived-course-1149.spec.ts`.
+
+**Én leser til, på klienten:** kursfilteret på Kvalitet-siden (`public/static/admin-content-calibration.js`) bygges av `courses` fra
+modulbiblioteket, og viser derfor heller ikke arkiverte kurs. Modulene finnes under «Alle kurs».
+
+**Vakttesten ser bestemte skrivemåter.** Den finner `courseItem`/`courseItems` og de seks navngitte handlingene. En ny slettefunksjon
+som spør om aktive kurs, gjenbruk av `findAffectedCourses` (#934) til visning, eller `course.findMany({ include: { items } })` med
+filtrering i minnet går forbi. Aktuelt når #1152 bygger sletting.
+
+**Kjente mangler:** se versjonsnotatet for #1149 i `doc/VERSIONS.md`.

@@ -28,6 +28,7 @@ import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { prisma } from "../../db/prisma.js";
 import { courseRepository, createCourseRepository } from "../course/courseRepository.js";
 import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
+import { findActiveCoursesContainingModule, findActiveCoursesContainingSection } from "../course/contentLifecycle.js";
 import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, renameSectionInVersionSnapshots, sameLocalizedText, type CourseVersionChoice, type CourseVersionRequest } from "../course/courseVersioning.js";
 import { randomUUID } from "node:crypto";
 import { createSection, evaluateSectionTranslationGate } from "../course/sectionCommands.js";
@@ -1142,16 +1143,18 @@ export async function importCourseFromEnvelope(
           // Det som ble byttet ut, er nå ute av dette kurset. Bruker ingen andre kurs det, arkiveres
           // det (som «Arkiver» i biblioteket: avpublisert + arkivert, I3) — det er bevart, ikke slettet.
           // Brukes det et annet sted, blir det liggende hos eieren sin.
+          // #1149: «andre kurs» er AKTIVE kurs, samme regel som «Arkiver» i biblioteket. Elementet arkiveres,
+          // det slettes ikke, så et arkivert kurs som også har det, stopper ikke.
           const now = new Date();
           for (const replaced of summary.replacedUnownedIds) {
             if (replaced.type === "SECTION") {
-              const elsewhere = await tx.courseItem.count({ where: { sectionId: replaced.oldId } });
-              if (elsewhere > 0) continue;
+              const elsewhere = await findActiveCoursesContainingSection(replaced.oldId, tx);
+              if (elsewhere.length > 0) continue;
               await tx.courseSection.update({ where: { id: replaced.oldId }, data: { archivedAt: now, activeVersionId: null } });
               await recordAuditEvent({ entityType: auditEntityTypes.courseSection, entityId: replaced.oldId, action: auditActions.section.archived, actorId: options.actorId, metadata: { sectionId: replaced.oldId } }, tx);
             } else {
-              const elsewhere = await tx.courseItem.count({ where: { moduleId: replaced.oldId } });
-              if (elsewhere > 0) continue;
+              const elsewhere = await findActiveCoursesContainingModule(replaced.oldId, tx);
+              if (elsewhere.length > 0) continue;
               await createAdminContentWriter(tx).archiveModule(replaced.oldId, now);
               await recordAuditEvent({ entityType: auditEntityTypes.module, entityId: replaced.oldId, action: auditActions.adminContent.moduleArchived, actorId: options.actorId, metadata: { moduleId: replaced.oldId } }, tx);
             }

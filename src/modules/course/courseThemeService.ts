@@ -13,11 +13,13 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { activeCourseWhere } from "./contentLifecycle.js";
 
 export interface CourseThemeRow {
   id: string;
   /** lagret lokalisert JSON, som kurstitler */
   name: string;
+  /** Aktive kurs med temaet. Arkiverte kurs telles ikke (#1149). */
   courseCount: number;
   updatedAt: string;
 }
@@ -47,9 +49,11 @@ export function sortThemesByName<T extends { name: string }>(themes: readonly T[
   return [...themes].sort((a, b) => collator.compare(a.name, b.name));
 }
 
+// #1149: tallet i temalista teller bare AKTIVE kurs — samme regel som «Brukt i kurs» for moduler og seksjoner.
+// Slettingen under (`deleteCourseTheme`) teller fortsatt alle: også et arkivert kurs mister koblingen.
 export async function listCourseThemes(): Promise<CourseThemeRow[]> {
   const rows = await prisma.courseTheme.findMany({
-    select: { id: true, name: true, updatedAt: true, _count: { select: { courses: true } } },
+    select: { id: true, name: true, updatedAt: true, _count: { select: { courses: { where: { course: activeCourseWhere } } } } },
   });
   return rows.map((row) => ({
     id: row.id,

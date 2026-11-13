@@ -86,6 +86,8 @@ export default defineConfig({
       "test/participant-module-version-guard.test.js",
       // #1140 etappe 2: nekter en ny leser eller skriver av kursutkastet utenom fila som eier det.
       "test/course-draft-guard.test.js",
+      // #1149: nekter en ny leser av «hvilke kurs bruker dette elementet» utenom contentLifecycle.ts.
+      "test/content-in-use-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

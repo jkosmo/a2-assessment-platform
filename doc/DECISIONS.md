@@ -1713,3 +1713,28 @@ Da kursbyggeren skulle bygges, svarte produkteier på fire spørsmål (skissen: 
   publiserte kurset, slipper gjennom selv om det ikke er publisert (kursimporten kan legge en ny seksjon inn som utkast).
   Det er tilstanden kurset alt har, og utkastet gjør den ikke verre. Uten dette ville et slikt kurs ikke fått publisert
   noe utkast (QA-porten, skive 2c).
+
+## Arkiverte kurs teller ikke som bruk (#1149, 2026-11-13)
+
+Produkteier 13.11.2026 (samlesak #1148, etappe 1). En modul eller seksjon er «i bruk» når den ligger i et **aktivt** kurs: et
+kurs som ikke er arkivert, publisert eller utkast. Et arkivert kurs teller ikke.
+
+- **Det som vises:** «Brukt i kurs», kursfilteret og popoveren i seksjonslista og modulbiblioteket, og tallet i temalista,
+  teller bare aktive kurs.
+- **Avpublisering og arkivering** av en modul eller seksjon stoppes bare av aktive kurs. Før stoppet også et arkivert kurs
+  dem, og innhold i et pensjonert kurs kunne ikke ryddes uten å gjenopprette kurset først.
+- **Sletting er unntatt: alle kurs teller, også arkiverte.** Det er ikke et valg, men databasen: `CourseItem` peker på
+  modul og seksjon med `onDelete: Restrict`, så raden i det arkiverte kurset holder elementet til kurset selv er borte.
+  Svaret sier hvilke av kursene som er arkiverte (`content_in_archived_course`), for forfatteren kan ikke «fjerne elementet
+  fra kurset» uten å gjenopprette det først. Det samme gjelder kaskadeslettingens «delt med andre kurs» og masseryddingen av
+  upubliserte moduler. Sletting av innhold i arkiverte kurs kommer i #1152, der kurset og innholdet slettes samlet.
+- **Gjenopprettes et arkivert kurs** med et element som er arkivert i mellomtiden, lander kurset som utkast, og
+  publiseringen stoppes av `item_archived` til elementet er gjenopprettet eller tatt ut. Ingen ny regel; den fantes.
+- **Uendret, med vilje:** hvilke kurs en ny modul- eller seksjonsversjon gjelder i (#934: `findModulePlacements`,
+  `findAffectedCourses`) teller fortsatt arkiverte kurs — de har kursbevis, og skal ha riktig versjon når de gjenopprettes.
+  Deltakersiden filtrerte alt på publisert og ikke arkivert.
+
+**Håndheves:** `src/modules/course/contentLifecycle.ts` — de to svarene har hvert sitt navn (`findActiveCoursesContaining…`,
+`findAllCoursesContaining…`), og det finnes ingen funksjon uten «Active» eller «All». `test/content-in-use-guard.test.js`
+nekter en ny leser av koblingen mellom kurs og element som ikke står oppført med en grunn.
+**Sak:** #1149 · **Dato:** 2026-11-13 · **Status:** avklart

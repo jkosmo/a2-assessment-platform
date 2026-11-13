@@ -2,6 +2,73 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.158.0 - 2026-11-13
+
+Første etappe av #1148 (arkivering og sletting som rydder), og et tydeligere merke i modulhodet.
+
+### Arkiverte kurs teller ikke som bruk (#1149)
+
+Produkteier 13.11.2026, meldt fra prod: arkiverte kurs sto fortsatt i kursfilteret i seksjonslista, og innholdet i dem
+kunne ikke ryddes.
+
+- **Hva forfatterne merker:**
+  - En modul eller seksjon som bare ligger i arkiverte kurs, viser 0 i «Brukt i kurs». Det arkiverte kurset er borte fra
+    kursfilteret og fra tallet i temalista.
+  - Den kan avpubliseres og arkiveres. Før måtte kurset gjenopprettes først.
+  - Den kan fortsatt ikke slettes. Meldingen sier nå hvilke av kursene som er arkiverte, og at kurset må gjenopprettes og
+    elementet tas ut først.
+- **Regelen:** «i bruk» betyr et kurs som ikke er arkivert, publisert eller utkast. Visning, avpublisering og arkivering
+  teller bare slike. Sletting teller alle kurs, fordi `CourseItem` peker på modul og seksjon med `onDelete: Restrict`:
+  databasen kan ikke slette et element som ligger i et kurs, heller ikke et arkivert. Det samme gjelder kaskadeslettingen
+  og masseryddingen av upubliserte moduler. Hvilke kurs en ny versjon gjelder i (#934), er uendret.
+- **Gjenoppretting:** et arkivert kurs med et element som er arkivert i mellomtiden, lander som utkast og kan ikke
+  publiseres før elementet er gjenopprettet eller tatt ut (`item_archived`, fantes fra før).
+- **Der regelen bor:** `contentLifecycle.ts`, med to svar som har hvert sitt navn (`findActiveCoursesContaining…`,
+  `findAllCoursesContaining…`). Det finnes med vilje ingen funksjon uten «Active» eller «All» i navnet. Importens
+  `updateExisting`, modulbiblioteket og seksjonslista spør der nå.
+- **API:** ny kode `400 content_in_archived_course` ved sletting når minst ett av kursene er arkivert, med
+  `details: { count, courseTitles, archivedCount, archivedCourseTitles }`. `content_in_use` teller og navngir bare aktive
+  kurs. `courseCount` og `courses` i listene, og `courseCount` i temalista, teller bare aktive kurs. Ingen migrering,
+  ingen bryter.
+- **Planen** sto i saken før bygging. Funnet som endret den: sletting kan ikke følge samme regel som arkivering.
+- **QA-porten:** GO. To av funnene er rettet i pakken:
+  - **Slettemeldingen ga et råd som ikke virket.** Første utgave sa «Gjenopprett kurset og ta innholdet ut av det før du
+    sletter». For en modul stopper slettingen likevel på versjonene, og for en seksjon i et utstedt kursbevis på beviset.
+    Rådet kostet et endret arkivert kurs. Setningen slutter nå med «Et arkivert kurs beholder innholdet sitt.» Veien som
+    virker, kommer med #1152.
+  - **Et gjenopprettet kurs er alltid et utkast.** `restoreCourse` nullstilte bare `archivedAt` og stolte på at
+    arkiveringen hadde avpublisert. Et kurs arkivert før #705, eller publisert fra en gammel fane etter arkiveringen,
+    ville gått rett ut til deltakerne ved gjenoppretting, forbi publiseringsporten, og etter denne pakken kan innholdet i
+    et arkivert kurs være arkivert eller avpublisert. `restoreCourse` nullstiller nå også `publishedAt`. Test:
+    «et kurs som er arkivert OG publisert, gjenopprettes som utkast».
+- **Tester:**
+  - `test/m2-archived-courses-not-in-use-1149.test.ts`: 19 tester gjennom rutene, med kontroll i aktivt kurs, listene,
+    gjenopprett-forløpet, importen, kaskadeslettingen og masseryddingen.
+  - `test/content-in-use-guard.test.js`: nekter en ny leser av koblingen mellom kurs og element utenom fila, og at en
+    handling spør om feil svar.
+  - `test/e2e/admin-content-delete-archived-course-1149.spec.ts`: meldingen på tre språk, for seksjon og modul.
+  - Mutasjonssjekket 29 veier, alle røde.
+- **Kjente mangler:**
+  - Slettedialogen for tema sier «Ingen kurs har dette temaet» når bare arkiverte kurs har det. Det arkiverte kurset
+    mister likevel temaet.
+  - Et element som bare står i et lagret kursutkast (#1140), regnes ikke som i bruk. Hører til #1150.
+  - En arkivert modul med versjoner kan fortsatt ikke slettes, og svaret er en engelsk feiltekst. Hører til #1152.
+  - Importens «oppdater kurs» kan arkivere et element en annen eier når bare et arkivert kurs ellers bruker det.
+  - En fane med gammel klient viser en generell feilsetning for den nye koden til sida lastes på nytt.
+  - Seksjonslista viser kurstitlene på bokmål uansett språk; modulbiblioteket bruker listas språk. Fra før.
+  - Kursskjemaet merker ikke arkiverte elementer i et gjenopprettet kurs. En lagring avvises med «Ett eller flere
+    elementer er arkivert …» uten å si hvilke. «Publiser» navngir dem, så kurset kan repareres. Tas i #1150.
+  - Kursfilteret på Kvalitet-siden viser heller ikke arkiverte kurs. Modulene finnes under «Alle kurs».
+  - `publishCourse` sjekker fortsatt ikke om kurset er arkivert (#1151).
+
+### «Nyere utkast» i modulhodet
+
+- **Hva forfatterne merker:** en publisert modul med en nyere, upublisert lagring åpen i skjemaet viser «Publisert v1.2»
+  og «Nyere utkast». Før sto det «Utkast», og produkteier så ikke at skjemaet viste noe annet enn det publiserte. Samme
+  ord og samme brikke som kurs og seksjoner bruker. En modul som aldri er publisert, sier fortsatt «Utkast».
+- **Tester:** `test/e2e/admin-content-module-header-newer-draft.spec.ts` (3, med to kontroller). Mutasjonssjekket tre
+  veier. `test/e2e/module-version-number-934-5b.spec.ts` festet det gamle ordet og er oppdatert.
+
 ## 2.157.2 - 2026-11-13
 
 To feil meldt av produkteier fra prod (2.154.2) samme dag. Begge er i klienten, begge har ligget der lenge.

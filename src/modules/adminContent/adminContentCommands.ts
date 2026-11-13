@@ -9,7 +9,7 @@ import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs
 import type { AssessmentMode } from "@prisma/client";
 import { localizedTextCodec, type LocalizedText, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
-import { assertModuleNotInAnyCourse, findCoursesContainingModule, inUseMessage } from "../course/contentLifecycle.js";
+import { assertModuleNotInActiveCourse, describeModuleDeleteBlock } from "../course/contentLifecycle.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import {
   generateModuleRubric,
@@ -286,6 +286,7 @@ export async function listUnpublishedPurgeCandidates(): Promise<PurgeCandidate[]
   return candidates.map((m) => {
     const reasons: string[] = [];
     if (m._count.submissions > 0) reasons.push(`${m._count.submissions} submissions`);
+    // #1149: ryddingen SLETTER, så alle kurs teller her, også arkiverte (`listPurgeCandidates`).
     if (m._count.courseItems > 0) reasons.push(`in ${m._count.courseItems} course(s)`);
     if (m._count.certificationStatuses > 0) reasons.push(`${m._count.certificationStatuses} certification statuses`);
     return {
@@ -313,7 +314,8 @@ export async function purgeUnpublishedModules(actorId: string): Promise<PurgeRes
       const purged = await runContentWrite(async (tx) => {
         // #934 skive 4a: kandidatlista over ble laget før innholdslåsen. Etter den sjekkes det på nytt at modulen
         // fortsatt er upublisert, ikke arkivert, ikke i noe kurs og uten innleveringer eller beståtte. Har noe
-        // endret seg, står modulen.
+        // endret seg, står modulen. #1149: «ikke i noe kurs» teller også arkiverte kurs — dette er en sletting,
+        // og `CourseItem` → modul er `onDelete: Restrict`.
         const fresh = await tx.module.findUnique({
           where: { id: candidate.id },
           select: { activeVersionId: true, archivedAt: true, _count: { select: { submissions: true, courseItems: true, certificationStatuses: true } } },
@@ -367,11 +369,10 @@ export async function deleteModule(moduleId: string, actorId: string) {
       throw new Error("Module not found.");
     }
 
-    // G2: samme melding og kode som ruta har gitt siden #705 (`module_in_use`, 409, antall kurs).
-    const courses = await findCoursesContainingModule(moduleId, tx);
-    if (courses.length > 0) {
-      throw new ConflictError("module_in_use", inUseMessage("Modulen", "slettes", courses), { courseCount: courses.length });
-    }
+    // G2, sletting: ALLE kurs teller, også arkiverte (#1149). Uten arkiverte kurs er svaret det ruta har gitt
+    // siden #705 (`module_in_use`, 409, antall kurs); med et arkivert kurs er det `content_in_archived_course`.
+    const blocked = await describeModuleDeleteBlock(moduleId, tx);
+    if (blocked) throw blocked.error;
 
     const dependencyChecks = [
       ["module versions", module._count.versions],
@@ -905,10 +906,11 @@ export async function archiveModule(moduleId: string, actorId: string) {
     if (module.archivedAt) {
       throw new Error("Module is already archived.");
     }
-    // G2 (bruk-lås): en modul som ligger i ETHVERT kurs (publisert eller utkast) kan ikke
+    // G2 (bruk-lås): en modul som ligger i et AKTIVT kurs (publisert eller utkast) kan ikke
     // arkiveres — den ville trekkes vekk under kurset. Dette tetter hullet der en publisert
     // modul kunne avpubliseres og deretter arkiveres mens den fortsatt lå i et publisert kurs.
-    await assertModuleNotInAnyCourse(moduleId, "arkiveres", tx);
+    // #1149: et arkivert kurs stopper ikke arkiveringen.
+    await assertModuleNotInActiveCourse(moduleId, "arkiveres", tx);
     const repo = createAdminContentWriter(tx);
     const archived = await repo.archiveModule(moduleId, new Date());
     await recordAuditEvent(
@@ -957,9 +959,10 @@ export async function restoreModule(moduleId: string, actorId: string) {
 export async function unpublishModule(moduleId: string, actorId: string) {
   const result = await runContentWrite(async (tx) => {
     await ensureModuleExists(moduleId, createAdminContentRepository(tx));
-    // G2 (bruk-lås): kan ikke avpublisere en modul som ligger i et kurs — det ville gi en
+    // G2 (bruk-lås): kan ikke avpublisere en modul som ligger i et aktivt kurs — det ville gi en
     // blindvei i kurset. Fjern den fra kursene først. #934 skive 4a: etter innholdslåsen.
-    await assertModuleNotInAnyCourse(moduleId, "avpubliseres", tx);
+    // #1149: et arkivert kurs stopper ikke avpubliseringen.
+    await assertModuleNotInActiveCourse(moduleId, "avpubliseres", tx);
     const repo = createAdminContentWriter(tx);
     const unpublished = await repo.unpublishModule(moduleId);
     await recordAuditEvent(

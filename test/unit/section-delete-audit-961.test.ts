@@ -46,6 +46,8 @@ vi.mock("../../src/db/transaction.js", () => ({
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
 
 vi.mock("../../src/modules/course/contentLifecycle.js", () => ({
+  // #1149: avpubliser og arkiver bruker denne; slettingen (som testes her) bruker den under.
+  assertSectionNotInActiveCourse: vi.fn(),
   assertSectionNotInAnyCourse,
   assertSectionNotInIssuedCertificate,
 }));

@@ -92,7 +92,7 @@ import { mcqCueWarnings, packageCueWarnings } from "../modules/adminContent/mcqC
 import { packageRubricWarnings, rubricWarnings } from "../modules/adminContent/rubricWarnings.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { isExtractionJobOwner, rememberExtractionJobOwner } from "../modules/adminContent/extractionJobOwners.js";
-import { findCoursesContainingModule, inUseMessage } from "../modules/course/contentLifecycle.js";
+import { describeModuleDeleteBlock } from "../modules/course/contentLifecycle.js";
 import {
   submitParseJob,
   getParsedResult,
@@ -346,12 +346,16 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     // #705: G2 use-lock — reuse the shared named-courses message (same as unpublish/archive) so the
     // three withdrawing actions read identically; keep the 409/`module_in_use`/`courseCount` shape.
-    const courses = await findCoursesContainingModule(request.params.moduleId);
-    if (courses.length > 0) {
-      response.status(409).json({
-        error: "module_in_use",
-        message: inUseMessage("Modulen", "slettes", courses),
-        courseCount: courses.length,
+    // #1149: sletting teller ALLE kurs, også arkiverte. Ligger modulen i et arkivert kurs, er koden
+    // `content_in_archived_course` (400), og `details` sier hvilke kurs som er arkiverte. `deleteModule`
+    // sjekker det samme på nytt etter innholdslåsen; denne forhåndssjekken finnes for `courseCount` øverst.
+    const blocked = await describeModuleDeleteBlock(request.params.moduleId);
+    if (blocked) {
+      response.status(blocked.error.httpStatus).json({
+        error: blocked.error.code,
+        message: blocked.error.message,
+        courseCount: blocked.courseCount,
+        details: blocked.error.details,
       });
       return;
     }
