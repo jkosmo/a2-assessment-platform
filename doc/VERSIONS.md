@@ -6,6 +6,12 @@ This document tracks release versions and what each version includes.
 
 To feil meldt av produkteier fra prod (2.154.2) samme dag. Begge er i klienten, begge har ligget der lenge.
 
+**På stage 13.11.2026 kl. 09:41** (dev 696fe1f2). `test/stage/release-2-157-2-liste-og-sok.spec.ts` mot ekte data, 4 av 4
+grønne: en modul som er live med en nyere lagring kommer opp i kurssøket, en som aldri er publisert gjør det ikke, søket
+merker ikke kurset som ulagret, en modul publisert mens kurset sto åpent kommer opp når forfatteren er tilbake, og
+seksjonslista slipper forfatteren til «Kurs» uten spørsmål etter at en seksjon har vært åpnet. Testdataene er arkivert.
+Ikke til prod alene: produkteier vil samle flere rettinger på stage først.
+
 ### En publisert modul med nyere utkast kunne ikke legges i et kurs
 
 - **Hva brukerne merket:** modulen «Test: Frihet under ansvar» var publisert, men kom ikke opp i søket «legg til innhold»
