@@ -1501,7 +1501,8 @@ Regelen (produkteier 13.11.2026, `doc/DECISIONS.md` → «Arkiverte kurs teller 
 | Handling på en modul eller seksjon | Stoppes av |
 |---|---|
 | Vises som «Brukt i kurs», i kursfilteret og i tematallet | bare aktive kurs teller (`archivedAt = null`, publisert eller utkast) |
-| Avpublisere, arkivere | aktive kurs |
+| Avpublisere | aktive kurs |
+| Arkivere (for hånd, importens utbytting, og forhåndsvisningen av kursarkiveringen) | #1150: «brukes andre steder» — aktive kurs, OG lagrede utkast (#1140) til aktive kurs |
 | Slette | alle kurs, også arkiverte (`CourseItem` → modul/seksjon er `onDelete: Restrict`) |
 
 **Der svaret bor:** `src/modules/course/contentLifecycle.ts`. Én spørring (`coursesContaining`) med et påkrevd valg, og to navn
@@ -1512,9 +1513,11 @@ utad: `findActiveCoursesContaining…` og `findAllCoursesContaining…`. Det fin
 | Seksjonslista (`GET /api/admin/content/sections`: `courses`, `courseCount`) | `findActiveCoursesForSections` | aktive |
 | Modulbiblioteket (`GET /api/admin/content/modules/library`: `courses`, `courseCount`) | `findActiveCoursesForModules` (fra `listLibraryModules` i `adminContentQueries.ts`) | aktive |
 | Temalista (`GET /api/admin/content/themes`: `courseCount`) | `listCourseThemes` (`courseThemeService.ts`), med `activeCourseWhere` fra contentLifecycle.ts | aktive |
-| Avpubliser og arkiver seksjon (`sectionCommands.ts`) | `assertSectionNotInActiveCourse` | aktive |
-| Avpubliser og arkiver modul (`adminContentCommands.ts`) | `assertModuleNotInActiveCourse` | aktive |
-| Kursimportens `updateExisting`: arkiver det utbyttede elementet når ingen andre kurs bruker det (`contentImportService.ts`) | `findActiveCoursesContainingModule/Section` | aktive (den arkiverer, sletter ikke) |
+| Avpubliser seksjon (`sectionCommands.ts`) | `assertSectionNotInActiveCourse(…, "avpubliseres")` | aktive |
+| Avpubliser modul (`adminContentCommands.ts`) | `assertModuleNotInActiveCourse(…, "avpubliseres")` | aktive |
+| Arkiver seksjon / modul for hånd | `assert…NotInActiveCourse(…, "arkiveres")` → `findActiveUsesOfItems` | #1150: aktive + utkast |
+| Kursimportens `updateExisting`: arkiver det utbyttede elementet når ingen andre kurs bruker det (`contentImportService.ts`) | `findActiveUsesOfItems` | #1150: aktive + utkast (den arkiverer, sletter ikke) |
+| Forhåndsvisningen av kursarkiveringen (`GET …/courses/:id/archive-preview`, `courseArchivePreview.ts`) | `findActiveUsesOfItems` med `excludeCourseId` = kurset | #1150: aktive + utkast, utenom kurset selv og dets eget utkast |
 | Slett seksjon (`deleteSection`) | `assertSectionNotInAnyCourse` | alle |
 | Slett modul (`deleteModule`, og forhåndssjekken i `DELETE /api/admin/content/modules/:id`) | `describeModuleDeleteBlock` | alle |
 | Kaskadeslettingens «delt med andre kurs» (`courseCascadeDeleteService.ts`) | `findAllCoursesContainingModule/Section` | alle |
@@ -1528,7 +1531,8 @@ på publisert og ikke arkivert (`enrollmentService.ts`, `findPublishedCoursesCon
 (`admin-content-sections.js`, `admin-content-library.js`, `list-page.js`), og temalista av `courseCount`
 (`admin-content-themes.js`). Ingen av dem spør selv.
 
-**Feilsvarene:** avpubliser og arkiver → `400 content_in_use` `{ count, courseTitles }` (bare aktive kurs). Slett med minst ett
+**Feilsvarene:** avpubliser og arkiver → `400 content_in_use` `{ count, courseTitles }` (bare aktive kurs; arkiver som stoppes
+av et utkast: `content_in_course_draft`, se 33b). Slett med minst ett
 arkivert kurs → `400 content_in_archived_course` `{ count, courseTitles, archivedCount, archivedCourseTitles }`; uten arkiverte
 kurs som før (`content_in_use` for seksjoner, `409 module_in_use` for moduler). Setningene: `errors.api.content_in_use` og
 `errors.api.content_in_archived_course` i `public/i18n/participant-translations.js` (nb, nn, en-GB), vist av `apiErrorToast` der
@@ -1555,3 +1559,37 @@ som spør om aktive kurs, gjenbruk av `findAffectedCourses` (#934) til visning, 
 filtrering i minnet går forbi. Aktuelt når #1152 bygger sletting.
 
 **Kjente mangler:** se versjonsnotatet for #1149 i `doc/VERSIONS.md`.
+
+### 33b. «Brukes andre steder» ved arkivering — kursene OG utkastene (#1150 skive 2a-1)
+
+Plan: `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, etappe 2. Et element brukes et annet sted når det står i et kurs som
+ikke er arkivert, eller i et **lagret utkast** (#1140) til et kurs som ikke er arkivert, når utkastets elementliste tar det med.
+Før #1150 så ingen «i bruk»-sjekk utkastene: et element som bare sto i et annet kurs' utkast, kunne arkiveres for hånd, og
+utkastet feilet først ved publisering (`course_draft_item_unusable`).
+
+**Der regelen bor:** `findActiveUsesOfItems` i `src/modules/course/contentLifecycle.ts` (svar per element: kurs, tittel og
+`via: "course" | "draft"`, utenom et valgfritt `excludeCourseId`). Utkastene leses i `src/modules/course/courseDraft.ts`
+(`findCourseDraftItemLists`), som eier tabellen; innholdet tolkes der ETT sted (`readCourseDraftPayload`, flyttet fra
+`routes/adminCourses.ts`, som nå bruker den samme). Et utkast som ikke kan leses, betyr «som publisert» (skjemaet krever `items`, så et utkast uten liste er uleselig).
+
+| Hvem spør | Hvordan |
+|---|---|
+| Arkiver seksjon / modul for hånd | `assert…NotInActiveCourse(…, "arkiveres")`; et utkast gir `400 content_in_course_draft` `{ count, courseTitles, draftCount, draftCourseTitles, uses }`, uten utkast `content_in_use` som før |
+| Importens `updateExisting` | utbyttet element som står i et annet aktivt kurs' utkast, blir stående (`oldArchived: false`) |
+| `GET …/courses/:id/archive-preview` | `stays` med `usedBy[].via`, og `follows`; kursets eget utkast teller ikke (det forkastes ved arkivering fra 2a-2) |
+
+**Uendret med vilje:** avpublisering (et utkast som får et avpublisert element, stoppes ved publisering), sletting og
+kaskadesletting (alle kurs, `findAll…`).
+
+**Setningen:** `errors.api.content_in_course_draft` i `public/i18n/participant-translations.js` (nb, nn, en-GB). Klientens
+`apiErrorToast` slår den opp av koden; ingen klientkode er endret.
+
+**Deltakere midt i (G3) i samme skive:** `findCourseInProgressParticipants` (contentLifecycle.ts) er den ene tellingen, brukt av
+G3 i `archiveCourse`, kurslista (`inProgressCount`) og forhåndsvisningen. Regelen er «I gang» i «Mine kurs» (se
+`doc/design/CONTENT_LIFECYCLE.md`, G3). `countCoursePendingReviews` teller besvarelser som venter (hvitelister over «ferdig»).
+
+**Vakter:** `test/content-in-use-guard.test.js` (vaktene for arkivering spør regelen; hvert sted som arkiverer en modul eller
+seksjon — funnet av vakta, ikke listet — går gjennom den; regelen har bare de kjente brukerne, som ikke bruker svaret uten
+utkastene; utkastene leses for «i bruk» bare av regelen; G3, kurslista og forhåndsvisningen teller med samme funksjon).
+`test/course-draft-guard.test.js` (importørene av courseDraft.ts står oppført med grunn; `payloadText` leses bare i
+courseDraft.ts). Gjennom rutene: `test/m2-course-archive-preview-1150.test.ts`.

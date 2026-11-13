@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 // #1140 etappe 2 (doc/design/PLAN_1140_E2.md): utkastet til et kurs bor ETT sted.
 //   - Tabellen `CourseDraft` leses og skrives bare i modules/course/courseDraft.ts. En leser et annet sted (en deltakerrute,
 //     en rapport, eksporten) ville vist noe som ikke er publisert.
-//   - Den fila importeres bare av kursbyggerens ruter og av låsesjekken i `claimCourseRevision`.
+//   - Den fila importeres bare av kursbyggerens ruter, av låsesjekken i `claimCourseRevision`, og (#1150 skive 2a-1) av
+//     regelen «brukes andre steder» i contentLifecycle.ts (elementlista i utkastene) og forhåndsvisningen av kursarkiveringen
+//     (om kurset har et utkast). Innholdet i utkastet tolkes ETT sted, `readCourseDraftPayload` i courseDraft.ts.
 //   - Utkastet leses fra databasen ved hvert kall og mellomlagres ikke: app og worker må være enige. (Bryteren fra skive
 //     2a og 2b er fjernet; utkast er alltid på.)
 //   - Låsen har ETT unntak (`publishingDraft: true`), og det gis ETT sted: i ruta som publiserer utkastet, inne i
@@ -19,7 +21,15 @@ import { describe, expect, it } from "vitest";
 
 const SRC = fileURLToPath(new URL("../src", import.meta.url));
 const DRAFT_FILE = "modules/course/courseDraft.ts";
-const DRAFT_IMPORTERS = ["modules/course/courseVersioning.ts", "routes/adminCourses.ts"];
+// Sortert: kontrollcasen under sammenligner med de faktiske importørene i sortert rekkefølge.
+const DRAFT_IMPORTERS = [
+  // #1150: `findCourseDraftItemLists` for regelen «brukes andre steder».
+  "modules/course/contentLifecycle.ts",
+  // #1150: `findCourseIdsWithDraft` for `hasDraft` i forhåndsvisningen av kursarkiveringen.
+  "modules/course/courseArchivePreview.ts",
+  "modules/course/courseVersioning.ts",
+  "routes/adminCourses.ts",
+];
 const PUBLISH_ROUTE_FILE = "routes/adminCourses.ts";
 // Hvor ordet `publishingDraft` står, og hvor mange ganger (kommentarer ikke medregnet):
 const PUBLISHING_DRAFT_USES = {
@@ -56,6 +66,9 @@ function violationsIn(file, rawText) {
     const withoutImportPaths = text.replace(/["'][^"'\n]*\/courseDraft\.js["']/g, '""');
     if (/\bcourseDraft\b/.test(withoutImportPaths) || /\b(FROM|INTO|UPDATE|JOIN|TABLE)\s+"CourseDraft"/i.test(text)) out.push(`${file} leser eller skriver CourseDraft. Alt om tabellen bor i ${DRAFT_FILE}`);
     if (/from\s+["'][^"']*\/courseDraft\.js["']/.test(text) && !DRAFT_IMPORTERS.includes(file)) out.push(`${file} importerer ${DRAFT_FILE}. Bare kursbyggerens ruter og låsesjekken gjør det`);
+    // #1150: innholdet i utkastet tolkes ETT sted (`readCourseDraftPayload`). En fil som leser `payloadText` selv, er en
+    // tolking nummer to: rutene og regelen «brukes andre steder» kunne da lest samme utkast ulikt.
+    if (/\bpayloadText\b/.test(text)) out.push(`${file} leser payloadText. Innholdet i utkastet tolkes bare av readCourseDraftPayload i ${DRAFT_FILE}`);
   }
   // Bare på toppnivå: en `let`, `Map` eller `Set` inne i en funksjon lever ikke mellom to kall (en funksjon som svarer med
   // et `Set` over kurs med utkast, er lov).
@@ -126,6 +139,12 @@ describe("#1140 etappe 2: vakt for utkastet til et kurs", () => {
     expect(caught("await tx.course.update({ where: { id }, data: { courseDraft: { delete: true } } });")).toHaveLength(1);
     expect(caught("const has = course.courseDraft != null;")).toHaveLength(1);
     expect(caught("await publishCourseDraft({ courseId, loaded, apply });")).toHaveLength(1);
+    // #1150: en tolking nummer to av den lagrede teksten, også gjennom en rad fra en lovlig funksjon.
+    expect(caught("const items = JSON.parse(draft.payloadText).items;")).toHaveLength(1);
+    // (I ruta teller også regelen for `publishingDraft`, som sier fra når ordet mangler; bare regelen for teksten måles her.)
+    const aboutText = (out) => out.filter((v) => /payloadText/.test(v));
+    expect(aboutText(caught("const items = JSON.parse(draft.payloadText).items;", PUBLISH_ROUTE_FILE))).toHaveLength(1);
+    expect(aboutText(caught("const payload = readCourseDraftPayload(draft);", PUBLISH_ROUTE_FILE))).toEqual([]);
     // Unntaket fra låsen satt med en variabel, eller en gang til i ruta som har lov til å sette det én gang.
     expect(caught("await claimCourseRevision(tx, courseId, expected, { publishingDraft: flagg });")).toHaveLength(1);
     expect(caught("const publishingDraft = true; await updateCourse(id, input, actor, { publishingDraft }, tx);")).toHaveLength(1);

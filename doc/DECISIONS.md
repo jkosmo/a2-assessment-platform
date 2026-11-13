@@ -1738,3 +1738,34 @@ kurs som ikke er arkivert, publisert eller utkast. Et arkivert kurs teller ikke.
 `findAllCoursesContaining…`), og det finnes ingen funksjon uten «Active» eller «All». `test/content-in-use-guard.test.js`
 nekter en ny leser av koblingen mellom kurs og element som ikke står oppført med en grunn.
 **Sak:** #1149 · **Dato:** 2026-11-13 · **Status:** avklart
+
+## Arkivering ser utkastene, og «midt i» er «I gang» i «Mine kurs» (#1150 skive 2a-1, 2026-11-13)
+
+Planen (`doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, etappe 2) sa hva; dette er valgene som ikke sto der.
+
+- **Et utkast som ikke kan leses, legger ikke til bruk.** Et lagret utkast (#1140) som ikke passer skjemaet lenger
+  (`course_draft_unreadable`), regnes som «som publisert» av regelen «brukes andre steder». Det kan verken vises eller
+  publiseres, bare forkastes, så ingenting i det kan nå deltakerne. Å la det holde elementer igjen ville stoppet forfatteren
+  på et utkast ingen kan åpne.
+- **Egen feilkode når et utkast stopper arkivering for hånd: `content_in_course_draft`.** Teksten til `content_in_use` ber
+  forfatteren fjerne elementet fra kursene eller avpublisere dem, og ingen av delene hjelper mot et utkast. En plassholder til
+  i `content_in_use` gikk ikke: klientens tekst blir ugyldig når en plassholder står igjen, og de andre avsenderne sender den
+  ikke. Uten utkast er svaret `content_in_use` som før.
+- **Arkivering for hånd har ikke noe «dette kurset».** Utkastet til ethvert aktivt kurs teller. Forhåndsvisningen av
+  kursarkiveringen ser bort fra kursets EGET utkast (det forkastes ved arkiveringen).
+- **«Midt i» følger «Mine kurs» (I gang), men spør ikke om kurset er publisert eller om deltakeren ser det.** Ellers ville
+  et avpublisert kurs alltid vært uten deltakere midt i, og G3 kunne vært omgått med «Avpubliser» først. Synligheten (OPEN,
+  tildeling, klasser fra Entra-grupper) kan heller ikke avgjøres for andre enn den som er logget inn.
+- **En innlevering på en delt modul teller i alle kursene modulen ligger i.** En innlevering har ikke noe kurs, og «Mine
+  kurs» gjør det samme. Planen så det som en feil i den gamle tellingen; den kan ikke rettes uten å lagre kurset på
+  innleveringen. Det telles i den trygge retningen: forfatteren får heller vite om én for mye.
+- **Forhåndsvisningen av et arkivert kurs svarer 200 med `archived: true` og tomme lister**, ikke 409. Det er en lesing, og
+  en arkivering av et arkivert kurs gjør ingenting med innholdet; en fane som er utdatert, får et svar den kan vise.
+- **«Venter på vurdering» er en hviteliste over det som er ferdig:** innleveringer `COMPLETED`, `REJECTED` og `SUPERSEDED`
+  (forlatt, vurderes aldri, #951), og anker `RESOLVED`, `REJECTED` og `SUPERSEDED`. Alt annet venter, også en status som
+  kommer senere. Bare modulene som er steg i kurset (ikke arkiverte), og bare fra deltakerne som er midt i.
+
+**Håndheves:** `findActiveUsesOfItems`, `findCourseInProgressParticipants` og `countCoursePendingReviews` i
+`src/modules/course/contentLifecycle.ts`; `test/content-in-use-guard.test.js`, `test/course-draft-guard.test.js`;
+`test/m2-course-archive-preview-1150.test.ts`.
+**Sak:** #1150 · **Dato:** 2026-11-13 · **Status:** valgt under byggingen av skive 2a-1; ikke avklart med produkteier

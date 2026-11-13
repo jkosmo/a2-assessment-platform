@@ -223,6 +223,92 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
     }
   });
 
+  it("#1150: vaktene for arkivering spør regelen «brukes andre steder»; avpublisering spør bare kursene", () => {
+    const owner = topLevelFunctions(textOf(OWNER));
+    for (const [name, key] of [["assertModuleNotInActiveCourse", "modules"], ["assertSectionNotInActiveCourse", "sections"]]) {
+      const body = owner.get(name);
+      expect(body, `fant ikke ${name}()`).toBeTruthy();
+      // Grenen for «arkiveres» går til regelen (med transaksjonen), og grenen for «avpubliseres» til kursene alene.
+      expect(body).toMatch(new RegExp(`if \\(verb === "arkiveres"\\) \\{\\s*const uses = \\(await findActiveUsesOfItems\\([^;]*, reader\\)\\)\\.${key}\\.get`));
+    }
+    // Regelen leser kursene OG utkastene, med samme «ikke arkivert» som kursene, og utenom kurset som spør.
+    const rule = owner.get("findActiveUsesOfItems");
+    expect(rule, "fant ikke findActiveUsesOfItems()").toBeTruthy();
+    expect(rule).toContain("findCourseDraftItemLists(reader, { course: activeCourseWhere, excludeCourseId: options.excludeCourseId })");
+    expect(rule).toContain('activeCoursesByItem("moduleId", moduleIds, locale, { excludeCourseId: options.excludeCourseId, reader })');
+    expect(rule).toContain('activeCoursesByItem("sectionId", sectionIds, locale, { excludeCourseId: options.excludeCourseId, reader })');
+  });
+
+  it("#1150: hvert sted som arkiverer en modul eller seksjon, går gjennom regelen «brukes andre steder»", () => {
+    // Formene en arkivering av en modul eller seksjon har: et kall til skriveren `archiveModule`, eller en `update` som setter
+    // `archivedAt` til noe annet enn null. Vakta finner dem selv; en ny vei inn blir rød den dagen den skrives.
+    const ARCHIVES = [/\.archiveModule\(/, /\b(module|courseSection)\s*\.\s*update(Many)?\(\s*\{[^;]{0,300}?\barchivedAt:(?!\s*null\b)/];
+    // Unntak: skriveren selv. Den kalles bare fra steder vakta ser (over).
+    const EXEMPT = { "modules/adminContent/adminContentRepository.ts:createAdminContentWriter": "selve skriveren `archiveModule`; kallerne sjekkes" };
+    const GOES_THROUGH_RULE = /\bfindActiveUsesOfItems\(|\bassert(Module|Section)NotInActiveCourse\([^)]*"arkiveres"/;
+
+    const found = [];
+    for (const file of files) {
+      for (const [name, body] of topLevelFunctions(file.text)) {
+        if (ARCHIVES.some((pattern) => pattern.test(body))) found.push({ where: `${file.rel}:${name}`, body });
+      }
+    }
+    // KONTROLL: de tre veiene inn som finnes i dag (biblioteket, seksjonslista, importen) og skriveren.
+    const where = found.map((f) => f.where);
+    expect(where).toEqual(expect.arrayContaining([
+      "modules/adminContent/adminContentCommands.ts:archiveModule",
+      "modules/course/sectionCommands.ts:archiveSection",
+      "modules/adminContent/adminContentRepository.ts:createAdminContentWriter",
+    ]));
+    expect(where.some((w) => w.startsWith("modules/adminContent/contentImportService.ts:")), where.join("\n")).toBe(true);
+    // KONTROLL: gjenoppretting (archivedAt: null) er ikke en arkivering.
+    expect(ARCHIVES.some((p) => p.test("tx.courseSection.update({ where: { id }, data: { archivedAt: null } })"))).toBe(false);
+    expect(ARCHIVES.some((p) => p.test("tx.courseSection.update({ where: { id }, data: { archivedAt: new Date() } })"))).toBe(true);
+
+    const problems = found
+      .filter((f) => !(f.where in EXEMPT))
+      .filter((f) => !GOES_THROUGH_RULE.test(f.body))
+      .map((f) => `${f.where} arkiverer en modul eller seksjon uten å spørre findActiveUsesOfItems (eller assert…NotInActiveCourse med «arkiveres»).`);
+    expect(problems, `\n${problems.join("\n")}\n`).toEqual([]);
+    expect(Object.keys(EXEMPT).filter((k) => !where.includes(k)), "EXEMPT peker på noe som ikke arkiverer lenger").toEqual([]);
+  });
+
+  it("#1150: regelen «brukes andre steder» har bare de kjente brukerne, og de bruker ikke svaret uten utkastene", () => {
+    const users = files.filter((f) => f.rel !== OWNER && /\bfindActiveUsesOfItems\(/.test(f.text)).map((f) => f.rel).sort();
+    expect(users, "En ny bruker av regelen: før den opp her med vilje").toEqual([
+      "modules/adminContent/contentImportService.ts",
+      "modules/course/courseArchivePreview.ts",
+    ]);
+    // Importen og forhåndsvisningen spør regelen, ikke kursene alene (som ikke ser utkastene).
+    for (const rel of users) {
+      expect(/\bfindActiveCoursesContaining(Module|Section)\(/.test(textOf(rel)), `${rel} spør kursene uten utkastene`).toBe(false);
+    }
+    // Ruta for forhåndsvisningen går gjennom analysen, og analysen gjennom regelen og tellingen.
+    expect(textOf("routes/adminCourses.ts")).toMatch(/adminCoursesRouter\.get\("\/:courseId\/archive-preview", requireContentOwnership\("COURSE", "courseId"\), async[\s\S]{0,200}?analyzeCourseArchive\(/);
+    const preview = textOf("modules/course/courseArchivePreview.ts");
+    expect(preview).toContain("findCourseInProgressParticipants(courseId, reader)");
+    expect(preview).toContain("countCoursePendingReviews(inProgress, reader)");
+  });
+
+  it("#1150: utkastene leses for «i bruk» bare gjennom regelen", () => {
+    // Elementlistene i utkastene (courseDraft.ts) hentes bare av regelen. Alt annet som spør «er dette i bruk», spør den.
+    // At ingen andre filer leser CourseDraft i det hele tatt, passer test/course-draft-guard.test.js på.
+    const callers = files.filter((f) => /\bfindCourseDraftItemLists\(/.test(f.text)).map((f) => f.rel).sort();
+    expect(callers).toEqual(["modules/course/contentLifecycle.ts", "modules/course/courseDraft.ts"]);
+    const owner = topLevelFunctions(textOf(OWNER));
+    const inOwner = [...owner].filter(([, body]) => /\bfindCourseDraftItemLists\(/.test(body)).map(([name]) => name);
+    expect(inOwner).toEqual(["findActiveUsesOfItems"]);
+  });
+
+  it("#1150: G3, kurslista og forhåndsvisningen teller deltakere midt i kurset med samme funksjon", () => {
+    const owner = topLevelFunctions(textOf(OWNER));
+    expect(owner.get("countCourseInProgressParticipants")).toContain("findCourseInProgressParticipants(courseId, reader)");
+    expect(owner.get("assertCourseHasNoInProgressParticipants")).toContain("countCourseInProgressParticipants(courseId, reader)");
+    // Ingen andre steder teller selv: den gamle formen (lesinger, innleveringer og bevis, uten «Mine kurs»-regelen) er borte.
+    const counting = files.filter((f) => /\b(countCourseInProgressParticipants|findCourseInProgressParticipants)\(/.test(f.text)).map((f) => f.rel).sort();
+    expect(counting).toEqual([OWNER, "modules/course/courseArchivePreview.ts", "routes/adminCourses.ts"].sort());
+  });
+
   it("svaret «alle kurs» brukes bare av slettingene", () => {
     // Sletting av en seksjon, sletting av en modul (kommandoen og ruta), og kaskadeslettingens «delt med andre kurs».
     const ALLOWED = {

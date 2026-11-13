@@ -3,6 +3,11 @@ import type { DbTransactionClient } from "../../db/transaction.js";
 import { type AppError, ConflictError, DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { AppealStatus, SubmissionStatus } from "../../db/prismaRuntime.js";
+import { SETTLED_SUBMISSION_STATUSES } from "../submission/submissionOutcome.js";
+import { findCourseDraftItemLists } from "./courseDraft.js";
+import { createCourseRepository } from "./courseRepository.js";
+import { computeCourseStatus } from "./courseQueries.js";
 
 // Enhetlig innholds-livssyklus — delte vakter for kurs/modul/seksjon.
 // Se doc/design/CONTENT_LIFECYCLE.md. G2 = bruk-lås (se «Hvilke kurs bruker dette elementet» under).
@@ -82,19 +87,25 @@ export function findAllCoursesContainingSection(sectionId: string, reader: Lifec
 // #705-UX(G), #1149: batch — hvilke AKTIVE kurs bruker hvert av disse elementene. For «Brukt i kurs»-kolonnen,
 // kursfilteret og popoveren i seksjonslista og modulbiblioteket. Ett spørsmål for alle elementene.
 // Et arkivert kurs er ikke med: det er ikke bruk (se toppen av fila).
+// #1150: `excludeCourseId` og `reader` for regelen «brukes andre steder» under (et kurs spør om de ANDRE kursene, og
+// arkiveringen spør på transaksjonen sin). Listene sender ingen av delene, og svarer som før.
 async function activeCoursesByItem(
   key: "moduleId" | "sectionId",
-  ids: string[],
+  ids: readonly string[],
   locale: SupportedLocale,
+  options: { excludeCourseId?: string; reader?: LifecycleReader } = {},
 ): Promise<Map<string, Array<{ id: string; title: string }>>> {
   const result = new Map<string, Array<{ id: string; title: string }>>();
   if (ids.length === 0) return result;
-  const items = await prisma.courseItem.findMany({
+  const course = { ...activeCourseWhere, ...(options.excludeCourseId ? { id: { not: options.excludeCourseId } } : {}) };
+  const items = await (options.reader ?? prisma).courseItem.findMany({
     where:
       key === "moduleId"
-        ? { moduleId: { in: ids }, course: activeCourseWhere }
-        : { sectionId: { in: ids }, itemType: "SECTION", course: activeCourseWhere },
+        ? { moduleId: { in: [...ids] }, course }
+        : { sectionId: { in: [...ids] }, itemType: "SECTION", course },
     select: { moduleId: true, sectionId: true, course: { select: { id: true, title: true } } },
+    // Samme rekkefølge som `coursesContaining` (sist endret først), så feilmeldingen ved arkivering navngir kursene som før.
+    orderBy: { course: { updatedAt: "desc" } },
   });
   for (const item of items) {
     const itemId = item[key];
@@ -119,6 +130,74 @@ export function findActiveCoursesForModules(moduleIds: string[], locale: Support
   return activeCoursesByItem("moduleId", moduleIds, locale);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// #1150 (plan: doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md, «Ett svar på «brukes andre steder»»):
+// «Brukes dette elementet andre steder?» — for ARKIVERING.
+//
+// Et element brukes et annet sted når det står i
+//   - et kurs som ikke er arkivert (som `findActiveCoursesContaining…`), eller
+//   - et lagret utkast (#1140) til et kurs som ikke er arkivert, når utkastet har en elementliste som tar det med.
+//     Et utkast som ikke kan leses, betyr «som publisert» og legger ikke til noe (courseDraft.ts). Skjemaet krever `items`.
+//
+// Hvorfor utkastene teller: et element som bare står i et utkast, ses ikke av kursets liste. Arkiveres det, feiler utkastet
+// først når det skal publiseres (`course_draft_item_unusable`). Her stoppes det før.
+//
+// Brukes av: arkivering for hånd av en modul og en seksjon (`assert…NotInActiveCourse` med «arkiveres»), importens
+// `updateExisting` (arkiverer det den byttet ut), og forhåndsvisningen av kursarkiveringen (courseArchivePreview.ts).
+// Avpublisering bruker den IKKE: et utkast som får et avpublisert element, stoppes ved publisering
+// (`course_draft_item_unusable`), og avpublisering er reversibel. Sletting teller alle kurs (`findAll…`), uendret.
+// Vakt: test/content-in-use-guard.test.js.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/** Hvor et element brukes: kurset, og om det er kursets egen liste (`course`) eller bare et lagret utkast (`draft`). */
+export type ItemUse = { courseId: string; title: string; via: "course" | "draft" };
+
+export type ItemUses = { modules: Map<string, ItemUse[]>; sections: Map<string, ItemUse[]> };
+
+/**
+ * DEN ENE regelen for «brukes andre steder» ved arkivering. Svarer for hver modul og seksjon hvilke kurs som bruker den,
+ * utenom `excludeCourseId`. Et element som ikke brukes noe sted, står ikke i svaret. Står elementet både i kursets liste og i
+ * utkastet, er det `course`. Kurstitlene på `locale` (bokmål når det er utelatt, som feilmeldingene).
+ */
+export async function findActiveUsesOfItems(
+  items: { moduleIds: readonly string[]; sectionIds: readonly string[] },
+  options: { excludeCourseId?: string; locale?: SupportedLocale } = {},
+  reader: LifecycleReader = prisma,
+): Promise<ItemUses> {
+  const locale = options.locale ?? MSG_LOCALE;
+  const moduleIds = [...new Set(items.moduleIds)];
+  const sectionIds = [...new Set(items.sectionIds)];
+  const result: ItemUses = { modules: new Map(), sections: new Map() };
+  if (moduleIds.length === 0 && sectionIds.length === 0) return result;
+
+  const [inModules, inSections, drafts] = await Promise.all([
+    activeCoursesByItem("moduleId", moduleIds, locale, { excludeCourseId: options.excludeCourseId, reader }),
+    activeCoursesByItem("sectionId", sectionIds, locale, { excludeCourseId: options.excludeCourseId, reader }),
+    findCourseDraftItemLists(reader, { course: activeCourseWhere, excludeCourseId: options.excludeCourseId }),
+  ]);
+
+  const add = (map: Map<string, ItemUse[]>, id: string, use: ItemUse) => {
+    const list = map.get(id) ?? [];
+    if (list.some((existing) => existing.courseId === use.courseId)) return;
+    list.push(use);
+    map.set(id, list);
+  };
+  for (const [id, courses] of inModules) for (const c of courses) add(result.modules, id, { courseId: c.id, title: c.title, via: "course" });
+  for (const [id, courses] of inSections) for (const c of courses) add(result.sections, id, { courseId: c.id, title: c.title, via: "course" });
+
+  const wantedModules = new Set(moduleIds);
+  const wantedSections = new Set(sectionIds);
+  for (const draft of drafts) {
+    if (!draft.items) continue;
+    const use: ItemUse = { courseId: draft.courseId, title: localizeContentText(locale, draft.courseTitle) ?? draft.courseTitle, via: "draft" };
+    for (const item of draft.items) {
+      if (item.type === "MODULE" && wantedModules.has(item.moduleId)) add(result.modules, item.moduleId, use);
+      if (item.type === "SECTION" && wantedSections.has(item.sectionId)) add(result.sections, item.sectionId, use);
+    }
+  }
+  return result;
+}
+
 function quoteCourseTitles(courses: Array<{ title: string }>): string {
   return courses.map((c) => `«${c.title}»`).join(", ");
 }
@@ -135,7 +214,7 @@ function inUseMessage(
   );
 }
 
-function inActiveCourseError(subject: "Modulen" | "Seksjonen", verb: string, courses: CourseUse[]) {
+function inActiveCourseError(subject: "Modulen" | "Seksjonen", verb: string, courses: Array<{ title: string }>) {
   // #999: koden er kontrakten. `courseTitles` følger med så klienten kan navngi kursene uten
   // å lese dem ut av setningen.
   return new DomainRuleError("content_in_use", inUseMessage(subject, verb, courses), {
@@ -144,15 +223,45 @@ function inActiveCourseError(subject: "Modulen" | "Seksjonen", verb: string, cou
   });
 }
 
+// #1150: arkivering for hånd stoppes også av et lagret utkast til et annet aktivt kurs. Står minst ett av kursene der bare
+// gjennom utkastet, får svaret en egen kode, `content_in_course_draft`: teksten til `content_in_use` ber forfatteren fjerne
+// elementet fra kursene eller avpublisere dem, og ingen av delene hjelper mot et utkast (det må tas ut av utkastet, eller
+// utkastet forkastes). `content_in_use` kunne heller ikke fått en plassholder til for utkastene: klientens tekst blir
+// ugyldig når en plassholder står igjen (api-error.js), og de andre avsenderne av koden sender den ikke.
+// Uten utkast er svaret det samme som før: `content_in_use`, `{ count, courseTitles }`.
+function usedElsewhereError(subject: "Modulen" | "Seksjonen", uses: ItemUse[]): AppError {
+  const drafts = uses.filter((use) => use.via === "draft");
+  if (drafts.length === 0) return inActiveCourseError(subject, "arkiveres", uses);
+  return new DomainRuleError(
+    "content_in_course_draft",
+    `${subject} kan ikke arkiveres fordi den er i bruk i ${uses.length} kurs: ${quoteCourseTitles(uses)}. ` +
+      `I ${drafts.length} av dem står den bare i et lagret utkast: ${quoteCourseTitles(drafts)}. ` +
+      `Ta den ut av utkastet (eller forkast utkastet) og av kursene først.`,
+    {
+      count: uses.length,
+      courseTitles: uses.map((use) => use.title),
+      draftCount: drafts.length,
+      draftCourseTitles: drafts.map((use) => use.title),
+      uses: uses.map((use) => ({ courseId: use.courseId, title: use.title, via: use.via })),
+    },
+  );
+}
+
 // G2, avpublisering og arkivering: en modul som ligger i et AKTIVT kurs (publisert eller utkast) kan ikke trekkes
 // vekk under det. Et arkivert kurs stopper ikke (#1149): blir det gjenopprettet, lander det som utkast, og
 // publiseringen stoppes av `item_archived` til elementet er gjenopprettet eller tatt ut.
+// #1150: «arkiveres» spør regelen «brukes andre steder» (også lagrede utkast); «avpubliseres» spør bare kursene, som før.
 // `verb` brukes i feilmeldingen. Sletting har sin egen vakt under, og kan ikke bruke denne.
 export async function assertModuleNotInActiveCourse(
   moduleId: string,
   verb: "avpubliseres" | "arkiveres",
   reader: LifecycleReader = prisma,
 ): Promise<void> {
+  if (verb === "arkiveres") {
+    const uses = (await findActiveUsesOfItems({ moduleIds: [moduleId], sectionIds: [] }, {}, reader)).modules.get(moduleId) ?? [];
+    if (uses.length > 0) throw usedElsewhereError("Modulen", uses);
+    return;
+  }
   const courses = await findActiveCoursesContainingModule(moduleId, reader);
   if (courses.length > 0) throw inActiveCourseError("Modulen", verb, courses);
 }
@@ -163,6 +272,11 @@ export async function assertSectionNotInActiveCourse(
   verb: "avpubliseres" | "arkiveres",
   reader: LifecycleReader = prisma,
 ): Promise<void> {
+  if (verb === "arkiveres") {
+    const uses = (await findActiveUsesOfItems({ moduleIds: [], sectionIds: [sectionId] }, {}, reader)).sections.get(sectionId) ?? [];
+    if (uses.length > 0) throw usedElsewhereError("Seksjonen", uses);
+    return;
+  }
   const courses = await findActiveCoursesContainingSection(sectionId, reader);
   if (courses.length > 0) throw inActiveCourseError("Seksjonen", verb, courses);
 }
@@ -346,33 +460,107 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
   }
 }
 
-// Antall deltakere som har PÅBEGYNT (lest en seksjon eller levert et forsøk på en kurs-modul)
-// men IKKE fullført (ingen CourseCompletion). Brukt av G3-vakta for kurs.
-export async function countCourseInProgressParticipants(courseId: string, reader: LifecycleReader = prisma): Promise<number> {
-  const [reads, submissions, completions] = await Promise.all([
-    reader.courseSectionRead.findMany({
-      where: { courseId },
-      select: { userId: true },
-      distinct: ["userId"],
-    }),
-    reader.submission.findMany({
-      where: { module: { courseItems: { some: { courseId } } } },
-      select: { userId: true },
-      distinct: ["userId"],
-    }),
-    reader.courseCompletion.findMany({ where: { courseId }, select: { userId: true } }),
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// «Deltakere midt i kurset» (G3, kurslista og forhåndsvisningen av arkiveringen). #1150 skive 2a-1.
+//
+// Deltakeren er midt i kurset når «Mine kurs» ville vist kurset som «I gang» for hen:
+//   - IKKE fullført: hen har ikke kursbevis for kursets NÅVÆRENDE hovedversjon (klienten: `isCourseCompleted`, som leser
+//     bare bevis med `current`), og har ikke gjort alle stegene (`computeCourseStatus` ≠ COMPLETED);
+//   - og PÅBEGYNT: en innlevering på en modul i kurset som ikke er arkivert, eller en lesing som teller for kursets
+//     nåværende hovedversjon (`myCoursesProgress.ts`, `hasStarted`).
+// Stegene er de samme som i «Mine kurs»: modulene som ikke er arkivert, og seksjonene deltakeren kan lese (deltakerdøra,
+// `findCourseItemsForParticipant`); beståtte fra `findModuleProgress` (#934), lesinger etter regelen for nåværende
+// hovedversjon. Ett unntak, med vilje: om kurset er publisert, og om deltakeren ser det (OPEN/tildelt), spørres ikke om.
+// Et avpublisert kurs ville ellers alltid vært «uten deltakere midt i», og G3 kunne vært omgått med «Avpubliser» først.
+//
+// Før #1150 telte den alle med et kursbevis som ferdige (også for en eldre hovedversjon), og alle med en lesing eller
+// innlevering i kurset som påbegynt (også lesinger i seksjoner som er tatt ut, og innleveringer på arkiverte moduler).
+//
+// ⚠️ Kjent og uendret: en innlevering har ikke noe kurs. En innlevering på en modul som ligger i flere kurs, gjør deltakeren
+// påbegynt i alle, akkurat som i «Mine kurs» (`queryLatestSubmissionsForModules` spør per modul). Telles i den trygge
+// retningen: forfatteren får heller vite om én for mye enn én for lite.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/** Deltakerne som er midt i kurset, og modulene som er steg i det (for `countCoursePendingReviews`). */
+export type CourseInProgress = { courseId: string; userIds: string[]; moduleIds: string[] };
+
+/** DEN ENE tellingen av deltakere midt i kurset. G3 (`archiveCourse`), kurslista og forhåndsvisningen spør her. */
+export async function findCourseInProgressParticipants(courseId: string, reader: LifecycleReader = prisma): Promise<CourseInProgress> {
+  const none: CourseInProgress = { courseId, userIds: [], moduleIds: [] };
+  const course = await reader.course.findUnique({ where: { id: courseId }, select: { versionMajor: true } });
+  if (!course) return none;
+  const repo = createCourseRepository(reader);
+  const items = await repo.findCourseItemsForParticipant(courseId);
+  // Stegene, som «Mine kurs»: moduler som ikke er arkivert (`required`), og seksjonene deltakerdøra slipper gjennom.
+  const moduleIds = [...new Set(items.flatMap((item) => (item.itemType === "MODULE" && item.required && item.moduleId ? [item.moduleId] : [])))];
+  const sectionIds = new Set(items.flatMap((item) => (item.itemType === "SECTION" && item.sectionId ? [item.sectionId] : [])));
+  const total = moduleIds.length + sectionIds.size;
+  // `computeCourseStatus` sier NOT_STARTED om et kurs uten steg. Da er ingen midt i.
+  if (total === 0) return { ...none, moduleIds };
+
+  const [submitters, readers, currentCertificates] = await Promise.all([
+    moduleIds.length > 0
+      ? reader.submission.findMany({ where: { moduleId: { in: moduleIds } }, select: { userId: true }, distinct: ["userId"] })
+      : Promise.resolve([] as Array<{ userId: string }>),
+    reader.courseSectionRead.findMany({ where: { courseId }, select: { userId: true }, distinct: ["userId"] }),
+    // Bevis for den NÅVÆRENDE hovedversjonen, også et registrert (`external`): klienten regner kurset som fullført da.
+    reader.courseCompletion.findMany({ where: { courseId, versionMajor: course.versionMajor }, select: { userId: true } }),
   ]);
+  const submitted = new Set(submitters.map((row) => row.userId));
+  const certified = new Set(currentCertificates.map((row) => row.userId));
+  // Bare den som har gjort noe i kurset, kan være påbegynt. Den med bevis for nåværende versjon er ferdig uansett.
+  const candidates = [...new Set([...submitted, ...readers.map((row) => row.userId)])].filter((userId) => !certified.has(userId));
+  if (candidates.length === 0) return { ...none, moduleIds };
 
-  const completed = new Set(completions.map((c) => c.userId));
-  const started = new Set<string>();
-  for (const r of reads) started.add(r.userId);
-  for (const s of submissions) started.add(s.userId);
-
-  let inProgress = 0;
-  for (const userId of started) {
-    if (!completed.has(userId)) inProgress += 1;
+  const [readRows, progress] = await Promise.all([
+    repo.findReadSectionIdsForCourseParticipants(courseId, candidates),
+    repo.findModuleProgress({ userIds: candidates, courses: [{ courseId, moduleIds }] }),
+  ]);
+  const readsByUser = new Map<string, Set<string>>();
+  for (const row of readRows) {
+    if (!sectionIds.has(row.sectionId)) continue;
+    readsByUser.set(row.userId, (readsByUser.get(row.userId) ?? new Set()).add(row.sectionId));
   }
-  return inProgress;
+
+  const userIds = candidates.filter((userId) => {
+    const readCount = readsByUser.get(userId)?.size ?? 0;
+    const passed = moduleIds.filter((moduleId) => progress.passedModuleIds(userId, courseId).has(moduleId)).length;
+    const hasStarted = submitted.has(userId) || readCount > 0;
+    return computeCourseStatus(passed + readCount, total, hasStarted) === "IN_PROGRESS";
+  });
+  return { courseId, userIds, moduleIds };
+}
+
+/** Antallet deltakere midt i kurset. Kurslista og G3. */
+export async function countCourseInProgressParticipants(courseId: string, reader: LifecycleReader = prisma): Promise<number> {
+  return (await findCourseInProgressParticipants(courseId, reader)).userIds.length;
+}
+
+// Innleveringer som FORTSATT kan få et utfall: ikke ferdig vurdert, eller med en åpen anke. HVITELISTER over det som er ferdig
+// (CLAUDE.md, Pre-flight 3): en ny status regnes som «venter» til noen har tatt stilling, og forfatteren får heller vite om én
+// for mye. Ferdig er det som er avgjort (`SETTLED_SUBMISSION_STATUSES`: COMPLETED, REJECTED) og det som er forlatt (SUPERSEDED,
+// #951: deltakeren leverte på nytt, og forsøket vurderes aldri). I kø (SUBMITTED), under vurdering (PROCESSING, SCORED) og til
+// manuell behandling (UNDER_REVIEW) venter.
+const ASSESSMENT_FINISHED_STATUSES = [...SETTLED_SUBMISSION_STATUSES, SubmissionStatus.SUPERSEDED];
+const APPEAL_FINISHED_STATUSES = [AppealStatus.RESOLVED, AppealStatus.REJECTED, AppealStatus.SUPERSEDED];
+
+/**
+ * Hvor mange besvarelser på modulene i kurset som ikke er ferdig vurdert, eller har en åpen anke, fra deltakerne som er midt i
+ * kurset (`findCourseInProgressParticipants`). Forhåndsvisningen av arkiveringen viser tallet: blir en av dem bestått etter
+ * arkiveringen, kan deltakeren ha fullført kurset uten å få kursbevis (#1152 holder da kurset igjen fra sletting).
+ */
+export async function countCoursePendingReviews(inProgress: CourseInProgress, reader: LifecycleReader = prisma): Promise<number> {
+  if (inProgress.userIds.length === 0 || inProgress.moduleIds.length === 0) return 0;
+  return reader.submission.count({
+    where: {
+      userId: { in: inProgress.userIds },
+      moduleId: { in: inProgress.moduleIds },
+      OR: [
+        { submissionStatus: { notIn: ASSESSMENT_FINISHED_STATUSES } },
+        { appeals: { some: { appealStatus: { notIn: APPEAL_FINISHED_STATUSES } } } },
+      ],
+    },
+  });
 }
 
 // G3: et kurs med minst én påbegynt-ufullført deltaker kan ikke arkiveres (pensjoneres). Avpublisering

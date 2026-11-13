@@ -302,12 +302,14 @@ describe("Unified content lifecycle (#705)", () => {
     expect(unpubResult.publishedAt).toBeNull();
 
     // Arkiver ER G3-låst.
-    const archCourseId = await makeCourse({ sectionId, published: true });
+    // #1150: «midt i» er nå «I gang» i «Mine kurs». Et kurs med bare den ene seksjonen deltakeren har lest, er FULLFØRT der
+    // (alle steg gjort), så kurset har en modul til: deltakeren har gjort ett av to steg.
+    const archCourseId = await makeCourse({ moduleId: await makePublishedModule(), sectionId, published: true });
     await prisma.courseSectionRead.create({ data: { userId, courseId: archCourseId, sectionId } });
     await expect(archiveCourse(archCourseId, ACTOR)).rejects.toThrow(/midt i en gjennomføring/);
 
-    // Fullført: deltakeren har en completion → ikke lenger «midt i».
-    await prisma.courseCompletion.create({ data: { userId, courseId: archCourseId, moduleSnapshotJson: "[]" } });
+    // Fullført: deltakeren har kursbevis for kursets nåværende hovedversjon (1, begge stedene) → ikke lenger «midt i».
+    await prisma.courseCompletion.create({ data: { userId, courseId: archCourseId, moduleSnapshotJson: "[]", versionMajor: 1 } });
 
     const result = await archiveCourse(archCourseId, ACTOR);
     expect(result.archivedAt).not.toBeNull();

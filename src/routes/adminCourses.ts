@@ -47,13 +47,18 @@ import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/i
 import { countCourseInProgressParticipants } from "../modules/course/contentLifecycle.js";
 import { countMajorVersionRecipients } from "../modules/course/courseVersioning.js";
 import {
+  courseDraftPayloadSchema,
   discardCourseDraft,
   findCourseDraft,
   findCourseIdsWithDraft,
   publishCourseDraft,
+  readCourseDraftPayload,
   saveCourseDraft,
+  type CourseDraftPayload,
   type CourseDraftRow,
 } from "../modules/course/courseDraft.js";
+import { courseBodySchema, courseItemListSchema } from "../modules/course/courseSchemas.js";
+import { analyzeCourseArchive } from "../modules/course/courseArchivePreview.js";
 import { prisma } from "../db/prisma.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
@@ -64,21 +69,8 @@ import { packageAltTextWarnings } from "../modules/adminContent/altTextWarnings.
 
 const adminCoursesRouter = Router();
 
-const courseBodySchema = z.object({
-  title: localizedTextPatchSchema,
-  description: localizedTextPatchSchema.optional(),
-  certificationLevel: localizedTextPatchSchema.optional(),
-  // #645/#496: course visibility — OPEN (everyone) or RESTRICTED (only enrolled / class-assigned).
-  enrollmentPolicy: z.enum(["OPEN", "RESTRICTED"]).optional(),
-  // #495/T-QA-4: kurs-master av/på for diskusjon (default true i datamodellen).
-  discussionsEnabled: z.boolean().optional(),
-  // 2.119.0: e-post til kursets eiere om nye spørsmål i diskusjonen (default true i datamodellen).
-  discussionOwnerNotifications: z.boolean().optional(),
-  // #1093: plassering i «Mine kurs». null = alfabetisk (det vanlige).
-  sortOrder: z.number().int().min(0).max(9999).nullable().optional(),
-  // 2.102.0: kursets tema i «Mine kurs». Satt = nøyaktig disse; utelatt = urørt.
-  themeIds: z.array(z.string().min(1)).max(100).optional(),
-});
+// #1150 skive 2a-1: kursets felt og elementliste står i modules/course/courseSchemas.ts, fordi utkastet til et kurs leses
+// gjennom dem både her og i regelen «brukes andre steder» (courseDraft.ts). Uendret.
 
 const setCourseModulesBodySchema = z.object({
   modules: z.array(
@@ -92,12 +84,7 @@ const setCourseModulesBodySchema = z.object({
 });
 
 const setCourseItemsBodySchema = z.object({
-  items: z.array(
-    z.discriminatedUnion("type", [
-      z.object({ type: z.literal("MODULE"), moduleId: z.string().min(1), discussionsEnabled: z.boolean().optional() }),
-      z.object({ type: z.literal("SECTION"), sectionId: z.string().min(1), discussionsEnabled: z.boolean().optional() }),
-    ]),
-  ),
+  items: courseItemListSchema,
   // AA-5 (#653): stamped into the items-update's audit event (source: agent_authoring).
   agentRunId: agentRunIdSchema.optional(),
   // #934 skive 3: forfatterens svar når et publisert kurs endres.
@@ -206,9 +193,13 @@ adminCoursesRouter.get("/", async (request, response, next) => {
   try {
     const courses = await courseRepository.listCourses();
     // #705-UX(F): vis antall påbegynte-ufullførte deltakere per kurs (samme signal som G3-vakta).
-    const inProgressCounts = await Promise.all(
-      courses.map((c) => countCourseInProgressParticipants(c.id)),
-    );
+    // #1150 skive 2a-1: tellingen er nå den «Mine kurs» bruker, 5–9 spørringer per kurs mot 3 før. Alle kursene samtidig ga
+    // et støt av hundrevis av spørringer mot én database-pool (prod er én B1-maskin). Fire kurs om gangen holder støtet lite.
+    const inProgressCounts: number[] = [];
+    for (let i = 0; i < courses.length; i += 4) {
+      // Et arkivert kurs telles ikke: det er allerede arkivert, og tallet er bare et varsel før arkivering (QA-porten 2a-1).
+      inProgressCounts.push(...(await Promise.all(courses.slice(i, i + 4).map((c) => (c.archivedAt ? 0 : countCourseInProgressParticipants(c.id))))));
+    }
     // #787 slice 5: hvilke kurs kan innlogget bruker forvalte (admin eller eier)? Styrer om lista viser
     // rediger/livssyklus-handlingene — speiler eierskaps-vakta så vi ikke rendrer knapper som gir 403.
     const manageable = await listManageableContentIds({
@@ -529,9 +520,9 @@ adminCoursesRouter.put("/:courseId/content", requireContentOwnership("COURSE", "
 // før utkastet publiseres. Alt om `CourseDraft` bor i modules/course/courseDraft.ts; rutene her eier skjemaet, og leser den
 // lagrede teksten gjennom det, både ved henting og ved publisering. Agent-tokenet når ingen av rutene (ikke i hvitelista).
 
-/** Det utkastet inneholder: kroppen til `PUT …/content`, uten svaret om versjon og uten telleren. */
-const courseDraftPayloadSchema = courseBodySchema.partial().extend({ items: setCourseItemsBodySchema.shape.items });
-type CourseDraftPayload = z.infer<typeof courseDraftPayloadSchema>;
+// Skjemaet for innholdet i utkastet (`courseDraftPayloadSchema`) og lesingen av den lagrede teksten (`readCourseDraftPayload`)
+// står i courseDraft.ts (#1150 skive 2a-1): regelen «brukes andre steder» leser elementlista i utkastene, og den skal lese
+// teksten på samme måte som rutene her.
 
 /** Utkastet fana lastet (`LoadedCourseDraft` i courseDraft.ts). Kreves for å lagre videre, forkaste og publisere. */
 const loadedCourseDraftSchema = z.object({ draftId: z.string().min(1), revision: z.number().int().min(1) }).strict();
@@ -549,28 +540,6 @@ const publishCourseDraftBodySchema = z
     confirmEmailRecipients: confirmEmailRecipientsSchema,
   })
   .strict();
-
-/**
- * Leser den lagrede teksten gjennom skjemaet. En rad som ikke passer (skjemaet er strammet inn siden den ble lagret), kan
- * verken vises eller publiseres: `409 course_draft_unreadable`, med id og teller så den kan forkastes. Ikke en 500.
- */
-function readCourseDraftPayload(draft: CourseDraftRow): CourseDraftPayload {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(draft.payloadText);
-  } catch {
-    raw = undefined;
-  }
-  const parsed = courseDraftPayloadSchema.safeParse(raw);
-  if (!parsed.success) {
-    throw new ConflictError(
-      "course_draft_unreadable",
-      "This draft was saved by an older version of the platform and cannot be opened. Discard the draft and make the changes again.",
-      { courseId: draft.courseId, draftId: draft.id, revision: draft.revision },
-    );
-  }
-  return parsed.data;
-}
 
 type DraftItemReader = Pick<typeof prisma, "module" | "courseSection">;
 
@@ -986,6 +955,23 @@ adminCoursesRouter.post("/:courseId/unpublish", requireContentOwnership("COURSE"
   try {
     const course = await unpublishCourse(request.params.courseId, request.context?.userId);
     response.json({ course });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #1150 skive 2a-1: hva en arkivering av kurset ville gjort — deltakere midt i, besvarelser som venter på vurdering, kursets
+// utkast, og hvilke moduler og seksjoner som følger med eller blir stående. Bare lesing, på den globale klienten: et forslag.
+// Arkiveringen selv er uendret i denne skiven (G3 sperrer fortsatt), og 2a-2 regner analysen på nytt under låsen. Samme
+// tilgang som `POST …/archive`. Agent-tokenet når den ikke (ikke i hvitelista).
+adminCoursesRouter.get("/:courseId/archive-preview", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  try {
+    const preview = await analyzeCourseArchive(
+      request.params.courseId,
+      { userId: request.context?.userId ?? "", roles: request.context?.roles ?? [] },
+      requestLocale(request),
+    );
+    response.json(preview);
   } catch (error) {
     next(error);
   }

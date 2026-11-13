@@ -9,15 +9,82 @@
 // funksjonalitet for moduler»). Skive 2a og 2b hadde en (`course_drafts` i `PlatformConfig`) mens serveren ble rullet ut
 // før kursbyggeren. Den er fjernet, og med den reglene for «utkast finnes, men bryteren er av» og for utdaterte utkast.
 //
-// Innholdet i utkastet (`payloadText`) er kroppen `PUT …/content` tar imot, etter validering. Denne fila tolker den ikke:
-// rutene eier skjemaet, og leser teksten gjennom det både ved henting og ved publisering.
+// Innholdet i utkastet (`payloadText`) er kroppen `PUT …/content` tar imot, etter validering. #1150 skive 2a-1: teksten tolkes
+// HER, på én måte (`readCourseDraftPayload`). Rutene leser den gjennom denne ved henting og publisering, og regelen «brukes
+// andre steder» (contentLifecycle.ts) leser elementlista gjennom den samme (`findCourseDraftItemLists`). Før lå tolkingen i
+// rutene, og regelen kunne ikke se utkastene uten en tolking nummer to.
+import { z } from "zod";
 import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
-import { ConflictError, NotFoundError } from "../../errors/AppError.js";
+import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { courseBodySchema, courseItemListSchema } from "./courseSchemas.js";
 
 type DraftReader = Pick<DbTransactionClient, "courseDraft">;
+
+/** Det utkastet inneholder: kroppen til `PUT …/content`, uten svaret om versjon og uten telleren. */
+export const courseDraftPayloadSchema = courseBodySchema.partial().extend({ items: courseItemListSchema });
+export type CourseDraftPayload = z.infer<typeof courseDraftPayloadSchema>;
+
+/**
+ * Leser den lagrede teksten gjennom skjemaet. En rad som ikke passer (skjemaet er strammet inn siden den ble lagret), kan
+ * verken vises eller publiseres: `409 course_draft_unreadable`, med id og teller så den kan forkastes. Ikke en 500.
+ */
+export function readCourseDraftPayload(draft: Pick<CourseDraftRow, "id" | "courseId" | "payloadText" | "revision">): CourseDraftPayload {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(draft.payloadText);
+  } catch {
+    raw = undefined;
+  }
+  const parsed = courseDraftPayloadSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ConflictError(
+      "course_draft_unreadable",
+      "This draft was saved by an older version of the platform and cannot be opened. Discard the draft and make the changes again.",
+      { courseId: draft.courseId, draftId: draft.id, revision: draft.revision },
+    );
+  }
+  return parsed.data;
+}
+
+/**
+ * Elementlista i et lagret utkast, for regelen «brukes andre steder» (#1150). `items: null` betyr «som publisert»: utkastet
+ * legger ikke til noe utover kursets egen liste, som regelen alt har lest.
+ *
+ * ⚠️ Et utkast som ikke kan leses (`course_draft_unreadable`), regnes også som «som publisert». Det kan verken vises eller
+ * publiseres, bare forkastes (rutene over), så ingenting i det kan nå deltakerne. Å la det holde elementer igjen fra arkivering
+ * ville stoppet forfatteren på et utkast ingen kan åpne.
+ */
+export type CourseDraftItemList = {
+  courseId: string;
+  courseTitle: string;
+  items: ReadonlyArray<{ type: "MODULE"; moduleId: string } | { type: "SECTION"; sectionId: string }> | null;
+};
+
+/**
+ * Elementlistene i utkastene til kursene som passer `course` (kalleren sier hvilke: contentLifecycle.ts sender «ikke
+ * arkivert»), utenom `excludeCourseId`. Bare contentLifecycle.ts kaller denne (test/content-in-use-guard.test.js).
+ */
+export async function findCourseDraftItemLists(
+  client: DraftReader,
+  input: { course: { archivedAt: null }; excludeCourseId?: string },
+): Promise<CourseDraftItemList[]> {
+  const rows = await client.courseDraft.findMany({
+    where: { course: input.course, ...(input.excludeCourseId ? { courseId: { not: input.excludeCourseId } } : {}) },
+    select: { id: true, courseId: true, payloadText: true, revision: true, course: { select: { title: true } } },
+  });
+  return rows.map((row) => {
+    let items: CourseDraftItemList["items"] = null;
+    try {
+      items = readCourseDraftPayload(row).items ?? null;
+    } catch (error) {
+      if (!(error instanceof AppError && error.code === "course_draft_unreadable")) throw error;
+    }
+    return { courseId: row.courseId, courseTitle: row.course.title, items };
+  });
+}
 
 export type CourseDraftRow = {
   id: string;

@@ -104,6 +104,9 @@ export const translations = {
     "errors.api.content_in_use": "This content is used in {count} course(s): {courseTitles}. Remove it from them first, or unpublish those courses.",
     // #1149: sletting stoppes også av arkiverte kurs. {archivedCount} og {archivedCourseTitles} sier hvilke.
     "errors.api.content_in_archived_course": "This content cannot be deleted because it is in {count} course(s): {courseTitles}. Archived courses ({archivedCount}): {archivedCourseTitles}. An archived course keeps its content.",
+    // #1150: arkivering for hånd stoppes også av et lagret utkast til et annet kurs. {draftCourseTitles} er kursene der
+    // elementet bare står i utkastet.
+    "errors.api.content_in_course_draft": "This content cannot be archived because it is used in {count} course(s): {courseTitles}. In {draftCount} of them it is only in a saved draft: {draftCourseTitles}. Take it out of the draft (or discard the draft) and out of the courses first.",
     "errors.api.not_configured": "This function is not set up on the server yet. Ask an administrator.",
     "errors.api.origin_mismatch": "This file does not belong to the course you are updating. Export the course again and adjust that file, or import it as a new course.",
     "errors.api.import_target_required": "Choose which course the file should update.",
@@ -670,6 +673,7 @@ export const translations = {
     // #972/#965/#980 — se merknaden i en-GB-tabellen.
     "errors.api.content_in_use": "Innholdet er i bruk i {count} kurs: {courseTitles}. Fjern det fra kursene først, eller avpubliser dem.",
     "errors.api.content_in_archived_course": "Innholdet kan ikke slettes fordi det ligger i {count} kurs: {courseTitles}. Arkiverte kurs ({archivedCount}): {archivedCourseTitles}. Et arkivert kurs beholder innholdet sitt.",
+    "errors.api.content_in_course_draft": "Innholdet kan ikke arkiveres fordi det er i bruk i {count} kurs: {courseTitles}. I {draftCount} av dem står det bare i et lagret utkast: {draftCourseTitles}. Ta det ut av utkastet (eller forkast utkastet) og av kursene først.",
     "errors.api.not_configured": "Funksjonen er ikke satt opp på serveren ennå. Kontakt en administrator.",
     "errors.api.origin_mismatch": "Denne fila hører ikke til kurset du oppdaterer. Eksporter kurset på nytt og juster den fila, eller importer fila som et nytt kurs.",
     "errors.api.import_target_required": "Velg hvilket kurs fila skal oppdatere.",
@@ -1226,6 +1230,7 @@ export const translations = {
 
 "errors.api.content_in_use": "Innhaldet er i bruk i {count} kurs: {courseTitles}. Fjern det frå kursa først, eller avpubliser dei.",
 "errors.api.content_in_archived_course": "Innhaldet kan ikkje slettast fordi det ligg i {count} kurs: {courseTitles}. Arkiverte kurs ({archivedCount}): {archivedCourseTitles}. Eit arkivert kurs beheld innhaldet sitt.",
+"errors.api.content_in_course_draft": "Innhaldet kan ikkje arkiverast fordi det er i bruk i {count} kurs: {courseTitles}. I {draftCount} av dei står det berre i eit lagra utkast: {draftCourseTitles}. Ta det ut av utkastet (eller forkast utkastet) og av kursa først.",
 "errors.api.not_configured": "Funksjonen er ikkje sett opp på tenaren enno. Kontakt ein administrator.",
 "errors.api.origin_mismatch": "Denne fila høyrer ikkje til kurset du oppdaterer. Eksporter kurset på nytt og juster den fila, eller importer fila som eit nytt kurs.",
 "errors.api.import_target_required": "Vel kva kurs fila skal oppdatere.",

@@ -62,8 +62,18 @@ Kan ikke publisere ufullstendig innhold.
 | Handling på en modul eller seksjon | Stoppes av |
 |---|---|
 | Vises som «Brukt i kurs», i kursfilteret og i tematallet | bare aktive kurs teller |
-| Avpublisere, arkivere | aktive kurs. Et arkivert kurs stopper ikke |
+| Avpublisere | aktive kurs. Et arkivert kurs stopper ikke |
+| Arkivere | aktive kurs, **og lagrede utkast (#1140) til aktive kurs** (#1150). Et arkivert kurs, eller utkastet til et, stopper ikke |
 | Slette | alle kurs, også arkiverte |
+
+**Utkastene teller ved arkivering (#1150 skive 2a-1).** Står et element i elementlista til et lagret utkast til et annet
+aktivt kurs, kan det ikke arkiveres: utkastet ville ellers feilet først når det skal publiseres
+(`course_draft_item_unusable`). Ett svar for all arkivering — for hånd, importens utbytting, og forhåndsvisningen av
+kursarkiveringen: `findActiveUsesOfItems` i contentLifecycle.ts. Et utkast som ikke kan leses (skjemaet krever elementlista), betyr
+«som publisert» og legger ikke til noe (det kan bare forkastes). **Avpublisering ser ikke utkastene:** den er reversibel, og et
+utkast med et avpublisert element stoppes ved publisering. Feilkoden når et utkast stopper: `content_in_course_draft`
+(«… I 1 av dem står den bare i et lagret utkast: «HMS 2025». Ta den ut av utkastet (eller forkast utkastet) og av kursene
+først.»). Uten utkast er svaret `content_in_use` som før.
 
 **Hvorfor sletting er unntatt:** `CourseItem` peker på modul og seksjon med `onDelete: Restrict`.
 Så lenge raden i det arkiverte kurset finnes, kan databasen ikke slette elementet. Sletting av
@@ -104,8 +114,23 @@ nekter en ny leser som svarer på spørsmålet utenom fila.
 
 ### G3 — Aktivitets-lås (kurs med påbegynt deltaker)  ⟵ *vedtatt: blokker hvis påbegynt*
 Et kurs som har minst én deltaker som har **påbegynt men ikke fullført** kan ikke **arkiveres**
-(pensjoneres). «Påbegynt» = har lest minst én seksjon (`CourseSectionRead`) eller levert minst
-ett forsøk (`Submission`) på en modul i kurset, uten en `CourseCompletion`.
+(pensjoneres).
+
+**«Midt i» er det «Mine kurs» viser som «I gang» (#1150 skive 2a-1).** Deltakeren er midt i når hen
+- ikke har kursbevis for kursets **nåværende** hovedversjon (et bevis for en eldre hovedversjon gjør
+  ikke kurset fullført, #934), og ikke har gjort alle stegene (moduler som ikke er arkivert, og
+  seksjonene deltakeren kan lese; beståtte fra `findModuleProgress`); og
+- har begynt: en innlevering på en modul i kurset som ikke er arkivert, eller en lesing som teller
+  for kursets nåværende hovedversjon.
+
+Om kurset er publisert, og om deltakeren ser det (OPEN, tildelt), spørres ikke om: ellers ville et
+avpublisert kurs alltid vært uten deltakere midt i. Tellingen bor i `findCourseInProgressParticipants`
+(contentLifecycle.ts) og brukes av G3, kurslista (`inProgressCount`) og forhåndsvisningen av
+arkiveringen (`GET …/archive-preview`), så de aldri svarer ulikt. Før #1150 telte alle med et kursbevis
+som ferdige, og alle med en lesing eller innlevering i kurset som påbegynt.
+
+⚠️ **En innlevering har ikke noe kurs.** En innlevering på en modul som ligger i flere kurs, gjør
+deltakeren påbegynt i alle, også i «Mine kurs». Det telles i den trygge retningen.
 
 **Avpublisering er bevisst unntatt fra G3** (justert etter staging-gjennomgang v1.5.1):
 avpublisering er reversibel (republiser når som helst) og er den «myke» måten å ta et kurs ned på

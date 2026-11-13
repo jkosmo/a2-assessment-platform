@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.159.0 - 2026-11-13 (under arbeid)
+
+Etappe 2 av #1148 (arkivering som følger med nedover, #1150), i tre skiver. **Skal ikke rulles ut før alle tre er med:**
+2a-1 alene gjør at arkiveringssperren (G3) stopper flere kurs enn før, til 2a-2 gjør sperren om til en bekreftelse. Plan:
+`doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`.
+
+### Skive 2a-1: arkivering ser utkastene, og «midt i» telles som i «Mine kurs»
+
+- **Hva forfatterne merker:** en modul eller seksjon som står i et lagret utkast til et annet aktivt kurs, kan ikke lenger
+  arkiveres for hånd. Meldingen sier hvilket kurs, og at det er et utkast (`400 content_in_course_draft`, tre språk).
+  Importens «oppdater kurs» lar et utbyttet element stå når et slikt utkast bruker det.
+- **Regelen:** `findActiveUsesOfItems` i `contentLifecycle.ts` er det ene svaret på «brukes andre steder»: et annet kurs som
+  ikke er arkivert, eller et lagret utkast til et slikt kurs. Brukt av arkivering for hånd, importen og forhåndsvisningen.
+  Avpublisering, sletting og kaskadesletting er uendret.
+- **Utkastets innhold tolkes ett sted:** `readCourseDraftPayload` er flyttet fra rutelaget til `courseDraft.ts` (eieren), med
+  skjemaene i `courseSchemas.ts`. Vakta sjekker at `payloadText` bare leses der.
+- **Ny `GET /api/admin/content/courses/:id/archive-preview`** (bare lesing, kursets eier eller administrator): deltakere midt i,
+  besvarelser som venter på vurdering, om kurset har et utkast, og hvilke moduler og seksjoner som følger med eller blir
+  stående (med hvilke kurs eller utkast som holder dem). Brukes av dialogen i skive 2b.
+- **«Deltakere midt i»** (G3, kurslista og forhåndsvisningen) er nå det «Mine kurs» viser som «I gang». Et bevis for en eldre
+  hovedversjon gjør ikke kurset fullført. Den som har gjort alle steg, er ikke midt i (se kjente mangler). En innlevering
+  på en modul som deles av flere kurs, teller i alle kursene; en innlevering har ingen kurs, og «Mine kurs» gjør det samme.
+- **Kurslista** teller deltakere midt i fire kurs om gangen, og ikke for arkiverte kurs. Tellingen er 5–9 spørringer per kurs
+  mot 3 før; alle samtidig ville gitt et støt mot databasen i prod.
+- **Tester:** `test/m2-course-archive-preview-1150.test.ts` (gjennom rutene), utvidede vakter i
+  `test/content-in-use-guard.test.js` og `test/course-draft-guard.test.js`, og
+  `test/e2e/admin-content-archive-in-course-draft-1150.spec.ts` (feilmeldingen på tre språk). Mutasjonssjekket 24 veier,
+  alle røde. Full runde: enhet 3240, DOM 109, integrasjon 1205, nettleser 1008.
+- **QA-porten:** GO. Rettet i skiven: kurslista telte også arkiverte kurs, og to dokumentasjonsfeil
+  (`doc/API_REFERENCE.md` sa at kursdetaljen, elementlista og publiseringsforhåndsvisningen er eierskapsvaktet; de er åpne
+  med vilje, `doc/DECISIONS.md` «Fagansvarlige deler innsyn»).
+- **Kjente mangler, tas i 2a-2:**
+  - En deltaker som har gjort alle steg, men ikke fått kursbeviset (det kan glippe, eller forfatteren tok ut steget hen
+    manglet), regnes ikke som midt i. Arkiveres kurset før hen åpner «Mine kurs», får hen aldri beviset. 2a-2 skal lage
+    de manglende bevisene før arkiveringen.
+  - Vakta mot nye veier som arkiverer flere elementer på én gang, ser bare bestemte skrivemåter.
+  - Et element som bare står i et annet kurs' utkast, kan fortsatt slettes (#1152).
+
 ## 2.158.1 - 2026-11-13
 
 **På stage 13.11.2026 kl. 14:49** (dev aa4173f2). `test/stage/release-2-158-1-jobber-og-sporsmaal.spec.ts` mot ekte data, 5 av
