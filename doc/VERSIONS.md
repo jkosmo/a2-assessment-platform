@@ -9,6 +9,12 @@ listene merkbart tregere for alle, også når ingen så på de arkiverte (målt 
 kurs mot 0,5–1,7 s i 2.159; seksjonslista 2,0 s for 192 seksjoner; modulbiblioteket 0,7 s). Produkteier valgte å regne
 datoene bare når de trengs.
 
+**På stage 14.11.2026 kl. 19:35** (dev 84c53ed3). `test/stage/release-2-162-slettedato.spec.ts` (5/5): uten parameteren har
+ingen av de 94 kursene, 177 modulene og 192 seksjonene `retention`; med den får en modul arkivert i dag 14.05.2027, og ingen
+arkivert rad er «ukjent» (av 91 arkiverte moduler: 50 med dato, 41 beholdes for besvarelser); en seksjon i et arkivert kurs
+får kursets dato. Tider fra utsiden, median av fem: kurslista 0,52 s, modulbiblioteket 0,22 s, seksjonslista 0,17 s; med
+datoene («Arkiverte») 2,7 / 2,3 / 1,9 s. `release-2-161` (4/4), `2-160` (7/7), `2-158` (6/6) og `2-159` (6/6) kjørt på nytt.
+
 - De tre listene regner `retention` bare med `?includeRetention=1`. Uten den leses verken overgangsraden eller vaktene,
   og lista koster det den gjorde i 2.161. Modulvelgeren i kursbyggeren og Kvalitet-siden ber aldri om feltet.
 - Klienten (`list-page.js`, valget `lazyFields`) henter datoene når «Arkiverte» velges, eller når sida åpner med filteret
