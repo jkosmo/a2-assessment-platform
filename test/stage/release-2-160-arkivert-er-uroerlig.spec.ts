@@ -15,9 +15,11 @@ import { arkiverKurs } from "./arkiver.js";
 //   C. I nettleseren: modulsida og seksjonsredigereren åpnes skrivebeskyttet med linja om arkivert; forhåndsvisningen av
 //      modulen er ikke sperret.
 //   D. Gjenopprettes kurset, kan modulen og seksjonen endres igjen (kontroll: vakta handler om arkivert, ikke noe annet).
-//   E. Arkivert på nytt kan kurset, modulen og seksjonen slettes med en gang. Det er også ryddingen.
+//   E. Arkivert på nytt kan kurset og seksjonen slettes med en gang. Modulen kan ikke (eldre regel: en modul med lagrede
+//      versjoner slettes ikke, #1152); den står igjen arkivert. Det er også ryddingen.
 //
-// Det testen skriver på stage: ett kurs, én modul og to seksjoner («Stage-test 2.160.0 …»). Alt slettes i E; feiler testen
+// Det testen skriver på stage: ett kurs, én modul og to seksjoner («Stage-test 2.160.0 …»). Modulen blir liggende arkivert,
+// resten slettes i E; feiler testen
 // før det, arkiverer og sletter ryddingen det som står igjen, og feiler hvis noe blir liggende uarkivert.
 // ⚠️ Tokenet leses fra den gitignorerte `.stage-service-auth.json` og skal ALDRI logges.
 
@@ -200,7 +202,8 @@ test("B: et arkivert kurs, modul og seksjon avviser hvert endringskall med rikti
     ["module_archived", "PATCH", `${modulsti()}/title`, { title: L(`${MODUL} endret`) }],
     ["module_archived", "POST", `${modulsti()}/mcq-set-versions`, { title: L("Set 2", "Sett 2"), questions: [sporsmaal] }],
     ["module_archived", "POST", `${modulsti()}/module-versions`, { assessmentMode: "MCQ_ONLY", mcqSetVersionId: tilstand.mcqSett, assessmentPolicy: { passRules: { mcqMinPercent: 60 } } }],
-    ["module_archived", "POST", `${modulsti()}/module-versions/${tilstand.modulversjon}/publish`, {}],
+    // Publiseringsporten (før #1151) sjekker arkivert før vakta: 422 med `item_archived` blant punktene. Se `forventet` under.
+    ["item_archived", "POST", `${modulsti()}/module-versions/${tilstand.modulversjon}/publish`, {}],
     ["section_archived", "PATCH", `${seksjonssti()}/title`, { title: L(`${SEKSJON} endret`) }],
     ["section_archived", "PUT", `${seksjonssti()}/content`, { bodyMarkdown: L("Endret tekst.") }],
     ["section_archived", "POST", `${seksjonssti()}/publish`],
@@ -208,10 +211,13 @@ test("B: et arkivert kurs, modul og seksjon avviser hvert endringskall med rikti
   const svar: Array<{ kall: string; status: number; error: unknown; message: unknown }> = [];
   for (const [, metode, sti, body] of kall) {
     const r = await api(metode, sti, body);
-    svar.push({ kall: `${metode} ${sti.replace(/\/api\/admin\/content\//, "").replace(/[a-z0-9]{20,}/gi, "…")}`, status: r.status, error: r.json.error, message: r.json.message });
+    // Porten svarer med en liste; koden som gjelder, står blant punktene.
+    const kode = r.json.error === "publish_blocked_by_validation" ? (r.json.issues ?? []).map((i: { code?: string }) => i.code).find((c: unknown) => c === "item_archived") ?? r.json.error : r.json.error;
+    svar.push({ kall: `${metode} ${sti.replace(/\/api\/admin\/content\//, "").replace(/[a-z0-9]{20,}/gi, "…")}`, status: r.status, error: kode, message: r.json.message });
   }
   noter("B, svarene", svar);
-  expect(svar.map((s) => [s.kall, s.status, s.error])).toEqual(kall.map(([kode], i) => [svar[i].kall, 400, kode]));
+  const forventet = (kode: string) => (kode === "item_archived" ? 422 : 400);
+  expect(svar.map((s) => [s.kall, s.status, s.error])).toEqual(kall.map(([kode], i) => [svar[i].kall, forventet(kode), kode]));
 
   const etter = await øyeblikk();
   noter("B, etter", etter);
@@ -264,7 +270,7 @@ test("D: gjenopprettet kurs — modulen og seksjonen kan endres igjen (kontroll)
   expect(seksjon.status, seksjon.tekst.slice(0, 300)).toBe(200);
 });
 
-test("E: arkivert på nytt slettes kurset, modulen og seksjonen med en gang", async () => {
+test("E: arkivert på nytt slettes kurset og seksjonen med en gang; modulen står igjen arkivert (eldre regel)", async () => {
   test.setTimeout(180_000);
   test.skip(!tilstand.kurs, "testdataene ble ikke laget");
   const arkivert = await arkiverKurs(api, tilstand.kurs!);
@@ -277,6 +283,12 @@ test("E: arkivert på nytt slettes kurset, modulen og seksjonen med en gang", as
   if (seksjon.status < 300) tilstand.slettet.add(tilstand.seksjon!);
   noter("E", { fulgte: [...arkivert.fulgte].length, kurs: [kurs.status, kurs.json.error], modul: [modul.status, modul.json.error], seksjon: [seksjon.status, seksjon.json.error] });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBeLessThan(300);
-  expect(modul.status, modul.tekst.slice(0, 300)).toBeLessThan(300);
   expect(seksjon.status, seksjon.tekst.slice(0, 300)).toBeLessThan(300);
+  // Kjent, eldre regel (uendret i 2.160): en modul som har hatt en lagret versjon, kan ikke slettes (`deleteModule`,
+  // «still has dependencies»; svaret er den generelle `delete_module_failed`). Den står igjen arkivert. Hører til #1152.
+  noter("E, modulen", { status: modul.status, error: modul.json.error });
+  if (modul.status >= 300) {
+    const etter = await api("GET", `${modulsti()}/export`);
+    expect(etter.json.moduleExport?.module?.archivedAt, "modulen som ikke kunne slettes, er ikke arkivert").toBeTruthy();
+  }
 });

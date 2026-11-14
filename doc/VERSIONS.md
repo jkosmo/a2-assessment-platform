@@ -9,6 +9,12 @@ gjenopprettes og slettes, men ikke endres. Og bare arkivert innhold kan slettes.
 latt klienten vise knapper tjeneren avviser, 3b alene ville stoppet stage-testene som sletter uten å arkivere først. Plan og
 gjennomlesing: `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`. Ingen migrering.
 
+**På stage 14.11.2026** (dev 2c3bd2a6). Mot ekte data, alt grønt: `test/stage/release-2-160-arkivert-er-uroerlig.spec.ts`
+(7/7): sletting uten arkivering avvist for seksjon og kurs, arkivert seksjon slettet med en gang; ti endringskall mot et
+arkivert kurs, en modul og en seksjon avvist med riktig kode, og ingenting endret; modulsida og seksjonsredigereren
+skrivebeskyttet, forhåndsvisningen åpen, ingen skrivinger fra sidene; etter gjenoppretting kan begge endres igjen.
+`release-2-158-arkiverte-kurs` (6/6) og `release-2-159-arkivering-i-dialogene` (6/6) kjørt på nytt. Ingen 5xx i stage-loggene.
+
 **Hva forfatterne merker, samlet:** et arkivert element åpnes skrivebeskyttet med en linje om at det er arkivert, og
 «Gjenopprett» og «Slett» står i hodet. «Døp om» og «Dupliser» finnes ikke på arkiverte rader. «Slett» på noe som ikke er
 arkivert sier «arkiver først». «Slett med innhold» finnes bare på arkiverte kurs.
@@ -71,6 +77,11 @@ som før; «Dupliser» er ikke lov på arkiverte elementer.
   aktive elementer i det (bare administrator, og forhåndsvisningen lister dem). Føres videre til #1152. Dekningsvakta ser
   skrivesteder gjennom typesjekken; en skriver som går utenom `ContentWriteTx`, ser den ikke. «Foreslå nye kriterier» kan
   stå igjen som melding når modulen arkiveres i en annen fane (eksisterende).
+- **Funnet på stage, eldre enn 2.160:** en modul som har hatt en lagret versjon, kan ikke slettes, heller ikke arkivert
+  (`deleteModule`, «still has dependencies»); svaret er den generelle `delete_module_failed` uten forklaring. Hører til #1152.
+  Publisering av en versjon på en arkivert modul svarer med publiseringsportens `422` og punktet `item_archived`, ikke
+  `module_archived`: porten sjekket arkivert før 2.160, og ingenting skrives. Modulsida har ingen Publiser-knapp når modulen
+  er arkivert.
 
 ## 2.159.0 - 2026-11-13
 
