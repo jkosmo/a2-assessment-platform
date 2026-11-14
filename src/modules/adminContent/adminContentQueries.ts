@@ -39,6 +39,8 @@ export async function listLibraryModules(
   locale: SupportedLocale = "en-GB",
   viewerUserId?: string,
   viewerIsAdmin = false,
+  // #1152 skive 4b-2: bare bibliotekssida med «Arkiverte» ber om svaret (`?includeRetention=1`). Modulvelgeren og Kvalitet gjør det ikke.
+  options: { includeRetention?: boolean } = {},
 ) {
   const modules = await adminContentRepository.listLibraryModules();
   // #787/#836: annotate each module with whether the viewer owns it, so the quality/calibration picker
@@ -47,7 +49,7 @@ export async function listLibraryModules(
   // #1149: «Brukt i kurs», kursfilteret og popoveren viser bare AKTIVE kurs. Samme spørsmål som seksjonslista stiller.
   const coursesByModule = await findActiveCoursesForModules(modules.map((module) => module.id), locale);
   // #1152 skive 4b: «slettes <dato>» eller «beholdes» med grunnen, bare for de arkiverte (content/archivedRetention.ts).
-  const archivedIds = modules.filter((module) => module.archivedAt).map((module) => module.id);
+  const archivedIds = options.includeRetention ? modules.filter((module) => module.archivedAt).map((module) => module.id) : [];
   const retention = archivedIds.length > 0
     ? await evaluateArchivedItems(await createRetentionContext(), "MODULE", archivedIds)
     : new Map<string, ArchivedRetention>();
@@ -77,7 +79,7 @@ export async function listLibraryModules(
     canManage: viewerIsAdmin || ownedIds.has(module.id),
     courseCount: coursesByModule.get(module.id)?.length ?? 0,
     courses: coursesByModule.get(module.id) ?? [],
-    ...(module.archivedAt ? { retention: retention.get(module.id) ?? ({ unknown: true } as ArchivedRetention) } : {}),
+    ...(options.includeRetention && module.archivedAt ? { retention: retention.get(module.id) ?? ({ unknown: true } as ArchivedRetention) } : {}),
   }));
 }
 

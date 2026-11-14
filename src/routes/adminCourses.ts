@@ -67,7 +67,7 @@ import { packageCueWarnings } from "../modules/adminContent/mcqCueWarnings.js";
 import { packageRubricWarnings } from "../modules/adminContent/rubricWarnings.js";
 import { packageAltTextWarnings } from "../modules/adminContent/altTextWarnings.js";
 import { assertNotArchivedBeforeLock } from "../modules/content/archivedGuard.js";
-import { createRetentionContext, evaluateArchivedCourse, type ArchivedRetention } from "../modules/content/archivedRetention.js";
+import { createRetentionContext, evaluateArchivedCourse, retentionRequested, type ArchivedRetention } from "../modules/content/archivedRetention.js";
 
 const adminCoursesRouter = Router();
 
@@ -200,7 +200,9 @@ adminCoursesRouter.get("/", async (request, response, next) => {
     const inProgressCounts: number[] = [];
     // #1152 skive 4b: et arkivert kurs får i stedet svaret på «slettes når, eller hvorfor beholdes det» (archivedRetention.ts), i
     // samme løkke og med samme fire om gangen. Overgangstidspunktet leses én gang, og bare når lista har et arkivert kurs.
-    const retentionContext = courses.some((c) => c.archivedAt) ? await createRetentionContext() : null;
+    // 4b-2: bare når klienten ber om det (`?includeRetention=1`, filteret «Arkiverte»). Ellers koster lista det den gjorde før.
+    const includeRetention = retentionRequested(request.query.includeRetention);
+    const retentionContext = includeRetention && courses.some((c) => c.archivedAt) ? await createRetentionContext() : null;
     const retentionByCourse = new Map<string, ArchivedRetention>();
     for (let i = 0; i < courses.length; i += 4) {
       // Et arkivert kurs telles ikke: det er allerede arkivert, og tallet er bare et varsel før arkivering (QA-porten 2a-1).
@@ -240,8 +242,8 @@ adminCoursesRouter.get("/", async (request, response, next) => {
       themes: themesByCourse.get(c.id) ?? [],
       versionMajor: c.versionMajor,
       versionMinor: c.versionMinor,
-      // #1152 skive 4b: bare på arkiverte kurs.
-      ...(c.archivedAt ? { retention: retentionByCourse.get(c.id) ?? { unknown: true as const } } : {}),
+      // #1152 skive 4b: bare på arkiverte kurs, og bare når klienten ba om det.
+      ...(includeRetention && c.archivedAt ? { retention: retentionByCourse.get(c.id) ?? { unknown: true as const } } : {}),
     }));
     response.json({ courses: items });
   } catch (error) {

@@ -1970,3 +1970,24 @@ Planen sa hva («Fristen», «Hva forfatteren ser», «Etter gjennomlesingen» p
 (lista kaller de samme sjekkene og har ingen egne vakter), `test/unit/archived-retention-deadline-1152.test.ts`,
 `test/m2-archived-retention-1152.test.ts` (lista og «Slett» sier det samme, som tabell), `test/e2e/admin-content-retention-line-1152.spec.ts`.
 **Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** valgt under byggingen av skive 4b; ikke avklart med produkteier
+
+## Slettedatoen bare når «Arkiverte» velges (#1152 skive 4b-2, 2026-11-14)
+
+2.162.0 regnet slettedatoen i alle tre listene ved hver lasting. På stage, med ekte data, ble kurslista 3,1 s (94 rader; 2.159 målte
+0,5–1,7 s), seksjonslista 2,0 s og modulbiblioteket 0,7 s. **Produkteier 14.11.2026: regn den bare når noen åpner «Arkiverte».**
+
+- **Tjeneren regner bare på forespørsel:** `?includeRetention=1` (eller `true`) på de tre listene. Uten den kalles ikke
+  `archivedRetention.ts` (overgangsraden leses ikke), og ingen rad har `retention`. Lista koster det den gjorde i 2.161. Ett sted
+  avgjør hva som teller som «ja» (`retentionRequested`).
+- **Klienten henter når filteret velges**, én gang per lasting av lista (også når sida åpner med «Arkiverte» husket), og fletter
+  `retention` inn i radene etter id. Lastes lista på nytt (etter en handling), hentes det på nytt hvis «Arkiverte» er valgt.
+  Mens den henter, vises ingen linje. Feiler hentingen, virker lista som før, uten linja, og det prøves ikke igjen før lista lastes
+  på nytt. Mekanismen bor i den felles listesida (`lazyFields`), ikke i hver side.
+- **Linja står bare under «Arkiverte»**, som planen sa. Under «Alle» står de arkiverte radene uten linje, også etter at datoen er
+  hentet.
+- Kallet med parameteren henter hele lista på nytt (ikke bare de arkiverte). Enklest, og prisen betales bare når filteret velges.
+
+**Håndheves:** `retentionRequested` (archivedRetention.ts), `lazyFields` (list-page.js); `test/m2-archived-retention-1152.test.ts` (uten
+parameteren: ingen `retention`, overgangsraden ikke lest), `test/e2e/admin-content-retention-line-1152.spec.ts` (linja etter «Arkiverte»,
+ikke før; feilet henting; husket filter).
+**Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** avgjort av produkteier (bare under «Arkiverte»); utformingen valgt under byggingen

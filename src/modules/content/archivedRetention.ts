@@ -23,7 +23,8 @@
 // bare til første grunn (`stopAtFirst`); modulene, kursene de ligger i og utkastene leses i én omgang, og det som må spørres per
 // element (seksjonens kursbevis) og per kurs, går fire om gangen, som tellingen i kurslista. Målt lokalt 14.11.2026 (85 kurs, 26
 // arkiverte med historikk, 128 arkiverte moduler, 82 arkiverte seksjoner; median av fem): kurslista 184 → 260 ms, modulbiblioteket
-// 49 → 178 ms, seksjonslista 50 → 196 ms. Mest av tillegget er kursvakta for de arkiverte kursene.
+// 49 → 178 ms, seksjonslista 50 → 196 ms. Mest av tillegget er kursvakta for de arkiverte kursene. På stage (2.162.0, ekte data) ble
+// kurslista 3,1 s; fra 4b-2 regnes svaret derfor bare på forespørsel (`retentionRequested`), når forfatteren velger «Arkiverte».
 import { prisma } from "../../db/prisma.js";
 import { ARCHIVED_CONTENT_RETENTION_FLOOR_KEY } from "../../config/retention.js";
 import type { AppError } from "../../errors/AppError.js";
@@ -35,6 +36,15 @@ import { checkCourseDelete } from "../course/courseDeleteGuard.js";
 import { checkSectionDeletes } from "../course/sectionCommands.js";
 import type { DeleteCheck } from "./deleteCheck.js";
 import { archivedContentDeletesOn, latestDate, parseRetentionFloor } from "./retentionDeadline.js";
+
+/**
+ * #1152 skive 4b-2 (produkteier 14.11.2026, etter stage 2.162.0): listene regner svaret bare når klienten ber om det
+ * (`?includeRetention=1`), det vil si når forfatteren åpner «Arkiverte». Uten parameteren leses verken overgangsraden eller vaktene,
+ * og lista koster det den gjorde i 2.161. Modulvelgeren i kursbyggeren og Kvalitet-siden ber aldri om det.
+ */
+export function retentionRequested(value: unknown): boolean {
+  return value === "1" || value === "true";
+}
 
 export type ArchivedRetention =
   | { deletesAt: string }

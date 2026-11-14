@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { ARCHIVED_CONTENT_RETENTION_FLOOR_KEY } from "../src/config/retention.js";
@@ -179,12 +179,17 @@ type Retention = { deletesAt: string } | { kept: { code: string; details: Record
 type Kind = "course" | "module" | "section";
 const timings: Array<{ list: string; ms: number; archivedRows: number }> = [];
 
-/** De tre listene, hver lest én gang, med `retention` per id. */
-async function readLists() {
+/**
+ * De tre listene, hver lest én gang, med `retention` per id. #1152 4b-2: med `?includeRetention=1`, slik klienten ber om det når
+ * «Arkiverte» velges. `includeRetention: false`: som før, og da skal ingen rad ha feltet.
+ */
+async function readLists(options: { includeRetention?: boolean } = {}) {
+  const include = options.includeRetention ?? true;
   nextAdmin();
   const answers = { course: new Map<string, Retention>(), module: new Map<string, Retention>(), section: new Map<string, Retention>() };
   const keys = { course: new Set<string>(), module: new Set<string>(), section: new Set<string>() };
-  for (const [kind, path, field] of [["course", `${C}/courses`, "courses"], ["module", `${C}/modules/library`, "modules"], ["section", `${C}/sections`, "sections"]] as const) {
+  const query = include ? "includeRetention=1" : "";
+  for (const [kind, path, field] of [["course", `${C}/courses?${query}`, "courses"], ["module", `${C}/modules/library?locale=nb&${query}`, "modules"], ["section", `${C}/sections?${query}`, "sections"]] as const) {
     const started = Date.now();
     const response = await get(path);
     const ms = Date.now() - started;
@@ -194,8 +199,8 @@ async function readLists() {
     for (const row of rows) {
       answers[kind].set(row.id, row.retention);
       if ("retention" in row) keys[kind].add(row.id);
-      // Bare arkiverte rader har feltet.
-      expect("retention" in row, `${kind} ${row.id}: retention bare på arkiverte`).toBe(row.archivedAt !== null);
+      // Bare arkiverte rader har feltet, og bare når klienten ba om det.
+      expect("retention" in row, `${kind} ${row.id}: retention bare på arkiverte, og bare med parameteren`).toBe(include && row.archivedAt !== null);
     }
   }
   return { answers, keys };
@@ -445,6 +450,40 @@ describe("#1152 4b: uten overgangsrad er svaret «ukjent», aldri en dato", () =
       expect((await readLists()).answers.module.get(module)).toHaveProperty("deletesAt");
     });
   }
+});
+
+// ── 5. Bare når klienten ber om det (4b-2) ────────────────────────────────────────────────────────────────────────────────
+
+describe("#1152 4b-2: listene regner slettedatoen bare med `?includeRetention=1`", () => {
+  it("uten parameteren: ingen rad har `retention`, og overgangsraden leses ikke (ingen vurdering); med den: datoen, og raden leses", async () => {
+    await setFloor("2026-01-01T00:00:00.000Z");
+    const module = await archivedModule("uten parameter");
+    const section = await archivedSection("uten parameter");
+    const course = await apiCourse("uten parameter", []);
+    await archiveCourse(course);
+    // Spionen går gjennom til den ekte funksjonen (fanget før spionen: en spion rett på Prisma-modellen svarte null). Ingen
+    // mockRestore: på en Prisma-modell fjerner den funksjonen for neste test.
+    const original = prisma.platformConfig.findUnique.bind(prisma.platformConfig);
+    const floorReads = vi.spyOn(prisma.platformConfig, "findUnique").mockImplementation(((args: Parameters<typeof original>[0]) => original(args)) as never);
+    const readsOfFloor = () => floorReads.mock.calls.filter(([args]) => (args as { where?: { key?: string } })?.where?.key === FLOOR_KEY).length;
+    floorReads.mockClear();
+
+    const without = await readLists({ includeRetention: false });
+    expect(without.keys.course.size + without.keys.module.size + without.keys.section.size, "ingen rad har feltet").toBe(0);
+    expect(readsOfFloor(), "uten parameteren vurderes ingenting").toBe(0);
+    // Parameteren med en annen verdi er ikke en forespørsel om datoen.
+    nextAdmin();
+    const other = await get(`${C}/sections?includeRetention=0`);
+    expect((other.body.sections as Array<Record<string, unknown>>).some((row) => "retention" in row)).toBe(false);
+    expect(readsOfFloor()).toBe(0);
+
+    // KONTROLL: med parameteren har de arkiverte radene datoen, og raden er lest (én gang per liste).
+    const withIt = await readLists();
+    expect(withIt.answers.module.get(module)).toHaveProperty("deletesAt");
+    expect(withIt.answers.section.get(section)).toHaveProperty("deletesAt");
+    expect(withIt.answers.course.get(course)).toHaveProperty("deletesAt");
+    expect(readsOfFloor()).toBe(3);
+  });
 });
 
 describe("#1152 4b: tiden listene bruker", () => {

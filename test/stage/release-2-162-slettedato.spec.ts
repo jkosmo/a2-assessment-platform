@@ -6,7 +6,7 @@ import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 import { arkiverKurs } from "./arkiver.js";
 
-// 2.162.0 mot UTRULLET stage, med ekte data (#1152 4b, slettedatoen i listene):
+// 2.162.1 mot UTRULLET stage (datoene hentes med ?includeRetention=1, som når «Arkiverte» velges), med ekte data (#1152 4b, slettedatoen i listene):
 //
 //   A. Migreringen har skrevet overgangsraden: en modul arkivert nå får `retention.deletesAt` (ikke `unknown`), og datoen er
 //      seks kalendermåneder fra i dag (overgangen og arkiveringen er begge i dag eller nylig). Gamle arkiverte rader i lista
@@ -17,7 +17,7 @@ import { arkiverKurs } from "./arkiver.js";
 //   C. I nettleseren: biblioteket viser «Slettes <dato>» under merket på den arkiverte modulen.
 //
 // Grunnene til å beholde er dekket av integrasjonstestene (test/m2-archived-retention-1152.test.ts); stage-kontoen kan ikke
-// lage kursbevis, innleveringer eller utkast her. Det testen skriver: én modul, ett kurs, én seksjon («Stage-test 2.162.0 …»),
+// lage kursbevis, innleveringer eller utkast her. Det testen skriver: én modul, ett kurs, én seksjon («Stage-test 2.162.1 …»),
 // alt slettes. ⚠️ Tokenet leses fra den gitignorerte `.stage-service-auth.json` og skal ALDRI logges.
 
 const { auth, reason } = readServiceAuth();
@@ -30,7 +30,7 @@ test.describe.configure({ mode: "serial" });
 const RAPPORT = path.resolve(process.cwd(), "test-results", "stage-rapport");
 const noter = (hva: string, verdi: unknown) => {
   fs.mkdirSync(RAPPORT, { recursive: true });
-  fs.appendFileSync(path.join(RAPPORT, "funn.jsonl"), `${JSON.stringify({ test: "2.162.0", hva, verdi: typeof verdi === "string" ? verdi : JSON.stringify(verdi) })}\n`, "utf8");
+  fs.appendFileSync(path.join(RAPPORT, "funn.jsonl"), `${JSON.stringify({ test: "2.162.1", hva, verdi: typeof verdi === "string" ? verdi : JSON.stringify(verdi) })}\n`, "utf8");
 };
 
 async function api(metode: string, sti: string, body?: unknown): Promise<{ status: number; json: any; tekst: string }> {
@@ -66,7 +66,7 @@ async function forberedSide(page: Page) {
 
 const L = (en: string, nb: string = en) => ({ "en-GB": en, nb, nn: nb });
 const stempel = Date.now();
-const navn = (hva: string) => `Stage-test 2.162.0 ${hva} ${stempel}`;
+const navn = (hva: string) => `Stage-test 2.162.1 ${hva} ${stempel}`;
 const sporsmaal = { stem: L("Who receives an appeal?", "Hvem skal klagen sendes til?"), options: [L("The deciding body", "Vedtaksorganet"), L("The ombudsman", "Ombudet"), L("The county governor", "Statsforvalteren"), L("The court", "Domstolen")], correctAnswer: L("The deciding body", "Vedtaksorganet"), rationale: L("The body that made the decision.", "Organet som fattet vedtaket.") };
 
 const tilstand: { modul?: string; kurs?: string; seksjon?: string; slettet: Set<string> } = { slettet: new Set() };
@@ -86,7 +86,7 @@ function seksMånederFraIDag(): string {
 }
 
 async function bibliotekRad(id: string) {
-  const b = await api("GET", "/api/admin/content/modules/library?locale=nb");
+  const b = await api("GET", "/api/admin/content/modules/library?locale=nb&includeRetention=1");
   expect(b.status).toBe(200);
   return { rad: (b.json.modules ?? []).find((m: { id: string }) => m.id === id), alle: b.json.modules ?? [] };
 }
@@ -115,8 +115,20 @@ test.afterAll(async () => {
   expect(mislyktes, "ryddingen på stage feilet; se funn.jsonl og rydd for hånd").toEqual([]);
 });
 
-test("versjonen er minst 2.162.0", async () => {
-  noter("versjon", await forventMinstVersjon(BASE, "2.162.0"));
+test("versjonen er minst 2.162.1", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.162.1"));
+});
+
+test("2.162.1: uten ?includeRetention=1 har ingen rad i de tre listene `retention` (2.162.0 regnet det alltid)", async () => {
+  test.setTimeout(180_000);
+  for (const sti of ["/api/admin/content/courses", "/api/admin/content/modules/library?locale=nb", "/api/admin/content/sections"]) {
+    const r = await api("GET", sti);
+    expect(r.status, sti).toBe(200);
+    const rader = r.json.courses ?? r.json.modules ?? r.json.sections ?? [];
+    const medFelt = rader.filter((rad: { retention?: unknown }) => rad.retention !== undefined).length;
+    noter(`uten parameteren: ${sti.split("?")[0]}`, { rader: rader.length, medFelt });
+    expect(medFelt, sti).toBe(0);
+  }
 });
 
 test("A: overgangsraden finnes — en modul arkivert nå får en dato seks måneder fram, og ingen arkivert rad er «ukjent»", async () => {
@@ -156,8 +168,8 @@ test("B: en seksjon som bare ligger i et arkivert kurs uten kursbevis, får kurs
   const arkivert = await arkiverKurs(api, tilstand.kurs);
   expect(arkivert.status, arkivert.tekst.slice(0, 300)).toBe(200);
 
-  const kursliste = await api("GET", "/api/admin/content/courses");
-  const seksjonsliste = await api("GET", "/api/admin/content/sections");
+  const kursliste = await api("GET", "/api/admin/content/courses?includeRetention=1");
+  const seksjonsliste = await api("GET", "/api/admin/content/sections?includeRetention=1");
   const kursRad = (kursliste.json.courses ?? kursliste.json ?? []).find?.((c: { id: string }) => c.id === tilstand.kurs);
   const seksjonRad = (seksjonsliste.json.sections ?? []).find((s: { id: string }) => s.id === tilstand.seksjon);
   noter("B, svarene", { kurs: kursRad?.retention, seksjon: seksjonRad?.retention });

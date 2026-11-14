@@ -1750,6 +1750,12 @@ reglene som `deleteModuleInTx`/`deleteSectionInTx`: `moduleDeleteRules`, `sectio
 svart med. Et element som bare holdes igjen av arkiverte kurs som selv kan slettes, får den seneste av sin egen og kursenes dato
 (jobben sletter kursene først). Fristen: `retentionDeadline.ts` og `ARCHIVED_CONTENT_RETENTION_MONTHS` (`src/config/retention.ts`).
 
+**Bare når «Arkiverte» velges (4b-2).** Tjeneren regner svaret bare med `?includeRetention=1` (`retentionRequested`,
+`archivedRetention.ts`); uten den leses verken overgangsraden eller vaktene. Den felles listesida henter feltet når filteret velges
+(`lazyFields` i `public/static/list-page.js`: én gang per lasting, også når sida åpner med filteret husket; feiler hentingen, virker
+lista uten linja), og fletter det inn i radene. Kolonnene får `ctx.filter`, og linja tegnes bare under «Arkiverte». Andre som leser
+`/modules/library` (modulvelgeren i kursbyggeren, Kvalitet), ber aldri om feltet.
+
 **Klienten:** `retentionLineHtml`, `retentionReasonText` og `formatRetentionDate` i `public/static/content-status-badge.js` (felles for
 de tre listene), `.retention-line` i `shared.css`. Tekstene: `adminContent.retention.*` i `public/i18n/admin-content-translations.js`
 (nb, nn med «behalde» for kurset og «behalden» for modulen og seksjonen, en-GB). En kode uten tekst får «kan ikke slettes nå».

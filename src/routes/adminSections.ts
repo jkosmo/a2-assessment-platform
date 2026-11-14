@@ -22,7 +22,7 @@ import {
   MAX_ASSET_BYTES,
 } from "../modules/course/index.js";
 import { findActiveCoursesForSections } from "../modules/course/contentLifecycle.js";
-import { createRetentionContext, evaluateArchivedItems, type ArchivedRetention } from "../modules/content/archivedRetention.js";
+import { createRetentionContext, evaluateArchivedItems, retentionRequested, type ArchivedRetention } from "../modules/content/archivedRetention.js";
 import {
   localizedTextPatchSchema,
   generationLocaleSchema,
@@ -353,7 +353,9 @@ adminSectionsRouter.get("/", async (request, response, next) => {
     // #705-UX(G): «Brukt i kurs»-kolonne med popover (likt modul-biblioteket). #1149: bare aktive kurs.
     const coursesBySection = await findActiveCoursesForSections(sections.map((s) => s.id));
     // #1152 skive 4b: «slettes <dato>» eller «beholdes» med grunnen, bare for de arkiverte (content/archivedRetention.ts).
-    const archivedIds = sections.filter((s) => s.archivedAt).map((s) => s.id);
+    // 4b-2: bare når klienten ber om det (`?includeRetention=1`, filteret «Arkiverte»).
+    const includeRetention = retentionRequested(request.query.includeRetention);
+    const archivedIds = includeRetention ? sections.filter((s) => s.archivedAt).map((s) => s.id) : [];
     const retention = archivedIds.length > 0
       ? await evaluateArchivedItems(await createRetentionContext(), "SECTION", archivedIds)
       : new Map<string, ArchivedRetention>();
@@ -384,7 +386,7 @@ adminSectionsRouter.get("/", async (request, response, next) => {
           courseCount: courses.length,
           courses,
           canManage: manageable.has(s.id),
-          ...(s.archivedAt ? { retention: retention.get(s.id) ?? ({ unknown: true } as ArchivedRetention) } : {}),
+          ...(includeRetention && s.archivedAt ? { retention: retention.get(s.id) ?? ({ unknown: true } as ArchivedRetention) } : {}),
         };
       }),
     });

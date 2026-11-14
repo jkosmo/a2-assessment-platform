@@ -997,7 +997,7 @@ function getListPage() {
         // Alfabetisk står temaene under navnet; etter tema sier overskriften det.
         + (view === "alphabetical" && (c.themes ?? []).length > 0 ? `<span class="list-group-themes">${escapeHtml(c.themes.map((theme) => theme.name).join(" · "))}</span>` : "") },
       // #934 skive 3: versjonen ved statusen («v3.2») — et merke, ikke en kolonne (#1084).
-      { key: "status", label: t("ui.status"), className: "col-status", render: (c) => lifecycleBadge(c, t) + courseVersionChipHtml(c) + retentionLineHtml(c, "course", t, currentLocale) },
+      { key: "status", label: t("ui.status"), className: "col-status", render: (c, ctx) => lifecycleBadge(c, t) + courseVersionChipHtml(c) + (ctx.filter === "archived" ? retentionLineHtml(c, "course", t, currentLocale) : "") },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (c) => certBadge(c.certificationLevel) },
       { key: "moduleCount", label: t("courses.col.moduleCount"), className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
       { key: "inProgress", label: t("courses.col.inProgress"), className: "col-inprogress", title: t("courses.col.inProgressHint"), sortValue: (c) => c.inProgressCount ?? 0, render: (c) => (c.inProgressCount > 0 ? String(c.inProgressCount) : "–") },
@@ -1049,6 +1049,8 @@ function getListPage() {
         <a href="/admin-content/courses/new" class="btn btn-primary">${escapeHtml(t("courses.create"))}</a>
       </div>`,
     load: async () => (await apiFetch("/api/admin/content/courses", getHeaders)).courses ?? [],
+    // #1152 skive 4b-2: slettedatoen regnes bare når «Arkiverte» er valgt (produkteier 14.11.2026, etter stage 2.162.0).
+    lazyFields: { filter: "archived", fields: ["retention"], load: async () => (await apiFetch("/api/admin/content/courses?includeRetention=1", getHeaders)).courses ?? [] },
     describeError: (err) => apiErrorText(err),
     onAction: (_action, _id, btn, _item, event) => handleListTableClick(event, btn),
     afterRender: () => {

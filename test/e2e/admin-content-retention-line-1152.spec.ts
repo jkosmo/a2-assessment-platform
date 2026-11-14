@@ -4,6 +4,9 @@ import { mockCommonApis } from "./admin-content-helpers.js";
 // #1152 skive 4b (doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md, «Hva forfatteren ser»): under «Arkiverte» i kurslista,
 // modulbiblioteket og seksjonslista står en linje under statusmerket: «Slettes 13.05.2027» eller «Beholdes: <grunn>».
 //
+// 4b-2 (produkteier 14.11.2026, etter stage 2.162.0): datoen hentes først når forfatteren velger «Arkiverte» (`?includeRetention=1`),
+// én gang per lasting; feiler hentingen, virker lista uten linja.
+//
 // Testen fester klientlaget: at `retention` fra tjeneren blir riktig tekst på brukerens språk (datoformat, grunnen slått opp på
 // koden, nynorsk bøyd etter kjønnet er i enhetstesten), at «ukjent» og aktive rader ikke får noen linje, og at linja passer på en
 // telefon uten vannrett rulling. Tjenerens svar er etterlignet; at tjeneren sender denne formen, festes i
@@ -95,12 +98,31 @@ const SECTIONS = [
   section("sec-aktiv", "Aktiv seksjon", { archivedAt: null, activeVersionId: "sv-1", lifecycle: "published" }),
 ];
 
-async function mockSectionList(page: Page) {
-  await page.route(/\/api\/admin\/content\/sections(\?.*)?$/, (route: Route) => {
+const withoutRetention = (rows: Array<Record<string, unknown>>) => rows.map(({ retention: _retention, ...row }) => row);
+
+/**
+ * #1152 skive 4b-2: tjeneren regner `retention` bare når klienten ber om det (`?includeRetention=1`). De tre listene etterlignes slik:
+ * uten parameteren ingen `retention`, med den feltet. `failRetention`: kallet med parameteren svarer 500. Svarer med kallene som ble
+ * gjort, så testen ser når parameteren ble sendt.
+ */
+async function mockLists(page: Page, options: { failRetention?: boolean } = {}) {
+  const calls: string[] = [];
+  const serve = (key: string, rows: Array<Record<string, unknown>>) => (route: Route) => {
     if (route.request().method() !== "GET") return route.fallback();
-    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: SECTIONS }) });
-  });
+    const url = new URL(route.request().url());
+    calls.push(`${url.pathname}${url.search}`);
+    const asked = url.searchParams.get("includeRetention") === "1";
+    if (asked && options.failRetention) return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "internal_error" }) });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ [key]: asked ? rows : withoutRetention(rows) }) });
+  };
+  // Registrert etter mockCommonApis, så disse svarer først.
+  await page.route(/\/api\/admin\/content\/courses(\?.*)?$/, serve("courses", COURSES));
+  await page.route(/\/api\/admin\/content\/modules\/library(\?.*)?$/, serve("modules", MODULES.map((m) => ({ lifecycle: m.status === "archived" ? "archived" : "published", ...m }))));
+  await page.route(/\/api\/admin\/content\/sections(\?.*)?$/, serve("sections", SECTIONS));
+  return calls;
 }
+
+const asked = (calls: string[]) => calls.filter((call) => call.includes("includeRetention=1")).length;
 
 const line = (page: Page, id: string) => page.locator(`tr[data-row-id="${id}"] .retention-line`);
 
@@ -124,33 +146,42 @@ const EXPECTED: Record<Locale, Record<string, string>> = {
 };
 
 const PAGES = [
-  { name: "kurslista", url: "/admin-content/courses", ids: ["course-slettes", "course-bevis"], none: ["course-ukjent", "course-aktiv"] },
-  { name: "modulbiblioteket", url: "/admin-content", ids: ["mod-slettes", "mod-besvarelser"], none: ["mod-ukjent", "mod-aktiv"] },
-  { name: "seksjonslista", url: "/admin-content/sections", ids: ["sec-slettes", "sec-kurs"], none: ["sec-ukjent", "sec-aktiv"] },
+  { name: "kurslista", url: "/admin-content/courses", ids: ["course-slettes", "course-bevis"], unknown: "course-ukjent", active: "course-aktiv" },
+  { name: "modulbiblioteket", url: "/admin-content", ids: ["mod-slettes", "mod-besvarelser"], unknown: "mod-ukjent", active: "mod-aktiv" },
+  { name: "seksjonslista", url: "/admin-content/sections", ids: ["sec-slettes", "sec-kurs"], unknown: "sec-ukjent", active: "sec-aktiv" },
 ] as const;
+
+async function open(page: Page, url: string, loc: Locale, width: number, options: { failRetention?: boolean } = {}) {
+  await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+  await locale(page, loc);
+  await mockCommonApis(page, { courses: COURSES as never, libraryModules: MODULES as never });
+  const calls = await mockLists(page, options);
+  await page.goto(url);
+  return calls;
+}
 
 for (const loc of ["nb", "en-GB"] as const) {
   for (const width of [1280, 390] as const) {
     for (const list of PAGES) {
-      test(`#1152 4b — ${list.name}, ${loc}, ${width} px: «slettes»/«beholdes» under merket, ingenting for ukjent og aktive`, async ({ page }) => {
-        await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-        await locale(page, loc);
-        await mockCommonApis(page, { courses: COURSES as never, libraryModules: MODULES as never });
-        await mockSectionList(page);
-        await page.goto(list.url);
+      test(`#1152 4b — ${list.name}, ${loc}, ${width} px: linja kommer når «Arkiverte» velges, ikke før; ingenting for ukjent`, async ({ page }) => {
+        const calls = await open(page, list.url, loc, width);
+        // Under «Alle»: radene står, uten linje, og ingen har bedt om slettedatoen.
         await page.locator('.list-filters [data-filter="all"]').click();
         await expect(page.locator(`tr[data-row-id="${list.ids[0]}"]`)).toBeVisible();
+        await expect(page.locator(".retention-line")).toHaveCount(0);
+        expect(asked(calls), "ingen har bedt om slettedatoen før «Arkiverte»").toBe(0);
 
+        await page.locator('.list-filters [data-filter="archived"]').click();
+        await expect.poll(() => asked(calls), "«Arkiverte» henter lista med parameteren").toBe(1);
         for (const id of list.ids) {
           await expect(line(page, id)).toHaveText(EXPECTED[loc][id]!);
-          // Linja står i statuscellen, under merket.
+          // Linja står i statuscellen, med merket.
           await expect(page.locator(`tr[data-row-id="${id}"] td.col-status .status-badge--archived`)).toHaveCount(1);
           await expect(page.locator(`tr[data-row-id="${id}"] td.col-status .retention-line`)).toHaveCount(1);
         }
-        for (const id of list.none) {
-          await expect(page.locator(`tr[data-row-id="${id}"]`)).toBeVisible();
-          await expect(line(page, id)).toHaveCount(0);
-        }
+        await expect(page.locator(`tr[data-row-id="${list.unknown}"]`)).toBeVisible();
+        await expect(line(page, list.unknown)).toHaveCount(0);
+        await expect(page.locator(`tr[data-row-id="${list.active}"]`)).toHaveCount(0);
         // Linja står UNDER merket, ikke ved siden av.
         const id = list.ids[1];
         const badge = await page.locator(`tr[data-row-id="${id}"] .status-badge`).boundingBox();
@@ -160,20 +191,54 @@ for (const loc of ["nb", "en-GB"] as const) {
         await noHorizontalScroll(page);
         await insideViewport(page, ".retention-line", width);
         await page.screenshot({ path: `${SHOTS}-${list.name}-${loc}-${width}.png`, fullPage: true });
+
+        // Tilbake til «Alle»: linja står bare under «Arkiverte» (planen), og datoen hentes ikke på nytt.
+        await page.locator('.list-filters [data-filter="all"]').click();
+        await expect(page.locator(`tr[data-row-id="${list.active}"]`)).toBeVisible();
+        await expect(page.locator(".retention-line")).toHaveCount(0);
+        await page.locator('.list-filters [data-filter="archived"]').click();
+        await expect(line(page, list.ids[0])).toHaveText(EXPECTED[loc][list.ids[0]]!);
+        expect(asked(calls), "hentet én gang per lasting").toBe(1);
       });
     }
   }
 }
 
-test("#1152 4b — «Arkiverte»-filteret i kurslista: linjene står der, og et svar uten `retention` (gammel tjener) gir ingen linje", async ({ page }) => {
+for (const list of PAGES) {
+  test(`#1152 4b — ${list.name}: feiler hentingen av slettedatoen, virker lista som før, uten linje`, async ({ page }) => {
+    const calls = await open(page, list.url, "nb", 1280, { failRetention: true });
+    await page.locator('.list-filters [data-filter="archived"]').click();
+    await expect.poll(() => asked(calls)).toBe(1);
+    await expect(page.locator(`tr[data-row-id="${list.ids[0]}"]`)).toBeVisible();
+    await expect(page.locator(`tr[data-row-id="${list.unknown}"]`)).toBeVisible();
+    await expect(page.locator(".retention-line")).toHaveCount(0);
+    // Lista virker: filtrene skifter.
+    await page.locator('.list-filters [data-filter="all"]').click();
+    await expect(page.locator(`tr[data-row-id="${list.active}"]`)).toBeVisible();
+  });
+}
+
+test("#1152 4b — kurslista som åpner med «Arkiverte» alt valgt (husket fra sist), henter slettedatoen med en gang", async ({ page }) => {
+  const calls = await open(page, "/admin-content/courses", "nb", 1280);
+  await page.locator('.list-filters [data-filter="archived"]').click();
+  await expect(line(page, "course-slettes")).toHaveText("Slettes 13.05.2027");
+  await page.reload();
+  await expect(page.locator('.list-filters [data-filter="archived"]')).toHaveClass(/active/);
+  await expect(line(page, "course-slettes")).toHaveText("Slettes 13.05.2027");
+  expect(asked(calls), "én gang per lasting av sida").toBe(2);
+});
+
+test("#1152 4b — et svar uten `retention` (gammel tjener) gir ingen linje under «Arkiverte»", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await locale(page, "nb");
   const courses = [...COURSES, course("course-gammel", "Kurs fra gammel tjener")];
   await mockCommonApis(page, { courses: courses as never });
+  await page.route(/\/api\/admin\/content\/courses(\?.*)?$/, (route: Route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ courses: route.request().url().includes("includeRetention=1") ? courses : withoutRetention(courses) }),
+  }));
   await page.goto("/admin-content/courses");
   await page.locator('.list-filters [data-filter="archived"]').click();
   await expect(line(page, "course-slettes")).toHaveText("Slettes 13.05.2027");
   await expect(page.locator('tr[data-row-id="course-gammel"]')).toBeVisible();
   await expect(line(page, "course-gammel")).toHaveCount(0);
-  await expect(page.locator('tr[data-row-id="course-aktiv"]')).toHaveCount(0);
 });

@@ -93,6 +93,7 @@ import { packageRubricWarnings, rubricWarnings } from "../modules/adminContent/r
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { isExtractionJobOwner, rememberExtractionJobOwner } from "../modules/adminContent/extractionJobOwners.js";
 import { describeModuleDeleteBlock } from "../modules/course/contentLifecycle.js";
+import { retentionRequested } from "../modules/content/archivedRetention.js";
 import {
   submitParseJob,
   getParsedResult,
@@ -272,6 +273,8 @@ adminContentRouter.get("/modules/library", async (request, response) => {
       locale as Parameters<typeof listLibraryModules>[0],
       request.context?.userId,
       hasAnyRole(request.context?.roles, ADMIN_ONLY),
+      // #1152 skive 4b-2: svaret om sletting bare når klienten ber om det (filteret «Arkiverte»).
+      { includeRetention: retentionRequested(request.query.includeRetention) },
     );
     response.json({ modules });
   } catch {

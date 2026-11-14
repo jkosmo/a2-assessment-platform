@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.162.1 - 2026-11-14
+
+**Slettedatoen regnes bare når «Arkiverte» velges** (#1152 4b). 2.162.0 var på stage, men ikke i prod: der gjorde utregningen
+listene merkbart tregere for alle, også når ingen så på de arkiverte (målt fra utsiden, median av fem: kurslista 3,1 s for 94
+kurs mot 0,5–1,7 s i 2.159; seksjonslista 2,0 s for 192 seksjoner; modulbiblioteket 0,7 s). Produkteier valgte å regne
+datoene bare når de trengs.
+
+- De tre listene regner `retention` bare med `?includeRetention=1`. Uten den leses verken overgangsraden eller vaktene,
+  og lista koster det den gjorde i 2.161. Modulvelgeren i kursbyggeren og Kvalitet-siden ber aldri om feltet.
+- Klienten (`list-page.js`, valget `lazyFields`) henter datoene når «Arkiverte» velges, eller når sida åpner med filteret
+  husket. Én gang per lasting; feiler hentingen, virker lista som før, uten linje. Linja vises bare under «Arkiverte».
+- Lokalt (85 kurs, 26 arkiverte): kurslista 109 ms uten og 166 ms med datoene; modulbiblioteket 32 / 102 ms; seksjonslista
+  31 / 111 ms.
+- Tester: integrasjon (uten parameteren ingen `retention`, og overgangsraden leses ikke; med den som før), nettleser 17
+  (tre lister, nb og en-GB, 1280 og 390 px, feilet henting, husket filter). 10 mutasjoner, alle røde.
+
+**Kjent:** kallet med parameteren henter hele lista på nytt, ikke bare de arkiverte. «Arkiverte» i kurslista kan fortsatt ta
+et par sekunder med mye data, fordi kursvakta regnes per arkivert kurs.
+
 ## 2.162.0 - 2026-11-14
 
 Etappe 4b av #1148: **forfatteren ser når arkivert innhold slettes** (#1152). Under «Arkiverte» i listene for kurs, moduler

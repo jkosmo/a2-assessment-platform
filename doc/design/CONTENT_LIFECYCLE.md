@@ -216,7 +216,8 @@ Norge (Europe/Oslo), og blir siste dag i måneden når dagen ikke finnes der (31
 `src/modules/content/retentionDeadline.ts`. Gjenoppretting nullstiller `archivedAt`, ny arkivering starter fristen på nytt.
 - **Ett svar per arkivert element** (`src/modules/content/archivedRetention.ts`): `{ deletesAt }`, `{ kept: { code, details } }`
   med koden «Slett» ville svart, eller `{ unknown: true }` når overgangsraden mangler eller ikke kan leses (ingen dato, aldri en
-  gjetning). Kurslista, modulbiblioteket og seksjonslista viser det under «Arkiverte» («Slettes 13.05.2027» / «Beholdes: …»).
+  gjetning). Kurslista, modulbiblioteket og seksjonslista viser det under «Arkiverte» («Slettes 13.05.2027» / «Beholdes: …»),
+  og regner det bare når filteret velges (`?includeRetention=1`, 4b-2): ellers koster listene det de gjorde før.
 - **Samme utregning som «Slett».** Kurset: `checkCourseDelete` (courseDeleteGuard.ts), som `deleteCourseInTx` kaster fra. Modul og
   seksjon: reglene står én gang (`moduleDeleteRules`, `sectionDeleteRules`); «Slett» leser dataene for ett element
   (`checkModuleDelete`, `checkSectionDelete`), lista for mange i én omgang (`checkModuleDeletes`, `checkSectionDeletes`).

@@ -36,7 +36,8 @@ import { readViewState, writeViewState } from "./view-state.js";
  * @property {string} [srLabel]        skjermlesertekst når label er tom
  * @property {string} [className]      klasse på th og td (col-name, col-status, …)
  * @property {string} [title]          title-attributt på th
- * @property {(item: any, ctx: { view: "group"|"alphabetical" }) => string} render  ferdig HTML for cellen
+ * @property {(item: any, ctx: { view: "group"|"alphabetical", filter: string }) => string} render  ferdig HTML for cellen
+ *   (`filter`: filterknappen som er valgt, #1152 4b-2)
  * @property {(item: any) => string|number|null} [sortValue]  gjør kolonnen sorterbar
  */
 
@@ -71,6 +72,10 @@ import { readViewState, writeViewState } from "./view-state.js";
  *   («Oversett det som mangler (N)»), for `afterRender` kjører ikke på et filterklikk (#894).
  * @property {(items: any[]) => string} [emptyHtml]  egen tom-tilstand når det ikke finnes noen elementer i det hele tatt
  * @property {ListPageGrouping} [grouping]  valget «etter gruppe» / «alfabetisk» over lista (2.126.0)
+ * @property {{ filter: string, fields: string[], load: () => Promise<any[]> }} [lazyFields]
+ *   #1152 skive 4b-2: felt som bare hentes når ett filter er valgt («Arkiverte»: `retention`, slettedatoen). `load` henter lista på
+ *   nytt med feltene; de flettes inn i radene etter `rowId`, og tabellen tegnes på nytt. Én gang per lasting av lista. Feiler den,
+ *   virker lista som før, uten feltene.
  */
 
 /**
@@ -107,6 +112,9 @@ export function createListPage(config) {
     loaded: false,
   };
   const listBodyId = ids.listBody ?? `${ids.tbody}Host`;
+  // #1152 skive 4b-2: felt som hentes først når filteret deres velges (se `lazyFields` over). idle → loading → loaded | failed.
+  const lazy = config.lazyFields ?? null;
+  let lazyState = "idle";
   const locale = () => config.sort?.locale?.() ?? undefined;
 
   // 2.101.0: det sida sto i sist, i denne fanen. Typen sjekkes her; om verdien fortsatt finnes
@@ -283,7 +291,7 @@ export function createListPage(config) {
     const view = grouped() ? "group" : "alphabetical";
     const rowHtml = (item) => {
       // #1080: kortvisningen på telefon skjuler tabellhodet og leser kolonnenavnet fra cellen.
-      const tds = columns.map((col) => `<td${col.className ? ` class="${col.className}"` : ""} data-label="${escapeHtml(col.label || col.srLabel || "")}">${col.render(item, { view })}</td>`).join("");
+      const tds = columns.map((col) => `<td${col.className ? ` class="${col.className}"` : ""} data-label="${escapeHtml(col.label || col.srLabel || "")}">${col.render(item, { view, filter: state.filter })}</td>`).join("");
       const actions = rowActionsHtml(config.actions(item), { moreLabel: texts.more ?? "Mer" });
       return `<tr data-row-id="${escapeHtml(config.rowId(item))}"${config.rowAttrs ? ` ${config.rowAttrs(item)}` : ""}>${tds}<td class="col-actions"><div class="row-actions">${actions}</div></td></tr>`;
     };
@@ -302,6 +310,32 @@ export function createListPage(config) {
     if (body) body.innerHTML = tableHtml(visibleItems());
     config.afterTableRender?.(visibleItems());
     rememberView();
+    loadLazyFields();
+  }
+
+  /** Henter `lazyFields` når filteret deres er valgt og lista er lastet, én gang per lasting. */
+  function loadLazyFields() {
+    if (!lazy || !state.loaded || state.filter !== lazy.filter || lazyState !== "idle") return;
+    lazyState = "loading";
+    const items = state.items;
+    Promise.resolve()
+      .then(() => lazy.load())
+      .then((rows) => {
+        // Lista er hentet på nytt imens: den nye lastingen henter selv.
+        if (items !== state.items) return;
+        const byId = new Map((rows ?? []).map((row) => [config.rowId(row), row]));
+        for (const item of state.items) {
+          const row = byId.get(config.rowId(item));
+          if (!row) continue;
+          for (const field of lazy.fields) if (field in row) item[field] = row[field];
+        }
+        lazyState = "loaded";
+        renderTable();
+      })
+      .catch(() => {
+        // Lista virker uten feltene; ingen nye forsøk før lista lastes på nytt.
+        if (items === state.items) lazyState = "failed";
+      });
   }
 
   function renderAll() {
@@ -318,6 +352,8 @@ export function createListPage(config) {
     config.afterRender?.(state.items);
     config.afterTableRender?.(visibleItems());
     rememberView();
+    // Sida kan åpne med filteret alt valgt (husket fra forrige gang).
+    loadLazyFields();
     // Første gang lista er tegnet med innhold: tilbake dit man var. Nettleseren klarer det ikke selv,
     // for lista hentes etter at sida er lastet.
     if (pendingScrollY !== null) {
@@ -394,6 +430,7 @@ export function createListPage(config) {
       try {
         state.items = await config.load();
         state.loaded = true;
+        lazyState = "idle";
       } catch (err) {
         // Serverens tekst vises aldri rått: sida oversetter den (describeApiError) gjennom `describeError`.
         const detalj = config.describeError ? config.describeError(err) : "";
@@ -408,7 +445,7 @@ export function createListPage(config) {
     /** Tegn bare tabellen på nytt. */
     renderTable,
     /** Erstatt lista uten å hente (etter en handling som alt vet svaret). */
-    setItems(items) { state.items = items; renderTable(); },
+    setItems(items) { state.items = items; lazyState = "idle"; renderTable(); },
     visibleItems,
   };
 }
