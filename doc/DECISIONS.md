@@ -1848,3 +1848,21 @@ Saken og planen (kommentarene i #1151, «Planen etter uavhengig gjennomlesing»)
 begrunnet unntak), `test/content-lock-write-guard.test.js`, `test/m2-archived-readonly-1151.test.ts`,
 `test/m2-archived-readonly-lock-1151.test.ts`.
 **Sak:** #1151 · **Dato:** 2026-11-13 · **Status:** valgt under byggingen; punkt A og «Dupliser» avgjort av produkteier 13.11.2026
+
+## Hva som holder et arkivert kurs igjen fra sletting (#1152, 2026-11-14)
+
+- **Bare kursbevis holder et kurs igjen for alltid** (produkteier 13.11.2026: «Bestått en modul og diskusjon, ikke nok,
+  slett»). Et kurs uten kursbevis slettes med påmeldinger, frister, klassetildelinger, lesehistorikk og diskusjon.
+- **«Fullført uten kursbevis» holder kurset igjen** (produkteier 13.11.2026), og den som prøver å slette, får vite hvorfor.
+  Kravet måles slik det var da kurset ble arkivert, med reglene fra utstedelsen: moduler som ble arkivert sammen med kurset
+  er med, moduler arkivert for seg før kurset og seksjoner som aldri ble publisert er ikke med. Er det uklart om et element
+  var påkrevd, regnes det ikke som påkrevd; tvil gir «beholdes».
+- **«Venter på vurdering» holder kurset igjen** (produkteier 14.11.2026, «Ja»). Så lenge en innlevering i kursets moduler
+  venter på vurdering, manuell behandling eller anke, kan kurset ikke slettes, verken med «Slett» eller av jobben. Grunnen
+  går bort av seg selv når sakene er avgjort. Dette er et unntak fra «Slett virker med en gang» (13.11.2026): blir saken
+  bestått etter at kurset er slettet, får deltakeren aldri kursbeviset.
+- **Et kursutkast teller som bruk også ved sletting**, som ved arkivering (#1150). Det gjelder «Slett», kaskaden og
+  masseryddingen av upubliserte moduler.
+
+**Plan:** `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, «Etappe 4» og «Etter gjennomlesingen».
+**Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** avgjort av produkteier; bygges i 4a
