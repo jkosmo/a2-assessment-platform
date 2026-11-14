@@ -7,6 +7,7 @@ import { AppealStatus, SubmissionStatus } from "../../db/prismaRuntime.js";
 import { SETTLED_SUBMISSION_STATUSES } from "../submission/submissionOutcome.js";
 import { findCourseDraftItemLists } from "./courseDraft.js";
 import { createCourseRepository } from "./courseRepository.js";
+import { findSectionReadCredit } from "./sectionReadCredit.js";
 import { computeCourseStatus } from "./courseQueries.js";
 
 // Enhetlig innholds-livssyklus — delte vakter for kurs/modul/seksjon.
@@ -533,11 +534,15 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
   });
   if (reads.length === 0) return;
 
+  // #1156: en lesing uten kurs (kurset er slettet) kan ikke ha vært grunnlaget for et bevis i et kurs som finnes. Det gamle
+  // beviset gjelder kurset lesingen ble gjort i, så lesingen matches fortsatt mot det kurset, ikke på tvers.
+  const readCourseIds = [...new Set(reads.flatMap((r) => (r.courseId ? [r.courseId] : [])))];
+  if (readCourseIds.length === 0) return;
   const legacy = await reader.courseCompletion.findMany({
     where: {
       sectionSnapshotJson: null,
       userId: { in: [...new Set(reads.map((r) => r.userId))] },
-      courseId: { in: [...new Set(reads.map((r) => r.courseId))] },
+      courseId: { in: readCourseIds },
     },
     select: { userId: true, courseId: true, completedAt: true },
   });
@@ -552,6 +557,7 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
   // (bevarte for mye), men den var feil. Bare lesninger ved eller før fullføringen teller.
   const earliestReadByPair = new Map<string, Date>();
   for (const r of reads) {
+    if (!r.courseId) continue;
     const key = `${r.userId}|${r.courseId}`;
     const prev = earliestReadByPair.get(key);
     if (!prev || r.readAt < prev) earliestReadByPair.set(key, r.readAt);
@@ -583,6 +589,9 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
 // hovedversjon. Ett unntak, med vilje: om kurset er publisert, og om deltakeren ser det (OPEN/tildelt), spørres ikke om.
 // Et avpublisert kurs ville ellers alltid vært «uten deltakere midt i», og G3 kunne vært omgått med «Avpubliser» først.
 //
+// #1156: en lesing gjort i et annet kurs teller her, som i «Mine kurs» (`findSectionReadCredit`): bare i kurs deltakeren ser, og
+// bare fram til arkiveringen for et arkivert kurs.
+//
 // Før #1150 telte den alle med et kursbevis som ferdige (også for en eldre hovedversjon), og alle med en lesing eller
 // innlevering i kurset som påbegynt (også lesinger i seksjoner som er tatt ut, og innleveringer på arkiverte moduler).
 //
@@ -613,29 +622,28 @@ export async function findCourseInProgressParticipants(courseId: string, reader:
   // `computeCourseStatus` sier NOT_STARTED om et kurs uten steg. Da er ingen midt i.
   if (total === 0) return { ...none, moduleIds };
 
-  const [submitters, readers, currentCertificates] = await Promise.all([
+  const [submitters, readCredit, currentCertificates] = await Promise.all([
     moduleIds.length > 0
       ? reader.submission.findMany({ where: { moduleId: { in: moduleIds } }, select: { userId: true }, distinct: ["userId"] })
       : Promise.resolve([] as Array<{ userId: string }>),
-    reader.courseSectionRead.findMany({ where: { courseId }, select: { userId: true }, distinct: ["userId"] }),
+    // #1156: lesinger fra alle kurs med kursets seksjoner, etter regelen i «Mine kurs» (bare i kurs deltakeren ser).
+    findSectionReadCredit(reader, { courseIds: [courseId], items: "participant" }),
     // Bevis for den NÅVÆRENDE hovedversjonen, også et registrert (`external`): klienten regner kurset som fullført da.
     reader.courseCompletion.findMany({ where: { courseId, versionMajor: course.versionMajor }, select: { userId: true } }),
   ]);
   const submitted = new Set(submitters.map((row) => row.userId));
   const certified = new Set(currentCertificates.map((row) => row.userId));
-  // Bare den som har gjort noe i kurset, kan være påbegynt. Den med bevis for nåværende versjon er ferdig uansett.
-  const candidates = [...new Set([...submitted, ...readers.map((row) => row.userId)])].filter((userId) => !certified.has(userId));
-  if (candidates.length === 0) return { ...none, moduleIds };
-
-  const [readRows, progress] = await Promise.all([
-    repo.findReadSectionIdsForCourseParticipants(courseId, candidates),
-    repo.findModuleProgress({ userIds: candidates, courses: [{ courseId, moduleIds }] }),
-  ]);
   const readsByUser = new Map<string, Set<string>>();
-  for (const row of readRows) {
-    if (!sectionIds.has(row.sectionId)) continue;
+  for (const row of readCredit.rows) {
+    if (!row.counts || !sectionIds.has(row.sectionId)) continue;
     readsByUser.set(row.userId, (readsByUser.get(row.userId) ?? new Set()).add(row.sectionId));
   }
+  // Bare den som har gjort noe i kurset, kan være påbegynt. Den med bevis for nåværende versjon er ferdig uansett. #1156: «lest»
+  // er en lesing som teller her; den som bare har lest en eldre versjon, var heller ikke påbegynt før.
+  const candidates = [...new Set([...submitted, ...readsByUser.keys()])].filter((userId) => !certified.has(userId));
+  if (candidates.length === 0) return { ...none, moduleIds };
+
+  const progress = await repo.findModuleProgress({ userIds: candidates, courses: [{ courseId, moduleIds }] });
 
   const userIds: string[] = [];
   const completedWithoutCertificateUserIds: string[] = [];

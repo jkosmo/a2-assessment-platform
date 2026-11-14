@@ -110,6 +110,14 @@ Samme mønster, i en egen etappe til slutt: seksjoner får lagring som utkast og
 hovedversjon. Før det må figurene undersøkes: de er i dag felles for alle versjoner av en seksjon, så en eldre versjon kan
 miste bildene sine. Til etappen er bygget, virker seksjoner som i dag.
 
+**Lesingen må huske versjonen (#1156).** Fra #1156 teller en lest seksjon i alle kurs som inneholder den (`findSectionReadCredit`,
+sectionReadCredit.ts), og hvert kurs avgjør om lesingen gjelder dets hovedversjon med en regel basert på tidspunkt
+(`readCountsForCurrentVersion`): en lesing teller hvis seksjonen er uendret i kursets hovedversjon, eller hvis den ble gjort etter
+at hovedversjonen kom. Det holder bare så lenge seksjonens innhold er felles for alle kurs. Når hvert kurs står på sin egen
+hovedversjon av seksjonen, kan en senere lesing i kurs A være av en ANNEN versjon enn den kurs B viser, og tidspunktet sier ikke
+lenger hva som ble lest. Etappen må da lagre hvilken versjon som ble lest (`CourseSectionRead` har den ikke i dag), og regelen må
+sammenligne versjoner i stedet for tidspunkter.
+
 ## Dette fjernes
 
 | Fjernes | Hvorfor det finnes i dag |

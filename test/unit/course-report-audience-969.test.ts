@@ -40,8 +40,28 @@ vi.mock("../../src/modules/course/courseRepository.js", () => ({
     findModuleProgress,
     findLearnerSubmissionsForModules,
     findCourseItemsForParticipant,
-    findReadSectionIdsForCourseParticipants,
-    findLearnerSectionReadersForCourse,
+  },
+}));
+
+// #1156: lesingene telles på tvers av kurs gjennom `findSectionReadCredit` (regelen måles i test/unit/section-read-credit-1156.test.ts
+// og gjennom rutene i test/m2-section-read-across-courses-1156.test.ts). Her svarer de to gamle navnene for hver sin bruk: lista
+// `all` gir «har lest i kurset» (publikummet), lista `participant` gir de leste seksjonene per deltaker.
+vi.mock("../../src/modules/course/sectionReadCredit.js", () => ({
+  findSectionReadCredit: async (
+    _client: unknown,
+    input: { courseIds: string[]; items: string; userIds?: string[]; filters?: Record<string, unknown> },
+  ) => {
+    const courseId = input.courseIds[0]!;
+    if (input.items === "all") {
+      const readers = (await findLearnerSectionReadersForCourse(courseId, input.filters)) as Array<{ userId: string }>;
+      return { readerIds: () => new Set(readers.map((r) => r.userId)), readSectionIds: () => new Set(), rows: [] };
+    }
+    const rows = ((await findReadSectionIdsForCourseParticipants(courseId, input.userIds, input.filters)) ?? []) as Array<{ userId: string; sectionId: string; readAt: Date }>;
+    return {
+      readerIds: () => new Set(rows.map((r) => r.userId)),
+      readSectionIds: (userId: string) => new Set(rows.filter((r) => r.userId === userId).map((r) => r.sectionId)),
+      rows: rows.map((r) => ({ ...r, courseId, counts: true })),
+    };
   },
 }));
 

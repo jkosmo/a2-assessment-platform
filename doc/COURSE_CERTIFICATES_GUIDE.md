@@ -14,6 +14,10 @@ Begge deler teller likt mot «X/Y fullført» i kursvisningen. Når det siste el
 (siste modul bestått eller siste seksjon lest), utstedes et **kursbevis** automatisk med en unik
 **bevis-ID**.
 
+En bestått modul og en lest seksjon teller i alle kurs som har dem (#1156: seksjonen bare i kurs deltakeren ser). Fullfører én
+lesing eller én bestått flere kurs, utstedes et kursbevis i hvert av dem. Kursbevisene i de andre kursene enn det deltakeren står
+i, utstedes like etter, av workeren; mangler ett, kommer det når «Mine kurs» åpnes.
+
 ## Feiringen
 
 - Når en **modul** bestås, vises en tydelig «bestått»-feiring (banner + konfetti), og «slett og

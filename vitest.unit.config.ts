@@ -90,6 +90,8 @@ export default defineConfig({
       "test/content-in-use-guard.test.js",
       // #1151: hvert skrivested til et kurs, en modul eller en seksjon har vakta mot arkivert, eller et begrunnet unntak.
       "test/archived-is-readonly-guard.test.js",
+      // #1156: nekter en ny leser av CourseSectionRead utenom findSectionReadCredit og de navngitte unntakene.
+      "test/section-read-reader-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

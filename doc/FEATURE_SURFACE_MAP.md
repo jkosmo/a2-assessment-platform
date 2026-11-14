@@ -190,10 +190,10 @@ and worker) and neutralizes addresses in other text (`github[.]com`).
 
 **Section rule:** a major version writes `CourseVersion` rows (N−1: the section versions just before
 the change; N: just after). Every reader of «which sections has the participant read» goes through
-`courseRepository` (`findReadSectionIds`, `findReadSectionIdsForCourses`,
-`findReadSectionIdsForCourseParticipants`), which applies `readCountsForCurrentVersion`: the certificate
-gate, the course detail's `read`, progress in «Mine kurs» and the course report must agree.
-`markSectionRead` gives a read that no longer counts a new timestamp.
+`findSectionReadCredit` (`src/modules/course/sectionReadCredit.ts`, #1156: reads from every course with the section, see §34),
+which applies `readCountsForCurrentVersion`: the certificate gate, the course detail's `read`, progress in «Mine kurs» and the
+course report must agree. `markSectionRead` gives a read that no longer counts (in any non-archived course with the section) a new
+timestamp.
 **Learner lock, locked issuance, the version the learner saw (#934 slice 5a-1, 2.133.0).** `src/db/contentLock.ts`:
 `runContentReadForLearner(userId, cb)` takes the content lock shared and then the learner lock (submission, section read,
 certificate); `runLearnerWrite(userId, cb)` takes only the learner lock (decisions). Order is always content → learner →
@@ -1767,3 +1767,48 @@ vaktene selv.
 går gjennom de samme reglene), `test/archived-is-readonly-guard.test.js`. Fristen og linja: `test/unit/archived-retention-deadline-1152.test.ts`.
 Lista og «Slett» sier det samme (tabell), punkt 7, overgangsraden, migreringen: `test/m2-archived-retention-1152.test.ts`. I
 nettleseren, tre lister på nb og en-GB, 1280 og 390 px: `test/e2e/admin-content-retention-line-1152.spec.ts`.
+
+## 34. «Hvilke seksjoner har deltakeren lest i dette kurset?» — én funksjon, på tvers av kurs (#1156)
+
+En lest seksjon teller i alle kurs som inneholder den, slik en bestått modul gjør, men bare i kurs deltakeren ser, og i et arkivert
+kurs bare fram til arkiveringen (lesinger gjort et annet sted). Regelen og valgene: `doc/DECISIONS.md`, «Lest seksjon teller i alle
+kurs deltakeren ser (#1156)». Lesingen har fortsatt kurset den ble gjort i («åpnet fra»), og blir stående uten kurs når kurset slettes.
+
+**Én funksjon:** `findSectionReadCredit` (sectionReadCredit.ts). Kalleren velger elementlista (`participant` eller `all`), og får
+`readSectionIds(userId, courseId)`, `readerIds(courseId)` og radene (den seneste som gjelder, per deltaker, kurs og seksjon).
+
+| Flate | Leser | Liste | Synlighet fra |
+|---|---|---|---|
+| Porten for kursbevis (lesing, utboks, avstemming, arkivering) | `findCompletionToIssue` (courseCompletionService.ts) | `participant` | innloggingen i ruta, ellers databasen |
+| «Mine kurs» (Seksjoner X/Y, status) | `getMyCoursesProgress` (myCoursesProgress.ts) | `participant` | kursene på lista (alt synlige) |
+| Kursdetaljen (`read` per seksjon, fremdrift) | `GET /api/courses/:id` (routes/courses.ts) | `participant` | kurset (døra over) |
+| Kursrapporten og CSV: leste seksjoner, status | `getCourseLearnerReport` (courseReport.ts) | `participant` | databasen |
+| Kursrapporten: «har lest i kurset» (publikummet) | `resolveCourseParticipantIds` (courseReport.ts) | `all` | databasen |
+| «Midt i kurset» (arkiveringsdialogen, G3, kurslista) | `findCourseInProgressParticipants` (contentLifecycle.ts) | `participant` | databasen |
+| «Fullført uten kursbevis» (#1152, «Slett», kaskaden, lista over arkiverte) | `findCompletedWithoutCertificate` (courseDeleteGuard.ts) | `all`, avgrenset til kravet | databasen |
+| «Påbegynt» i `/enrollments`, kullstatus, påmeldingslista, påminnelsene | `deriveStatuses` (enrollmentService.ts), ett kall for alle | `participant` | databasen |
+| Importen «Oppdater kurs»: lesingene følger kopien | contentImportService.ts | `all`, den ene seksjonen | databasen |
+
+**Synligheten uten innlogging:** `findLearnersSeeingCourses` (learnerVisibility.ts), for alle deltakerne og kursene i ett fast sett med
+spørringer, på kallerens klient. Med innlogging: `findCoursesVisibleToLearner` (enrollmentService.ts), regnet før låsene.
+
+**Aktivitet i kurset selv** (e-post og synlighet, produkteier 14.11.2026): `findCoursesWithOwnReads` / `findOwnReadPairs` (learnerVisibility.ts) for
+«i gang» i den ukentlige e-posten (`startedInCourseIds`) og kurs fra arkiverte klasser (`findStartedOrCompletedCourseIds`), og vilkår 9
+i tildelings-e-posten (rå SQL, courseAssignmentNotice.ts).
+
+**Unntak som leser tabellen direkte, med grunn:** aktivitetsrapporten og «Min statistikk» (én hendelse per lesing, med kurset den ble
+gjort i; uten kurs når det er slettet, `distinctReads` på person, kurs og tidspunkt), vakta for gamle kursbevis (lesingen i beviset sitt
+kurs; rader uten kurs hoppes over), og skriveren `markSectionRead`.
+
+**Skrivere:** `markSectionRead` (courseRepository.ts) under innholdslåsen delt og deltakerlåsen, kalt fra `recordSectionRead`
+(courseCompletionService.ts), som også legger `section_read_completion_check` i utboksen når raden er ny eller får nytt tidspunkt.
+Behandleren (`checkAndIssueCourseCompletionsForSection`) sjekker de andre publiserte, ikke-arkiverte kursene med seksjonen som
+deltakeren ser, én låst transaksjon per kurs. Importen kopierer lesinger til kopien, med kurset lesingen ble gjort i.
+
+**Når en ny flate skal vise eller bruke «lest»:** kall `findSectionReadCredit` med lista som passer. Skal flaten sende e-post eller
+avgjøre synlighet, er spørsmålet «har personen gjort noe i kurset selv» (`findCoursesWithOwnReads`).
+
+**Vakter og tester:** `test/section-read-reader-guard.test.js` (ingen nye lesere av `CourseSectionRead`, heller ikke via en relasjon
+eller rå SQL, utenom unntakene over), `test/unit/section-read-credit-1156.test.ts` (regelen uten database, og synligheten i et fast antall spørringer på kallerens klient), `test/unit/enrollment-status-batch-1156.test.ts` (statusene for et helt kull i ett kall),
+`test/m2-section-read-across-courses-1156.test.ts` (gjennom rutene: «Mine kurs», kursdetaljen, rapporten, CSV, `/enrollments`, et
+begrenset kurs, ny hovedversjon, utboksen, slettet kurs, arkivert kurs, vilkår 9, den ukentlige e-posten, arkiverte klasser, importen).

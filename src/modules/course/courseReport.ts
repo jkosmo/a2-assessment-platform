@@ -8,6 +8,8 @@ import { effectiveCourseIds } from "../reporting/scopeRules.js";
 import { computeCourseStatus } from "./courseQueries.js";
 import { isSettledSubmission } from "../submission/submissionOutcome.js";
 import { round2 } from "../reporting/csvExport.js";
+import { prisma } from "../../db/prisma.js";
+import { findSectionReadCredit } from "./sectionReadCredit.js";
 
 type CourseReportRow = {
   courseId: string;
@@ -107,7 +109,8 @@ async function resolveReportAudienceIds(courseId: string, orgUnit: string | unde
  *   fullført     har et kursbevis i vinduet — kan ha mistet tildelingen etterpå
  *   aktiv        har levert på en av kursets moduler — dekker ENTRA-klasser, som ikke er
  *                oppløsbare hos oss, og som derfor ikke finnes i den første kilden
- *   leser        har lest en seksjon i kurset i vinduet (#1010)
+ *   leser        har lest en seksjon i kurset i vinduet (#1010). #1156: en av kursets seksjoner, i hvilket som helst kurs, når
+ *                lesingen teller her (`findSectionReadCredit`, lista `all`: også arkiverte seksjoner, som før)
  *
  * Den tredje er lagt til etter at #969 alene KRYMPET nevneren for Entra-tildelte kurs: deltakere som
  * talte før (via innlevering) forsvant. Én fiks gjorde ett tall riktigere og et annet galere.
@@ -134,13 +137,13 @@ async function resolveCourseParticipantIds(
     resolveReportAudienceIds(courseId, filters.orgUnit),
     courseRepository.findCourseCompletionsForLearnerReport(courseId, filters),
     courseRepository.findLearnerSubmissionsForModules(moduleIds, filters),
-    courseRepository.findLearnerSectionReadersForCourse(courseId, filters),
+    findSectionReadCredit(prisma, { courseIds: [courseId], items: "all", filters }).then((credit) => credit.readerIds(courseId)),
   ]);
 
   const participantIds = new Set(audienceUserIds);
   for (const completion of completions) participantIds.add(completion.userId);
   for (const submission of submissions) participantIds.add(submission.userId);
-  for (const reader of readers) participantIds.add(reader.userId);
+  for (const reader of readers) participantIds.add(reader);
 
   return { participantIds, completions, submissions };
 }
@@ -293,11 +296,15 @@ export async function getCourseLearnerReport(
     .map((item) => item.sectionId as string);
   const requiredSectionIdSet = new Set(requiredSectionIds);
 
-  const sectionReadRows = await courseRepository.findReadSectionIdsForCourseParticipants(
-    course.id,
-    Array.from(participantIds),
-    filters,
-  );
+  // #1156: lesinger fra alle kurs med seksjonen, etter samme regel som porten for kursbevis. Vinduet gjelder den seneste lesingen.
+  const sectionReadRows = participantIds.size === 0
+    ? []
+    : (await findSectionReadCredit(prisma, {
+        userIds: Array.from(participantIds),
+        courseIds: [course.id],
+        items: "participant",
+        filters: { dateFrom: filters.dateFrom, dateTo: filters.dateTo },
+      })).rows.filter((row) => row.counts);
   const readSectionsByUser = new Map<string, Set<string>>();
   // #966: lesing er AKTIVITET. `hasStarted` teller den nå, så «Siste aktivitet» må gjøre det samme
   // — ellers sier raden «Pågår» ved siden av «Siste aktivitet: —» for en deltaker som bare har

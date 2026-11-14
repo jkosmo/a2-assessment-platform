@@ -54,6 +54,9 @@ Kursets to typer innhold skilles med både ord og form:
 
 Fargen på merket viser status, ikke type: grønt betyr fullført for begge.
 
+Har to kurs den samme seksjonen, står den som lest i begge når du har lest den i ett av dem, og fullfører det et kurs, får du
+kursbeviset for det andre kurset like etter, eller senest når du åpner «Mine kurs» eller kursbevisene. Har kurset fått en ny versjon av seksjonen etter at du leste den, må du lese den på nytt der.
+
 ### 2. Forstå resultater
 
 Etter at vurderingen er fullført, vises resultatet i modulen. Åpner du modulen igjen senere, står siste

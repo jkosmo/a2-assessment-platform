@@ -11,7 +11,8 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { buildNotificationEmail, deliverIllustratedEmail } from "../certification/participantNotificationService.js";
 import { buildEmailLink } from "../certification/emailLinks.js";
 import { EMAIL_ILLUSTRATIONS } from "../certification/illustratedEmail.js";
-import { deriveStatus } from "./enrollmentService.js";
+import { deriveStatuses } from "./enrollmentService.js";
+import { pairKey } from "./learnerVisibility.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
 import { classRepository } from "./classRepository.js";
 import { findActiveParticipants } from "../../repositories/userRepository.js";
@@ -293,6 +294,11 @@ export async function runCourseReminderSchedule(input?: {
   // far-future-dated enrolments/assignments are pruned at the DB.
   const upperBound = addDays(asOf, (reminderDaysBefore[0] ?? 0) + 1);
   const candidates = await gatherCandidates(summary, upperBound);
+  // #1156 (QA-porten): statusene for alle kandidatene i ett kall (`deriveStatuses`, et fast antall spørringer), ikke én om gangen.
+  const statuses = await deriveStatuses(
+    candidates.filter((candidate) => isReachableParticipant(candidate)).map((c) => ({ userId: c.userId, courseId: c.courseId, dueAt: c.dueAt })),
+    asOf,
+  );
 
   for (const candidate of candidates) {
     if (!isReachableParticipant(candidate)) {
@@ -300,7 +306,7 @@ export async function runCourseReminderSchedule(input?: {
       continue;
     }
 
-    const status = await deriveStatus(candidate.userId, candidate.courseId, candidate.dueAt, asOf);
+    const status = statuses.get(pairKey(candidate.userId, candidate.courseId));
 
     if (status === "COMPLETED") {
       summary.skippedCompleted += 1;

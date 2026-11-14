@@ -70,6 +70,11 @@ export function classifyWeeklyDigest(input: {
   certifiedCourseIds: Set<string>;
   individual: WeeklyDigestIndividualEnrollment[];
   classCourseDue: Map<string, Date | null>;
+  /**
+   * #1156: kursene personen har gjort noe i SELV (`getMyCoursesProgress`). «I gang» krever det: en lesing som teller på tvers,
+   * gjør ikke et kurs personen aldri har valgt, til et kurs i gang i e-posten (produkteier 14.11.2026).
+   */
+  startedInCourseIds: Set<string>;
   lastActivityAt: Date | null;
 }): WeeklyDigestContent | null {
   const todayKey = osloDayKey(input.now);
@@ -92,7 +97,7 @@ export function classifyWeeklyDigest(input: {
     if (status === "COMPLETED") continue;
     const assigned = individual.has(course.id) || input.classCourseDue.has(course.id);
     const dueAt = individual.get(course.id)?.dueAt ?? input.classCourseDue.get(course.id) ?? null;
-    const started = status === "IN_PROGRESS";
+    const started = status === "IN_PROGRESS" && input.startedInCourseIds.has(course.id);
     const item: WeeklyDigestCourse = {
       courseId: course.id,
       title: course.title,
@@ -122,7 +127,7 @@ export function classifyWeeklyDigest(input: {
 export async function getWeeklyDigestContent(input: { userId: string; roles: string[]; locale: SupportedLocale; now: Date }): Promise<WeeklyDigestContent | null> {
   const { userId, roles, locale, now } = input;
   const weekEnd = endOfPreviousWeek(now);
-  const [{ items, classCourseDue }, completions, enrollments, activity] = await Promise.all([
+  const [{ items, classCourseDue, startedInCourseIds }, completions, enrollments, activity] = await Promise.all([
     getMyCoursesProgress({ userId, roles, locale }),
     prisma.courseCompletion.findMany({ where: { userId }, select: { courseId: true } }),
     prisma.courseEnrollment.findMany({ where: { userId, revokedAt: null }, select: { courseId: true, source: true, dueAt: true } }),
@@ -138,6 +143,7 @@ export async function getWeeklyDigestContent(input: { userId: string; roles: str
     certifiedCourseIds: new Set(completions.map((c) => c.courseId)),
     individual: enrollments,
     classCourseDue,
+    startedInCourseIds,
     lastActivityAt,
   });
 }

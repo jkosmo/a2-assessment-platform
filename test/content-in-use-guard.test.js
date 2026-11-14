@@ -77,10 +77,12 @@ const LESERE = {
     reason: "setCourseModules leser seksjonsradene i ETT kurs for å bevare dem gjennom en omskriving. Kursets eget innhold.",
   },
   "modules/course/courseRepository.ts": {
-    count: 7,
+    count: 9,
     reason:
       "Dørene til kursets eget innhold (test/course-items-accessor-guard.test.js) og findPublishedCoursesContainingModule: "
-      + "hvilke PUBLISERTE, ikke-arkiverte kurs som skal vurderes for kursbevis etter et vedtak. Deltakersiden.",
+      + "hvilke PUBLISERTE, ikke-arkiverte kurs som skal vurderes for kursbevis etter et vedtak. Deltakersiden. "
+      + "#1156: findPublishedCoursesContainingSection (samme spørsmål etter en lesing, for utboksen) og markSectionRead (hvilke "
+      + "kurs som ikke er arkivert og har seksjonen, for å sjekke om lesingen teller i alle). Deltakersiden, ikke «i bruk».",
   },
   "modules/course/courseVersioning.ts": {
     count: 2,
@@ -89,10 +91,11 @@ const LESERE = {
       + "Også arkiverte og avpubliserte kurs som har vært ute, med vilje: de har kursbevis, og skal ha riktig versjon når de gjenopprettes.",
   },
   "modules/course/enrollmentService.ts": {
-    count: 4,
+    count: 3,
     reason:
-      "Deltakerens tilgang: hvilke publiserte, ikke-arkiverte kurs med modulen eller seksjonen deltakeren kan se, og om "
-      + "deltakeren har begynt på ETT kurs. Filtrerer selv på publisert og ikke arkivert.",
+      "Deltakerens tilgang: hvilke publiserte, ikke-arkiverte kurs med modulen eller seksjonen deltakeren kan se. Filtrerer selv "
+      + "på publisert og ikke arkivert. #1156: «har deltakeren begynt» leser kursets moduler gjennom findModuleItemsForCourses "
+      + "(courseRepository.ts), for mange deltakere og kurs på én gang.",
   },
   "modules/discussion/discussionService.ts": {
     count: 2,

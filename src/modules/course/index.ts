@@ -6,7 +6,7 @@
 // ApplicationService) is a large, risky refactor not worth a dedicated pass for a p4 concern. **Address
 // opportunistically:** when you next touch these modules, prefer a narrow import over the wide barrel and
 // nudge toward a shared kernel. See doc/design/ARCHITECTURE_REVIEW_2026-07-19.md.
-export { checkAndIssueCourseCompletions, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "./courseCompletionService.js";
+export { checkAndIssueCourseCompletions, checkAndIssueCourseCompletionsForSection, recordSectionRead, reconcileCourseCompletionsForUser } from "./courseCompletionService.js";
 export { getCourseReport, getCourseLearnerReport } from "./courseReport.js";
 export { createCourse, updateCourse, publishCourse, unpublishCourse, setCourseModules, setCourseItems, deleteCourse } from "./courseCommands.js";
 export { archiveCourse, restoreCourse } from "./courseArchive.js";
@@ -101,6 +101,7 @@ export {
   isModuleInAccessibleCourse,
   canParticipantReadSection,
   deriveStatus,
+  deriveStatuses,
 } from "./enrollmentService.js";
 export type {
   AssignEnrollmentsInput,

@@ -2,6 +2,80 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.163.0 - 2026-11-14
+
+**En lest seksjon teller i alle kurs deltakeren ser som har den** (#1156), slik en bestått modul gjør. Meldt fra prod
+13.11.2026: to kurs deler innhold, deltakeren leser en seksjon i det ene, og «Mine kurs» viste «Seksjoner 1/9 · Påbegynt» på
+det ene og «0/9 · Ikke startet» på det andre. Plan: `doc/design/PLAN_1156_LEST_PA_TVERS.md` (lest av en uavhengig
+Claude-agent; Codex nådde forbruksgrensen). Avgjørelsene: `doc/DECISIONS.md`, «Lest seksjon teller i alle kurs deltakeren
+ser (#1156)».
+
+**Hva deltakerne merker:** en seksjon lest i ett kurs er lest i de andre kursene de ser som har den, i «Mine kurs», i kurset
+og i rapportene. Blir et kurs fullført på den måten, kommer kursbeviset med en gang, og påminnelsene om frist stopper.
+**Første dag:** deltakere som alt har lest delte seksjoner, kan bli fullført i flere kurs og få kursbevis (telt i prod før
+utrulling; se `doc/OPERATIONS_RUNBOOK.md`, «Lest seksjon på tvers av kurs»).
+
+### Hva som er endret
+
+- **Migreringen** `20261115120000_section_read_across_courses` (bare utvidelse): `CourseSectionRead.courseId` valgfri,
+  fremmednøkkelen mot kurset `ON DELETE SET NULL` (var `CASCADE`), indeks på `(userId, sectionId)`. Slettes et kurs, blir
+  lesingene stående og teller i de andre kursene.
+- **Én felles funksjon** (`src/modules/course/sectionReadCredit.ts`, `findSectionReadCredit`): lesinger fra alle kurs,
+  den seneste per seksjon, kursets egen versjonsregel. En lesing i kurset selv teller alltid der; en lesing fra et annet
+  kurs teller bare i kurs deltakeren ser (samme regel som «Mine kurs»). I et arkivert kurs teller lesinger fra andre kurs
+  bare fram til arkiveringen. En vakt nekter nye lesere av tabellen utenom funksjonen.
+- **Kursbevis i de andre kursene:** ny utboks-hendelse `section_read_completion_check` når en lesing er ny eller får nytt
+  tidspunkt; den sjekker de andre publiserte kursene deltakeren ser, ett om gangen under kursets låser. Ingen e-post.
+  Avstemmingen når «Mine kurs» åpnes, teller lesinger fra andre kurs bare i kurs deltakeren ser (moduler uendret).
+- **E-post og synlighet krever fortsatt aktivitet i kurset selv:** vilkår 9 i tildelings-e-posten, «i gang» i den ukentlige
+  e-posten og kurs fra arkiverte klasser.
+- `markSectionRead` gir lesingen nytt tidspunkt hvis den ikke teller i et av kursene med seksjonen (ny hovedversjon).
+- Aktivitetsrapporten tåler lesinger uten kurs; vakta for gamle kursbevis hopper over dem. Importen «Oppdater kurs» kopierer
+  den seneste lesingen fra alle kurs, med kurset den ble gjort i.
+- **Telleskriptet** `npm run maint:count-section-read-certificates` (bare lesing, ingen personopplysninger i utdata).
+
+### Tester
+
+- `test/m2-section-read-across-courses-1156.test.ts` (11, gjennom rutene), `test/unit/section-read-credit-1156.test.ts` (12),
+  vakta `test/section-read-reader-guard.test.js`, og oppdaterte tester for rapporten, den ukentlige e-posten, aktiviteten og
+  #1150/#1152. Runde: enhet 3287, DOM 109, integrasjon 1343, nettleser 1089.
+- Mutasjonssjekket: 27 regler; alle røde unntatt synlighetsfilteret i utboks-behandleren (porten sjekker det samme på nytt;
+  filteret sparer bare låste transaksjoner).
+- En test som ble rød én gang og grønn ved tre nye kjøringer (lesingen og kursets nye hovedversjon fikk samme tidsstempel),
+  er gjort uavhengig av klokka.
+
+### Kjent
+
+- **Tilbakerulling:** etter at et kurs er slettet, finnes lesinger uten kurs. De må slettes eller få et kurs før gammel kode
+  rulles tilbake (gammel kode krever kurs). Står i migreringen og runbooken.
+- En gammel worker under utrullingen kjenner ikke den nye hendelsen og gir opp etter fem forsøk; avstemmingen i «Mine kurs»
+  utsteder beviset.
+- Et begrenset kurs deltakeren bare ser gjennom en rolle i innloggingen (ikke lagret), får ikke kursbevis fra utboksen;
+  avstemmingen i «Mine kurs» tar det.
+- `/enrollments` og klassestatus bruker rollene fra databasen for lesinger fra andre kurs.
+- **Fra QA-porten (GO; en uavhengig Claude-agent i stedet for Codex):**
+  - Importen «Oppdater kurs» kopierer ikke lesingen for en deltaker som ser kurset bare gjennom en rolle i innloggingen
+    (sjeldent i prod, vanlig på stage); seksjonen må da leses på nytt i det kurset.
+  - En ny lesing etter en ny hovedversjon kan flytte tidspunktet forbi arkiveringen av et tredje kurs, så lesingen ikke lenger
+    teller der; «fullført uten kursbevis» kan da falle bort for det arkiverte kurset (konstruert; arkiveringen utsteder
+    manglende bevis først).
+  - En lesing som venter på låsen mens et kurs arkiveres, kan få et tidspunkt like før arkiveringen og telle der (høyst 3 s).
+  - Telleskriptet gir et tak, ikke en prognose: det tar med deltakere som har sluttet, og som aldri åpner kursbevissiden.
+  - Rapportens datovindu brukes på den seneste lesingen: har noen lest i K i juni og i A i september, er de ikke «leser» i K
+    for juni (valgt med vilje i planen).
+- **Rettet etter QA-porten (fart):** synligheten regnes per kurs i noen få spørringer, i transaksjonen som holder låsen
+  (`learnerVisibility.ts`), ikke per deltaker gjennom den globale klienten: 300 deltakere koster like mange spørringer som 10
+  (før: 1680 mot 58). Klassestatus, påminnelsesjobben og påmeldingslistene regner status for alle i én omgang
+  (`deriveStatuses`). Lesingen gjenbruker synligheten døra alt har sjekket. En uavhengig gjennomlesing bekreftet at den nye
+  regelen aldri sier «synlig» der «Mine kurs» sier «ikke synlig» (GO).
+- **Kjent fra den gjennomlesingen:** utboksen sjekker synligheten før låsen og ikke på nytt etterpå; fjernes en deltaker fra
+  klassen i de få sekundene jobben venter på låsen, kan beviset likevel utstedes (samme mønster som lesingen hadde fra før).
+  Entra-grupper og roller som bare står i innloggingen, telles ikke av den samlede regelen (trygg retning; avstemmingen i
+  «Mine kurs» tar dem). Påminnelsene regner rollenes gyldighet mot nå, ikke mot jobbens tidspunkt (bare status).
+- **To tester som feilet tilfeldig er rettet:** databasens «nå» (`@default(now())`) og programmets `new Date()` kunne ligge opptil
+  2 ms forskjøvet, så rekkefølgen mellom en lesing eller en klassetildeling og en ny hovedversjon varierte
+  (`m2-course-assignment-rule-1142`, og versjonstesten i #1156). Tidspunktene settes nå etter radenes egne.
+
 ## 2.162.1 - 2026-11-14
 
 **Slettedatoen regnes bare når «Arkiverte» velges** (#1152 4b). 2.162.0 var på stage, men ikke i prod: der gjorde utregningen

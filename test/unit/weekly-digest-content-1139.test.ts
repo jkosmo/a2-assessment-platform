@@ -37,6 +37,8 @@ function classify(input: {
   classDue?: Array<[string, Date | null]>;
   lastActivityAt?: Date | null;
   now?: Date;
+  /** #1156: kursene personen har gjort noe i selv. Utelatt: alle som er i gang (slik testene under er skrevet). */
+  startedHere?: string[];
 }) {
   return classifyWeeklyDigest({
     now: input.now ?? MONDAY,
@@ -44,6 +46,7 @@ function classify(input: {
     certifiedCourseIds: new Set(input.certified ?? []),
     individual: input.individual ?? [],
     classCourseDue: new Map(input.classDue ?? []),
+    startedInCourseIds: new Set(input.startedHere ?? input.progress.filter((c) => c.progress.courseStatus === "IN_PROGRESS").map((c) => c.id)),
     lastActivityAt: input.lastActivityAt ?? null,
   });
 }
@@ -214,5 +217,24 @@ describe("#1139: e-posten", () => {
     const content = classify({ progress: [{ ...course("x", "IN_PROGRESS", 1), title: "Kurs om github.com" }] })!;
     const email = renderWeeklyDigestEmail(content, "nb");
     expect(email.plainText).toContain("github[.]com");
+  });
+});
+
+describe("#1156: «i gang» krever aktivitet i kurset selv", () => {
+  it("et kurs som er påbegynt bare gjennom lesinger i et annet kurs, står ikke som «i gang»; er det tildelt, står det som ikke påbegynt", () => {
+    const content = classify({
+      progress: [course("aapent", "IN_PROGRESS", 1), course("tildelt", "IN_PROGRESS", 2), course("eget", "IN_PROGRESS", 1)],
+      classDue: [["tildelt", null]],
+      startedHere: ["eget"],
+    });
+    expect(ids(content?.inProgress)).toEqual(["eget"]);
+    expect(ids(content?.notStarted)).toEqual(["tildelt"]);
+    // Stegene som står igjen, følger fremdriften (på tvers), ikke «i gang».
+    expect(content?.notStarted[0]).toMatchObject({ started: false, stepsLeft: 3 });
+  });
+
+  it("KONTROLL: det samme kurset med aktivitet i kurset selv er «i gang»", () => {
+    const content = classify({ progress: [course("aapent", "IN_PROGRESS", 1)], startedHere: ["aapent"] });
+    expect(ids(content?.inProgress)).toEqual(["aapent"]);
   });
 });

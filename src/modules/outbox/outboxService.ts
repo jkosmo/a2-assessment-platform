@@ -3,7 +3,7 @@ import { env } from "../../config/env.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
 import { notifyAppealStatusTransition, notifyAssessmentResult, notifyAssessmentUnderReview, sendModuleRevisedNotification } from "../certification/index.js";
 import type { AppealNotificationInput, NotificationResult } from "../certification/participantNotificationService.js";
-import { checkAndIssueCourseCompletions } from "../course/index.js";
+import { checkAndIssueCourseCompletions, checkAndIssueCourseCompletionsForSection } from "../course/index.js";
 import { deliverCourseMajorVersionNotice } from "../course/courseMajorVersionEmail.js";
 import { deliverCourseAssignmentDigest } from "../course/courseAssignmentNotice.js";
 import { deliverWeeklyDigest } from "../weeklyDigest/weeklyDigestJob.js";
@@ -54,6 +54,10 @@ export const OUTBOX_EVENT_TYPES = {
   // inn, og bare med WEEKLY_EMAIL_ENABLED=true, som slås på når app og worker viser samme versjon: en gammel worker møter aldri
   // typen. Tilbakerulling: den gamle workeren kjenner den ikke, utboksen gir opp, ingen dobbel e-post (PLAN_1139 punkt 9).
   weeklyDigest: "weekly_digest",
+  // #1156: «sjekk kursbevisene i de andre kursene med seksjonen» etter en lesing (`recordSectionRead`). Egen type, ikke
+  // `course_completion_check` med `sectionId`: der ville `moduleId` vært udefinert og matchet alle publiserte kurs. En gammel worker
+  // under utrullingen kjenner den ikke og gir opp etter fem forsøk; avstemmingen når «Mine kurs» åpnes, tar beviset da.
+  sectionReadCompletionCheck: "section_read_completion_check",
 } as const;
 
 type AssessmentNotificationPayload = {
@@ -72,6 +76,13 @@ export type AssessmentUnderReviewNotificationPayload = Omit<AssessmentNotificati
 type CourseCompletionCheckPayload = {
   userId: string;
   moduleId: string;
+};
+
+/** #1156: deltakeren, seksjonen og kurset lesingen ble gjort i (det er alt sjekket, i lesingens egen transaksjon). */
+export type SectionReadCompletionCheckPayload = {
+  userId: string;
+  sectionId: string;
+  readInCourseId?: string;
 };
 
 export type ModuleRevisedNotificationPayload = {
@@ -102,6 +113,7 @@ export type OutboxEnqueueInput = (
   | { type: typeof OUTBOX_EVENT_TYPES.assessmentNotification; payload: AssessmentNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification; payload: AssessmentUnderReviewNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.courseCompletionCheck; payload: CourseCompletionCheckPayload }
+  | { type: typeof OUTBOX_EVENT_TYPES.sectionReadCompletionCheck; payload: SectionReadCompletionCheckPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.appealNotification; payload: AppealNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.moduleRevisedNotification; payload: ModuleRevisedNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.courseMajorVersionNotification; payload: CourseMajorVersionNotificationPayload }
@@ -253,6 +265,11 @@ export async function deliverOutboxEvent(event: { type: string; payloadJson: str
   if (event.type === OUTBOX_EVENT_TYPES.courseCompletionCheck) {
     const p = JSON.parse(event.payloadJson) as CourseCompletionCheckPayload;
     await checkAndIssueCourseCompletions({ userId: p.userId, moduleId: p.moduleId });
+    return;
+  }
+  if (event.type === OUTBOX_EVENT_TYPES.sectionReadCompletionCheck) {
+    const p = JSON.parse(event.payloadJson) as SectionReadCompletionCheckPayload;
+    await checkAndIssueCourseCompletionsForSection({ userId: p.userId, sectionId: p.sectionId, readInCourseId: p.readInCourseId });
     return;
   }
   if (event.type === OUTBOX_EVENT_TYPES.appealNotification) {

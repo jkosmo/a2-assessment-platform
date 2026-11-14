@@ -285,8 +285,11 @@ export function passedAt(submission: { submissionStatus: SubmissionStatusType; d
 /**
  * «Oppdater kurs» (#1095) kopierer lesingene til den nye seksjonen med SAMME tidspunkt, og den gamle
  * raden blir stående. Samme person, samme kurs, samme øyeblikk er derfor én lesing, ikke to.
+ *
+ * #1156: importen kopierer nå den seneste lesingen fra ALLE kurs, og kopien beholder kurset lesingen ble gjort i (tomt når det er
+ * slettet), så nøkkelen kjenner den fortsatt igjen. Planens `userId|sectionId|readAt` ville ikke det: kopien har en ny seksjon.
  */
-export function distinctReads<T extends { userId: string; courseId: string; readAt: Date }>(reads: T[]): T[] {
+export function distinctReads<T extends { userId: string; courseId: string | null; readAt: Date }>(reads: T[]): T[] {
   const seen = new Set<string>();
   return reads.filter((r) => {
     const key = `${r.userId}|${r.courseId}|${r.readAt.getTime()}`;
@@ -371,7 +374,7 @@ export async function getActivityReport(options: {
 export type ActivityRecentEvent = {
   type: ActivityType;
   at: string;
-  /** Kurset hendelsen hører til, når det er entydig (lesing og fullføring). */
+  /** Kurset hendelsen hører til, når det er entydig (lesing og fullføring). #1156: en lesing i et slettet kurs står uten kurs. */
   courseTitle: string | null;
   /** Seksjonen, modulen eller kurset. */
   itemTitle: string;
@@ -419,7 +422,7 @@ export async function getActivityRecent(userId: string, locale: SupportedLocale,
   ]);
 
   const events: Array<ActivityRecentEvent & { t: number }> = [
-    ...distinctReads(reads).map((r) => ({ type: "read" as const, t: r.readAt.getTime(), at: r.readAt.toISOString(), courseTitle: title(r.course.title), itemTitle: title(r.section.title) })),
+    ...distinctReads(reads).map((r) => ({ type: "read" as const, t: r.readAt.getTime(), at: r.readAt.toISOString(), courseTitle: r.course ? title(r.course.title) : null, itemTitle: title(r.section.title) })),
     ...submissions.map((s) => ({ type: "submitted" as const, t: s.submittedAt.getTime(), at: s.submittedAt.toISOString(), courseTitle: null, itemTitle: title(s.module.title) })),
     ...passedSubmissions.flatMap((s) => {
       const at = passedAt(s);

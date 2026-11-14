@@ -1095,18 +1095,21 @@ model SectionAsset {
 // Per-deltaker lese-markering av en læringsseksjon i et kurs (#487/#492). Moduler
 // "fullføres" via CertificationStatus; seksjoner markeres eksplisitt som lest. Begge
 // teller mot kurs-progresjon (alle elementer teller).
+// #1156: lesingen tilhører deltakeren og seksjonen, og teller i alle kurs med seksjonen (sectionReadCredit.ts). `courseId` er
+// kurset den ble gjort i («åpnet fra»), og blir tom når kurset slettes: lesingen står og teller videre i de andre kursene.
 model CourseSectionRead {
   id        String        @id @default(cuid())
   userId    String
-  courseId  String
+  courseId  String?
   sectionId String
   readAt    DateTime      @default(now())
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  course    Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course    Course?       @relation(fields: [courseId], references: [id], onDelete: SetNull)
   section   CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   @@unique([userId, courseId, sectionId])
   @@index([userId, courseId])
+  @@index([userId, sectionId])
 }
 
 enum CourseItemType {

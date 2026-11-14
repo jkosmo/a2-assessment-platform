@@ -63,6 +63,7 @@ function createFakeClient(passes: PassRow[], minModuleMajor: number | null = 1) 
           .filter((row) => where.userId.in.includes(row.userId) && where.moduleId.in.includes(row.moduleId))
           .map((row) => ({ userId: row.userId, moduleId: row.moduleId, invalidatedAt: row.invalidatedAt, moduleVersion: { versionMajor: row.versionMajor } })),
     },
+    // #1156: lesingene hentes for kursets seksjoner fra alle kurs (sectionReadCredit.ts). Kurset har ingen seksjoner.
     courseSectionRead: {
       findMany: async () => [],
     },

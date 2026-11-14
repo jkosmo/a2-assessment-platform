@@ -2011,3 +2011,61 @@ ikke før; feilet henting; husket filter).
 
 **Plan:** `doc/design/PLAN_1156_LEST_PA_TVERS.md`.
 **Sak:** #1156 · **Dato:** 2026-11-14 · **Status:** avgjort av produkteier
+
+### Valgt under byggingen (#1156)
+
+Planen og avgjørelsene over sa hva; dette er valgene som ikke sto der.
+
+- **Én funksjon teller lesingene:** `findSectionReadCredit` (sectionReadCredit.ts). Kalleren velger elementlista (`participant`:
+  det deltakeren kan lese nå, for fremdrift og kursbevis; `all`: også arkiverte seksjoner, for #1152-vakta og rapportens «har lest
+  i kurset»). Lesingene hentes for kursets seksjoner fra alle kurs; den seneste som gjelder, velges; kursets hovedversjon avgjør.
+- **Et arkivert kurs avskjærer bare lesinger gjort et annet sted** ved `archivedAt`. En lesing gjort i kurset selv teller som før:
+  lesestien slipper ikke inn i et arkivert kurs, så den er gjort før arkiveringen (og #1152-fiksturene lager slike rader direkte).
+- **Synligheten er regelen fra «Mine kurs»** (klasser → `filterVisibleCourseIds`). Der ruta har innloggingen, er den slått fast før
+  noe annet («Mine kurs», kursdetaljen og lesingen: kurset er synlig; avstemmingen på `/api/courses/completions`: hele svaret regnet
+  én gang, `findCoursesVisibleToLearner`), og ingenting slås opp under låsene. Ellers (utboksen, rapportene, #1152-vakta, arkiveringen,
+  importen, «påbegynt») gjelder regelen uten innlogging, `findLearnersSeeingCourses` (learnerVisibility.ts): lagrede roller, ingen
+  Entra-grupper, som den ukentlige e-posten. Den svarer for alle deltakerne og kursene i ett fast sett med spørringer, på kallerens
+  klient (transaksjonen under arkiveringen, slettingen og importen), aldri én deltaker om gangen (QA-porten: 300 deltakere ga
+  300 × 5 oppslag under den eksklusive låsen). Lesinger som forkastes uansett (gjort et annet sted etter arkiveringen), slår ikke
+  opp noe. Om kurset er publisert eller arkivert, spør synligheten ikke om; det avgjør kalleren.
+- **Statusen i påmeldingene regnes for mange på én gang** (`deriveStatuses`, enrollmentService.ts): kullstatusen, påminnelsene,
+  administratorens påmeldingsliste og `/enrollments` spør én gang for alle, med ett kall til `findSectionReadCredit`. **Kjent mangel:** et begrenset kurs en deltaker bare ser
+  gjennom en rolle i tokenet (ikke lagret), får ikke beviset fra utboksen; avstemmingen gir det når «Mine kurs» åpnes.
+- **«Påbegynt» og «i gang», per leser:**
+
+  | Leser | Lesing i et annet kurs teller |
+  |---|---|
+  | «Mine kurs» (Seksjoner X/Y, Påbegynt), kursdetaljen, kursbeviset | ja |
+  | Kursrapporten og CSV (lest, status, «har lest i kurset» i publikummet) | ja |
+  | «Midt i kurset» (arkiveringsdialogen, G3) og «fullført uten kursbevis» (#1152) | ja |
+  | `/enrollments`, kullstatusen og administratorens påmeldingsliste (`deriveStatuses`) | ja: statusen følger fremdriften |
+  | Påminnelser om frist | ja, gjennom kursbeviset: de ser bare «fullført» og fristen |
+  | Vilkår 9 i tildelings-e-posten | nei, uendret SQL |
+  | «I gang» i den ukentlige e-posten | nei: en lesing i kurset selv eller en innlevering på en av modulene (`startedInCourseIds`); stegene som står igjen, teller på tvers |
+  | Kurs fra arkiverte klasser i «Mine kurs» (`findStartedOrCompletedCourseIds`) | nei |
+
+  Et tildelt kurs som bare er påbegynt gjennom et annet kurs, står i den ukentlige e-posten som «tildelt, ikke påbegynt».
+- **Rapportens «har lest i kurset»** er nå en lesing av en av kursets seksjoner (lista `all`). Før var det enhver rad med kurset,
+  også for en seksjon som senere er tatt ut av kurset; den teller ikke lenger som aktivitet i kurset.
+- **Importen** kopierer den seneste lesingen per deltaker slik kurset som oppdateres, teller den (en lesing gjort et annet sted bare
+  for den som ser kurset), uansett hovedversjon. **Kopien beholder kurset lesingen ble gjort i** (tomt når det er slettet) og
+  tidspunktet, ikke kurset som oppdateres som planen sa: den er den samme lesingen og teller etter de samme reglene. Med kurset som
+  «åpnet fra» ville en lesing gjort et annet sted blitt en lesing i kurset selv, som teller uansett synlighet.
+- **Aktivitetsrapporten** kjenner en kopi igjen med den gamle nøkkelen (`distinctReads`: `userId|courseId|readAt`), fordi kopien
+  beholder kurset. Planens `userId|sectionId|readAt` ville ikke det (kopien har en ny seksjon). En nøkkel uten kurs
+  (`userId|readAt`) ble prøvd og forkastet: den slo sammen to ekte lesinger med samme tidspunkt (`test/me-stats-1138.test.ts`).
+- **`markSectionRead`** sjekker regelen for alle kurs som har seksjonen og ikke er arkivert. Teller lesingen ikke i ett av dem,
+  får raden nytt tidspunkt, også om kurset er et deltakeren ikke ser.
+- **Utboks-hendelsen** heter `section_read_completion_check` (`{ userId, sectionId, readInCourseId }`). Behandleren hopper over
+  kurset lesingen ble gjort i (det er sjekket i lesingens transaksjon) og kurs deltakeren ikke ser, og måler hvert av de andre i sin
+  egen låste transaksjon. Den sender ingen e-post (`SENDS_TO_A_PERSON` er uendret).
+- **Indeksen** er den planen sa (`userId, sectionId`). Rapportene spør på seksjon uten deltaker, som de før spurte på kurs uten
+  deltaker; ingen av delene har egen indeks.
+- **Telleskriptet** (`npm run maint:count-section-read-certificates`) bruker den samme funksjonen, med og uten synlighet, og en
+  tilkobling databasen gjør skrivebeskyttet. Se driftsboka.
+
+**Håndheves:** `findSectionReadCredit` (sectionReadCredit.ts), `findLearnersSeeingCourses` og `findOwnReadPairs` (learnerVisibility.ts), `deriveStatuses` (enrollmentService.ts), `markSectionRead` (courseRepository.ts),
+`recordSectionRead` og `checkAndIssueCourseCompletionsForSection` (courseCompletionService.ts); `test/section-read-reader-guard.test.js`
+(ingen nye lesere av tabellen), `test/unit/section-read-credit-1156.test.ts` (også at synligheten koster et fast antall spørringer på klienten som sendes inn), `test/unit/enrollment-status-batch-1156.test.ts` (statusene i ett kall), `test/m2-section-read-across-courses-1156.test.ts`.
+**Sak:** #1156 · **Dato:** 2026-11-14 · **Status:** valgt under byggingen; ikke avklart med produkteier

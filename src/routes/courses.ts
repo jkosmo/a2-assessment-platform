@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
-import { courseRepository, createCourseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
+import { courseRepository, createCourseRepository, computeCourseStatus, getSection, recordSectionRead, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
+import { findSectionReadCredit } from "../modules/course/sectionReadCredit.js";
+import { prisma } from "../db/prisma.js";
+import { pairKey } from "../modules/course/learnerVisibility.js";
 import { runContentReadForLearner } from "../db/contentLock.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
@@ -15,7 +18,7 @@ import {
   findCourseForParticipant,
   getUserClassIds,
   getClassAssignedCourseDueDates,
-  deriveStatus,
+  deriveStatuses,
   sortThemesByName,
   getMyCoursesProgress,
 } from "../modules/course/index.js";
@@ -85,17 +88,16 @@ coursesRouter.get("/enrollments", async (request, response, next) => {
       groupIds: request.context?.principal?.groupIds,
     });
     const classCourseDue = await getClassAssignedCourseDueDates(classIds, userId);
-    const classEntries = await Promise.all(
-      [...classCourseDue.entries()]
-        .filter(([courseId]) => !seen.has(courseId))
-        .map(async ([courseId, dueAt]) => ({
-          courseId,
-          source: "CLASS" as const,
-          dueAt: dueAt ? dueAt.toISOString() : null,
-          assignedAt: null,
-          status: await deriveStatus(userId, courseId, dueAt, now),
-        })),
-    );
+    // #1156: statusene i ett kall (`deriveStatuses`), ikke ett per kurs.
+    const fromClasses = [...classCourseDue.entries()].filter(([courseId]) => !seen.has(courseId));
+    const statuses = await deriveStatuses(fromClasses.map(([courseId, dueAt]) => ({ userId, courseId, dueAt })), now);
+    const classEntries = fromClasses.map(([courseId, dueAt]) => ({
+      courseId,
+      source: "CLASS" as const,
+      dueAt: dueAt ? dueAt.toISOString() : null,
+      assignedAt: null,
+      status: statuses.get(pairKey(userId, courseId))!,
+    }));
 
     response.json({ enrollments: [...individual, ...classEntries] });
   } catch (error) {
@@ -115,7 +117,8 @@ coursesRouter.get("/completions", async (request, response, next) => {
   try {
     // #580 follow-up: backfill any completion whose gates are met but whose certificate was never
     // issued (event-driven issuance can miss). Idempotent — only creates genuinely-missing ones.
-    await reconcileCourseCompletionsForUser(userId);
+    // #1156: med innloggingen, så lesinger gjort i et annet kurs teller etter samme synlighet som «Mine kurs».
+    await reconcileCourseCompletionsForUser(userId, { roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds });
     const completions = await courseRepository.findUserCourseCompletions(userId);
     const items = completions.map((cc) => ({
       courseId: cc.courseId,
@@ -248,7 +251,15 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     // #958: deltakerdøra. Seksjoner deltakeren ikke kan åpne er allerede filtrert bort, og hvert
     // element bærer et ferdig avgjort `available` — ruta har ikke lenger noen egen regel å glemme.
     const courseItems = await courseRepository.findCourseItemsForParticipant(course.id);
-    const readSectionIds = new Set(await courseRepository.findReadSectionIds(userId, course.id));
+    // #1156: lesinger fra alle kurs med seksjonen, etter samme regel som porten for kursbevis. Kurset er synlig for deltakeren
+    // (døra over), så en lesing gjort et annet sted teller her.
+    const credit = await findSectionReadCredit(prisma, {
+      userIds: [userId],
+      courseIds: [course.id],
+      items: "participant",
+      knownVisibleCourseIds: [course.id],
+    });
+    const readSectionIds = credit.readSectionIds(userId, course.id);
     let readSectionCount = 0;
     // ⚠️ #992: upubliserte seksjoner UTELATES fra deltakerens sekvens — de vises ikke som en
     // nedtonet rad, de er borte.
@@ -487,9 +498,9 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
       if (section?.activeVersionId !== seenVersionId) {
         throw new ConflictError("section_version_changed", "The text has changed since this page was opened. Nothing was recorded; reload the page.", { sectionId: request.params.sectionId });
       }
-      await txRepo.markSectionRead(tx, userId, course.id, request.params.sectionId);
       // Reading the final section can be the last gate for certification (#476/#525) — re-check.
-      await checkCourseCompletionForCourse({ userId, courseId: course.id }, tx);
+      // #1156: lesingen og beviset i dette kurset i samme transaksjon; de andre kursene med seksjonen gjennom utboksen.
+      await recordSectionRead(tx, { userId, courseId: course.id, sectionId: request.params.sectionId });
     });
     response.status(204).send();
   } catch (error) {

@@ -27,6 +27,7 @@ import type { DbTransactionClient } from "../../db/transaction.js";
 import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { prisma } from "../../db/prisma.js";
 import { courseRepository, createCourseRepository } from "../course/courseRepository.js";
+import { findSectionReadCredit } from "../course/sectionReadCredit.js";
 import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
 import { findActiveUsesOfItems } from "../course/contentLifecycle.js";
 import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, renameSectionInVersionSnapshots, sameLocalizedText, type CourseVersionChoice, type CourseVersionRequest } from "../course/courseVersioning.js";
@@ -1048,9 +1049,12 @@ export async function importCourseFromEnvelope(
                 await persistStagedSection(tx, staged, options.actorId, { draft: true });
               }
               // «Lest» følger med til kopien, i dette kurset.
-              const reads = await tx.courseSectionRead.findMany({ where: { courseId, sectionId: target.targetId }, select: { userId: true, readAt: true } });
+              // #1156: den seneste lesingen per deltaker fra ALLE kurs, slik dette kurset teller den (`findSectionReadCredit`: en
+              // lesing gjort et annet sted bare for den som ser kurset). Kopien beholder kurset lesingen ble gjort i og tidspunktet:
+              // den er den samme lesingen, teller etter de samme reglene, og aktivitetsrapporten kjenner den igjen (`distinctReads`).
+              const reads = (await findSectionReadCredit(tx, { courseIds: [courseId], items: "all", onlySectionIds: [target.targetId] })).rows;
               if (reads.length > 0) {
-                await tx.courseSectionRead.createMany({ data: reads.map((r) => ({ userId: r.userId, courseId, sectionId: newId, readAt: r.readAt })), skipDuplicates: true });
+                await tx.courseSectionRead.createMany({ data: reads.map((r) => ({ userId: r.userId, courseId: r.readInCourseId, sectionId: newId, readAt: r.readAt })), skipDuplicates: true });
               }
               // #934 skive 3: øyeblikksbildet følger med til kopien, så de kopierte lesingene teller som før.
               await renameSectionInVersionSnapshots(tx, courseId, target.targetId, newId);

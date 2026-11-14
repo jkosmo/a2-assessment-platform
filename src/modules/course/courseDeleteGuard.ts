@@ -31,6 +31,7 @@ import { deleteRequiresArchivedError } from "../content/archivedGuard.js";
 import type { DeleteCheck } from "../content/deleteCheck.js";
 import { countPendingReviewsOnModules, type LifecycleReader } from "./contentLifecycle.js";
 import { createCourseRepository } from "./courseRepository.js";
+import { findSectionReadCredit } from "./sectionReadCredit.js";
 
 /** Kravet slik det var da kurset ble arkivert. */
 export type CourseRequirementAsArchived = { moduleIds: string[]; sectionIds: string[] };
@@ -97,26 +98,32 @@ export async function findCompletedWithoutCertificate(
 ): Promise<string[]> {
   const { moduleIds, sectionIds } = requirement;
   if (moduleIds.length === 0 && sectionIds.length === 0) return [];
-  // Kandidatene: den som har bestått en modul, har levert på den; den som har lest, har en lesing i kurset.
+  // Kandidatene: den som har bestått en modul, har levert på den; den som har lest, har en lesing som teller her.
   // #1152 skive 4b: kurset og kandidatene leses samtidig (lista over arkiverte måler mange kurs).
-  const [course, submitters, readers] = await Promise.all([
+  // #1156: lesinger fra alle kurs med seksjonene (`findSectionReadCredit`), mot ALLE kursets elementer (lista `all`: også
+  // seksjoner arkivert sammen med kurset), avgrenset til kravet under. Et arkivert kurs teller bare lesinger fram til arkiveringen,
+  // og en lesing gjort et annet sted bare når deltakeren ser kurset. Lesingene står når et kurs slettes; de tilhører seksjonen.
+  const [course, submitters, readCredit] = await Promise.all([
     reader.course.findUnique({ where: { id: courseId }, select: { versionMajor: true } }),
     findSubmitters(moduleIds, reader),
-    reader.courseSectionRead.findMany({ where: { courseId }, select: { userId: true }, distinct: ["userId"] }),
+    sectionIds.length > 0
+      ? findSectionReadCredit(reader, { courseIds: [courseId], items: "all", onlySectionIds: sectionIds })
+      : Promise.resolve(null),
   ]);
   if (!course) return [];
-  const candidates = [...new Set([...submitters, ...readers.map((row) => row.userId)])];
+  const readsByUser = new Map<string, Set<string>>();
+  for (const row of readCredit?.rows ?? []) {
+    if (row.counts) readsByUser.set(row.userId, (readsByUser.get(row.userId) ?? new Set()).add(row.sectionId));
+  }
+  const candidates = [...new Set([...submitters, ...readsByUser.keys()])];
   if (candidates.length === 0) return [];
 
   const repo = createCourseRepository(reader);
-  const [progress, readRows, certificates] = await Promise.all([
+  const [progress, certificates] = await Promise.all([
     repo.findModuleProgress({ userIds: candidates, courses: [{ courseId, moduleIds }] }),
-    repo.findReadSectionIdsForCourseParticipants(courseId, candidates),
     reader.courseCompletion.findMany({ where: { courseId, versionMajor: course.versionMajor, userId: { in: candidates } }, select: { userId: true, source: true } }),
   ]);
   const certified = new Set(certificates.filter((row) => row.source !== "external").map((row) => row.userId));
-  const readsByUser = new Map<string, Set<string>>();
-  for (const row of readRows) readsByUser.set(row.userId, (readsByUser.get(row.userId) ?? new Set()).add(row.sectionId));
 
   return candidates.filter((userId) => {
     if (certified.has(userId)) return false;

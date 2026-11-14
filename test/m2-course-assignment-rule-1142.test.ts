@@ -330,7 +330,12 @@ describe("(b) filtrene for seg: hvert vilkår tar paret ut, og kontrollen viser 
   it("kursbevis for en eldre hovedversjon: ingen par når veien er eldre enn hovedversjonen; paret når kurset legges til etter (#1146)", async () => {
     const m = await memberWithCourse({ versionMajor: 2 });
     await prisma.courseCompletion.create({ data: { userId: m.userId, courseId: m.courseId, moduleSnapshotJson: "[]", versionMajor: 1 } });
-    await prisma.courseVersion.create({ data: { courseId: m.courseId, versionMajor: 2, publishedAt: new Date(), sectionVersionsJson: "{}" } });
+    // Etter veien. `@default(now())` kan ligge opptil et par millisekunder foran `new Date()` rett etterpå (målt 14.11.2026 lokalt,
+    // #1156), så tidspunktet settes etter radene, ikke bare til «nå»: ellers ble testen tilfeldig rød.
+    const path = await prisma.courseGroupAssignment.findFirstOrThrow({ where: { classId: m.classId, courseId: m.courseId }, select: { createdAt: true } });
+    const member = await prisma.classMember.findFirstOrThrow({ where: { classId: m.classId, userId: m.userId }, select: { addedAt: true } });
+    const v2At = new Date(Math.max(Date.now(), path.createdAt.getTime() + 1, member.addedAt.getTime() + 1));
+    await prisma.courseVersion.create({ data: { courseId: m.courseId, versionMajor: 2, publishedAt: v2At, sectionVersionsJson: "{}" } });
     expect(await myCourses(m.userId, [m.courseId])).toEqual([m.courseId]);
     expect(await rule(m.userId, [m.courseId]), "veien er eldre enn v2").toEqual([]);
     await prisma.courseGroupAssignment.deleteMany({ where: { classId: m.classId, courseId: m.courseId } });

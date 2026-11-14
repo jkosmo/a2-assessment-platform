@@ -12,6 +12,9 @@ import { computeCourseStatus } from "./courseQueries.js";
 import { filterVisibleCourseIds } from "./enrollmentService.js";
 import { getClassAssignedCourseDueDates, getUserClassIds } from "./classService.js";
 import { findLocalizedThemesForCourses } from "./courseThemeService.js";
+import { prisma } from "../../db/prisma.js";
+import { findSectionReadCredit } from "./sectionReadCredit.js";
+import { findCoursesWithOwnReads } from "./learnerVisibility.js";
 import type { CourseListItem } from "./courseReadModels.js";
 
 export type MyCoursesProgressInput = {
@@ -26,6 +29,12 @@ export type MyCoursesProgress = {
   items: CourseListItem[];
   /** Klassefristen per kurs fra personens klasser (tidligste), som `getClassAssignedCourseDueDates` gir den. */
   classCourseDue: Map<string, Date | null>;
+  /**
+   * #1156: kursene personen har gjort noe i SELV: en lesing gjort i kurset, eller en innlevering på en av modulene. Ikke det
+   * samme som «Påbegynt» i `items`, som også teller lesinger gjort i et annet kurs. «I gang» i den ukentlige e-posten spør her
+   * (produkteier 14.11.2026: «e-post og synlighet krever aktivitet i kurset selv»).
+   */
+  startedInCourseIds: Set<string>;
 };
 
 export async function getMyCoursesProgress({ userId, roles, groupIds, locale }: MyCoursesProgressInput): Promise<MyCoursesProgress> {
@@ -43,14 +52,17 @@ export async function getMyCoursesProgress({ userId, roles, groupIds, locale }: 
   const courseIds = courses.map((course) => course.id);
   const allModuleIds = courses.flatMap((course) => course.modules.map((m) => m.moduleId));
 
-  const [sectionRows, moduleProgress, readRows, latestSubmissions] = await Promise.all([
+  const [sectionRows, moduleProgress, readCredit, ownReadCourseIds, latestSubmissions] = await Promise.all([
     courseRepository.findCourseItemSectionIdsForCourses(courseIds),
     // #934 skive 5a-3: beståtte per kurs. Samme modul kan telle i ett kurs og ikke i et annet.
     courseRepository.findModuleProgress({
       userIds: [userId],
       courses: courses.map((course) => ({ courseId: course.id, moduleIds: course.modules.map((m) => m.moduleId) })),
     }),
-    courseRepository.findReadSectionIdsForCourses(userId, courseIds),
+    // #1156: lesinger fra alle kurs med seksjonen, etter samme regel som porten for kursbevis. Alle kursene her er synlige for
+    // personen (over), så en lesing gjort et annet sted teller i dem.
+    findSectionReadCredit(prisma, { userIds: [userId], courseIds, items: "participant", knownVisibleCourseIds: courseIds }),
+    findCoursesWithOwnReads(prisma, userId, courseIds),
     allModuleIds.length > 0 ? queryLatestSubmissionsForModules(userId, allModuleIds) : Promise.resolve([]),
   ]);
 
@@ -60,27 +72,24 @@ export async function getMyCoursesProgress({ userId, roles, groupIds, locale }: 
     if (list) list.push(row.sectionId);
     else sectionIdsByCourse.set(row.courseId, [row.sectionId]);
   }
-  const readSectionsByCourse = new Map<string, Set<string>>();
-  for (const row of readRows) {
-    const set = readSectionsByCourse.get(row.courseId);
-    if (set) set.add(row.sectionId);
-    else readSectionsByCourse.set(row.courseId, new Set([row.sectionId]));
-  }
   const startedModuleIds = new Set(latestSubmissions.map((s) => s.moduleId));
   // 2.102.0: temaene i «Mine kurs». Ett kall for alle kursene.
   const themesByCourse = await findLocalizedThemesForCourses(courseIds, locale);
 
+  const startedInCourseIds = new Set<string>();
   const items: CourseListItem[] = courses.map((course) => {
     // #938/#945: samme filter som kursdetaljen og bevisporten — den tredje telleren.
     const moduleIds = course.modules.filter((m) => m.module?.archivedAt == null).map((m) => m.moduleId);
     const sectionIds = sectionIdsByCourse.get(course.id) ?? [];
     const passedInCourse = moduleProgress.passedModuleIds(userId, course.id);
     const passed = moduleIds.filter((id) => passedInCourse.has(id)).length;
-    const readSet = readSectionsByCourse.get(course.id);
-    const readCount = readSet ? sectionIds.filter((id) => readSet.has(id)).length : 0;
+    const readSet = readCredit.readSectionIds(userId, course.id);
+    const readCount = sectionIds.filter((id) => readSet.has(id)).length;
     const total = moduleIds.length + sectionIds.length;
     const completed = passed + readCount;
-    const hasStarted = moduleIds.some((id) => startedModuleIds.has(id)) || readCount > 0;
+    const submittedHere = moduleIds.some((id) => startedModuleIds.has(id));
+    const hasStarted = submittedHere || readCount > 0;
+    if (submittedHere || ownReadCourseIds.has(course.id)) startedInCourseIds.add(course.id);
 
     return {
       id: course.id,
@@ -102,5 +111,5 @@ export async function getMyCoursesProgress({ userId, roles, groupIds, locale }: 
     };
   });
 
-  return { items, classCourseDue };
+  return { items, classCourseDue, startedInCourseIds };
 }

@@ -75,7 +75,15 @@ function matchesClause(row: ItemRow, clause: Record<string, unknown>): boolean {
     } else if (key === "module") {
       if (!matchesRelation(row.module as never, value as Record<string, unknown>)) return false;
     } else if (key === "courseId") {
-      if (row.courseId !== value) return false;
+      // #1156: lesingene telles mot kursets seksjoner for flere kurs på én gang (`findSectionItemsForCourses`).
+      if (typeof value === "object" && value !== null && "in" in value) {
+        if (!(value as { in: string[] }).in.includes(row.courseId)) return false;
+      } else if (row.courseId !== value) return false;
+    } else if (key === "sectionId") {
+      if (!(typeof value === "object" && value !== null && "not" in value && (value as { not: unknown }).not === null)) {
+        throw new Error("Testtolken kjenner bare `sectionId: { not: null }`.");
+      }
+      if (row.sectionId === null) return false;
     } else {
       throw new Error(`Testtolken kjenner ikke filteret «${key}» — utvid den, ikke ignorer det.`);
     }
@@ -300,7 +308,11 @@ describe("#958 bevisporten og deltakersekvensen får radene fra samme dør", () 
         findUnique: async () => courseRow,
       },
       certificationStatus: { count: async () => 0 },
-      courseSectionRead: { findMany: async () => reads.map((sectionId) => ({ sectionId })) },
+      // #1156: lesingene hentes for kursets seksjoner fra alle kurs (sectionReadCredit.ts); her er alle gjort i kurset selv.
+      courseSectionRead: {
+        findMany: async ({ where }: { where: { sectionId: { in: string[] } } }) =>
+          reads.filter((sectionId) => where.sectionId.in.includes(sectionId)).map((sectionId) => ({ userId: "user-1", courseId: COURSE_ID, sectionId, readAt: new Date("2026-02-01") })),
+      },
       // #934 skive 3: ingen hovedversjon er laget — alle lesinger teller.
       courseVersion: { findMany: async () => [] },
       courseCompletion: {

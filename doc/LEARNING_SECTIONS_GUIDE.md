@@ -218,6 +218,8 @@ fortsatt.)
   registreres av systemet når du åpner seksjonen.
 - **Fremdrift** teller **alle elementer**: en seksjon som er lest og en modul som er bestått
   teller likt mot «X/Y fullført».
+- **En seksjon som står i flere kurs, leses én gang** (#1156): lest i ett kurs står den som lest i alle kurs du ser som har
+  den. Har et kurs tatt i bruk en ny hovedversjon der seksjonen er endret, må den leses på nytt der.
 
 ---
 

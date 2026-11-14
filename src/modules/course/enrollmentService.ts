@@ -11,6 +11,9 @@ import { getUserClassIds, getClassAssignedCourseDueDates } from "./classService.
 // ikke denne fila, så retningen er entydig og det finnes ingen sirkel.
 import { courseRepository } from "./courseRepository.js";
 import { sectionAvailableWhere } from "./sectionAvailability.js";
+import { findSectionReadCredit } from "./sectionReadCredit.js";
+import { findLearnersSeeingCourses, findOwnReadPairs, pairKey } from "./learnerVisibility.js";
+import { findModuleItemsForCourses } from "./courseRepository.js";
 
 // #496/EN-2: enrollment service — assign/revoke/list + self-enroll + course visibility. Status is
 // always DERIVED here (never stored) from CourseCompletion + progress + dueAt, so it cannot drift.
@@ -222,27 +225,58 @@ export async function selfEnroll(courseId: string, userId: string): Promise<void
   });
 }
 
-// Lightweight "has the user begun this course" probe used for IN_PROGRESS derivation: a read
-// section OR any submission against one of the course's modules.
-async function hasUserStartedCourse(userId: string, courseId: string): Promise<boolean> {
-  const reads = await prisma.courseSectionRead.count({ where: { userId, courseId } });
-  if (reads > 0) return true;
-  const submissions = await prisma.submission.count({
-    where: { userId, module: { courseItems: { some: { courseId } } } },
-  });
-  return submissions > 0;
+export type EnrollmentStatusInput = { userId: string; courseId: string; dueAt: Date | null };
+
+/**
+ * Status for mange (deltaker, kurs) på én gang, i et fast antall spørringer (#1156, QA-porten: kullstatusen, påminnelsene og
+ * påmeldingslistene gikk én deltaker om gangen). Svaret har nøkkelen `pairKey(userId, courseId)`.
+ *
+ * «Fullført»: #934, bevis for HVILKEN SOM HELST hovedversjon oppfyller tildelingen. Produkteier 2026-11-01: en frist som er
+ * oppfylt, står som oppfylt; en ny hovedversjon er frivillig til noen setter en ny frist, og gir ingen påminnelser.
+ * «Påbegynt»: en lesing gjort i kurset (uansett seksjon og hovedversjon, som før), en lesing gjort et annet sted som teller her
+ * (#1156, `findSectionReadCredit`, bare i kurs deltakeren ser), eller en innlevering på en av kursets moduler (også arkiverte).
+ * Statusen vises i `/enrollments`, kullstatusen og administratorens påmeldingsliste; påminnelsene ser bare på «fullført» og fristen.
+ */
+export async function deriveStatuses(pairs: EnrollmentStatusInput[], now: Date): Promise<Map<string, EnrollmentStatus>> {
+  const statuses = new Map<string, EnrollmentStatus>();
+  if (pairs.length === 0) return statuses;
+  const userIds = [...new Set(pairs.map((pair) => pair.userId))];
+  const courseIds = [...new Set(pairs.map((pair) => pair.courseId))];
+  const [completions, ownReads, credit, moduleItems] = await Promise.all([
+    prisma.courseCompletion.findMany({
+      where: { userId: { in: userIds }, courseId: { in: courseIds } },
+      distinct: ["userId", "courseId"],
+      select: { userId: true, courseId: true },
+    }),
+    findOwnReadPairs(prisma, userIds, courseIds),
+    findSectionReadCredit(prisma, { userIds, courseIds, items: "participant" }),
+    findModuleItemsForCourses(prisma, courseIds),
+  ]);
+  const completed = new Set(completions.map((row) => pairKey(row.userId, row.courseId)));
+  const coursesByModule = new Map<string, string[]>();
+  for (const item of moduleItems) {
+    if (item.moduleId) coursesByModule.set(item.moduleId, [...(coursesByModule.get(item.moduleId) ?? []), item.courseId]);
+  }
+  const submitted = new Set<string>();
+  if (coursesByModule.size > 0) {
+    const rows = await prisma.submission.findMany({
+      where: { userId: { in: userIds }, moduleId: { in: [...coursesByModule.keys()] } },
+      distinct: ["userId", "moduleId"],
+      select: { userId: true, moduleId: true },
+    });
+    for (const row of rows) for (const courseId of coursesByModule.get(row.moduleId) ?? []) submitted.add(pairKey(row.userId, courseId));
+  }
+  for (const pair of pairs) {
+    const key = pairKey(pair.userId, pair.courseId);
+    const isCompleted = completed.has(key);
+    const hasStarted = isCompleted || ownReads.has(key) || submitted.has(key) || credit.readSectionIds(pair.userId, pair.courseId).size > 0;
+    statuses.set(key, deriveEnrollmentStatus({ isCompleted, hasStarted, dueAt: pair.dueAt, now }));
+  }
+  return statuses;
 }
 
 export async function deriveStatus(userId: string, courseId: string, dueAt: Date | null, now: Date): Promise<EnrollmentStatus> {
-  // #934: bevis for HVILKEN SOM HELST hovedversjon oppfyller tildelingen. Produkteier 2026-11-01: en frist
-  // som er oppfylt, står som oppfylt; en ny hovedversjon er frivillig til noen setter en ny frist, og gir
-  // ingen påminnelser.
-  const completion = await prisma.courseCompletion.findFirst({
-    where: { userId, courseId },
-    select: { id: true },
-  });
-  const hasStarted = completion ? true : await hasUserStartedCourse(userId, courseId);
-  return deriveEnrollmentStatus({ isCompleted: !!completion, hasStarted, dueAt, now });
+  return (await deriveStatuses([{ userId, courseId, dueAt }], now)).get(pairKey(userId, courseId))!;
 }
 
 export interface UserEnrollmentView {
@@ -256,15 +290,14 @@ export interface UserEnrollmentView {
 /** A participant's active enrolments, each with derived status. */
 export async function listUserEnrollments(userId: string, now: Date = new Date()): Promise<UserEnrollmentView[]> {
   const enrollments = await enrollmentRepository.findActiveEnrollmentsForUser(userId);
-  return Promise.all(
-    enrollments.map(async (e) => ({
-      courseId: e.courseId,
-      source: e.source,
-      dueAt: e.dueAt ? e.dueAt.toISOString() : null,
-      assignedAt: e.assignedAt.toISOString(),
-      status: await deriveStatus(userId, e.courseId, e.dueAt, now),
-    })),
-  );
+  const statuses = await deriveStatuses(enrollments.map((e) => ({ userId, courseId: e.courseId, dueAt: e.dueAt })), now);
+  return enrollments.map((e) => ({
+    courseId: e.courseId,
+    source: e.source,
+    dueAt: e.dueAt ? e.dueAt.toISOString() : null,
+    assignedAt: e.assignedAt.toISOString(),
+    status: statuses.get(pairKey(userId, e.courseId))!,
+  }));
 }
 
 export interface CourseEnrollmentView {
@@ -282,8 +315,8 @@ export interface CourseEnrollmentView {
 export async function listCourseEnrollments(courseId: string, now: Date = new Date()): Promise<CourseEnrollmentView[]> {
   await requireCourse(courseId);
   const enrollments = await enrollmentRepository.findActiveEnrollmentsForCourse(courseId);
-  return Promise.all(
-    enrollments.map(async (e) => ({
+  const statuses = await deriveStatuses(enrollments.map((e) => ({ userId: e.userId, courseId, dueAt: e.dueAt })), now);
+  return enrollments.map((e) => ({
       userId: e.userId,
       name: e.user.name,
       email: e.user.email,
@@ -291,9 +324,8 @@ export async function listCourseEnrollments(courseId: string, now: Date = new Da
       source: e.source,
       dueAt: e.dueAt ? e.dueAt.toISOString() : null,
       assignedAt: e.assignedAt.toISOString(),
-      status: await deriveStatus(e.userId, courseId, e.dueAt, now),
-    })),
-  );
+      status: statuses.get(pairKey(e.userId, courseId))!,
+    }));
 }
 
 /**
@@ -320,6 +352,27 @@ export async function filterVisibleCourseIds(
     for (const row of enrolled) visible.add(row.courseId);
   }
   return visible;
+}
+
+/**
+ * #1156: hvilke av kursene deltakeren ser, med samme regel som «Mine kurs» (klasser → `filterVisibleCourseIds`), for lesinger gjort
+ * i et annet kurs (sectionReadCredit.ts). `viewer` er innloggingen når kalleren har den (avstemmingen fra ruta); uten den gjelder
+ * regelen uten innlogging (`findLearnersSeeingCourses`, learnerVisibility.ts: lagrede roller, ingen Entra-grupper). Om kurset er
+ * publisert eller arkivert, spørres ikke om her: det avgjør kalleren.
+ */
+export async function findCoursesVisibleToLearner(
+  userId: string,
+  courses: Array<{ id: string; enrollmentPolicy: string }>,
+  viewer?: { roles: string[]; groupIds?: string[] },
+): Promise<Set<string>> {
+  if (courses.every((course) => course.enrollmentPolicy === "OPEN")) return new Set(courses.map((course) => course.id));
+  if (!viewer) {
+    const seeing = await findLearnersSeeingCourses(prisma, courses, [userId]);
+    return new Set(courses.filter((course) => seeing.get(course.id)?.has(userId)).map((course) => course.id));
+  }
+  const classIds = await getUserClassIds({ userId, roles: viewer.roles, groupIds: viewer.groupIds });
+  const classCourseDue = await getClassAssignedCourseDueDates(classIds, userId);
+  return filterVisibleCourseIds(userId, courses, new Set(classCourseDue.keys()));
 }
 
 /**

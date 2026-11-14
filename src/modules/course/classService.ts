@@ -9,7 +9,7 @@ import { hasAnyRole, PARTICIPANTS } from "../../auth/roleSets.js";
 import { classRepository, createClassRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
 import { isClassEntraLinkingEnabled } from "./classConfig.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
-import { courseRepository } from "./courseRepository.js";
+import { findStartedOrCompletedPairs, pairKey } from "./learnerVisibility.js";
 
 // #645/CL-2: class (cohort) business logic — CRUD + membership + course assignment + dynamic
 // membership evaluation. Course→class assignment is dynamic: a participant is assigned a course if
@@ -416,7 +416,8 @@ export async function getClassAssignedCourseDueDates(classIds: Set<string>, user
  * Kursene i `courseIds` som deltakeren har påbegynt eller fullført (produkteier 2026-11-08, arkiverte klasser).
  *
  * «Påbegynt eller fullført» er det kursdetaljen allerede regner som fremdrift, minst én av:
- *   1. en lest seksjon i kurset (en rad i `CourseSectionRead` for kurset);
+ *   1. en lest seksjon i kurset (en rad i `CourseSectionRead` for kurset). #1156: bare en lesing gjort I kurset, ikke en som
+ *      teller på tvers;
  *   2. en levert modul: en innlevering på en modul som ligger i kurset, uansett status. En bestått modul har alltid en
  *      innlevering, så «bestått modul» er med her;
  *   3. et kursbevis for kurset (`CourseCompletion`), uansett versjon: fullført;
@@ -429,31 +430,8 @@ export async function getClassAssignedCourseDueDates(classIds: Set<string>, user
  * side som svarer 404. Med punkt 4 beholder hen kurset, og varselet stemmer.
  */
 export async function findStartedOrCompletedCourseIds(userId: string, courseIds: string[]): Promise<Set<string>> {
-  const found = new Set<string>();
-  if (courseIds.length === 0) return found;
-  const [completions, reads, threads, replies, follows] = await Promise.all([
-    prisma.courseCompletion.findMany({ where: { userId, courseId: { in: courseIds } }, select: { courseId: true } }),
-    prisma.courseSectionRead.findMany({ where: { userId, courseId: { in: courseIds } }, select: { courseId: true } }),
-    prisma.discussionThread.findMany({ where: { authorId: userId, courseId: { in: courseIds } }, select: { courseId: true } }),
-    prisma.discussionReply.findMany({ where: { authorId: userId, thread: { courseId: { in: courseIds } } }, select: { thread: { select: { courseId: true } } } }),
-    prisma.discussionSubscription.findMany({ where: { userId, thread: { courseId: { in: courseIds } } }, select: { thread: { select: { courseId: true } } } }),
-  ]);
-  for (const row of [...completions, ...reads, ...threads]) found.add(row.courseId);
-  for (const row of [...replies, ...follows]) found.add(row.thread.courseId);
-  const remaining = courseIds.filter((courseId) => !found.has(courseId));
-  if (remaining.length === 0) return found;
-  // Modulene i kursene gjennom døra for forfatterflatene (#958), i én spørring for alle kursene. Også arkiverte moduler.
-  const modulesByCourse = new Map<string, string[]>();
-  for (const item of await courseRepository.findModuleItemsForCourses(remaining)) {
-    if (!item.moduleId) continue;
-    modulesByCourse.set(item.courseId, [...(modulesByCourse.get(item.courseId) ?? []), item.moduleId]);
-  }
-  const moduleIds = [...new Set([...modulesByCourse.values()].flat())];
-  if (moduleIds.length === 0) return found;
-  const submitted = await prisma.submission.findMany({ where: { userId, moduleId: { in: moduleIds } }, distinct: ["moduleId"], select: { moduleId: true } });
-  const submittedModuleIds = new Set(submitted.map((row) => row.moduleId));
-  for (const [courseId, ids] of modulesByCourse) {
-    if (ids.some((moduleId) => submittedModuleIds.has(moduleId))) found.add(courseId);
-  }
-  return found;
+  // #1156: regelen bor i `findStartedOrCompletedPairs` (learnerVisibility.ts), som også svarer for mange deltakere på én gang
+  // (synligheten for lesinger gjort i et annet kurs). Bare lesinger gjort I kurset teller (produkteier 14.11.2026).
+  const pairs = await findStartedOrCompletedPairs(prisma, [userId], courseIds);
+  return new Set(courseIds.filter((courseId) => pairs.has(pairKey(userId, courseId))));
 }

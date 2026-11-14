@@ -506,6 +506,28 @@ gang jobben går etter utrullingen av 2.151.0. Skriptet bruker samme spørring s
 ut kurs og antall, ingen navn. Før migreringen regner det `settledAt` som migreringen gjør det. Etter migreringen:
 `-- --after-migration`. Kjør det mot prod før utrulling, og vis tallet til produkteier (`doc/design/PLAN_1146.md`, punkt 6).
 
+### Lest seksjon på tvers av kurs: hvor mange kursbevis (#1156)
+
+`npm run maint:count-section-read-certificates` teller, per publisert kurs med seksjoner, hvor mange kursbevis som utstedes når
+lesinger begynner å telle i alle kurs med seksjonen (`doc/design/PLAN_1156_LEST_PA_TVERS.md`, «Utrulling»). Kjør det mot prod FØR
+utrulling og vis tallet til produkteier:
+
+```powershell
+# DATABASE_URL til prod i miljøet (samme som for de andre telleskriptene), så:
+npm run maint:count-section-read-certificates
+```
+
+Skriptet åpner tilkoblingen med `default_transaction_read_only=on` og stopper hvis den ikke er skrivebeskyttet. Det skriver kurs-id,
+tittel, tilgang og antall, ingen navn, e-postadresser eller bruker-id-er. Det virker før migreringen. Feltene: `today` (oppfyller
+kravet med dagens regel, får beviset uansett neste gang), `newRule` (med den nye regelen, bare i kurs deltakeren ser), `added`
+(forskjellen), `notVisible` (ville fått bevis om lesinger talte også i kurs deltakeren ikke ser; holdes tilbake), og
+`coursesGoingFromZeroHolders` (kurs som går fra null til flere bevisinnehavere for nåværende hovedversjon: de får e-post ved neste
+hovedversjon, og «kurs fullført» dateres utrullingsdagen i aktiviteten).
+
+**Tilbakerulling etter #1156:** migreringen gjør `CourseSectionRead.courseId` valgfri, og et kurs som slettes, lar lesingene stå uten
+kurs. Gammel kode leser feltet som påkrevd. Før koden rulles tilbake: slett radene uten kurs, eller gi dem et kurs
+(`DELETE FROM "CourseSectionRead" WHERE "courseId" IS NULL` mister lesingene i de andre kursene; tell dem først).
+
 ### Den ukentlige e-posten fra båten (#1139)
 
 Planen: `doc/design/PLAN_1139.md`. To innstillinger på WORKEREN, i Bicep og i GitHub-miljøet (`doc/AZURE_ENVIRONMENTS.md`):

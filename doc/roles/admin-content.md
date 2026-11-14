@@ -100,6 +100,10 @@ seksjon som er arkivert, avvises oppdateringen på samme måte.
 
 **«Slett kurs og ubrukt innhold»** (administratorer) står bare på et arkivert kurs.
 
+**Lesingene blir stående når et kurs slettes (#1156).** En lest seksjon tilhører deltakeren og seksjonen, ikke kurset den ble lest
+i, og teller i alle kurs som har seksjonen. Slettes kurset, teller lesingene videre i de andre kursene. Aktiviteten viser dem uten
+kursnavn.
+
 ### 4. Importere og eksportere modul-JSON
 
 Det finnes **to** steder, med bevisst ulik betydning:
@@ -195,6 +199,13 @@ før e-posten går, kommer ikke med.
 - endret frist.
 
 ## Vanlige spørsmål
+
+**Deler to kurs en seksjon. Må deltakeren lese den i begge? (#1156)**
+Nei. En lest seksjon teller i alle kurs som har den, som en bestått modul, men bare i kurs deltakeren ser (åpne kurs, og begrensede
+kurs hen er tildelt). Fremdriften i «Mine kurs», kursrapporten og kursbeviset regner med lesingen, og blir et kurs fullført av den,
+utstedes kursbeviset like etter (workeren gjør det), eller senest når deltakeren åpner «Mine kurs» eller kursbevisene. Har kurset ditt tatt i bruk en ny hovedversjon der seksjonen er endret, må den leses på nytt i
+ditt kurs. E-postene regner ikke slik: «du har fått et nytt kurs» og «i gang» i den ukentlige e-posten krever at deltakeren har gjort
+noe i kurset selv. Rapporten for kurset tar med dem som har lest kursets seksjoner i et annet kurs.
 
 **Kan jeg redigere en publisert modul?**
 Ja, redigeringer lagres som ny kladd. Den publiserte versjonen forblir aktiv til du publiserer kladden.

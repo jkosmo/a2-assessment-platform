@@ -6,6 +6,7 @@ import { runContentWrite, lockLearnersInContentWrite } from "../src/db/contentLo
 import { recordAuditEvent } from "../src/services/auditService.js";
 import { auditActions, auditEntityTypes } from "../src/observability/auditEvents.js";
 import { createCourseRepository } from "../src/modules/course/courseRepository.js";
+import { findSectionReadCredit } from "../src/modules/course/sectionReadCredit.js";
 import { withRevision } from "./support/courseRevision.js";
 import { recordFixturePass } from "./support/modulePassFixture.js";
 import { archiveCourseConfirmed } from "./support/courseArchive.js";
@@ -655,8 +656,11 @@ describe("#1150 2a-2: et gjenopprettet kurs publiseres uten ny hovedversjon, og 
 
     // Fremdriften står: lesingene teller for nåværende hovedversjon, og beståtten teller i kurset.
     const repo = createCourseRepository(prisma);
-    expect(await repo.findReadSectionIds(reader, course.id)).toEqual([section]);
-    expect(await repo.findReadSectionIds(holder, course.id)).toEqual([section]);
+    // #1156: lesingene telles gjennom den felles funksjonen (sectionReadCredit.ts), med samme liste som porten for kursbevis.
+    const readIds = async (userId: string) =>
+      [...(await findSectionReadCredit(prisma, { userIds: [userId], courseIds: [course.id], items: "participant" })).readSectionIds(userId, course.id)];
+    expect(await readIds(reader)).toEqual([section]);
+    expect(await readIds(holder)).toEqual([section]);
     const progress = await repo.findModuleProgress({ userIds: [holder], courses: [{ courseId: course.id, moduleIds: [module.id] }] });
     expect([...progress.passedModuleIds(holder, course.id)]).toEqual([module.id]);
     // Kursbeviset er det samme, for samme hovedversjon.
