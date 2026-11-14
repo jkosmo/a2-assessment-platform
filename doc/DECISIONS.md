@@ -2082,3 +2082,8 @@ Planen og avgjørelsene over sa hva; dette er valgene som ikke sto der.
   eierne. Følger #1150 2b og «SMO-deling er ønsket».
 
 **Sak:** #1157 · **Dato:** 2026-11-14 · **Status:** avgjort av produkteier
+- **Publisering av kurs gjøres likt med moduler** (produkteier 14.11.2026: «Vi bør gjøre ting likt mellom moduler og kurs»):
+  «Publiser» og «Publiser utkastet» på et kurs får en dialog før publiseringen, slik moduler har, og den sier hvem som ser
+  kurset etterpå (alle deltakere, eller de tildelte).
+- **Nye kurs er begrenset som standard** (samme dag: «Nye kurs bør ikke være åpent for alle»): bare de tildelte ser et nytt
+  kurs til forfatteren selv åpner det for alle.
