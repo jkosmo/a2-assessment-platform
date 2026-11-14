@@ -136,8 +136,13 @@ test("A: en arkivert modul med en publisert versjon slettes; kontroll: ikke arki
   noter("A, arkivert", { status: s.status, error: s.json.error });
   expect(s.status, s.tekst.slice(0, 300)).toBeLessThan(300);
   slettet.add(id);
+  // Eierskapssjekken kommer før oppslaget, så en modul som ikke finnes, gir 403 (ingen eier) — ikke 404. Borte fra lista er
+  // det som teller.
   const etter = await api("GET", `${modulsti(id)}/export`);
-  expect(etter.status).toBe(404);
+  expect([403, 404]).toContain(etter.status);
+  const bibliotek = await api("GET", "/api/admin/content/modules/library?locale=nb");
+  expect(bibliotek.status).toBe(200);
+  expect((bibliotek.json.modules ?? []).some((m: { id: string }) => m.id === id), "modulen står fortsatt i biblioteket").toBe(false);
 });
 
 test("B: et arkivert kurs med egen modul og seksjon slettes, og så elementene", async () => {

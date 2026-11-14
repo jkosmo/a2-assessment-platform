@@ -10,6 +10,12 @@ som skal beholdes, sier hvorfor. Jobben som sletter etter seks måneder (4c) og 
 uavhengig Claude-agent før bygging). Avgjørelsene: `doc/DECISIONS.md`, «Hva som holder et arkivert kurs igjen fra sletting».
 Ingen migrering.
 
+**På stage 14.11.2026 kl. 15:45** (dev b7aee324). Mot ekte data, alt grønt: `test/stage/release-2-161-slett-arkivert.spec.ts`
+(4/4): en arkivert modul med publisert versjon slettes og er borte fra biblioteket (kontroll: ikke arkivert →
+`delete_requires_archived`); et arkivert kurs med egen modul og seksjon slettes, og så elementene; «Slett» i biblioteket
+fjerner raden uten feilmelding. `release-2-160` (7/7), `release-2-158` (6/6) og `release-2-159` (6/6) kjørt på nytt. Ingen
+5xx i stage-loggene.
+
 **Hva forfatterne merker:**
 
 - En arkivert modul kan slettes, også når den har lagrede versjoner (i 2.160 kunne den ikke det, og svaret var en generell
