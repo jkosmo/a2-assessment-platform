@@ -2069,3 +2069,16 @@ Planen og avgjørelsene over sa hva; dette er valgene som ikke sto der.
 `recordSectionRead` og `checkAndIssueCourseCompletionsForSection` (courseCompletionService.ts); `test/section-read-reader-guard.test.js`
 (ingen nye lesere av tabellen), `test/unit/section-read-credit-1156.test.ts` (også at synligheten koster et fast antall spørringer på klienten som sendes inn), `test/unit/enrollment-status-batch-1156.test.ts` (statusene i ett kall), `test/m2-section-read-across-courses-1156.test.ts`.
 **Sak:** #1156 · **Dato:** 2026-11-14 · **Status:** valgt under byggingen; ikke avklart med produkteier
+
+## Svar fra produkteier på #1157, første runde (2026-11-14)
+
+- **«Lagre» på en seksjon gjør det samme som på kurs og moduler** («La oss gjøre det likt»): lagringen blir et utkast, og
+  deltakerne ser den publiserte versjonen til forfatteren publiserer. Erstatter at lagring av en seksjon publiserer straks.
+  Lagringen av tittel og innhold skal skje i én transaksjon. Bygges som egen sak.
+- **Den som eier en klasse, kan tildele kurs vedkommende ikke eier, via klassen** («Ja»). Det er villet, ikke et hull:
+  klassen er eierens eget verktøy for å samle deltakere. Enkeltvis tildeling fra kurset krever fortsatt at man eier kurset.
+- **Produsenter skal kunne se hverandres innhold** («Produsenter bør kunne se hverandres innhold»). En produsent som ikke
+  eier et kurs eller en modul, skal kunne åpne det for å lese (skrivebeskyttet), slik seksjoner alt gjør. Endre kan bare
+  eierne. Følger #1150 2b og «SMO-deling er ønsket».
+
+**Sak:** #1157 · **Dato:** 2026-11-14 · **Status:** avgjort av produkteier
