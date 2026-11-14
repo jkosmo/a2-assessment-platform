@@ -26,7 +26,7 @@ const MSG_LOCALE = "nb" as const;
 //     - det som stopper AVPUBLISERING og ARKIVERING                assert…NotInActiveCourse
 //
 //   ALLE kurs, også arkiverte                                     findAllCoursesContaining…
-//     - det som stopper SLETTING                                   assertSectionNotInAnyCourse, describeModuleDeleteBlock
+//     - det som stopper SLETTING                                   courseDeleteHold (og describeModuleDeleteBlock for ruta)
 //     - kaskadeslettingens «delt med andre kurs»
 //
 // Sletting er unntatt fordi databasen ikke kan noe annet: `CourseItem` peker på modul og seksjon med
@@ -82,6 +82,41 @@ export function findAllCoursesContainingModule(moduleId: string, reader: Lifecyc
 /** ALLE kurs som inneholder seksjonen, også arkiverte (`archived` sier hvilke). Bare for sletting. */
 export function findAllCoursesContainingSection(sectionId: string, reader: LifecycleReader = prisma) {
   return coursesContaining({ sectionId }, "all", reader);
+}
+
+/**
+ * #1152 skive 4b: det samme svaret som `findAllCoursesContainingModule`/`…Section` (ALLE kurs, også arkiverte, sist endret først),
+ * for mange moduler og seksjoner i én spørring. Bare for sletting: lista over arkiverte (`checkModuleDeletes`, `checkSectionDeletes`)
+ * spør her i stedet for én gang per element.
+ */
+export async function findAllCoursesContainingItems(
+  items: { moduleIds: readonly string[]; sectionIds: readonly string[] },
+  reader: LifecycleReader = prisma,
+): Promise<{ modules: Map<string, CourseUse[]>; sections: Map<string, CourseUse[]> }> {
+  const result = { modules: new Map<string, CourseUse[]>(), sections: new Map<string, CourseUse[]>() };
+  const branches = [
+    ...(items.moduleIds.length > 0 ? [{ moduleId: { in: [...items.moduleIds] } }] : []),
+    ...(items.sectionIds.length > 0 ? [{ sectionId: { in: [...items.sectionIds] } }] : []),
+  ];
+  if (branches.length === 0) return result;
+  const rows = await reader.courseItem.findMany({
+    where: { OR: branches },
+    select: { moduleId: true, sectionId: true, course: { select: { id: true, title: true, archivedAt: true } } },
+    // Samme rekkefølge som `coursesContaining`, så feilmeldingen navngir kursene likt.
+    orderBy: { course: { updatedAt: "desc" } },
+  });
+  const add = (map: Map<string, CourseUse[]>, id: string, course: { id: string; title: string; archivedAt: Date | null }) => {
+    const list = map.get(id) ?? [];
+    if (!list.some((c) => c.id === course.id)) list.push({ id: course.id, title: courseDisplayTitle(course.title), archived: course.archivedAt !== null });
+    map.set(id, list);
+  };
+  const wantedModules = new Set(items.moduleIds);
+  const wantedSections = new Set(items.sectionIds);
+  for (const row of rows) {
+    if (row.moduleId && wantedModules.has(row.moduleId)) add(result.modules, row.moduleId, row.course);
+    if (row.sectionId && wantedSections.has(row.sectionId)) add(result.sections, row.sectionId, row.course);
+  }
+  return result;
 }
 
 // #705-UX(G), #1149: batch — hvilke AKTIVE kurs bruker hvert av disse elementene. For «Brukt i kurs»-kolonnen,
@@ -318,20 +353,42 @@ function deleteBlockedError(subject: "Modulen" | "Seksjonen", courses: CourseUse
   return inActiveCourseError(subject, "slettes", courses);
 }
 
+/** Et element som ligger i kurs: feilen «Slett» gir, og kursene (lista over arkiverte, #1152 4b, ser om de selv slettes først). */
+export type CourseDeleteHold = { error: AppError; courseCount: number; courses: CourseUse[] };
+
+/**
+ * DEN ENE regelen for «ligger i et kurs» ved SLETTING av en modul eller seksjon: kursene som inneholder elementet (ALLE, også
+ * arkiverte, fra `findAllCoursesContaining…` eller `findAllCoursesContainingItems`) gir `null` (ingen) eller feilen. «Slett» og lista
+ * over arkiverte (#1152 4b) kommer hit med kursene de har lest; `describeModuleDeleteBlock` er ruta sin forhåndssjekk.
+ * `coursesDeletedFirst`: se `withoutCoursesDeletedFirst` under.
+ */
+export function courseDeleteHold(
+  subject: "Modulen" | "Seksjonen",
+  containing: CourseUse[],
+  coursesDeletedFirst?: ReadonlySet<string>,
+): CourseDeleteHold | null {
+  const courses = withoutCoursesDeletedFirst(containing, coursesDeletedFirst);
+  return courses.length > 0 ? { error: deleteBlockedError(subject, courses), courseCount: courses.length, courses } : null;
+}
+
 /**
  * Sletting av en modul: `null` når den ikke ligger i noe kurs, ellers feilen som skal kastes. Returnerer i stedet
  * for å kaste fordi sletteruta (`DELETE /api/admin/content/modules/:id`) svarer med sin egen form (#705:
  * `courseCount` øverst i kroppen) før den kaller `deleteModule`, som sjekker på nytt etter innholdslåsen.
  */
-export async function describeModuleDeleteBlock(moduleId: string, reader: LifecycleReader = prisma) {
-  const courses = await findAllCoursesContainingModule(moduleId, reader);
-  return courses.length > 0 ? { error: deleteBlockedError("Modulen", courses), courseCount: courses.length } : null;
+export async function describeModuleDeleteBlock(moduleId: string, reader: LifecycleReader = prisma): Promise<CourseDeleteHold | null> {
+  return courseDeleteHold("Modulen", await findAllCoursesContainingModule(moduleId, reader));
 }
 
-/** Sletting av en seksjon stoppes av ALLE kurs, også arkiverte. Avpublisering og arkivering: `assertSectionNotInActiveCourse`. */
-export async function assertSectionNotInAnyCourse(sectionId: string, reader: LifecycleReader = prisma): Promise<void> {
-  const courses = await findAllCoursesContainingSection(sectionId, reader);
-  if (courses.length > 0) throw deleteBlockedError("Seksjonen", courses);
+/**
+ * #1152 skive 4b (planen, «Etter gjennomlesingen» punkt 7): lista over arkiverte spør «kan dette slettes NÅR kursene det ligger i
+ * er slettet?». Jobben (4c) sletter kursene først; da er koblingen borte, og elementets egne vakter avgjør. `coursesDeletedFirst`
+ * er kursene lista har regnet ut at kan slettes. Bare ARKIVERTE kurs kan tas ut: et aktivt kurs slettes aldri av fristen.
+ * «Slett» sender aldri settet; der teller alle kursene, som før.
+ */
+function withoutCoursesDeletedFirst(courses: CourseUse[], coursesDeletedFirst: ReadonlySet<string> | undefined): CourseUse[] {
+  if (!coursesDeletedFirst || coursesDeletedFirst.size === 0) return courses;
+  return courses.filter((course) => !(course.archived && coursesDeletedFirst.has(course.id)));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -373,16 +430,18 @@ function inCourseDraftDeleteError(subject: "Modulen" | "Seksjonen", drafts: Item
   );
 }
 
-/** Sletting av en modul stoppes av et lagret utkast som nevner den (#1152). */
-export async function assertModuleNotInCourseDraft(moduleId: string, reader: LifecycleReader = prisma): Promise<void> {
-  const drafts = (await findCourseDraftUsesForDelete({ moduleIds: [moduleId], sectionIds: [] }, reader)).modules.get(moduleId) ?? [];
-  if (drafts.length > 0) throw inCourseDraftDeleteError("Modulen", drafts);
-}
-
-/** Sletting av en seksjon stoppes av et lagret utkast som nevner den (#1152). */
-export async function assertSectionNotInCourseDraft(sectionId: string, reader: LifecycleReader = prisma): Promise<void> {
-  const drafts = (await findCourseDraftUsesForDelete({ moduleIds: [], sectionIds: [sectionId] }, reader)).sections.get(sectionId) ?? [];
-  if (drafts.length > 0) throw inCourseDraftDeleteError("Seksjonen", drafts);
+/**
+ * Sletting av en modul eller seksjon stoppes av et lagret utkast som nevner den (#1152): feilen per element, for mange elementer i
+ * én omgang. Et element uten utkast står ikke i svaret. «Slett» spør for ett element; lista over arkiverte (#1152 4b) for alle.
+ */
+export async function findCourseDraftDeleteBlocks(
+  items: { moduleIds: readonly string[]; sectionIds: readonly string[] },
+  reader: LifecycleReader = prisma,
+): Promise<{ modules: Map<string, AppError>; sections: Map<string, AppError> }> {
+  const uses = await findCourseDraftUsesForDelete(items, reader);
+  const errors = (subject: "Modulen" | "Seksjonen", map: Map<string, ItemUse[]>) =>
+    new Map([...map].map(([id, drafts]) => [id, inCourseDraftDeleteError(subject, drafts)] as const));
+  return { modules: errors("Modulen", uses.modules), sections: errors("Seksjonen", uses.sections) };
 }
 
 // #938: innhold som står i et UTSTEDT kursbevis kan aldri slettes.

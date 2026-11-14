@@ -1407,6 +1407,15 @@ dialog::backdrop {
       smalere, ville holdt til neste kolonne kom; denne holder uansett hva raden inneholder. */
 .list-table .col-status { line-height: 1.9; }
 .list-table .col-status > * { white-space: nowrap; }
+/* #1152 skive 4b: «Slettes 13.05.2027» / «Beholdes: <grunn>» under statusmerket på en arkivert rad. Egen linje i metafargen, som
+   datoen i «Sist endret»; grunnen får brekke (regelen over holder merkene på én linje), så raden ikke blir bredere enn kortet på
+   en telefon. */
+.list-table .col-status > .retention-line { display: block; white-space: normal; overflow-wrap: anywhere; min-width: 9em; color: var(--color-meta); font-size: 12.5px; line-height: 1.4; margin-top: 2px; }
+/* I kortet på telefon er cellen en rad (navnet til venstre, merket til høyre). Linja får sin egen rad under merket. */
+@media (max-width: 600px) {
+  .list-table td.col-status { flex-wrap: wrap; }
+  .list-table .col-status > .retention-line { flex-basis: 100%; min-width: 0; text-align: right; margin-top: 0; }
+}
 .list-table th.col-actions, .list-table td.col-actions { position: sticky; right: 0; }
 .list-table td.col-actions { background: var(--color-surface); }
 .list-table tr:hover td.col-actions { background: var(--color-row-hover); }

@@ -4,6 +4,7 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText, localesPresent } from "../../i18n/content.js";
 import { deriveContentLifecycle } from "../content/lifecycle.js";
 import { findActiveCoursesForModules } from "../course/contentLifecycle.js";
+import { createRetentionContext, evaluateArchivedItems, type ArchivedRetention } from "../content/archivedRetention.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
 import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
@@ -45,6 +46,11 @@ export async function listLibraryModules(
   const ownedIds = viewerUserId ? await adminContentRepository.listModuleIdsOwnedBy(viewerUserId) : new Set<string>();
   // #1149: «Brukt i kurs», kursfilteret og popoveren viser bare AKTIVE kurs. Samme spørsmål som seksjonslista stiller.
   const coursesByModule = await findActiveCoursesForModules(modules.map((module) => module.id), locale);
+  // #1152 skive 4b: «slettes <dato>» eller «beholdes» med grunnen, bare for de arkiverte (content/archivedRetention.ts).
+  const archivedIds = modules.filter((module) => module.archivedAt).map((module) => module.id);
+  const retention = archivedIds.length > 0
+    ? await evaluateArchivedItems(await createRetentionContext(), "MODULE", archivedIds)
+    : new Map<string, ArchivedRetention>();
 
   return modules.map((module) => ({
     id: module.id,
@@ -71,6 +77,7 @@ export async function listLibraryModules(
     canManage: viewerIsAdmin || ownedIds.has(module.id),
     courseCount: coursesByModule.get(module.id)?.length ?? 0,
     courses: coursesByModule.get(module.id) ?? [],
+    ...(module.archivedAt ? { retention: retention.get(module.id) ?? ({ unknown: true } as ArchivedRetention) } : {}),
   }));
 }
 

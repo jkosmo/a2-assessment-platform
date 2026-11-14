@@ -27,3 +27,20 @@ export const OFFBOARDING_GRACE_PERIOD_DAYS = 90;
  *  Expressed in years for readability; converted to days internally. */
 export const INACTIVITY_RETENTION_YEARS = 2;
 export const INACTIVITY_RETENTION_DAYS = INACTIVITY_RETENTION_YEARS * 365;
+
+/**
+ * #1152 (doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md, «Fristen»): archived content without participant
+ * history is deleted this many CALENDAR months after it was archived. Not days: the author reads the date in
+ * the list («Slettes 13.05.2027»), and «six months after 13 November» is 13 May. The arithmetic (Oslo calendar
+ * date, month end) lives in src/modules/content/retentionDeadline.ts.
+ */
+export const ARCHIVED_CONTENT_RETENTION_MONTHS = 6;
+
+/**
+ * #1152: the `PlatformConfig` row that holds the transition floor — the moment the retention rule arrived in
+ * this environment (written once by the migration `20261114120000_archived_content_retention`, ISO 8601 UTC).
+ * The deadline counts from the LATER of `archivedAt` and this floor, so content archived before the rule
+ * existed gets its full six months. A missing or unparseable row means «unknown»: the lists show no date and
+ * the job (4c) deletes nothing.
+ */
+export const ARCHIVED_CONTENT_RETENTION_FLOOR_KEY = "archived_content_retention_floor";

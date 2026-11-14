@@ -3,7 +3,7 @@ const formatDate = createDateFormatter(() => currentLocale);
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "");
 import { pickLocalizedText, resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
 import { escapeHtml } from "./html-escape.js";
-import { lifecycleBadge, lifecycleOf } from "./content-status-badge.js";
+import { lifecycleBadge, lifecycleOf, retentionLineHtml } from "./content-status-badge.js";
 import {
   supportedLocales,
   localeLabels,
@@ -997,7 +997,7 @@ function getListPage() {
         // Alfabetisk står temaene under navnet; etter tema sier overskriften det.
         + (view === "alphabetical" && (c.themes ?? []).length > 0 ? `<span class="list-group-themes">${escapeHtml(c.themes.map((theme) => theme.name).join(" · "))}</span>` : "") },
       // #934 skive 3: versjonen ved statusen («v3.2») — et merke, ikke en kolonne (#1084).
-      { key: "status", label: t("ui.status"), className: "col-status", render: (c) => lifecycleBadge(c, t) + courseVersionChipHtml(c) },
+      { key: "status", label: t("ui.status"), className: "col-status", render: (c) => lifecycleBadge(c, t) + courseVersionChipHtml(c) + retentionLineHtml(c, "course", t, currentLocale) },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (c) => certBadge(c.certificationLevel) },
       { key: "moduleCount", label: t("courses.col.moduleCount"), className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
       { key: "inProgress", label: t("courses.col.inProgress"), className: "col-inprogress", title: t("courses.col.inProgressHint"), sortValue: (c) => c.inProgressCount ?? 0, render: (c) => (c.inProgressCount > 0 ? String(c.inProgressCount) : "–") },

@@ -14,7 +14,7 @@ import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const recordAuditEvent = vi.fn();
 const sectionFindUnique = vi.fn();
-const assertSectionNotInAnyCourse = vi.fn();
+const findAllCoursesContainingSection = vi.fn();
 const assertSectionNotInIssuedCertificate = vi.fn();
 const collectSectionAssetBlobPaths = vi.fn();
 const reclaimAssetBlobs = vi.fn();
@@ -48,10 +48,13 @@ vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
 vi.mock("../../src/modules/course/contentLifecycle.js", () => ({
   // #1149: avpubliser og arkiver bruker denne; slettingen (som testes her) bruker den under.
   assertSectionNotInActiveCourse: vi.fn(),
-  assertSectionNotInAnyCourse,
+  // #1152 skive 4b: kursene leses, og regelen for «ligger i et kurs» er en ren funksjon (lista over arkiverte trenger kursene).
+  findAllCoursesContainingSection,
+  findAllCoursesContainingItems: vi.fn(async () => ({ modules: new Map(), sections: new Map() })),
+  courseDeleteHold: vi.fn(() => null),
   assertSectionNotInIssuedCertificate,
   // #1152: et lagret kursutkast stopper også slettingen.
-  assertSectionNotInCourseDraft: vi.fn(),
+  findCourseDraftDeleteBlocks: vi.fn(async () => ({ modules: new Map(), sections: new Map() })),
 }));
 
 vi.mock("../../src/modules/course/assetCommands.js", () => ({
@@ -74,7 +77,7 @@ describe("#961 deleteSection leaves an audit trail", () => {
     recordAuditEvent.mockReset().mockResolvedValue(undefined);
     // #1151: bare en arkivert seksjon kan slettes.
     sectionFindUnique.mockReset().mockResolvedValue({ id: "section-1", title: "Arbeidsmiljøloven", archivedAt: new Date("2026-11-01T00:00:00Z") });
-    assertSectionNotInAnyCourse.mockReset().mockResolvedValue(undefined);
+    findAllCoursesContainingSection.mockReset().mockResolvedValue([]);
     assertSectionNotInIssuedCertificate.mockReset().mockResolvedValue(undefined);
     collectSectionAssetBlobPaths.mockReset().mockResolvedValue([]);
     reclaimAssetBlobs.mockReset().mockResolvedValue(undefined);

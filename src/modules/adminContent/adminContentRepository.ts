@@ -6,6 +6,25 @@ import { resolvePublishNumber, type ModuleVersionKind } from "./moduleVersioning
 
 type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseItem" | "contentOwner">;
 
+/** Det «Slett» for en modul trenger å vite om den (`checkModuleDelete`, `checkModuleDeletes`, kaskaden). */
+const moduleDeleteSummarySelect = {
+  id: true,
+  title: true,
+  activeVersionId: true,
+  // #1151: «slett krever arkivert» (`deleteModule`).
+  archivedAt: true,
+  _count: {
+    select: {
+      versions: true,
+      submissions: true,
+      mcqSetVersions: true,
+      certificationStatuses: true,
+      rubricVersions: true,
+      promptTemplateVersions: true,
+    },
+  },
+} as const;
+
 export function createAdminContentRepository(client: AdminContentRepositoryClient = prisma) {
   return {
     // #787/#836: module ids the given user is a content-owner of. Used to annotate the module library
@@ -85,26 +104,13 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
     },
 
     findModuleDeleteSummary(moduleId: string) {
-      return client.module.findUnique({
-        where: { id: moduleId },
-        select: {
-          id: true,
-          title: true,
-          activeVersionId: true,
-          // #1151: «slett krever arkivert» (`deleteModule`).
-          archivedAt: true,
-          _count: {
-            select: {
-              versions: true,
-              submissions: true,
-              mcqSetVersions: true,
-              certificationStatuses: true,
-              rubricVersions: true,
-              promptTemplateVersions: true,
-            },
-          },
-        },
-      });
+      return client.module.findUnique({ where: { id: moduleId }, select: moduleDeleteSummarySelect });
+    },
+
+    /** #1152 skive 4b: det samme for mange moduler i én spørring (lista over arkiverte, `checkModuleDeletes`). */
+    findModuleDeleteSummaries(moduleIds: readonly string[]) {
+      if (moduleIds.length === 0) return Promise.resolve([]);
+      return client.module.findMany({ where: { id: { in: [...moduleIds] } }, select: moduleDeleteSummarySelect });
     },
 
     findModuleTitle(moduleId: string) {

@@ -1,5 +1,6 @@
 import type { LocalizedTheme } from "./courseThemeService.js";
 import type { ContentLifecycle } from "../content/lifecycle.js";
+import type { ArchivedRetention } from "../content/archivedRetention.js";
 
 export type CourseStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
@@ -93,6 +94,8 @@ export interface AdminCourseListItem {
   /** #934 skive 3: kursets versjon, vist som «v3.2» i lista. */
   versionMajor: number;
   versionMinor: number;
+  /** #1152 skive 4b: bare på arkiverte kurs. «Slettes <dato>», «beholdes» med koden, eller ukjent (content/archivedRetention.ts). */
+  retention?: ArchivedRetention;
 }
 
 export interface AdminCourseDetail {

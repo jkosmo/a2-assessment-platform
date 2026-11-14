@@ -5,10 +5,15 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import {
   assertSectionNotInActiveCourse,
-  assertSectionNotInAnyCourse,
-  assertSectionNotInCourseDraft,
   assertSectionNotInIssuedCertificate,
+  courseDeleteHold,
+  findAllCoursesContainingItems,
+  findAllCoursesContainingSection,
+  findCourseDraftDeleteBlocks,
+  type CourseUse,
+  type LifecycleReader,
 } from "./contentLifecycle.js";
+import { firstDeleteBlock, type DeleteCheck } from "../content/deleteCheck.js";
 import { applyMinorVersionToCoursesContaining, sameLocalizedText } from "./courseVersioning.js";
 import { randomUUID } from "node:crypto";
 import { stageSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs, type IncomingSectionAsset } from "./assetCommands.js";
@@ -603,24 +608,13 @@ export async function deleteSectionInTx(
   sectionId: string,
   options: { actorId?: string; source?: string } = {},
 ): Promise<{ deleted: true; blobPaths: string[] } | { deleted: false; reason: "not_found" }> {
-  // #961: tittelen hentes FØR slettingen. Etterpå finnes den ingen steder — revisjonsraden er alt
+  // #1152 skive 4b: «kan seksjonen slettes?» er den samme utregningen som lista over arkiverte viser (`checkSectionDelete`).
+  const check = await checkSectionDelete(sectionId, tx);
+  if (check.status === "not_found") return { deleted: false, reason: "not_found" };
+  if (check.status === "blocked") throw check.error;
+  // #961: tittelen hentes FØR slettingen (`check.title`). Etterpå finnes den ingen steder — revisjonsraden er alt
   // som er igjen, og en id alene lar ingen kjenne igjen hva som forsvant (samme form som
   // modul-sletting, adminContentCommands.ts:376).
-  const section = await tx.courseSection.findUnique({
-    where: { id: sectionId },
-    select: { id: true, title: true, archivedAt: true },
-  });
-  if (!section) return { deleted: false, reason: "not_found" };
-  // #1151 (G4): bare en arkivert seksjon kan slettes. Før sto regelen bare i klienten.
-  if (!section.archivedAt) throw deleteRequiresArchivedError({ type: "SECTION", id: sectionId });
-  // G2, sletting: ALLE kurs teller, også arkiverte (#1149; `CourseItem` → seksjon er `onDelete: Restrict`).
-  // Svaret navngir kursene, og sier hvilke som er arkiverte.
-  await assertSectionNotInAnyCourse(sectionId, tx);
-  // #938: G2 over dekker «ligger i et kurs NÅ». Denne dekker «sto i et kursbevis DA» — innhold
-  // som er fjernet fra kurset, men som et utstedt diplom fortsatt hviler på.
-  await assertSectionNotInIssuedCertificate(sectionId, "slettes", tx);
-  // #1152: et lagret utkast til et kurs teller som bruk, som ved arkivering.
-  await assertSectionNotInCourseDraft(sectionId, tx);
   // #758: capture the section's asset blob paths before the delete — SectionAsset rows cascade away
   // with the section, so afterwards there is nothing left to look them up from.
   const blobPaths = await collectSectionAssetBlobPaths([sectionId], tx);
@@ -641,11 +635,81 @@ export async function deleteSectionInTx(
       entityId: sectionId,
       action: auditActions.section.deleted,
       actorId: options.actorId,
-      metadata: { sectionId, title: section.title, ...(options.source ? { source: options.source } : {}) },
+      metadata: { sectionId, title: check.title, ...(options.source ? { source: options.source } : {}) },
     },
     tx,
   );
   return { deleted: true, blobPaths };
+}
+
+type SectionDeleteSummary = { id: string; title: string; archivedAt: Date | null };
+const sectionDeleteSummarySelect = { id: true, title: true, archivedAt: true } as const;
+
+/**
+ * #1152 skive 4b: «kan seksjonen slettes?». REGLENE bor her, én gang; dataene leses av `checkSectionDelete` (én seksjon, «Slett», på
+ * transaksjonen som holder innholdslåsen) eller `checkSectionDeletes` (mange, lista over arkiverte, uten lås). Vaktene i rekkefølge;
+ * den første som slår til, er svaret. `coursesDeletedFirst`: bare lista sender det (se `withoutCoursesDeletedFirst`, contentLifecycle.ts).
+ */
+async function sectionDeleteRules(
+  sectionId: string,
+  section: SectionDeleteSummary | null,
+  courses: CourseUse[],
+  draftBlock: AppError | null,
+  reader: LifecycleReader,
+  coursesDeletedFirst?: ReadonlySet<string>,
+): Promise<DeleteCheck<{ title: string }>> {
+  if (!section) return { status: "not_found" };
+  // #1151 (G4): bare en arkivert seksjon kan slettes. Før sto regelen bare i klienten.
+  if (!section.archivedAt) return { status: "blocked", error: deleteRequiresArchivedError({ type: "SECTION", id: sectionId }) };
+  // G2, sletting: ALLE kurs teller, også arkiverte (#1149; `CourseItem` → seksjon er `onDelete: Restrict`).
+  // Svaret navngir kursene, og sier hvilke som er arkiverte.
+  const inCourses = courseDeleteHold("Seksjonen", courses, coursesDeletedFirst);
+  if (inCourses) return { status: "blocked", error: inCourses.error, heldBy: inCourses.courses };
+  // #938: G2 over dekker «ligger i et kurs NÅ». Denne dekker «sto i et kursbevis DA» — innhold
+  // som er fjernet fra kurset, men som et utstedt diplom fortsatt hviler på.
+  const certificate = await firstDeleteBlock([() => assertSectionNotInIssuedCertificate(sectionId, "slettes", reader)]);
+  if (certificate) return { status: "blocked", error: certificate };
+  // #1152: et lagret utkast til et kurs teller som bruk, som ved arkivering.
+  if (draftBlock) return { status: "blocked", error: draftBlock };
+  return { status: "deletable", archivedAt: section.archivedAt, title: section.title };
+}
+
+/** «Kan seksjonen slettes?» for én seksjon: «Slett» (`deleteSectionInTx`) spør her, på transaksjonen som holder innholdslåsen. */
+export async function checkSectionDelete(sectionId: string, reader: LifecycleReader = prisma): Promise<DeleteCheck<{ title: string }>> {
+  const [section, courses, drafts] = await Promise.all([
+    reader.courseSection.findUnique({ where: { id: sectionId }, select: sectionDeleteSummarySelect }),
+    findAllCoursesContainingSection(sectionId, reader),
+    findCourseDraftDeleteBlocks({ moduleIds: [], sectionIds: [sectionId] }, reader),
+  ]);
+  return sectionDeleteRules(sectionId, section, courses, drafts.sections.get(sectionId) ?? null, reader);
+}
+
+/**
+ * «Kan seksjonen slettes?» for mange seksjoner: lista over arkiverte (archivedRetention.ts). Samme regler som «Slett»
+ * (`sectionDeleteRules`); seksjonene, kursene og utkastene leses i én omgang, kursbevisene per seksjon, fire om gangen.
+ */
+export async function checkSectionDeletes(
+  sectionIds: readonly string[],
+  reader: LifecycleReader = prisma,
+  options: { coursesDeletedFirst?: ReadonlyMap<string, ReadonlySet<string>> } = {},
+): Promise<Map<string, DeleteCheck<{ title: string }>>> {
+  const ids = [...new Set(sectionIds)];
+  const result = new Map<string, DeleteCheck<{ title: string }>>();
+  if (ids.length === 0) return result;
+  const [sections, courses, drafts] = await Promise.all([
+    reader.courseSection.findMany({ where: { id: { in: ids } }, select: sectionDeleteSummarySelect }),
+    findAllCoursesContainingItems({ moduleIds: [], sectionIds: ids }, reader),
+    findCourseDraftDeleteBlocks({ moduleIds: [], sectionIds: ids }, reader),
+  ]);
+  const byId = new Map(sections.map((section) => [section.id, section]));
+  for (let i = 0; i < ids.length; i += 4) {
+    const chunk = ids.slice(i, i + 4);
+    const checks = await Promise.all(
+      chunk.map((id) => sectionDeleteRules(id, byId.get(id) ?? null, courses.sections.get(id) ?? [], drafts.sections.get(id) ?? null, reader, options.coursesDeletedFirst?.get(id))),
+    );
+    chunk.forEach((id, j) => result.set(id, checks[j]!));
+  }
+  return result;
 }
 
 async function assertSectionExists(sectionId: string, reader: Pick<ContentWriteTx, "courseSection"> | typeof prisma = prisma) {

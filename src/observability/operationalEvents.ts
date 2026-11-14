@@ -78,6 +78,9 @@ export const operationalEvents = {
   },
   retention: {
     auditScanCompleted: "audit_retention_scan_completed",
+    // #1152 skive 4b: overgangsraden for fristen på arkivert innhold mangler eller kan ikke leses. Listene viser da ingen slettedato,
+    // og jobben (4c) sletter ingenting. Logges én gang per prosess.
+    archivedFloorUnavailable: "archived_content_retention_floor_unavailable",
   },
   submission: {
     documentParse: "submission_document_parse",
@@ -301,6 +304,10 @@ export type OperationalEventMetadataByName = {
     deletedCount: number;
     cutoffDate: string;
     retentionDays: number;
+  }>;
+  [operationalEvents.retention.archivedFloorUnavailable]: EventMetadata<{
+    key: string;
+    reason: "missing" | "unparseable";
   }>;
   [operationalEvents.submission.documentParse]: EventMetadata<{
     submissionId: string;

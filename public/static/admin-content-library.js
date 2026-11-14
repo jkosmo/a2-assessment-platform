@@ -2,7 +2,7 @@ import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "./html-escape.js";
 import { createListPage } from "./list-page.js";
-import { lifecycleBadge, lifecycleOf } from "./content-status-badge.js";
+import { lifecycleBadge, lifecycleOf, retentionLineHtml } from "./content-status-badge.js";
 import { moduleVersionLabel } from "./version-label.js";
 import {
   supportedLocales,
@@ -222,7 +222,7 @@ function getListPage() {
       // #894: hvilke språk tittelen MANGLER. Står ved siden av navnet fordi det er navnet det
       // gjelder — ikke modulens tilstand.
       { key: "lang", label: t("ui.lang.col"), className: "col-lang", sortValue: (m) => manglendeSpraak(m).length, render: (m) => spraakMerkeHtml(m, tf) },
-      { key: "status", label: t("ui.status"), className: "col-status", render: (m) => lifecycleBadge(m, t) + moduleVersionChipHtml(m) },
+      { key: "status", label: t("ui.status"), className: "col-status", render: (m) => lifecycleBadge(m, t) + moduleVersionChipHtml(m) + retentionLineHtml(m, "module", t, currentLocale) },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (m) => certBadge(m.certificationLevel) },
       { key: "courses", label: t("library.col.usedInCourses"), className: "col-courses", sortValue: (m) => m.courseCount ?? 0, render: (m) => (m.courseCount > 0
         ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${m.courseCount} kurs">${m.courseCount}</button>`

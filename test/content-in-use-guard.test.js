@@ -306,7 +306,7 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
     const sections = topLevelFunctions(textOf("modules/course/sectionCommands.ts"));
     const modules = topLevelFunctions(textOf("modules/adminContent/adminContentCommands.ts"));
     const ACTIVE = /\bassert(Module|Section)NotInActiveCourse\(|\bfindActiveCoursesContaining/;
-    const ALL = /\bassertSectionNotInAnyCourse\(|\bdescribeModuleDeleteBlock\(|\bfindAllCoursesContaining/;
+    const ALL = /\bcourseDeleteHold\(|\bdescribeModuleDeleteBlock\(|\bfindAllCoursesContaining/;
 
     const owner = topLevelFunctions(textOf(OWNER));
 
@@ -315,14 +315,24 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
       [owner, "assertModuleNotInActiveCourse", "findActiveCoursesContainingModule(moduleId, reader)", /\bfindAllCoursesContaining/],
       [owner, "assertSectionNotInActiveCourse", "findActiveCoursesContainingSection(sectionId, reader)", /\bfindAllCoursesContaining/],
       [owner, "describeModuleDeleteBlock", "findAllCoursesContainingModule(moduleId, reader)", /\bfindActiveCoursesContaining/],
-      [owner, "assertSectionNotInAnyCourse", "findAllCoursesContainingSection(sectionId, reader)", /\bfindActiveCoursesContaining/],
+      // #1152 skive 4b: regelen for «ligger i et kurs» ved sletting er én funksjon; kursene den får, er ALLE (også arkiverte).
+      [owner, "courseDeleteHold", "deleteBlockedError(subject, courses)", /\bfindActiveCoursesContaining/],
+      [owner, "findAllCoursesContainingItems", "reader.courseItem.findMany", /\bactiveCourseWhere\b/],
       // Handlingene:
       [sections, "unpublishSection", 'assertSectionNotInActiveCourse(sectionId, "avpubliseres", tx)', ALL],
       [sections, "archiveSection", 'assertSectionNotInActiveCourse(sectionId, "arkiveres", tx)', ALL],
-      [sections, "deleteSectionInTx", "assertSectionNotInAnyCourse(sectionId, tx)", ACTIVE],
+      // #1152 skive 4b: slettingen og lista over arkiverte spør den samme sjekken; slettingen på transaksjonen som holder låsen.
+      [sections, "deleteSectionInTx", "checkSectionDelete(sectionId, tx)", ACTIVE],
+      // Reglene (`sectionDeleteRules`, `moduleDeleteRules`) er felles for «Slett» (én om gangen) og lista (mange).
+      [sections, "sectionDeleteRules", 'courseDeleteHold("Seksjonen", courses, coursesDeletedFirst)', ACTIVE],
+      [sections, "checkSectionDelete", "findAllCoursesContainingSection(sectionId, reader)", ACTIVE],
+      [sections, "checkSectionDeletes", "findAllCoursesContainingItems({ moduleIds: [], sectionIds: ids }, reader)", ACTIVE],
       [modules, "unpublishModule", 'assertModuleNotInActiveCourse(moduleId, "avpubliseres", tx)', ALL],
       [modules, "archiveModule", 'assertModuleNotInActiveCourse(moduleId, "arkiveres", tx)', ALL],
-      [modules, "deleteModuleInTx", "describeModuleDeleteBlock(moduleId, tx)", ACTIVE],
+      [modules, "deleteModuleInTx", "checkModuleDelete(moduleId, tx)", ACTIVE],
+      [modules, "moduleDeleteRules", 'courseDeleteHold("Modulen", courses, coursesDeletedFirst)', ACTIVE],
+      [modules, "checkModuleDelete", "findAllCoursesContainingModule(moduleId, reader)", ACTIVE],
+      [modules, "checkModuleDeletes", "findAllCoursesContainingItems({ moduleIds: ids, sectionIds: [] }, reader)", ACTIVE],
     ];
     for (const [fns, name, mustCall, mustNotMatch] of expectations) {
       const body = fns.get(name);
@@ -339,11 +349,31 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
     const modules = topLevelFunctions(textOf("modules/adminContent/adminContentCommands.ts"));
     // Vaktene går gjennom regelen «brukes andre steder» (`findActiveUsesOfItems`), og bare utkastene teller (kursene har sin egen vakt).
     expect(owner.get("findCourseDraftUsesForDelete")).toContain("await findActiveUsesOfItems(items, {}, reader)");
-    expect(owner.get("assertModuleNotInCourseDraft")).toContain("findCourseDraftUsesForDelete({ moduleIds: [moduleId], sectionIds: [] }, reader)");
-    expect(owner.get("assertSectionNotInCourseDraft")).toContain("findCourseDraftUsesForDelete({ moduleIds: [], sectionIds: [sectionId] }, reader)");
-    // Handlingene, på transaksjonen som holder låsen.
-    expect(modules.get("deleteModuleInTx")).toContain("assertModuleNotInCourseDraft(moduleId, tx)");
-    expect(sections.get("deleteSectionInTx")).toContain("assertSectionNotInCourseDraft(sectionId, tx)");
+    // #1152 skive 4b: feilen per element, for mange elementer i én omgang («Slett» spør for ett, lista for alle).
+    expect(owner.get("findCourseDraftDeleteBlocks")).toContain("await findCourseDraftUsesForDelete(items, reader)");
+    // Handlingene, på transaksjonen som holder låsen. #1152 skive 4b: gjennom sjekken lista over arkiverte også spør.
+    expect(modules.get("checkModuleDelete")).toContain("findCourseDraftDeleteBlocks({ moduleIds: [moduleId], sectionIds: [] }, reader)");
+    expect(sections.get("checkSectionDelete")).toContain("findCourseDraftDeleteBlocks({ moduleIds: [], sectionIds: [sectionId] }, reader)");
+    expect(modules.get("checkModuleDeletes")).toContain("findCourseDraftDeleteBlocks({ moduleIds: ids, sectionIds: [] }, reader)");
+    expect(sections.get("checkSectionDeletes")).toContain("findCourseDraftDeleteBlocks({ moduleIds: [], sectionIds: ids }, reader)");
+    // Én og mange går gjennom de samme reglene, og reglene bruker utkastet de får.
+    for (const [fns, rules, one, many] of [[modules, "moduleDeleteRules", "checkModuleDelete", "checkModuleDeletes"], [sections, "sectionDeleteRules", "checkSectionDelete", "checkSectionDeletes"]]) {
+      expect(fns.get(rules)).toContain("if (draftBlock) return { status: \"blocked\", error: draftBlock };");
+      expect(fns.get(one)).toContain(`return ${rules}(`);
+      expect(fns.get(many)).toContain(`${rules}(id, `);
+    }
+    expect(modules.get("deleteModuleInTx")).toContain("checkModuleDelete(moduleId, tx)");
+    expect(sections.get("deleteSectionInTx")).toContain("checkSectionDelete(sectionId, tx)");
+    // Kurset: samme sjekk for «Slett» (med deltakerlåsene mellom «arkivert» og målingen) og lista.
+    const courseCommands = topLevelFunctions(textOf("modules/course/courseCommands.ts"));
+    expect(courseCommands.get("deleteCourseInTx")).toContain("checkCourseDelete(courseId, tx, { beforeMeasure: () => lockCourseDeleteLearners(tx, courseId) })");
+    expect(topLevelFunctions(textOf("modules/course/courseDeleteGuard.ts")).get("checkCourseDelete")).toContain("measureCourseDeleteBlocks(courseId, reader, { stopAtFirst: true })");
+    // Lista over arkiverte spør de samme tre sjekkene, og ingen egne vakter.
+    const retention = textOf("modules/content/archivedRetention.ts");
+    for (const name of ["checkCourseDelete(courseId, ctx.reader)", "checkModuleDeletes(ids, ctx.reader, { coursesDeletedFirst })", "checkSectionDeletes(ids, ctx.reader, { coursesDeletedFirst })"]) {
+      expect(retention, `archivedRetention.ts skal kalle ${name}`).toContain(name);
+    }
+    expect(/\b(assert\w+|describe\w+Block|measureCourseDeleteBlocks)\(/.test(retention), "archivedRetention.ts har sin egen vakt").toBe(false);
     // Kaskaden (#1152 skive 4a-2): forhåndsvisningen spør det samme, og slettingen går gjennom de indre funksjonene over.
     const cascade = topLevelFunctions(textOf("modules/course/courseCascadeDeleteService.ts"));
     expect(cascade.get("analyzeCourseCascade")).toContain("findCourseDraftUsesForDelete({ moduleIds, sectionIds }, reader)");
@@ -536,10 +566,13 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
   it("svaret «alle kurs» brukes bare av slettingene", () => {
     // Sletting av en seksjon, sletting av en modul (kommandoen og ruta), og kaskadeslettingens «delt med andre kurs».
     const ALLOWED = {
-      assertSectionNotInAnyCourse: ["modules/course/sectionCommands.ts"],
-      describeModuleDeleteBlock: ["modules/adminContent/adminContentCommands.ts", "routes/adminContent.ts"],
-      findAllCoursesContainingModule: ["modules/course/courseCascadeDeleteService.ts"],
-      findAllCoursesContainingSection: ["modules/course/courseCascadeDeleteService.ts"],
+      // #1152 skive 4b: «Slett» (én) og lista over arkiverte (mange) leser kursene og kjører regelen `courseDeleteHold`; ruta har
+      // sin forhåndssjekk.
+      courseDeleteHold: ["modules/adminContent/adminContentCommands.ts", "modules/course/sectionCommands.ts"],
+      findAllCoursesContainingItems: ["modules/adminContent/adminContentCommands.ts", "modules/course/sectionCommands.ts"],
+      describeModuleDeleteBlock: ["routes/adminContent.ts"],
+      findAllCoursesContainingModule: ["modules/adminContent/adminContentCommands.ts", "modules/course/courseCascadeDeleteService.ts"],
+      findAllCoursesContainingSection: ["modules/course/courseCascadeDeleteService.ts", "modules/course/sectionCommands.ts"],
     };
     for (const [name, allowed] of Object.entries(ALLOWED)) {
       const users = files.filter((f) => f.rel !== OWNER && new RegExp(`\\b${name}\\b`).test(f.text)).map((f) => f.rel).sort();

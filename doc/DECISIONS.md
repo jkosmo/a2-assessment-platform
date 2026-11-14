@@ -1929,3 +1929,44 @@ Planen sa hva; dette er valgene som ikke sto der.
 `deleteSectionInTx` (sectionCommands.ts), courseCascadeDeleteService.ts; `test/m2-course-delete-1152.test.ts`,
 `test/e2e/admin-content-delete-archived-course-1152.spec.ts`.
 **Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** valgt under byggingen av skive 4a-2; ikke avklart med produkteier
+
+## Slettedatoen i listene (#1152 skive 4b, 2026-11-14)
+
+Planen sa hva («Fristen», «Hva forfatteren ser», «Etter gjennomlesingen» punkt 7–9); dette er valgene som ikke sto der.
+
+- **Fristen er en dato i norsk kalender, ikke et tidspunkt.** Seks kalendermåneder etter det seneste av `archivedAt` og
+  overgangstidspunktet, regnet på Oslo-datoen (arkivert 00:30 norsk tid er arkivert den dagen, også når UTC sier dagen før). Finnes
+  ikke dagen i målmåneden, er det siste dag i måneden (31. august → 28. februar, 29. i et skuddår). Elementet kan slettes fra og med
+  datoen: jobben (4c) sletter første natt med Oslo-dato ≥ datoen. Lista og jobben bruker samme funksjon
+  (`archivedContentDeletesOn`, `retentionDeadline.ts`).
+- **Overgangsraden** heter `archived_content_retention_floor` (`ARCHIVED_CONTENT_RETENTION_FLOOR_KEY`), og verdien er ISO 8601 i UTC
+  med `Z`. Lesingen er streng: et tidspunkt uten tidssone, en norsk dato eller tull er «ukjent», ikke «nå». Ukjent gir
+  `{ unknown: true }` på alle arkiverte rader (ingen dato vises), og logges én gang per prosess
+  (`archived_content_retention_floor_unavailable`, `warn`). `updatedAt` skrives i UTC (kolonnen er uten tidssone, og Prisma leser
+  den som UTC; en database på norsk tid ville ellers stått en time feil), `updatedBy` er tom.
+- **Svaret har tre former** (`archivedRetention.ts`): `{ deletesAt }`, `{ kept: { code, details } }` med nøyaktig koden «Slett» ville
+  svart, og `{ unknown: true }`. Feltet `retention` står bare på arkiverte rader. Et arkivert element i et AKTIVT kurs (sjeldent;
+  arkiveringen nekter det) er `kept` med `module_in_use`/`content_in_use`, som «Slett».
+- **Et element i et kurs som selv slettes** (punkt 7): lista vurderer det med de samme reglene som om de arkiverte kursene som kan
+  slettes, var borte (`coursesDeletedFirst`; bare arkiverte kurs kan tas ut). Datoen er den seneste av elementets og kursenes. Ligger
+  det OGSÅ i et kurs som beholdes, er svaret `content_in_archived_course`. «Slett» på elementet svarer fortsatt
+  `content_in_archived_course` til kurset er slettet: lista viser datoen jobben vil bruke, ikke hva knappen gjør i dag.
+- **Reglene for modul og seksjon står én gang, dataene leses to måter.** «Slett» leser for ett element
+  (`checkModuleDelete`/`checkSectionDelete`), lista for mange i én omgang (`checkModuleDeletes`/`checkSectionDeletes`, med
+  `findAllCoursesContainingItems`, samme svar som `findAllCoursesContaining…`). Begge går gjennom `moduleDeleteRules`/
+  `sectionDeleteRules` og `courseDeleteHold`. `assertModuleNotInCourseDraft`, `assertSectionNotInCourseDraft` og
+  `assertSectionNotInAnyCourse` er erstattet av `findCourseDraftDeleteBlocks` og `courseDeleteHold` (samme regel og feil).
+  Grunnen er kostnaden (punkt 9): én og én tok modulbiblioteket fra 60 til 590 ms lokalt med 128 arkiverte moduler.
+- **Kursvakta måler bare til første grunn i «Slett» og lista** (`stopAtFirst`), og leser det som ikke avhenger av hverandre
+  samtidig. Kaskaden viser fortsatt alle grunnene.
+- **Teksten** er kort og uten subjekt: «Slettes 13.05.2027», «Beholdes: har besvarelser». Nynorsk bøyer «behalde» etter kjønnet:
+  «Blir behalde» (kurset), «Blir behalden» (modulen, seksjonen). En kode lista ikke har tekst for, får «kan ikke slettes nå».
+  Datoen: `dd.mm.åååå` på bokmål og nynorsk, «13 May 2027» på engelsk, formatert fra datoen (ikke et tidspunkt), så den ikke flytter
+  seg i nettleserens tidssone. Linja står under statusmerket i metafargen, som «Sist endret», og brekker på en telefon.
+- **«Slett»-dialogen for kurset lister ikke elementene som går etterpå** (punkt 7, andre setning). Det trenger en ny forhåndsvisning
+  for alle forfattere (kaskadens er bare for administrator), og ble ikke tatt i denne skiven.
+
+**Håndheves:** `src/modules/content/archivedRetention.ts`, `retentionDeadline.ts`, `deleteCheck.ts`; `test/content-in-use-guard.test.js`
+(lista kaller de samme sjekkene og har ingen egne vakter), `test/unit/archived-retention-deadline-1152.test.ts`,
+`test/m2-archived-retention-1152.test.ts` (lista og «Slett» sier det samme, som tabell), `test/e2e/admin-content-retention-line-1152.spec.ts`.
+**Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** valgt under byggingen av skive 4b; ikke avklart med produkteier

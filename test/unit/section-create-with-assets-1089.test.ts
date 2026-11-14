@@ -19,7 +19,8 @@ vi.mock("../../src/db/transaction.js", () => ({ runInTransaction }));
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent: vi.fn() }));
 vi.mock("../../src/modules/course/contentLifecycle.js", () => ({
   assertSectionNotInActiveCourse: vi.fn(),
-  assertSectionNotInAnyCourse: vi.fn(),
+  courseDeleteHold: vi.fn(),
+  findAllCoursesContainingSection: vi.fn(),
   assertSectionNotInIssuedCertificate: vi.fn(),
 }));
 vi.mock("../../src/modules/course/assetCommands.js", () => ({

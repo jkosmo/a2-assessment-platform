@@ -27,6 +27,8 @@
 import { prisma } from "../../db/prisma.js";
 import { lockLearnersInContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { DomainRuleError, type AppError } from "../../errors/AppError.js";
+import { deleteRequiresArchivedError } from "../content/archivedGuard.js";
+import type { DeleteCheck } from "../content/deleteCheck.js";
 import { countPendingReviewsOnModules, type LifecycleReader } from "./contentLifecycle.js";
 import { createCourseRepository } from "./courseRepository.js";
 
@@ -95,13 +97,14 @@ export async function findCompletedWithoutCertificate(
 ): Promise<string[]> {
   const { moduleIds, sectionIds } = requirement;
   if (moduleIds.length === 0 && sectionIds.length === 0) return [];
-  const course = await reader.course.findUnique({ where: { id: courseId }, select: { versionMajor: true } });
-  if (!course) return [];
   // Kandidatene: den som har bestått en modul, har levert på den; den som har lest, har en lesing i kurset.
-  const [submitters, readers] = await Promise.all([
+  // #1152 skive 4b: kurset og kandidatene leses samtidig (lista over arkiverte måler mange kurs).
+  const [course, submitters, readers] = await Promise.all([
+    reader.course.findUnique({ where: { id: courseId }, select: { versionMajor: true } }),
     findSubmitters(moduleIds, reader),
     reader.courseSectionRead.findMany({ where: { courseId }, select: { userId: true }, distinct: ["userId"] }),
   ]);
+  if (!course) return [];
   const candidates = [...new Set([...submitters, ...readers.map((row) => row.userId)])];
   if (candidates.length === 0) return [];
 
@@ -179,18 +182,53 @@ function pendingReviewsBlock(count: number): CourseDeleteBlock {
 }
 
 /**
- * Alle grunnene til å beholde kurset, i rekkefølgen over. Tom liste: kurset kan slettes. Leser bare; holder ingen lås.
- * «Slett» kaller den under innholdslåsen og etter `lockCourseDeleteLearners`, og kaster den første. Kaskaden viser alle.
+ * #1152 skive 4b: «kan kurset slettes?», ÉN utregning for «Slett» (`deleteCourseInTx`) og lista over arkiverte
+ * (archivedRetention.ts). Leser kurset på nytt, krever at det er arkivert, og svarer med den første grunnen til å beholde det
+ * (`measureCourseDeleteBlocks`). `beforeMeasure` kjøres mellom «arkivert» og målingen: slettingen tar deltakerlåsene der
+ * (`lockCourseDeleteLearners`). Lista tar ingen lås; den viser et forslag, og slettingen måler på nytt under låsene.
  */
-export async function measureCourseDeleteBlocks(courseId: string, reader: LifecycleReader = prisma): Promise<CourseDeleteBlock[]> {
+export async function checkCourseDelete(
+  courseId: string,
+  reader: LifecycleReader = prisma,
+  options: { beforeMeasure?: () => Promise<void> } = {},
+): Promise<DeleteCheck> {
+  const course = await reader.course.findUnique({ where: { id: courseId }, select: { id: true, archivedAt: true } });
+  if (!course) return { status: "not_found" };
+  // #1151 (G4): bare et arkivert kurs kan slettes.
+  if (!course.archivedAt) return { status: "blocked", error: deleteRequiresArchivedError({ type: "COURSE", id: courseId }) };
+  await options.beforeMeasure?.();
+  const [blocked] = await measureCourseDeleteBlocks(courseId, reader, { stopAtFirst: true });
+  return blocked ? { status: "blocked", error: blocked.error } : { status: "deletable", archivedAt: course.archivedAt };
+}
+
+/**
+ * Alle grunnene til å beholde kurset, i rekkefølgen over. Tom liste: kurset kan slettes. Leser bare; holder ingen lås.
+ * «Slett» kaller den under innholdslåsen og etter `lockCourseDeleteLearners` (gjennom `checkCourseDelete`), og kaster den første.
+ * Kaskaden viser alle.
+ */
+export async function measureCourseDeleteBlocks(
+  courseId: string,
+  reader: LifecycleReader = prisma,
+  // #1152 skive 4b: «Slett» og lista over arkiverte bruker bare den første grunnen, og slipper å måle resten (planens punkt 9).
+  options: { stopAtFirst?: boolean } = {},
+): Promise<CourseDeleteBlock[]> {
   const blocks: CourseDeleteBlock[] = [];
-  const completions = await reader.courseCompletion.count({ where: { courseId } });
+  // #1152 skive 4b: det som ikke avhenger av hverandre, leses samtidig (lista over arkiverte måler mange kurs). Grunnene og
+  // rekkefølgen er de samme.
+  const [completions, requirement, allModuleIds] = await Promise.all([
+    reader.courseCompletion.count({ where: { courseId } }),
+    findCourseRequirementAsArchived(courseId, reader),
+    // Alle kursets moduler, ikke bare kravets (se grunn 3 øverst).
+    findAllCourseModuleIds(courseId, reader),
+  ]);
   if (completions > 0) blocks.push(completionsBlock(completions));
-  const requirement = await findCourseRequirementAsArchived(courseId, reader);
-  const completed = await findCompletedWithoutCertificate(courseId, requirement, reader);
+  if (options.stopAtFirst && blocks.length > 0) return blocks;
+  const [completed, pending] = await Promise.all([
+    findCompletedWithoutCertificate(courseId, requirement, reader),
+    countPendingReviewsOnModules(allModuleIds, undefined, reader),
+  ]);
   if (completed.length > 0) blocks.push(completedWithoutCertificateBlock(completed.length));
-  // Alle kursets moduler, ikke bare kravets (se grunn 3 øverst).
-  const pending = await countPendingReviewsOnModules(await findAllCourseModuleIds(courseId, reader), undefined, reader);
+  if (options.stopAtFirst && blocks.length > 0) return blocks;
   if (pending > 0) blocks.push(pendingReviewsBlock(pending));
   return blocks;
 }

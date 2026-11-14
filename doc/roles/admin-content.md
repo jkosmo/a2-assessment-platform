@@ -81,6 +81,13 @@ Du kan:
 - **Slette** det for godt (bare et arkivert element kan slettes).
 - Endre **eierne** (under Innstillinger).
 
+**Slettes eller beholdes (fra 2.162.0).** Under «Arkiverte» i listene for kurs, moduler og seksjoner står det under merket
+enten «Slettes 13.05.2027» eller «Beholdes: <grunn>». Arkivert innhold som ingen deltaker har brukt, slettes av seg selv
+seks måneder etter at det ble arkivert (jobben som gjør det, kommer senere; datoen gjelder fra nå). Grunnene til å beholde
+er de samme som «Slett» ville gitt: har kursbevis, en deltaker har fullført kravet uten kursbevis, besvarelser venter på
+vurdering, har besvarelser, inngår i et kursbevis, ligger i et kurs som beholdes, eller står i utkastet til et kurs. Vil du
+ikke vente, kan du trykke «Slett» selv.
+
 Det som ikke tilbys før elementet er gjenopprettet: generering og «Be om endring», oversetting, «Erstatt fra fil», «Last opp
 bilde», publisering og avpublisering, å hente fram en eldre versjon, og i listene «Døp om» og **«Dupliser»**. «Oversett det
 som mangler» i listene hopper over arkiverte elementer, og tallet på knappen teller dem ikke.
@@ -196,7 +203,8 @@ Ja, redigeringer lagres som ny kladd. Den publiserte versjonen forblir aktiv til
 Allerede leverte besvarelser ferdigbehandles. Ingen nye besvarelser kan leveres på en avpublisert modul.
 
 **Kan jeg slette en modul som har besvarelser?**
-Nei. Moduler med besvarelser kan bare arkiveres, ikke slettes.
+Nei. Moduler med besvarelser kan bare arkiveres, ikke slettes. En arkivert modul uten besvarelser kan slettes, også når den
+har lagrede versjoner (fra 2.161.0).
 
 **Kan jeg avpublisere, arkivere eller slette en modul eller seksjon som ligger i et kurs?**
 Det kommer an på kurset:
@@ -206,7 +214,9 @@ Det kommer an på kurset:
 - Ligger den bare i **arkiverte** kurs, kan den avpubliseres og arkiveres. Arkiverte kurs teller ikke som bruk, og vises
   heller ikke i kolonnen «Brukt i kurs» eller i kursfilteret.
 - **Slette** kan du ikke så lenge den ligger i et kurs, heller ikke et arkivert: det arkiverte kurset beholder innholdet sitt.
-  Meldingen sier hvilke av kursene som er arkiverte. En egen vei for å slette arkivert innhold kommer (#1152).
+  Meldingen sier hvilke av kursene som er arkiverte. Slett kurset først (et arkivert kurs uten kursbevis kan slettes); da er
+  elementet fritt og kan slettes etterpå. Lista viser datoen: et element som bare ligger i et kurs som skal slettes, får
+  kursets dato.
 
 Gjenoppretter du et arkivert kurs der en modul eller seksjon er arkivert for seg (ikke sammen med kurset), står kurset som
 utkast. Det kan ikke publiseres før elementet er gjenopprettet eller tatt ut av kurset. Dialogen for «Gjenopprett» viser

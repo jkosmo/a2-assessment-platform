@@ -2,6 +2,52 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.162.0 - 2026-11-14
+
+Etappe 4b av #1148: **forfatteren ser når arkivert innhold slettes** (#1152). Under «Arkiverte» i listene for kurs, moduler
+og seksjoner står «Slettes 13.05.2027» eller «Beholdes: <grunn>». Jobben som faktisk sletter (4c), kommer senere. Plan:
+`doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`.
+
+**Klokka starter med denne versjonen.** Migreringen skriver overgangsdatoen per miljø. Fristen er seks kalendermåneder etter
+det seneste av arkiveringen og overgangsdatoen, så ingenting får en dato tidligere enn seks måneder etter at 2.162.0 kom i
+miljøet. En kopi fra prod til stage tar med prods dato (`doc/OPERATIONS_RUNBOOK.md`).
+
+### Hva som er nytt
+
+- **Migreringen** `20261114120000_archived_content_retention` (bare tillegg): indeks på `archivedAt` for kurs, modul og
+  seksjon, og raden `archived_content_retention_floor` i `PlatformConfig` (`ON CONFLICT DO NOTHING`, `updatedAt` i UTC).
+- **Én felles vurdering** (`src/modules/content/archivedRetention.ts`, `deleteCheck.ts`): lista og «Slett» går gjennom den
+  samme sjekken per type, så de kan ikke si forskjellig. Grunnene er nøyaktig feilkodene «Slett» ville gitt.
+- **Et element som bare ligger i et kurs som selv skal slettes**, viser den seneste av sin egen og kursets dato.
+- **Mangler overgangsraden, eller kan den ikke leses**, viser listene ingen dato (`unknown`), og det logges én gang. En dato
+  som JavaScript ville flyttet (31. februar), regnes som ulesbar (QA-porten).
+- **Fristen** regnes på norsk kalenderdato; finnes ikke dagen i måneden, blir det siste dag (31. august → 28. februar).
+- Teksten på nb, nn og en-GB; linja passer på 390 px.
+
+### Tid
+
+Målt lokalt med 85 kurs (26 arkiverte), 128 arkiverte moduler og 82 arkiverte seksjoner, median av fem: kurslista 184 →
+260 ms, modulbiblioteket 49 → 178 ms, seksjonslista 50 → 196 ms. Det meste er kursvakta for de arkiverte kursene.
+
+### Tester
+
+- `test/m2-archived-retention-1152.test.ts`: migreringen (raden finnes, står urørt ved ny kjøring, indeksene), og en tabell
+  med 21 fiksturer der hver grunn og hver dato sjekkes mot «Slett»: «slettes» gir sletting, «beholdes: X» gir feil X.
+- `test/unit/archived-retention-deadline-1152.test.ts`: månedsslutt, skuddår, sommertid, det seneste av to datoer, streng
+  lesing av raden.
+- Nettleser: `admin-content-retention-line-1152` (tre lister × nb/en-GB × 1280/390 px).
+- Mutasjonssjekket: 20 regler, og rundturen for overgangsraden. Alle ga rød test.
+- **QA-porten (Codex): GO.** Rettet: streng lesing av overgangsraden, forfatterveiledningen og rutekartet.
+
+### Kjent
+
+- «Slett»-dialogen for et kurs lister ikke elementene som slettes etterpå (krever en ny forhåndsvisning for alle forfattere).
+- Modulvelgeren i kursbyggeren og Kvalitet-siden henter også `retention` fra `/modules/library` uten å bruke det (~+130 ms
+  lokalt).
+- «Slett» på et element i et kurs som skal slettes, svarer `content_in_archived_course` til kurset er borte, mens lista viser
+  datoen. Med vilje: jobben sletter kurset først.
+- Seksjonslista har ikke «Slett» i raden for arkiverte seksjoner (fra før); det ligger i den åpnede seksjonen.
+
 ## 2.161.0 - 2026-11-14
 
 Etappe 4a av #1148: **«Slett» virker for arkivert innhold** (#1152). Det som ikke har deltakerhistorikk, kan slettes, og det

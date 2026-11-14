@@ -492,6 +492,13 @@ prod uten å vise det. Meldingen skriver aldri ut passordet eller adressen. Utsk
 `stage_copy_email_neutralized` med antallet i hvert steg. Kjørt to ganger gir andre runde 0 overalt, bortsett fra
 `settledNow` (#1146), som setter `settledAt` = nå på alle rader i sluttstatus hver gang.
 
+**Slettefristen for arkivert innhold følger med kopien (#1152).** `PlatformConfig` er med i kopien, og med den raden
+`archived_content_retention_floor`: dagen slettefristen kom i PROD. Migreringen i steg 2 rører den ikke (`ON CONFLICT DO NOTHING`).
+Stage regner da fristen fra prods dag, og sletter tidligst når prod ville gjort det, og kanskje med en gang etter kopien (prod
+kan ha hatt regelen lenger enn stage). Det er ufarlig: det er samme innhold, og prod ville slettet det samme. Vil man se lista
+over arkiverte uten slettinger på stage en stund, sett raden til kopieringstidspunktet (ISO 8601 i UTC, f.eks.
+`2026-12-01T09:00:00.000Z`) før stage startes. Slettes raden, sletter jobben ingenting og listene viser ingen dato.
+
 ### Kurs lagt inn igjen: hvor mange får e-post (#1146)
 
 `npm run maint:count-readded-assignment-notices` teller hvor mange som får e-post om et kurs som er lagt inn igjen, første

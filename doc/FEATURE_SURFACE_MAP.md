@@ -1518,8 +1518,9 @@ utad: `findActiveCoursesContaining…` og `findAllCoursesContaining…`. Det fin
 | Arkiver seksjon / modul for hånd | `assert…NotInActiveCourse(…, "arkiveres")` → `findActiveUsesOfItems` | #1150: aktive + utkast |
 | Kursimportens `updateExisting`: arkiver det utbyttede elementet når ingen andre kurs bruker det (`contentImportService.ts`) | `findActiveUsesOfItems` | #1150: aktive + utkast (den arkiverer, sletter ikke) |
 | Forhåndsvisningen av kursarkiveringen (`GET …/courses/:id/archive-preview`, `courseArchivePreview.ts`) | `findActiveUsesOfItems` med `excludeCourseId` = kurset | #1150: aktive + utkast, utenom kurset selv og dets eget utkast |
-| Slett seksjon (`deleteSection` → `deleteSectionInTx`) | `assertSectionNotInAnyCourse`, så #1152 `assertSectionNotInCourseDraft` | alle + utkast |
-| Slett modul (`deleteModule` → `deleteModuleInTx`, og forhåndssjekken i `DELETE /api/admin/content/modules/:id`) | `describeModuleDeleteBlock`, så #1152 `assertModuleNotInCourseDraft` | alle + utkast |
+| Slett seksjon (`deleteSection` → `deleteSectionInTx` → `checkSectionDelete`) | `findAllCoursesContainingSection` + `courseDeleteHold`, så #1152 `findCourseDraftDeleteBlocks` (reglene: `sectionDeleteRules`) | alle + utkast |
+| Slett modul (`deleteModule` → `deleteModuleInTx` → `checkModuleDelete`, og forhåndssjekken i `DELETE /api/admin/content/modules/:id`) | `findAllCoursesContainingModule` + `courseDeleteHold` (ruta: `describeModuleDeleteBlock`), så #1152 `findCourseDraftDeleteBlocks` (reglene: `moduleDeleteRules`) | alle + utkast |
+| #1152 4b: lista over arkiverte (`checkModuleDeletes`, `checkSectionDeletes`, fra `archivedRetention.ts`) | `findAllCoursesContainingItems` (samme svar, mange elementer i én spørring) + `courseDeleteHold`, `findCourseDraftDeleteBlocks`; de samme reglene som «Slett» | alle + utkast |
 | Kaskadeslettingens «delt med andre kurs» (`courseCascadeDeleteService.ts`) | `findAllCoursesContainingModule/Section`, og #1152 4a-2 `findCourseDraftUsesForDelete` i analysen; slettingen går gjennom `deleteModuleInTx`/`deleteSectionInTx` | alle + utkast |
 | Masseryddingen av upubliserte moduler (`listUnpublishedPurgeCandidates`, `purgeUnpublishedModule`) | egen telling, `_count.courseItems`, og #1152 `findCourseDraftUsesForDelete` (forhåndsvisningen og under låsen) | alle + utkast (den sletter) |
 
@@ -1730,3 +1731,33 @@ den ikke), `test/content-lock-write-guard.test.js` (kriterier, ledetekst og fler
 `test/m2-archived-readonly-lock-1151.test.ts` (vakta etter låsen med forhåndssjekkene slått av),
 `test/e2e/admin-content-archived-readonly-1151.spec.ts` (klienten: hver flate arkivert med kontroll, eid/ikke eid seksjon,
 gjenopprett og slett fra modulsida, masseoversettingen, kursimporten, feilene fra lagringen, 390 px).
+
+### 33f. Slettedatoen i listene over arkiverte (#1152 skive 4b)
+
+Planen: `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, «Hva forfatteren ser» og «Etter gjennomlesingen» punkt 5, 7–9. Valgene:
+`doc/DECISIONS.md`, «Slettedatoen i listene». Under «Arkiverte» står en linje under statusmerket: «Slettes 13.05.2027» eller
+«Beholdes: <grunn>». Ingenting når svaret er ukjent (overgangsraden mangler), og ingenting på aktive rader.
+
+| Flate | Tjeneren (feltet `retention`, bare på arkiverte rader) | Klienten |
+|---|---|---|
+| Kurslista | `GET /api/admin/content/courses` (`routes/adminCourses.ts`): `evaluateArchivedCourse` i samme fire-om-gangen-løkke som «Påbegynt» | statuskolonnen i `getListPage()`, `admin-content-courses.js` |
+| Modulbiblioteket | `GET /api/admin/content/modules/library` (`listLibraryModules`, `adminContentQueries.ts`): `evaluateArchivedItems(…, "MODULE", …)` | statuskolonnen i `getListPage()`, `admin-content-library.js` |
+| Seksjonslista | `GET /api/admin/content/sections` (`routes/adminSections.ts`): `evaluateArchivedItems(…, "SECTION", …)` | statuskolonnen i `getListPage()`, `admin-content-sections.js` |
+
+**Ett svar, samme som «Slett».** `src/modules/content/archivedRetention.ts` spør sjekkene i `content/deleteCheck.ts`:
+`checkCourseDelete` (den `deleteCourseInTx` kaster fra) og `checkModuleDeletes`/`checkSectionDeletes` (mange om gangen, men de samme
+reglene som `deleteModuleInTx`/`deleteSectionInTx`: `moduleDeleteRules`, `sectionDeleteRules`). `kept.code` er koden «Slett» ville
+svart med. Et element som bare holdes igjen av arkiverte kurs som selv kan slettes, får den seneste av sin egen og kursenes dato
+(jobben sletter kursene først). Fristen: `retentionDeadline.ts` og `ARCHIVED_CONTENT_RETENTION_MONTHS` (`src/config/retention.ts`).
+
+**Klienten:** `retentionLineHtml`, `retentionReasonText` og `formatRetentionDate` i `public/static/content-status-badge.js` (felles for
+de tre listene), `.retention-line` i `shared.css`. Tekstene: `adminContent.retention.*` i `public/i18n/admin-content-translations.js`
+(nb, nn med «behalde» for kurset og «behalden» for modulen og seksjonen, en-GB). En kode uten tekst får «kan ikke slettes nå».
+
+**Når en ny flate skal vise datoen** (det åpnede elementet, jobben i 4c): kall `archivedRetention.ts`. Ikke regn fristen eller
+vaktene selv.
+
+**Vakter og tester:** `test/content-in-use-guard.test.js` (lista kaller de samme sjekkene og har ingen egne vakter; «Slett» og lista
+går gjennom de samme reglene), `test/archived-is-readonly-guard.test.js`. Fristen og linja: `test/unit/archived-retention-deadline-1152.test.ts`.
+Lista og «Slett» sier det samme (tabell), punkt 7, overgangsraden, migreringen: `test/m2-archived-retention-1152.test.ts`. I
+nettleseren, tre lister på nb og en-GB, 1280 og 390 px: `test/e2e/admin-content-retention-line-1152.spec.ts`.

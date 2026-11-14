@@ -8,13 +8,19 @@ import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 import type { AssessmentMode } from "@prisma/client";
 import { localizedTextCodec, type LocalizedText, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
-import { ConflictError, DomainRuleError, NotFoundError } from "../../errors/AppError.js";
+import { ConflictError, DomainRuleError, NotFoundError, type AppError } from "../../errors/AppError.js";
 import {
   assertModuleNotInActiveCourse,
-  assertModuleNotInCourseDraft,
-  describeModuleDeleteBlock,
+  courseDeleteHold,
+  findAllCoursesContainingItems,
+  findAllCoursesContainingModule,
+  findCourseDraftDeleteBlocks,
   findCourseDraftUsesForDelete,
+  type CourseUse,
+  type LifecycleReader,
 } from "../course/contentLifecycle.js";
+import type { DeleteCheck } from "../content/deleteCheck.js";
+import { prisma } from "../../db/prisma.js";
 import { addContentOwner, deleteContentOwnersOf } from "../content/contentOwnershipService.js";
 import {
   generateModuleRubric,
@@ -420,40 +426,10 @@ export async function deleteModuleInTx(
   options: { actorId?: string; source?: string } = {},
 ): Promise<{ deleted: true; module: { id: string; title: string } } | { deleted: false; reason: "not_found" }> {
   const actorId = options.actorId;
-  const module = await createAdminContentRepository(tx).findModuleDeleteSummary(moduleId);
-
-  if (!module) return { deleted: false, reason: "not_found" };
-  // #1151 (G4): bare en arkivert modul kan slettes. Før sto regelen bare i klienten. (Masseryddingen av upubliserte
-  // moduler, `purgeUnpublishedModules`, er motsatt regel og går ikke hit.)
-  if (!module.archivedAt) throw deleteRequiresArchivedError({ type: "MODULE", id: moduleId });
-
-  // G2, sletting: ALLE kurs teller, også arkiverte (#1149). Uten arkiverte kurs er svaret det ruta har gitt
-  // siden #705 (`module_in_use`, 409, antall kurs); med et arkivert kurs er det `content_in_archived_course`.
-  const blocked = await describeModuleDeleteBlock(moduleId, tx);
-  if (blocked) throw blocked.error;
-
-  // #1152: deltakerhistorikk holder modulen igjen for alltid. Innleveringer og sertifiseringer peker på modulen med
-  // `onDelete: Restrict`, så databasen ville nektet uansett; vakta gir svaret en kode og et tall.
-  // #938: en modul i et utstedt kursbevis er beskyttet her: beviset krever at deltakeren besto modulen, så det finnes
-  // innleveringer og en sertifisering. Derfor ingen egen `assertModuleNotInIssuedCertificate` (den kunne aldri fyre, #960).
-  // Seksjoner har ingen tilsvarende avhengighet, så der er vakta reell (`assertSectionNotInIssuedCertificate`).
-  if (module._count.submissions > 0) {
-    throw new DomainRuleError(
-      "module_has_submissions",
-      `Module cannot be deleted: participants have submitted to it (${module._count.submissions}). It stays archived, and the results are kept.`,
-      { count: module._count.submissions },
-    );
-  }
-  if (module._count.certificationStatuses > 0) {
-    throw new DomainRuleError(
-      "module_has_certification",
-      `Module cannot be deleted: participants hold a certification on it (${module._count.certificationStatuses}). It stays archived, and the certifications are kept.`,
-      { count: module._count.certificationStatuses },
-    );
-  }
-
-  // #1152: et lagret utkast til et annet kurs teller som bruk, som ved arkivering.
-  await assertModuleNotInCourseDraft(moduleId, tx);
+  // #1152 skive 4b: «kan modulen slettes?» er den samme utregningen som lista over arkiverte viser (`checkModuleDelete`).
+  const check = await checkModuleDelete(moduleId, tx);
+  if (check.status === "not_found") return { deleted: false, reason: "not_found" };
+  if (check.status === "blocked") throw check.error;
 
   const repo = createAdminContentWriter(tx);
   const deleted = await repo.deleteModule(moduleId);
@@ -473,6 +449,93 @@ export async function deleteModuleInTx(
     tx,
   );
   return { deleted: true, module: deleted };
+}
+
+type ModuleDeleteSummary = NonNullable<Awaited<ReturnType<ReturnType<typeof createAdminContentRepository>["findModuleDeleteSummary"]>>>;
+
+/**
+ * #1152 skive 4b: «kan modulen slettes?». REGLENE bor her, én gang; dataene leses av `checkModuleDelete` (én modul, «Slett», på
+ * transaksjonen som holder innholdslåsen) eller `checkModuleDeletes` (mange, lista over arkiverte, uten lås). Vaktene i rekkefølge
+ * (doc/DECISIONS.md, «Slettingen av moduler»): arkivert → ligger i et kurs → innleveringer → sertifiseringer → utkast. Den første som
+ * slår til, er svaret. `coursesDeletedFirst`: bare lista sender det (se `withoutCoursesDeletedFirst`, contentLifecycle.ts).
+ */
+function moduleDeleteRules(
+  moduleId: string,
+  module: ModuleDeleteSummary | null,
+  courses: CourseUse[],
+  draftBlock: AppError | null,
+  coursesDeletedFirst?: ReadonlySet<string>,
+): DeleteCheck {
+  if (!module) return { status: "not_found" };
+  // #1151 (G4): bare en arkivert modul kan slettes. Før sto regelen bare i klienten. (Masseryddingen av upubliserte
+  // moduler, `purgeUnpublishedModules`, er motsatt regel og går ikke hit.)
+  if (!module.archivedAt) return { status: "blocked", error: deleteRequiresArchivedError({ type: "MODULE", id: moduleId }) };
+  // G2, sletting: ALLE kurs teller, også arkiverte (#1149). Uten arkiverte kurs er svaret det ruta har gitt
+  // siden #705 (`module_in_use`, 409, antall kurs); med et arkivert kurs er det `content_in_archived_course`.
+  const inCourses = courseDeleteHold("Modulen", courses, coursesDeletedFirst);
+  if (inCourses) return { status: "blocked", error: inCourses.error, heldBy: inCourses.courses };
+  // #1152: deltakerhistorikk holder modulen igjen for alltid. Innleveringer og sertifiseringer peker på modulen med
+  // `onDelete: Restrict`, så databasen ville nektet uansett; vakta gir svaret en kode og et tall.
+  // #938: en modul i et utstedt kursbevis er beskyttet her: beviset krever at deltakeren besto modulen, så det finnes
+  // innleveringer og en sertifisering. Derfor ingen egen `assertModuleNotInIssuedCertificate` (den kunne aldri fyre, #960).
+  // Seksjoner har ingen tilsvarende avhengighet, så der er vakta reell (`assertSectionNotInIssuedCertificate`).
+  if (module._count.submissions > 0) {
+    return {
+      status: "blocked",
+      error: new DomainRuleError(
+        "module_has_submissions",
+        `Module cannot be deleted: participants have submitted to it (${module._count.submissions}). It stays archived, and the results are kept.`,
+        { count: module._count.submissions },
+      ),
+    };
+  }
+  if (module._count.certificationStatuses > 0) {
+    return {
+      status: "blocked",
+      error: new DomainRuleError(
+        "module_has_certification",
+        `Module cannot be deleted: participants hold a certification on it (${module._count.certificationStatuses}). It stays archived, and the certifications are kept.`,
+        { count: module._count.certificationStatuses },
+      ),
+    };
+  }
+  // #1152: et lagret utkast til et annet kurs teller som bruk, som ved arkivering.
+  if (draftBlock) return { status: "blocked", error: draftBlock };
+  return { status: "deletable", archivedAt: module.archivedAt };
+}
+
+/** «Kan modulen slettes?» for én modul: «Slett» (`deleteModuleInTx`) spør her, på transaksjonen som holder innholdslåsen. */
+export async function checkModuleDelete(moduleId: string, reader: LifecycleReader = prisma): Promise<DeleteCheck> {
+  const [module, courses, drafts] = await Promise.all([
+    createAdminContentRepository(reader).findModuleDeleteSummary(moduleId),
+    findAllCoursesContainingModule(moduleId, reader),
+    findCourseDraftDeleteBlocks({ moduleIds: [moduleId], sectionIds: [] }, reader),
+  ]);
+  return moduleDeleteRules(moduleId, module, courses, drafts.modules.get(moduleId) ?? null);
+}
+
+/**
+ * «Kan modulen slettes?» for mange moduler: lista over arkiverte (archivedRetention.ts). Samme regler som «Slett»
+ * (`moduleDeleteRules`); modulene, kursene og utkastene leses i én omgang.
+ */
+export async function checkModuleDeletes(
+  moduleIds: readonly string[],
+  reader: LifecycleReader = prisma,
+  options: { coursesDeletedFirst?: ReadonlyMap<string, ReadonlySet<string>> } = {},
+): Promise<Map<string, DeleteCheck>> {
+  const ids = [...new Set(moduleIds)];
+  const result = new Map<string, DeleteCheck>();
+  if (ids.length === 0) return result;
+  const [modules, courses, drafts] = await Promise.all([
+    createAdminContentRepository(reader).findModuleDeleteSummaries(ids),
+    findAllCoursesContainingItems({ moduleIds: ids, sectionIds: [] }, reader),
+    findCourseDraftDeleteBlocks({ moduleIds: ids, sectionIds: [] }, reader),
+  ]);
+  const byId = new Map(modules.map((module) => [module.id, module]));
+  for (const id of ids) {
+    result.set(id, moduleDeleteRules(id, byId.get(id) ?? null, courses.modules.get(id) ?? [], drafts.modules.get(id) ?? null, options.coursesDeletedFirst?.get(id)));
+  }
+  return result;
 }
 
 async function getNextVersionNo(

@@ -278,6 +278,8 @@ model Module {
   courseRequirements     CourseModuleRequirement[]
 
   @@index([archivedWithCourseId])
+  // #1152 skive 4b: listene over arkiverte og slettejobben spør etter det som er arkivert.
+  @@index([archivedAt])
 }
 
 // Whether a module bundles a free-text submission (LLM-graded) plus MCQ, or is MCQ-only
@@ -776,6 +778,9 @@ model Course {
   // (test/course-draft-guard.test.js) finner enhver bruk av ordet `courseDraft` utenfor fila som eier tabellen, også
   // `include: { courseDraft: true }`. `draft` brukes til annet i koden og kunne ikke vært søkt etter.
   courseDraft        CourseDraft?
+
+  // #1152 skive 4b: listene over arkiverte og slettejobben spør etter det som er arkivert.
+  @@index([archivedAt])
 }
 
 // #1140 etappe 2 (doc/design/PLAN_1140_E2.md): utkastet til et PUBLISERT kurs. «Lagre» i kursbyggeren skriver hit, og ingenting
@@ -1057,6 +1062,8 @@ model CourseSection {
   assets          SectionAsset[]
 
   @@index([archivedWithCourseId])
+  // #1152 skive 4b: listene over arkiverte og slettejobben spør etter det som er arkivert.
+  @@index([archivedAt])
 }
 
 // Media-asset (bilde) for en læringsseksjon (#483/F4). Binæren ligger i Azure Blob

@@ -5,9 +5,9 @@ import { ConflictError, DomainRuleError, NotFoundError } from "../../errors/AppE
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { clearArchiveMarksForCourse } from "./courseArchive.js";
-import { assertNotArchived, deleteRequiresArchivedError } from "../content/archivedGuard.js";
+import { assertNotArchived } from "../content/archivedGuard.js";
 import { addContentOwner, deleteContentOwnersOf } from "../content/contentOwnershipService.js";
-import { lockCourseDeleteLearners, measureCourseDeleteBlocks } from "./courseDeleteGuard.js";
+import { checkCourseDelete, lockCourseDeleteLearners } from "./courseDeleteGuard.js";
 import { setCourseThemes } from "./courseThemeService.js";
 import { assignCourseSlugIfMissing } from "./courseSlug.js";
 import { applyCourseVersionChange, claimCourseRevision, isCourseEverPublished, NO_SECTION_SNAPSHOT, sameLocalizedText, type CourseVersionBump, type CourseVersionChoice, type CourseVersionRequest } from "./courseVersioning.js";
@@ -349,16 +349,12 @@ export async function deleteCourseInTx(
   courseId: string,
   options: { actorId?: string; recordAudit?: boolean } = {},
 ): Promise<DeleteInTxResult> {
-  const course = await tx.course.findUnique({ where: { id: courseId }, select: { id: true, archivedAt: true } });
-  if (!course) return { deleted: false, reason: "not_found" };
-  // #1151 (G4): bare et arkivert kurs kan slettes. Før sto regelen bare i klienten.
-  if (!course.archivedAt) throw deleteRequiresArchivedError({ type: "COURSE", id: courseId });
-
-  // #660: kursbevis (`CourseCompletion` er `onDelete: Restrict`). #1152: fullført uten kursbevis, og besvarelser som venter. Et
-  // vedtak tar bare deltakerlåsen, så den tas for alle som har levert på kravets moduler før målingen.
-  await lockCourseDeleteLearners(tx, courseId);
-  const [blocked] = await measureCourseDeleteBlocks(courseId, tx);
-  if (blocked) throw blocked.error;
+  // #1151 (G4): bare et arkivert kurs kan slettes. #660: kursbevis (`CourseCompletion` er `onDelete: Restrict`). #1152: fullført
+  // uten kursbevis, og besvarelser som venter. Et vedtak tar bare deltakerlåsen, så den tas for alle som har levert på kursets
+  // moduler før målingen. #1152 skive 4b: utregningen er den samme som lista over arkiverte viser (`checkCourseDelete`).
+  const check = await checkCourseDelete(courseId, tx, { beforeMeasure: () => lockCourseDeleteLearners(tx, courseId) });
+  if (check.status === "not_found") return { deleted: false, reason: "not_found" };
+  if (check.status === "blocked") throw check.error;
 
   // #1150 skive 2a-2: elementer som fulgte kurset inn i arkivet, peker på det. Merket er et merke, ikke et eierskap: det
   // nullstilles, og elementene blir stående arkivert.

@@ -76,6 +76,86 @@ export function lifecycleBadge(item, t) {
   return lifecycleStatusBadge(lifecycle, t);
 }
 
+// ---------------------------------------------------------------------------
+// #1152 skive 4b (doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md, «Hva forfatteren ser»): under «Arkiverte» i kurslista,
+// modulbiblioteket og seksjonslista står en linje under statusmerket: «Slettes 13.05.2027» eller «Beholdes: <grunn>».
+// Tjeneren sender `retention` bare på arkiverte rader (src/modules/content/archivedRetention.ts):
+//   { deletesAt: "YYYY-MM-DD" } · { kept: { code, details } } · { unknown: true }
+// «Ukjent» (overgangsraden mangler) viser ingenting: lista sier aldri en dato den ikke vet.
+// Grunnen slås opp på koden, samme kode som «Slett» svarer med. En kode uten tekst får den generelle («kan ikke slettes nå»).
+// ---------------------------------------------------------------------------
+
+const RETENTION_REASON_KEYS = {
+  course_has_completions: "course_has_completions",
+  course_has_completed_without_certificate: "course_has_completed_without_certificate",
+  course_has_pending_reviews: "course_has_pending_reviews",
+  module_has_submissions: "module_has_submissions",
+  module_has_certification: "module_has_certification",
+  content_in_issued_certificate: "content_in_issued_certificate",
+  // Bevis utstedt før øyeblikksbildet: samme grunn for forfatteren.
+  content_in_legacy_certificate: "content_in_issued_certificate",
+  content_in_archived_course: "content_in_archived_course",
+  // Et arkivert element i et aktivt kurs (sjeldent): modul og seksjon har hver sin kode for det.
+  content_in_use: "content_in_use",
+  module_in_use: "content_in_use",
+  delete_blocked_by_course_draft: "delete_blocked_by_course_draft",
+};
+
+/** Datoen slik listene skriver den: 13.05.2027 på norsk, 13 May 2027 på engelsk. `date` er en kalenderdato (YYYY-MM-DD). */
+export function formatRetentionDate(date, locale) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date ?? ""));
+  if (!match) return "";
+  // Kalenderdatoen, ikke et tidspunkt: formateres i UTC, så den ikke flytter seg en dag i nettleserens tidssone.
+  const at = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  const english = String(locale ?? "").startsWith("en");
+  const options = english
+    ? { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }
+    : { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" };
+  try {
+    return new Intl.DateTimeFormat(locale || "nb", options).format(at);
+  } catch {
+    return date;
+  }
+}
+
+function fill(text, vars) {
+  let out = text;
+  for (const [k, v] of Object.entries(vars)) out = out.replaceAll(`{${k}}`, String(v));
+  return out;
+}
+
+/** Grunnen til å beholde, på brukerens språk. */
+export function retentionReasonText(kept, t) {
+  const key = RETENTION_REASON_KEYS[kept?.code];
+  if (!key) return t("adminContent.retention.reason.other");
+  if (key === "course_has_completed_without_certificate") {
+    const count = Number(kept.details?.count) || 1;
+    return fill(t(`adminContent.retention.reason.${key}.${count === 1 ? "one" : "other"}`), { count });
+  }
+  return t(`adminContent.retention.reason.${key}`);
+}
+
+/**
+ * Linja under statusmerket for en arkivert rad. `kind` er "course", "module" eller "section" (nynorsk bøyer «behalde» etter
+ * kjønnet). Tom streng for en rad som ikke er arkivert, uten `retention`, eller med «ukjent».
+ */
+export function retentionLineHtml(item, kind, t, locale) {
+  if (lifecycleOf(item) !== "archived") return "";
+  const retention = item?.retention;
+  if (!retention || typeof retention !== "object") return "";
+  if (typeof retention.deletesAt === "string") {
+    const date = formatRetentionDate(retention.deletesAt, locale);
+    if (!date) return "";
+    const text = fill(t("adminContent.retention.deletesAt"), { date });
+    return `<span class="retention-line" data-retention="deletes">${escapeHtml(text)}</span>`;
+  }
+  if (retention.kept && typeof retention.kept === "object") {
+    const text = fill(t(`adminContent.retention.kept.${kind}`), { reason: retentionReasonText(retention.kept, t) });
+    return `<span class="retention-line" data-retention="kept" data-retention-code="${escapeHtml(retention.kept.code ?? "")}">${escapeHtml(text)}</span>`;
+  }
+  return "";
+}
+
 /**
  * Filterknappenes regel, én gang for alle listene:
  *   all → alt · active → ikke arkivert · archived → arkivert

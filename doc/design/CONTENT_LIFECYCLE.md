@@ -208,6 +208,23 @@ med én hendelse i revisjonsloggen per element. Masseryddingen av upubliserte mo
 sletting rydder dem i samme transaksjon (`deleteContentOwnersOf`): «Slett» for alle tre, kaskaden (kurset og elementene den
 sletter; delte elementer beholder sine) og masseryddingen. Vakt: `test/unit/content-owner-cleanup-1152-guard.test.js`.
 
+**Fristen, og hva lista viser (#1152 skive 4b).** Et arkivert element uten deltakerhistorikk kan slettes **seks kalendermåneder**
+(`ARCHIVED_CONTENT_RETENTION_MONTHS`, `src/config/retention.ts`) etter det seneste av `archivedAt` og **overgangstidspunktet**:
+dagen regelen kom i miljøet, skrevet én gang av migreringen `20261114120000_archived_content_retention` som raden
+`archived_content_retention_floor` i `PlatformConfig` (ISO 8601 i UTC; finnes den, står den urørt). Datoen er en kalenderdato i
+Norge (Europe/Oslo), og blir siste dag i måneden når dagen ikke finnes der (31. august → 28. februar); regnestykket:
+`src/modules/content/retentionDeadline.ts`. Gjenoppretting nullstiller `archivedAt`, ny arkivering starter fristen på nytt.
+- **Ett svar per arkivert element** (`src/modules/content/archivedRetention.ts`): `{ deletesAt }`, `{ kept: { code, details } }`
+  med koden «Slett» ville svart, eller `{ unknown: true }` når overgangsraden mangler eller ikke kan leses (ingen dato, aldri en
+  gjetning). Kurslista, modulbiblioteket og seksjonslista viser det under «Arkiverte» («Slettes 13.05.2027» / «Beholdes: …»).
+- **Samme utregning som «Slett».** Kurset: `checkCourseDelete` (courseDeleteGuard.ts), som `deleteCourseInTx` kaster fra. Modul og
+  seksjon: reglene står én gang (`moduleDeleteRules`, `sectionDeleteRules`); «Slett» leser dataene for ett element
+  (`checkModuleDelete`, `checkSectionDelete`), lista for mange i én omgang (`checkModuleDeletes`, `checkSectionDeletes`).
+- **Et element i et kurs som selv slettes** (planen, «Etter gjennomlesingen» punkt 7): jobben sletter kursene først, så lista
+  vurderer elementet som om de arkiverte kursene som kan slettes, er borte, og viser den seneste av elementets og kursenes dato.
+  Holdes det av et kurs som beholdes: «Beholdes: ligger i et kurs som beholdes» (`content_in_archived_course`).
+- **Lista tar ingen lås.** Den er et forslag; «Slett» og jobben (4c) måler på nytt under låsene.
+
 ### G5 — Arkivert er urørlig (#1151)
 Et arkivert kurs, en arkivert modul og en arkivert seksjon kan ikke endres eller brukes før de er gjenopprettet. **Lov** på et
 arkivert element: gjenopprette (også med kurset, #1150), slette (G4), eksportere og lese, og endre eiere (eierpanelet, #1150

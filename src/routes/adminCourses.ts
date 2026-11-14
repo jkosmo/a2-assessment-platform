@@ -67,6 +67,7 @@ import { packageCueWarnings } from "../modules/adminContent/mcqCueWarnings.js";
 import { packageRubricWarnings } from "../modules/adminContent/rubricWarnings.js";
 import { packageAltTextWarnings } from "../modules/adminContent/altTextWarnings.js";
 import { assertNotArchivedBeforeLock } from "../modules/content/archivedGuard.js";
+import { createRetentionContext, evaluateArchivedCourse, type ArchivedRetention } from "../modules/content/archivedRetention.js";
 
 const adminCoursesRouter = Router();
 
@@ -197,9 +198,17 @@ adminCoursesRouter.get("/", async (request, response, next) => {
     // #1150 skive 2a-1: tellingen er nå den «Mine kurs» bruker, 5–9 spørringer per kurs mot 3 før. Alle kursene samtidig ga
     // et støt av hundrevis av spørringer mot én database-pool (prod er én B1-maskin). Fire kurs om gangen holder støtet lite.
     const inProgressCounts: number[] = [];
+    // #1152 skive 4b: et arkivert kurs får i stedet svaret på «slettes når, eller hvorfor beholdes det» (archivedRetention.ts), i
+    // samme løkke og med samme fire om gangen. Overgangstidspunktet leses én gang, og bare når lista har et arkivert kurs.
+    const retentionContext = courses.some((c) => c.archivedAt) ? await createRetentionContext() : null;
+    const retentionByCourse = new Map<string, ArchivedRetention>();
     for (let i = 0; i < courses.length; i += 4) {
       // Et arkivert kurs telles ikke: det er allerede arkivert, og tallet er bare et varsel før arkivering (QA-porten 2a-1).
-      inProgressCounts.push(...(await Promise.all(courses.slice(i, i + 4).map((c) => (c.archivedAt ? 0 : countCourseInProgressParticipants(c.id))))));
+      inProgressCounts.push(...(await Promise.all(courses.slice(i, i + 4).map(async (c) => {
+        if (!c.archivedAt) return countCourseInProgressParticipants(c.id);
+        if (retentionContext) retentionByCourse.set(c.id, await evaluateArchivedCourse(retentionContext, c.id));
+        return 0;
+      }))));
     }
     // #787 slice 5: hvilke kurs kan innlogget bruker forvalte (admin eller eier)? Styrer om lista viser
     // rediger/livssyklus-handlingene — speiler eierskaps-vakta så vi ikke rendrer knapper som gir 403.
@@ -231,6 +240,8 @@ adminCoursesRouter.get("/", async (request, response, next) => {
       themes: themesByCourse.get(c.id) ?? [],
       versionMajor: c.versionMajor,
       versionMinor: c.versionMinor,
+      // #1152 skive 4b: bare på arkiverte kurs.
+      ...(c.archivedAt ? { retention: retentionByCourse.get(c.id) ?? { unknown: true as const } } : {}),
     }));
     response.json({ courses: items });
   } catch (error) {
