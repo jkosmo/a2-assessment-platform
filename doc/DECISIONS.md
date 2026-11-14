@@ -1991,3 +1991,23 @@ Planen sa hva («Fristen», «Hva forfatteren ser», «Etter gjennomlesingen» p
 parameteren: ingen `retention`, overgangsraden ikke lest), `test/e2e/admin-content-retention-line-1152.spec.ts` (linja etter «Arkiverte»,
 ikke før; feilet henting; husket filter).
 **Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** avgjort av produkteier (bare under «Arkiverte»); utformingen valgt under byggingen
+
+## Lest seksjon teller i alle kurs deltakeren ser (#1156, 2026-11-14)
+
+- **En lest seksjon teller i alle kurs som inneholder den** (produkteier 13.11.2026), som en bestått modul. Hvert kurs avgjør
+  fortsatt om lesingen gjelder for kursets nåværende hovedversjon (#934).
+- **Bare i kurs deltakeren ser** (produkteier 14.11.2026, «ja»): åpne kurs, og begrensede kurs deltakeren er tildelt. Det
+  gjelder fremdriften og kursbeviset. Moduler beholder dagens oppførsel (en bestått teller også i kurs deltakeren ikke ser);
+  spørsmålet for begge tas i #1157. Grunnen: et kursbevis kan ikke trekkes tilbake og holder kurset igjen fra sletting for
+  alltid, og utrullingen ville ellers utstedt bevis i bulk i begrensede kurs.
+- **Fremdrift og kursbevis teller på tvers; e-post og synlighet krever aktivitet i kurset selv** (produkteier 14.11.2026,
+  «OK»). «Seksjoner 1/9» og kursbeviset regnes på tvers. Vilkår 9 i tildelings-e-posten, «i gang» i den ukentlige e-posten og
+  synligheten av kurs fra arkiverte klasser krever fortsatt en lesing eller innlevering i kurset selv.
+- **Lesingene blir stående når et kurs slettes** (produkteier 14.11.2026, «Ja»): de tilhører deltakeren og seksjonen, og
+  teller videre i de andre kursene. Dette erstatter «slettes med lesehistorikk» fra #1152 for lesinger. Seksjonen kan
+  fortsatt slettes, og da går lesingene.
+- **Arkiverte kurs teller bare lesinger fram til arkiveringen**, så et arkivert kurs ikke kan bli «fullført uten kursbevis»
+  av lesinger i andre kurs (valgt under planleggingen).
+
+**Plan:** `doc/design/PLAN_1156_LEST_PA_TVERS.md`.
+**Sak:** #1156 · **Dato:** 2026-11-14 · **Status:** avgjort av produkteier
