@@ -280,6 +280,149 @@ være i prod før jobben får slette.
 - Ingenting med kursbevis eller besvarelser forsvinner: en test som teller radene før og etter.
 - Dekningsvakt: bare slettefunksjonen sletter kurs, moduler og seksjoner; jobben har ingen egen `delete`.
 
+### Byggeplan etter etappe 3 (14.11.2026)
+
+Kartlagt i koden etter 2.160.0. Planen over står; dette er det som er nytt, og skivene.
+
+**Nytt siden planen ble skrevet**
+
+- **Etappe 3 er i prod:** sletting krever arkivert på tjeneren, og kaskaden krever arkivert kurs. Kravet «etappe 3 i prod før
+  jobben sletter» er oppfylt.
+- **Merket fra etappe 2 (`archivedWithCourseId`) nullstilles alt når et kurs slettes** (`clearArchiveMarksForCourse`, både
+  vanlig sletting og kaskaden). `archivedAt` blir stående, så fristen for elementene regnes fra da kurset ble arkivert.
+- **Kursenes versjonshistorikk peker ikke på modulversjoner med fremmednøkkel.** `CourseVersion.sectionVersionsJson` og
+  øyeblikksbildene i kursbevisene (`CourseCompletion`) har bare id-er som tekst, og leserne slår dem ikke opp. Et kurs vi
+  beholder, mister derfor ingenting når et element det en gang hadde, slettes. Kursbevisene er dessuten vernet: en modul
+  med sertifiseringsstatus og en seksjon i et utstedt bevis slettes aldri.
+- **Ingen kode sletter innleveringer eller sertifiseringsstatuser.** Begge er `Restrict` mot modulen, så en modul med
+  deltakerhistorikk kan ikke slettes, heller ikke ved en feil i vaktene.
+
+**Fire hull planen ikke dekket**
+
+1. **«Fullført uten kursbevis» kan ikke måles med dagens hjelper på et arkivert kurs.** `findCourseInProgressParticipants`
+   ser bort fra arkiverte moduler og seksjoner, og fra 2.159.0 er kursets egne elementer arkivert sammen med kurset. Kravet
+   krymper da til de delte elementene, og den som bare har bestått en delt modul, ser fullført ut. Sjekken før sletting må
+   måle kravet slik det var da kurset ble arkivert. «Alle elementene uansett `archivedAt`» er feil, og feil i den farlige
+   retningen (gjennomlesingen): kravet for kursbevis har aldri tatt med en seksjon uten publisert versjon eller en modul som
+   var arkivert før kurset. Se «Etter gjennomlesingen», punkt 1.
+2. **Sletting ser ikke kursutkast.** Arkiveringen (etappe 2) teller et utkast som bruk, men slettingen gjør det ikke. Et
+   arkivert element som står i utkastet til et annet kurs, kan slettes, og utkastet kan da ikke publiseres
+   (`course_draft_item_unusable`). Rettes: slettingen teller utkast likt med arkiveringen. Grunnen i lista: «Beholdes: står i
+   utkastet til et kurs».
+3. **Slettefunksjonen for moduler må skrives om.** Den nekter i dag alt som har versjoner, med en vanlig `Error` som blir den
+   generelle `delete_module_failed`. Den må slette i riktig rekkefølge (versjoner, så flervalgsspørsmål og -sett, kriterier og
+   ledetekster; bestått og kurskrav går av seg selv) og gi egne feilkoder med tekst på tre språk. Den må også tåle at
+   ingen person står bak (jobben): `actorId` blir valgfri, som for kurs og seksjoner.
+4. **Mønsteret fra `AuditRetentionMonitor` er svakere enn planen antok.** Det kjører ved oppstart, melder aldri feil og blir
+   først «usunt» etter 72 timer. Jobben følger i stedet `WeeklyDigestMonitor`: sjekker ofte, men sletter bare i et vindu om
+   natten (Oslo-tid), med `maxTickMs`, `lastError`, `lastSummary` og frist ved oppstart.
+
+**Rydding som følger med:** eierrader (`ContentOwner`) slettes sammen med kurs, modul og seksjon; i dag blir de liggende for
+alle tre. Kaskaden skriver en hendelse per seksjon i revisjonsloggen, som den gjør per modul. Kaskaden sletter bare elementer
+som er arkivert. Et aktivt element som bare lå i kurset (kurs arkivert før 2.159.0), blir stående, og forhåndsvisningen sier
+det. Det følger regelen «slett krever arkivert».
+
+**Masseryddingen av upubliserte moduler** sletter moduler som aldri er arkivert, og er motsatt regel. Den står som et
+eksplisitt unntak og går ikke gjennom den felles slettefunksjonen.
+
+**Skiver**, hver sin pakke som kan stå alene i prod:
+
+- **4a. Sletting som virker, med en gang (ingen jobb, ingen migrering).**
+  - Modulen slettes med versjonene sine; egne feilkoder (`module_has_submissions`, `module_has_certification`) og tekst.
+  - Kurset: «fullført uten kursbevis» stopper slettingen, med egen kode og tekst som sier hvor mange det gjelder og hva som
+    må til (gjenopprett og publiser).
+  - Utkast teller som bruk ved sletting.
+  - Eierrader ryddes for alle tre typene.
+  - Kaskaden: bare arkiverte elementer, hendelse per seksjon.
+  - Prøves med «Slett»-knappen på stage mot ekte data, og løser det stage-testen for 2.160.0 fant (arkivert modul kunne ikke
+    slettes).
+- **4b. Forfatteren ser datoen.**
+  - Én additiv migrering: indeks på `archivedAt` for kurs, modul og seksjon, og raden med overgangstidspunktet i
+    `PlatformConfig` (settes til nå hvis den mangler; første gang en migrering skriver en rad der).
+  - En felles funksjon svarer for hvert arkivert element: «slettes <dato>» eller «beholdes» med grunnen. Den kaller de samme
+    vaktene som slettingen, så lista og slettingen kan ikke si forskjellig.
+  - Listene viser svaret under «Arkiverte».
+- **4c. Jobben.**
+  - Sjekker hvert tiende minutt, sletter bare mellom 02:00 og 05:00 Oslo-tid, ett element per transaksjon, kurs først.
+  - Kaller den felles funksjonen fra 4b og den samme slettingen som knappen. Ingen egne regler.
+  - Revisjonsloggen får `source: retention` på hver sletting, og «beholdes» første gang et element hoppes over.
+  - Mangler overgangsraden, sletter jobben ingenting og melder seg usunn.
+  - Kan ikke slette noe før seks måneder etter at 4b kom i miljøet.
+
+**Samtidighet:** jobben og knappen tar innholdslåsen og leser `archivedAt` og vaktene på nytt under låsen. Én sletting per
+transaksjon holder låsen kort; deltakerne venter høyst 3 sekunder før de får «prøv igjen».
+
+**Tester:**
+
+- Gjennom rutene, per type og per grunn til å beholde, med kontroll.
+- Modulen med versjoner slettes; tellingen av innleveringer, sertifiseringsstatuser og kursbevis er lik før og etter.
+- Kurs der den eneste beståtte er en delt modul: ikke «fullført».
+- Kurs der alt er bestått uten bevis: beholdes, med grunnen.
+- Utkast som nevner elementet: beholdes.
+- Jobben med flyttede datoer: under og over fristen, gjenopprettet imens, overgangsraden mangler, utenfor nattvinduet.
+- Dekningsvakt: bare slettefunksjonene sletter kurs, moduler og seksjoner (unntak: masseryddingen, med grunn).
+- Stage-test for 4a mot ekte data.
+
+### Etter gjennomlesingen (Codex og en uavhengig Claude-agent, 14.11.2026)
+
+Begge sa «ikke klar», hver for seg, med de samme tre hovedfunnene. Endringene under går foran teksten over der de er
+uenige.
+
+1. **Kravet måles slik det var da kurset ble arkivert, med de samme reglene som når kursbevis utstedes.**
+   - Modul: med når den ikke er arkivert, eller når den ble arkivert sammen med kurset (`archivedWithCourseId` = kurset).
+     En modul arkivert for seg før kurset er ikke med, som ved utstedelse.
+   - Seksjon: med når den er tilgjengelig for deltakerne nå, eller når den ble arkivert sammen med kurset og hadde en
+     publisert versjon (`activeVersionIdBeforeArchive` satt). Arkiveringen nullstiller `activeVersionId`, så døra for
+     deltakere alene ville latt alle seksjonene falle ut.
+   - Samme beståttregel (kreditt per kurs, `moduleCredit.ts`, med kravet til hovedversjon) og samme lesingsregel som i dag.
+   - Er det uklart om et element var påkrevd, regnes det **ikke** som påkrevd. Tvil gjør flere «fullført», og det gir
+     «beholdes».
+   - Måles før merkene nullstilles (`clearArchiveMarksForCourse`).
+   - Ingen ny lagring trengs: merket fra 2.159.0 sier hva som fulgte kurset. Kurs arkivert før 2.159.0 har elementene sine
+     aktive, så de telles med av seg selv.
+2. **Ny grunn til å beholde et kurs: «venter på vurdering».** Så lenge en innlevering i kursets moduler venter på vurdering,
+   manuell behandling eller anke (`countCoursePendingReviews`), kan kurset ikke slettes, verken med knappen eller av jobben.
+   Grunnen går bort av seg selv når sakene er avgjort. Et vedtak tar bare låsen per deltaker, så slettingen tar
+   deltakerlåsene (`lockLearnersInContentWrite`) før den måler, slik arkiveringen gjør. Nye innleveringer kan ikke starte
+   mens innholdslåsen holdes.
+3. **Kaskadeslettingen bruker de samme vaktene:** kursvakta i punkt 1 og 2, bruksregelen med utkast, og opprydding av
+   eierrader. Den vurderer kurset før den fjerner elementene.
+4. **Masseryddingen av upubliserte moduler** beholder unntaket for «krever arkivert», men bruker den felles bruksregelen
+   med utkast. En ny modul som bare står i et lagret utkast, er under arbeid og skal ikke slettes.
+5. **Transaksjonene:** hver type får en indre funksjon som tar en transaksjon (vurder, slett), og en ytre som åpner den.
+   Knappen, kaskaden og jobben bruker de indre. Alt leses på nytt under låsen: at elementet finnes, at det er arkivert,
+   fristen regnet på nytt, overgangsdatoen, bruk og historikk. Finnes elementet ikke lenger, hoppes det over (to workere
+   under en utrulling).
+6. **Jobben gjør ikke workeren usunn.** «Usunn» betyr at hele workeren startes om, og da stopper vurderingene. Mangler
+   overgangsraden, eller er den ugyldig, sletter jobben ingenting og sier det i `lastError` og `lastSummary`, som ikke
+   påvirker helsa. Hver runde har en tidsgrense godt under `maxTickMs`. Monitoren registreres for oppstart, helse og
+   avslutning som de andre.
+7. **Lista og jobben skal si det samme om elementer i et kurs som slettes.** Et element som ligger i et kurs som selv kan
+   slettes, viser den seneste av sin egen og kursets dato, ikke «beholdes». «Slett»-dialogen for kurset lister elementene
+   som går etterpå.
+8. **Migreringen:** `INSERT … ON CONFLICT DO NOTHING` med `updatedAt` satt (kolonnen har ingen standardverdi). 4b starter
+   klokka: kommer 4c mer enn seks måneder senere, sletter den det lista har vist fra første natt. En kopi fra prod til stage
+   tar med prods dato, og stage kan da slette med en gang; oppskriften for kopien skal si det.
+9. **Kostnad:** kursvakta regnes bare for arkiverte kurs, én gang per forespørsel.
+
+**Kjente mangler (stopper ikke bygging):**
+
+- Bildefiler som ikke lar seg slette etter commit, blir liggende (som i dag); de logges.
+- Et utkast som ble liggende på et kurs arkivert mellom 2.156 og 2.159, teller ikke som bruk. Et element i et slikt
+  utkast kan slettes, og utkastet må da forkastes.
+- Et kurs som aldri ble publisert, kan stå som «fullført uten kursbevis» for alltid, fordi innleveringer telles per modul.
+  Det beholder mer enn nødvendig, ikke mindre. Teksten sier «har fullført kravet uten kursbevis», ikke «etter
+  arkiveringen».
+
+**Tester i tillegg:**
+
+- Kurs med en upublisert seksjon og en deltaker som har fullført resten: beholdes.
+- Kurs med en modul arkivert for seg før kurset: telles ikke med.
+- Kurs med en innlevering som venter: beholdes; avgjøres den, kan kurset slettes.
+- Et vedtak som kommer mens slettingen holder låsene: venter, og slettingen ser resultatet.
+- Kaskaden og masseryddingen mot et utkast som nevner elementet.
+- Manglende overgangsrad: ingen sletting, workeren frisk.
+
 ---
 
 ## Rekkefølge
