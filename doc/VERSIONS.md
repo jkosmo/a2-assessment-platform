@@ -10,6 +10,11 @@ det ene og «0/9 · Ikke startet» på det andre. Plan: `doc/design/PLAN_1156_LE
 Claude-agent; Codex nådde forbruksgrensen). Avgjørelsene: `doc/DECISIONS.md`, «Lest seksjon teller i alle kurs deltakeren
 ser (#1156)».
 
+**På stage 14.11.2026 kl. 22:45** (dev 94bf67a5). `test/stage/release-2-163-lest-pa-tvers.spec.ts` (3/3) mot ekte data: to
+åpne kurs deler en seksjon; før lesingen 0/2 i begge, etter lesingen i A «1/2 · Påbegynt» i A og B; etter at A er slettet, står
+B fortsatt på 1/2. `release-2-162` (5/5), `2-161` (4/4), `2-160` (7/7), `2-158` (6/6), `2-159` (6/6) og `2-130-1-seilbaat` (3/3)
+kjørt på nytt.
+
 **Hva deltakerne merker:** en seksjon lest i ett kurs er lest i de andre kursene de ser som har den, i «Mine kurs», i kurset
 og i rapportene. Blir et kurs fullført på den måten, kommer kursbeviset med en gang, og påminnelsene om frist stopper.
 **Første dag:** deltakere som alt har lest delte seksjoner, kan bli fullført i flere kurs og få kursbevis (telt i prod før
