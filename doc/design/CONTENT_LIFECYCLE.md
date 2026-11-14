@@ -64,7 +64,7 @@ Kan ikke publisere ufullstendig innhold.
 | Vises som «Brukt i kurs», i kursfilteret og i tematallet | bare aktive kurs teller |
 | Avpublisere | aktive kurs. Et arkivert kurs stopper ikke |
 | Arkivere | aktive kurs, **og lagrede utkast (#1140) til aktive kurs** (#1150). Et arkivert kurs, eller utkastet til et, stopper ikke |
-| Slette | alle kurs, også arkiverte |
+| Slette | alle kurs, også arkiverte, **og lagrede utkast til aktive kurs** (#1152) |
 
 **Utkastene teller ved arkivering (#1150 skive 2a-1).** Står et element i elementlista til et lagret utkast til et annet
 aktivt kurs, kan det ikke arkiveres: utkastet ville ellers feilet først når det skal publiseres
@@ -89,8 +89,8 @@ Sletting der minst ett av kursene er arkivert (`content_in_archived_course`) sie
 > «Seksjonen kan ikke slettes fordi den ligger i 2 kurs: «Arbeidsmiljø», «HMS 2024». Arkiverte
 > kurs (1): «HMS 2024». Et arkivert kurs beholder innholdet sitt.»
 >
-> Meldingen ber ikke forfatteren gjenopprette kurset og ta elementet ut: for en modul stopper slettingen
-> likevel på versjonene (#1152), og det arkiverte kurset ville mistet innholdet det skulle beholde.
+> Meldingen ber ikke forfatteren gjenopprette kurset og ta elementet ut: det arkiverte kurset ville mistet innholdet det
+> skulle beholde. Veien er å slette kurset først (#1152); da er elementet fritt.
 
 Sletting uten arkiverte kurs svarer som før: `content_in_use` for seksjoner, `module_in_use` (409)
 for moduler.
@@ -159,14 +159,54 @@ terminale steget *etter* arkivering, likt for kurs/modul/seksjon. Aktive rader v
 modul eller en seksjon som ikke er arkivert, svarer `400 delete_requires_archived` (`details.itemType`), før de andre vaktene.
 Kaskadeslettingen (#762, administrator) krever at **kurset** er arkivert, i forhåndsvisningen og i slettingen; innholdet som
 bare brukes i kurset, fulgte det inn i arkivet (#1150) — men ikke for kurs arkivert før 2.159.0, eller når et element er
-gjenopprettet for hånd mens kurset var arkivert: da sletter kaskaden aktive elementer, som den alltid har gjort (bare
-administrator, og forhåndsvisningen lister dem). **Unntak:** masseryddingen av upubliserte moduler («Rydd stage») er
+gjenopprettet for hånd mens kurset var arkivert. **Fra #1152 (skive 4a-2) sletter kaskaden bare arkiverte elementer:** et aktivt
+element som bare lå i kurset, blir stående og kobles bare fra, og forhåndsvisningen lister det for seg («Blir stående som før»,
+`stays: "not_archived"`). **Unntak:** masseryddingen av upubliserte moduler («Rydd stage») er
 motsatt regel: den sletter bare moduler som *ikke* er arkivert. I tillegg kan man ikke slette hvis det ødelegger bevarte
 registre — da blir elementet stående arkivert.
-- **Kurs:** har `CourseCompletion` (utstedte sertifikat) → `course_has_completions`, kurset blir stående arkivert.
-- **Modul:** har versjoner/forsøk/sertifiseringsstatus, eller er i et kurs, også et arkivert (G2).
+- **Kurs:** har `CourseCompletion` (utstedte sertifikat) → `course_has_completions`, kurset blir stående arkivert. #1152 (skive
+  4a-2), i denne rekkefølgen etter kursbevisene:
+  - **Fullført uten kursbevis** (`course_has_completed_without_certificate`, `{ count }`): noen har oppfylt kravet mens kurset var
+    arkivert (utstedelsen hopper over arkiverte kurs). Kurset må gjenopprettes og publiseres for at de skal få beviset.
+  - **Venter på vurdering** (`course_has_pending_reviews`, `{ count }`): en besvarelse i en av kursets moduler venter på vurdering,
+    manuell behandling (`UNDER_REVIEW`) eller anke. ALLE modulene i elementlista teller, også en delt modul som ble arkivert for seg
+    etter kurset og derfor er ute av kravet under (QA-porten 4a). Går bort av seg selv når sakene er avgjort.
+
+  **Kravet måles slik det var da kurset ble arkivert**, med reglene fra utstedelsen (kreditt per kurs med kravet til
+  hovedversjon, lesingsregelen for nåværende hovedversjon, et tomt krav gjør ingen fullført), men det som ble arkivert
+  **sammen med** kurset, teller: en modul som ikke er arkivert eller har `archivedWithCourseId` = kurset, og en seksjon deltakerne
+  kan lese nå eller som ble arkivert med kurset og hadde en publisert versjon (`activeVersionIdBeforeArchive`). En modul arkivert
+  for seg og en seksjon som aldri ble publisert, er ikke med; tvil gjør flere «fullført», og det beholder kurset. Måles før
+  merkene nullstilles. **Låsene:** et vedtak tar bare deltakerlåsen, så slettingen tar deltakerlåsene for alle som har levert på
+  en av kursets moduler, under innholdslåsen og før målingen (`lockCourseDeleteLearners`). Ikke `findCourseInProgressParticipants`:
+  den ser bort fra arkiverte elementer og hører til arkiveringsdialogen. Kode: `courseDeleteGuard.ts`.
+- **Modul (#1152):** er i et kurs, også et arkivert (G2); har innleveringer (`module_has_submissions`) eller
+  sertifiseringsstatus (`module_has_certification`); eller står i et lagret utkast til et aktivt kurs
+  (`delete_blocked_by_course_draft`). **Versjoner holder den ikke lenger igjen:** en arkivert modul uten deltakerhistorikk
+  slettes med modulversjonene, flervalgsspørsmålene og -settene, kriteriene og ledetekstene, i den rekkefølgen
+  fremmednøklene krever (skriverens `deleteModule`). Før #1152 nektet slettingen alt med versjoner, med den generelle
+  `delete_module_failed`.
 - **Seksjon:** er i et kurs, også et arkivert (G2) — dekker også leshistorikk (kun kurs-koblede
-  seksjoner har lesinger) — eller inngår i et utstedt kursbevis (#938).
+  seksjoner har lesinger) — eller inngår i et utstedt kursbevis (#938), eller (#1152) står i et lagret utkast til et aktivt
+  kurs (`delete_blocked_by_course_draft`).
+
+**Utkastene teller også ved sletting (#1152)**, med samme regel som arkiveringen (`findActiveUsesOfItems`), men bare utkastene:
+kursenes egne lister har slettingen sin egen vakt (alle kurs). Utkastet til et arkivert kurs teller ikke (kjent mangel for kurs
+arkivert mellom 2.156 og 2.159). Masseryddingen av upubliserte moduler hopper også over en modul i et utkast, både i
+forhåndsvisningen og under låsen (`findCourseDraftUsesForDelete`). Den sletter bare modulene forhåndsvisningen viste som «slettes»
+(`expectedModuleIds`, QA-porten 4a): en modul laget mens dialogen sto åpen, står. En side uten lista får
+`409 purge_confirmation_outdated`.
+
+**Én slettefunksjon per type, i to lag (#1152 skive 4a-2).** `deleteCourseInTx`, `deleteModuleInTx` og `deleteSectionInTx` tar
+transaksjonen (som holder innholdslåsen), leser alt på nytt, vurderer og sletter; `deleteCourse`, `deleteModule` og `deleteSection`
+åpner transaksjonen og gjør «finnes ikke» til 404. Finnes raden ikke lenger, svarer den indre `{ deleted: false, reason: "not_found" }`
+i stedet for å kaste, så to workere (eller jobben i 4c og knappen) kan komme til samme rad. Kaskaden kaller de tre indre i én
+transaksjon: deltakerlåsene og analysen først, så kurset (koblingene går med det), så hver eksklusive, arkiverte modul og seksjon,
+med én hendelse i revisjonsloggen per element. Masseryddingen av upubliserte moduler er motsatt regel og sletter fortsatt selv.
+
+**Eierradene (`ContentOwner`) går med innholdet (#1152).** De har ingen fremmednøkkel til kurs, modul eller seksjon, så hver
+sletting rydder dem i samme transaksjon (`deleteContentOwnersOf`): «Slett» for alle tre, kaskaden (kurset og elementene den
+sletter; delte elementer beholder sine) og masseryddingen. Vakt: `test/unit/content-owner-cleanup-1152-guard.test.js`.
 
 ### G5 — Arkivert er urørlig (#1151)
 Et arkivert kurs, en arkivert modul og en arkivert seksjon kan ikke endres eller brukes før de er gjenopprettet. **Lov** på et

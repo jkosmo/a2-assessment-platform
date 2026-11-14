@@ -9,8 +9,13 @@ import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs
 import type { AssessmentMode } from "@prisma/client";
 import { localizedTextCodec, type LocalizedText, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
 import { ConflictError, DomainRuleError, NotFoundError } from "../../errors/AppError.js";
-import { assertModuleNotInActiveCourse, describeModuleDeleteBlock } from "../course/contentLifecycle.js";
-import { addContentOwner } from "../content/contentOwnershipService.js";
+import {
+  assertModuleNotInActiveCourse,
+  assertModuleNotInCourseDraft,
+  describeModuleDeleteBlock,
+  findCourseDraftUsesForDelete,
+} from "../course/contentLifecycle.js";
+import { addContentOwner, deleteContentOwnersOf } from "../content/contentOwnershipService.js";
 import {
   generateModuleRubric,
   type AssessmentBlueprint,
@@ -273,6 +278,8 @@ export type PurgeCandidate = {
   updatedAt: Date;
   submissions: number;
   courseModules: number;
+  /** #1152: kursene som har modulen i et lagret utkast. Over null: modulen hoppes over. */
+  courseDrafts: number;
   versions: number;
   reasonSkipped: string | null;
 };
@@ -285,68 +292,50 @@ export type PurgeResult = {
 
 export async function listUnpublishedPurgeCandidates(): Promise<PurgeCandidate[]> {
   const candidates = await adminContentRepository.listPurgeCandidates();
+  // #1152: et lagret utkast til et kurs teller som bruk, som ved «Slett». En ny modul som bare står i et utkast, er under arbeid.
+  const drafts = (await findCourseDraftUsesForDelete({ moduleIds: candidates.map((m) => m.id), sectionIds: [] })).modules;
   return candidates.map((m) => {
     const reasons: string[] = [];
     if (m._count.submissions > 0) reasons.push(`${m._count.submissions} submissions`);
     // #1149: ryddingen SLETTER, så alle kurs teller her, også arkiverte (`listPurgeCandidates`).
     if (m._count.courseItems > 0) reasons.push(`in ${m._count.courseItems} course(s)`);
     if (m._count.certificationStatuses > 0) reasons.push(`${m._count.certificationStatuses} certification statuses`);
+    const inDrafts = drafts.get(m.id) ?? [];
+    if (inDrafts.length > 0) reasons.push(`in the saved draft of ${inDrafts.length} course(s): ${inDrafts.map((use) => use.title).join(", ")}`);
     return {
       id: m.id,
       title: m.title,
       updatedAt: m.updatedAt,
       submissions: m._count.submissions,
       courseModules: m._count.courseItems,
+      courseDrafts: inDrafts.length,
       versions: m._count.versions,
       reasonSkipped: reasons.length > 0 ? reasons.join("; ") : null,
     };
   });
 }
 
-export async function purgeUnpublishedModules(actorId: string): Promise<PurgeResult> {
+/**
+ * #1152 (QA-porten 4a): `shownModuleIds` er modulene forhåndsvisningen viste som «slettes». Bare de slettes, og bare hvis de
+ * fortsatt er kandidater (sjekket på nytt under låsen, `purgeUnpublishedModule`). En kandidat som ikke ble vist (laget mens dialogen
+ * sto åpen), står og rapporteres som hoppet over. Før ble lista laget på nytt her, og alt i den ble slettet.
+ */
+export async function purgeUnpublishedModules(actorId: string, shownModuleIds: readonly string[]): Promise<PurgeResult> {
+  const shown = new Set(shownModuleIds);
   const candidates = await listUnpublishedPurgeCandidates();
   const result: PurgeResult = { deleted: [], skipped: [], failed: [] };
 
   for (const candidate of candidates) {
+    if (!shown.has(candidate.id)) {
+      result.skipped.push({ id: candidate.id, title: candidate.title, reason: "not in the list that was confirmed" });
+      continue;
+    }
     if (candidate.reasonSkipped) {
       result.skipped.push({ id: candidate.id, title: candidate.title, reason: candidate.reasonSkipped });
       continue;
     }
     try {
-      const purged = await runContentWrite(async (tx) => {
-        // #934 skive 4a: kandidatlista over ble laget før innholdslåsen. Etter den sjekkes det på nytt at modulen
-        // fortsatt er upublisert, ikke arkivert, ikke i noe kurs og uten innleveringer eller beståtte. Har noe
-        // endret seg, står modulen. #1149: «ikke i noe kurs» teller også arkiverte kurs — dette er en sletting,
-        // og `CourseItem` → modul er `onDelete: Restrict`.
-        const fresh = await tx.module.findUnique({
-          where: { id: candidate.id },
-          select: { activeVersionId: true, archivedAt: true, _count: { select: { submissions: true, courseItems: true, certificationStatuses: true } } },
-        });
-        if (!fresh || fresh.activeVersionId || fresh.archivedAt || fresh._count.submissions > 0 || fresh._count.courseItems > 0 || fresh._count.certificationStatuses > 0) {
-          return false;
-        }
-        // FKs på Module-relasjoner er Restrict, så vi må slette barn først i riktig
-        // rekkefølge: moduleVersions har FK til rubric/prompt/mcq-set-versions, så slett
-        // moduleVersions først; deretter mcqQuestions (FK til mcqSetVersion + module);
-        // deretter rubric/prompt/mcq-set-versions; til slutt selve modulen.
-        await tx.moduleVersion.deleteMany({ where: { moduleId: candidate.id } });
-        await tx.mCQQuestion.deleteMany({ where: { moduleId: candidate.id } });
-        await tx.mCQSetVersion.deleteMany({ where: { moduleId: candidate.id } });
-        await tx.rubricVersion.deleteMany({ where: { moduleId: candidate.id } });
-        await tx.promptTemplateVersion.deleteMany({ where: { moduleId: candidate.id } });
-        await tx.module.delete({ where: { id: candidate.id } });
-        await recordAuditEvent(
-          {
-            entityType: auditEntityTypes.module,
-            entityId: candidate.id,
-            action: auditActions.adminContent.moduleDeleted,
-            actorId,
-            metadata: { moduleId: candidate.id, title: candidate.title, purged: true, source: "bulk_purge_unpublished" },
-          },
-          tx,
-        );
-        return true;
-      });
+      const purged = await purgeUnpublishedModule(candidate, actorId);
       if (!purged) {
         result.skipped.push({ id: candidate.id, title: candidate.title, reason: "changed since the list was made" });
         continue;
@@ -361,69 +350,129 @@ export async function purgeUnpublishedModules(actorId: string): Promise<PurgeRes
   return result;
 }
 
-export async function deleteModule(moduleId: string, actorId: string) {
-  // #934 skive 4a: alt etter innholdslåsen, i samme transaksjon som slettingen — også «ligger ikke i noe kurs»,
-  // som ruta sjekket alene før. Sjekket før låsen, kunne modulen bli lagt inn i et kurs mellom sjekken og slettingen.
+/**
+ * Én modul fra masseryddingen, i egen transaksjon under innholdslåsen. `false` når modulen ikke lenger skal ryddes. Egen funksjon
+ * så testene kan rydde én bestemt modul: `purgeUnpublishedModules` tar alle upubliserte moduler i databasen.
+ */
+export async function purgeUnpublishedModule(candidate: { id: string; title: string }, actorId: string): Promise<boolean> {
   return runContentWrite(async (tx) => {
-    const module = await createAdminContentRepository(tx).findModuleDeleteSummary(moduleId);
-
-    if (!module) {
-      throw new Error("Module not found.");
+    // #934 skive 4a: kandidatlista ble laget før innholdslåsen. Etter den sjekkes det på nytt at modulen
+    // fortsatt er upublisert, ikke arkivert, ikke i noe kurs og uten innleveringer eller beståtte. Har noe
+    // endret seg, står modulen. #1149: «ikke i noe kurs» teller også arkiverte kurs — dette er en sletting,
+    // og `CourseItem` → modul er `onDelete: Restrict`.
+    const fresh = await tx.module.findUnique({
+      where: { id: candidate.id },
+      select: { activeVersionId: true, archivedAt: true, _count: { select: { submissions: true, courseItems: true, certificationStatuses: true } } },
+    });
+    if (!fresh || fresh.activeVersionId || fresh.archivedAt || fresh._count.submissions > 0 || fresh._count.courseItems > 0 || fresh._count.certificationStatuses > 0) {
+      return false;
     }
-    // #1151 (G4): bare en arkivert modul kan slettes. Før sto regelen bare i klienten. (Masseryddingen av upubliserte
-    // moduler, `purgeUnpublishedModules`, er motsatt regel og går ikke hit.)
-    if (!module.archivedAt) throw deleteRequiresArchivedError({ type: "MODULE", id: moduleId });
-
-    // G2, sletting: ALLE kurs teller, også arkiverte (#1149). Uten arkiverte kurs er svaret det ruta har gitt
-    // siden #705 (`module_in_use`, 409, antall kurs); med et arkivert kurs er det `content_in_archived_course`.
-    const blocked = await describeModuleDeleteBlock(moduleId, tx);
-    if (blocked) throw blocked.error;
-
-    const dependencyChecks = [
-      ["module versions", module._count.versions],
-      ["rubric versions", module._count.rubricVersions],
-      ["prompt template versions", module._count.promptTemplateVersions],
-      ["MCQ set versions", module._count.mcqSetVersions],
-      ["submissions", module._count.submissions],
-      ["certification statuses", module._count.certificationStatuses],
-    ].filter(([, count]) => typeof count === "number" && count > 0);
-
-    // #938: en modul som står i et utstedt kursbevis er ALLEREDE beskyttet her — `certificationStatuses`
-    // over blokkerer. Et kursbevis krever at deltakeren besto modulen, så raden finnes, og sletting
-    // stoppes. Derfor er det bevisst IKKE lagt til en egen `assertModuleNotInIssuedCertificate`:
-    // den ville aldri kunne fyre, og en vakt som leser som en vakt uten å kunne virke er verre enn
-    // ingen vakt (#960).
-    //
-    // Seksjoner har ingen tilsvarende avhengighet — `courseSectionRead` sjekkes ikke ved sletting —
-    // så DER er vakta reell. Se `assertSectionNotInIssuedCertificate` i contentLifecycle.ts.
-
-    if (module.activeVersionId || dependencyChecks.length > 0) {
-      const dependencySummary = [
-        module.activeVersionId ? "active published version" : null,
-        ...dependencyChecks.map(([label, count]) => `${count} ${label}`),
-      ]
-        .filter(Boolean)
-        .join(", ");
-      throw new Error(`Module cannot be deleted because it still has dependencies: ${dependencySummary}.`);
-    }
-
-    const repo = createAdminContentWriter(tx);
-    const deleted = await repo.deleteModule(moduleId);
+    // #1152: et lagret utkast som nevner modulen, holder den igjen (samme regel som forhåndsvisningen).
+    const drafts = (await findCourseDraftUsesForDelete({ moduleIds: [candidate.id], sectionIds: [] }, tx)).modules.get(candidate.id) ?? [];
+    if (drafts.length > 0) return false;
+    // FKs på Module-relasjoner er Restrict, så vi må slette barn først i riktig
+    // rekkefølge: moduleVersions har FK til rubric/prompt/mcq-set-versions, så slett
+    // moduleVersions først; deretter mcqQuestions (FK til mcqSetVersion + module);
+    // deretter rubric/prompt/mcq-set-versions; til slutt selve modulen.
+    await tx.moduleVersion.deleteMany({ where: { moduleId: candidate.id } });
+    await tx.mCQQuestion.deleteMany({ where: { moduleId: candidate.id } });
+    await tx.mCQSetVersion.deleteMany({ where: { moduleId: candidate.id } });
+    await tx.rubricVersion.deleteMany({ where: { moduleId: candidate.id } });
+    await tx.promptTemplateVersion.deleteMany({ where: { moduleId: candidate.id } });
+    await tx.module.delete({ where: { id: candidate.id } });
+    // #1152: eierradene går med modulen.
+    await deleteContentOwnersOf(tx, "MODULE", [candidate.id]);
     await recordAuditEvent(
       {
         entityType: auditEntityTypes.module,
-        entityId: moduleId,
+        entityId: candidate.id,
         action: auditActions.adminContent.moduleDeleted,
         actorId,
-        metadata: {
-          moduleId,
-          title: deleted.title,
-        },
+        metadata: { moduleId: candidate.id, title: candidate.title, purged: true, source: "bulk_purge_unpublished" },
       },
       tx,
     );
-    return deleted;
+    return true;
   });
+}
+
+/**
+ * «Slett» for en modul. #1152: en arkivert modul uten deltakerhistorikk slettes med versjonene sine (skriverens `deleteModule`)
+ * og eierradene. `actorId` er valgfri: jobben som sletter etter fristen (#1152 4c) har ingen person bak seg, og
+ * `AuditEvent.actorId` peker på en bruker.
+ */
+export async function deleteModule(moduleId: string, actorId?: string) {
+  // #934 skive 4a: alt etter innholdslåsen, i samme transaksjon som slettingen — også «ligger ikke i noe kurs»,
+  // som ruta sjekket alene før. Sjekket før låsen, kunne modulen bli lagt inn i et kurs mellom sjekken og slettingen.
+  const result = await runContentWrite((tx) => deleteModuleInTx(tx, moduleId, { actorId }));
+  if (!result.deleted) throw new NotFoundError("Module", "module_not_found", "Module not found.");
+  return result.module;
+}
+
+/**
+ * #1152 skive 4a-2: «Slett» for en modul i kallerens transaksjon (som holder innholdslåsen): les på nytt, vurder, slett. Knappen
+ * (`deleteModule`) og kaskaden (courseCascadeDeleteService.ts) går hit. Finnes modulen ikke lenger: `not_found`, ingen feil
+ * (se `DeleteInTxResult`, courseCommands.ts). `source` står i revisjonshendelsen (kaskaden: `course_cascade_delete`).
+ */
+export async function deleteModuleInTx(
+  tx: ContentWriteTx,
+  moduleId: string,
+  options: { actorId?: string; source?: string } = {},
+): Promise<{ deleted: true; module: { id: string; title: string } } | { deleted: false; reason: "not_found" }> {
+  const actorId = options.actorId;
+  const module = await createAdminContentRepository(tx).findModuleDeleteSummary(moduleId);
+
+  if (!module) return { deleted: false, reason: "not_found" };
+  // #1151 (G4): bare en arkivert modul kan slettes. Før sto regelen bare i klienten. (Masseryddingen av upubliserte
+  // moduler, `purgeUnpublishedModules`, er motsatt regel og går ikke hit.)
+  if (!module.archivedAt) throw deleteRequiresArchivedError({ type: "MODULE", id: moduleId });
+
+  // G2, sletting: ALLE kurs teller, også arkiverte (#1149). Uten arkiverte kurs er svaret det ruta har gitt
+  // siden #705 (`module_in_use`, 409, antall kurs); med et arkivert kurs er det `content_in_archived_course`.
+  const blocked = await describeModuleDeleteBlock(moduleId, tx);
+  if (blocked) throw blocked.error;
+
+  // #1152: deltakerhistorikk holder modulen igjen for alltid. Innleveringer og sertifiseringer peker på modulen med
+  // `onDelete: Restrict`, så databasen ville nektet uansett; vakta gir svaret en kode og et tall.
+  // #938: en modul i et utstedt kursbevis er beskyttet her: beviset krever at deltakeren besto modulen, så det finnes
+  // innleveringer og en sertifisering. Derfor ingen egen `assertModuleNotInIssuedCertificate` (den kunne aldri fyre, #960).
+  // Seksjoner har ingen tilsvarende avhengighet, så der er vakta reell (`assertSectionNotInIssuedCertificate`).
+  if (module._count.submissions > 0) {
+    throw new DomainRuleError(
+      "module_has_submissions",
+      `Module cannot be deleted: participants have submitted to it (${module._count.submissions}). It stays archived, and the results are kept.`,
+      { count: module._count.submissions },
+    );
+  }
+  if (module._count.certificationStatuses > 0) {
+    throw new DomainRuleError(
+      "module_has_certification",
+      `Module cannot be deleted: participants hold a certification on it (${module._count.certificationStatuses}). It stays archived, and the certifications are kept.`,
+      { count: module._count.certificationStatuses },
+    );
+  }
+
+  // #1152: et lagret utkast til et annet kurs teller som bruk, som ved arkivering.
+  await assertModuleNotInCourseDraft(moduleId, tx);
+
+  const repo = createAdminContentWriter(tx);
+  const deleted = await repo.deleteModule(moduleId);
+  await deleteContentOwnersOf(tx, "MODULE", [moduleId]);
+  await recordAuditEvent(
+    {
+      entityType: auditEntityTypes.module,
+      entityId: moduleId,
+      action: auditActions.adminContent.moduleDeleted,
+      actorId,
+      metadata: {
+        moduleId,
+        title: deleted.title,
+        ...(options.source ? { source: options.source } : {}),
+      },
+    },
+    tx,
+  );
+  return { deleted: true, module: deleted };
 }
 
 async function getNextVersionNo(

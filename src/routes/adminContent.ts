@@ -405,8 +405,23 @@ adminContentRouter.post("/modules/purge-unpublished", async (request, response) 
     response.status(400).json({ error: "confirmation_required", message: "Body must include { confirmation: 'SLETT' }." });
     return;
   }
+  // #1152 (QA-porten 4a): modulene forhåndsvisningen viste. Bare de slettes, og bare hvis de fortsatt er kandidater. Uten en brukbar
+  // liste (en fane fra før denne endringen) kunne en modul laget mens dialogen sto åpen, bli slettet uten at noen så den: 409,
+  // ingenting slettet. En liste som ikke er id-er, svarer det samme: siden sendte ikke det den viste.
+  const expectedModuleIds: unknown = request.body?.expectedModuleIds;
+  if (
+    !Array.isArray(expectedModuleIds)
+    || expectedModuleIds.length > 5000
+    || !expectedModuleIds.every((id: unknown) => typeof id === "string" && id.length > 0)
+  ) {
+    response.status(409).json({
+      error: "purge_confirmation_outdated",
+      message: "This page did not send the list of modules it showed (an older version?). Reload the page and try again; nothing was deleted.",
+    });
+    return;
+  }
   try {
-    const result = await purgeUnpublishedModules(actorId);
+    const result = await purgeUnpublishedModules(actorId, expectedModuleIds as string[]);
     response.json(result);
   } catch (error) {
     response.status(500).json({ error: "purge_failed", message: error instanceof Error ? error.message : "unknown" });

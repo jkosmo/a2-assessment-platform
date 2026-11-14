@@ -194,7 +194,7 @@ Without this bootstrap step, the deploy fails with `AuthorizationFailed` partway
 
 ## Deployment flow
 
-Both staging and production require **manual `workflow_dispatch`** — push to `main` does *not* auto-deploy. See `CLAUDE.md` → "Which deploy workflow to use" for the choice between `deploy-app.yml` (code-only, ~16 min) and `deploy-azure.yml` (full Bicep + app, ~22 min).
+Both staging and production require **manual `workflow_dispatch`** — push to `main` does *not* auto-deploy. See `.claude/skills/deploy-runbook/SKILL.md` → "Which deploy workflow to use" for the choice between `deploy-app.yml` (code-only, ~16 min) and `deploy-azure.yml` (full Bicep + app, ~22 min).
 
 1. **Staging only:** dispatch `deploy-azure.yml` (or `deploy-app.yml`) with defaults. Verify staging `/healthz` green before considering prod.
 2. **Production:** dispatch `deploy-azure.yml` with `deploy_production=true`. If staging is already verified green on the same `main` HEAD, also set `skip_staging=true` to bypass the redundant staging redeploy. The production GitHub environment has the approval gate.

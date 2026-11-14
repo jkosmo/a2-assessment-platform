@@ -311,7 +311,9 @@ describe("MVP admin content management and publication", () => {
     expect(response.body.error).toBe("validation_error");
   });
 
-  it("allows deleting an empty module and blocks deleting a module with dependencies", async () => {
+  // #1152: en arkivert modul med kriterier (og andre versjonsrader) slettes nå med dem. Det som holder den igjen (innleveringer,
+  // sertifiseringer, kurs og kursutkast), måles i test/m2-content-delete-1152.test.ts.
+  it("allows deleting an empty module and an archived module with dependencies", async () => {
     const createEmptyModuleResponse = await request(app)
       .post("/api/admin/content/modules")
       .set(adminHeaders)
@@ -360,12 +362,13 @@ describe("MVP admin content management and publication", () => {
     expect(rubricResponse.status).toBe(201);
     expect((await request(app).post(`/api/admin/content/modules/${protectedModuleId}/archive`).set(adminHeaders)).status).toBe(200);
 
-    const blockedDeleteResponse = await request(app)
+    const deleteWithDependenciesResponse = await request(app)
       .delete(`/api/admin/content/modules/${protectedModuleId}`)
       .set(adminHeaders);
 
-    expect(blockedDeleteResponse.status).toBe(400);
-    expect(blockedDeleteResponse.body.error).toBe("delete_module_failed");
+    expect(deleteWithDependenciesResponse.status).toBe(200);
+    expect(await prisma.rubricVersion.count({ where: { moduleId: protectedModuleId } })).toBe(0);
+    expect(await prisma.module.count({ where: { id: protectedModuleId } })).toBe(0);
   });
 
   it("merges partial title locale patches instead of rejecting or dropping other locales", async () => {

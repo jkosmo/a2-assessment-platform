@@ -2,7 +2,8 @@
 
 > **Maintained in sync with `AGENTS.md`** (which Codex reads). Any change to the invariants,
 > tenant-split table, deploy discipline, or QA checklist sections MUST be applied to both
-> files in the same commit. CLAUDE.md additionally covers orchestration, AI delegation flow,
+> files in the same commit. CLAUDE.md additionally covers orchestration (the deploy runbook and AI delegation flow live in the
+> Claude Code skills `.claude/skills/deploy-runbook/` and `.claude/skills/ai-delegation/`),
 > and Claude-specific guidance not relevant to other agents.
 
 ## ⚠️ CRITICAL: PRODUCTION AND STAGING USE DIFFERENT AZURE TENANTS
@@ -80,15 +81,6 @@ az deployment operation group list \
 
 ---
 
-## Project overview
-
-A2 Assessment Platform — Next.js + Prisma + PostgreSQL on Azure App Service.
-
-- Infrastructure: `infra/azure/main.bicep`
-- Deploy script: `scripts/azure/deploy-environment.ps1`
-- CI/CD: `.github/workflows/deploy-azure.yml`
-- Environments runbook: `doc/AZURE_ENVIRONMENTS.md`
-
 ## Beslutninger som ikke kan leses ut av koden
 
 `doc/DECISIONS.md` — regler der et annet valg ville vært like forsvarlig, og som derfor ikke kan
@@ -99,20 +91,8 @@ Dette er en peker, ikke en ny regel: #938 tok en hel kveld fordi ingen kunne si 
 
 ## Kompleksitetsskanning — MÅNEDLIG (standing order, 2026-08-21)
 
-`doc/COMPLEXITY_SCAN.md` — seks agenter, seks områder, seks mønstre. Måler om kodebasen samler opp
-slitasje: divergerende definisjoner, ueid policy, lag på lag, unåbare vakter, servertekst vist rått,
-og løfter som ikke holdes.
-
-Verdien er **trenden**, ikke funnene alene: gikk «hvor mange steder svarer på dette spørsmålet» opp
-eller ned siden sist? Nullpunktet fra første kjøring (2026-08-21) står i fila.
-
-⚠️ **Datoen for sist kjørt bor KUN i `doc/COMPLEXITY_SCAN.md`.** Ikke gjenta den her — to kopier av
-samme faktum som må oppdateres i takt er nøyaktig feilklassen skanningen leter etter.
-`scripts/ai-qa.ps1` leser datoen og sier fra når skanningen forfaller. Den blokkerer ikke.
-
-Etter en kjøring: verifiser de tyngste funnene for hånd (agentene leser koden, de kjører den ikke),
-skill defekt fra beslutning — beslutninger hører i `doc/DECISIONS.md` — og **oppdater datoen og
-loggen**. Det siste er resetten; uten den finnes ingen trend.
+`doc/COMPLEXITY_SCAN.md`; slik den kjøres: skillen `.claude/skills/complexity-scan/`. `scripts/ai-qa.ps1` sier fra når den
+forfaller.
 
 ## Workflow conventions
 
@@ -307,18 +287,7 @@ written for; the recurring loss is the class they were *not* written for — "co
 surface" and client-layer integration. So: **once the automated suites are green and before the
 stage deploy, run a cross-model review.**
 
-```powershell
-.\scripts\ai-qa.ps1 -Issue 896                    # branch vs main
-.\scripts\ai-qa.ps1 -Uncommitted -SkipTests       # working tree, suites already green this session
-.\scripts\ai-qa.ps1 -IncludeE2E                   # also run the admin-content e2e first
-```
-
-The script runs `lint` + `test:unit` + `test:dom` first and **refuses to call Codex if any is red**
-(reviewing broken code is wasted tokens). It then runs `codex exec review` (default `gpt-5.6-sol`,
-reasoning effort `high`) with this file's standing orders as the checklist, then a short second
-pass for the verdict and the manual-test list, and writes both to `.ai-qa/qa-<timestamp>.md`
-(gitignored). Exit codes so a wrapper can gate on it: `0` GO · `1` could not review · `2` review
-incomplete (missing verdict or manual-test list — not a pass) · `3` NO-GO.
+Usage, exit codes and the PS 5.1 gotchas are in the header of `scripts/ai-qa.ps1`.
 
 1. **NO-GO means fix before deploying.** The whole point is to spend the round here rather than on
    stage. NO-GO is reserved for what is likely in normal use and does real harm, or rare but serious
@@ -329,11 +298,6 @@ incomplete (missing verdict or manual-test list — not a pass) · `3` NO-GO.
    that stage round. Test that list, not the whole app.
 4. A finding that exposes a *systematic* gap belongs in `doc/FEATURE_SURFACE_MAP.md`, not only in
    the fix.
-
-Gotchas: codex writes its banner to stderr, so PowerShell 5.1 may report a non-zero exit code even
-on success — **the output file is the source of truth**, not `$LASTEXITCODE`. The prompt is piped on
-stdin, which both avoids PS 5.1 quote mangling and closes stdin (`codex exec` hangs on an open TTY
-stdin). Requires `npm install -g @openai/codex`; auth comes from the existing ChatGPT login.
 
 ### Map the full UI surface before building/fixing (standing order)
 
@@ -378,43 +342,6 @@ coverage** — unless the user has given a different instruction for that wait.
 - Do **not** start a refactor or behavioural change as a "wait filler" — only tests (and test-
   adjacent docs). Refactoring during a wait reintroduces the very risk this avoids.
 
-### Which deploy workflow to use
-
-| Type of change | Use workflow | Why |
-|----------------|--------------|-----|
-| Code-only (no `infra/`, no Bicep, no workflow YAML) | `.github/workflows/deploy-app.yml` | ~6 min faster (~16 min vs ~22 min) — skips ARM, KV-ref wait, explicit restart |
-| Anything touching `infra/azure/*.bicep` | `.github/workflows/deploy-azure.yml` | Full deploy — applies Bicep changes |
-| Changes to `.github/workflows/*.yml` | `.github/workflows/deploy-azure.yml` | Workflow changes only take effect on next deploy from main; use full deploy to be safe |
-| Changes to `scripts/azure/deploy-environment.ps1` | Either | Both workflows use the same script; the change auto-picks via main |
-| Secret rotation requiring KV-ref refresh | `.github/workflows/deploy-azure.yml` | KV-ref propagation + container restart needed |
-
-### Promoting a verified version to prod while `main` advances
-
-Both deploy workflows accept a `git_ref` input. The workflow is still **triggered from `main`** (all
-`ref_name == default_branch` gating and the production-environment approval gate stay intact), but the
-checkout/build uses the pinned ref instead of `main` HEAD. This decouples "what's verified on stage and
-promoted to prod" from "what's currently on `main`" — so feature work can keep flowing to local/stage on
-`main` without dragging unverified commits into a prod promotion.
-
-**Flow:**
-1. Tag the stage-verified commit: `git tag v1.3.67 <sha> && git push origin v1.3.67`.
-2. Promote that tag to prod (skipping a redundant stage redeploy):
-   `gh workflow run deploy-app.yml --ref main -f git_ref=v1.3.67 -f deploy_production=true -f skip_staging=true`
-3. `main` keeps moving; stage deploys still default to `main` HEAD (empty `git_ref`).
-
-Use `deploy-app.yml` for code-only promotions. For infra, leave `git_ref` empty (pinning an old tag would
-also re-apply that ref's Bicep). `/version` on prod reflects the deployed tag — verify it after promotion.
-
-### Pre-merge Bicep what-if (production)
-
-Before merging a PR that touches `infra/azure/*.bicep` or `scripts/azure/deploy-environment.ps1`, run a production what-if to see the ARM diff:
-
-```bash
-gh workflow run bicep-whatif-prod.yml -f pr_number=<PR_NUMBER>
-```
-
-The diff is posted as a PR comment. Staging what-if runs automatically on PR; prod what-if is manual because the production GitHub environment has approval gates that would block PR-time auto-runs (#419).
-
 ## Agent skills (repo-canonical)
 
 Repo-canonical agent skills live under `skills/`; Claude Code discovers them via thin
@@ -425,68 +352,13 @@ pointers in `.claude/skills/`. The `skills/` copy is the source of truth — edi
   admin-UI links; NEVER calls publish endpoints. Distributable zip:
   `npm run skill:package` → `dist/skills/a2-authoring-api-v<version>.zip`.
 
-## AI delegation workflow (Claude orchestrates, Codex/Gemini drafts)
+Claude Code-only skills (not for Codex; AGENTS.md keeps its own copy where relevant):
 
-Use `scripts/ai-draft.ps1` to delegate implementation to Codex or Gemini, then Claude QAs.
-
-### When to delegate
-
-| Task size | Action |
-|-----------|--------|
-| < ~50 lines, single file | Claude handles directly |
-| 50–300 lines, well-specified | Delegate with `Tier=medium` |
-| Large feature / multi-file | Delegate with `Tier=complex` |
-| Security-critical, auth, infra | Delegate with `Tier=security` (but raise scrutiny in QA) |
-
-### Model selection matrix
-
-| Tier | Codex model | Codex effort | Gemini model |
-|------|-------------|--------------|--------------|
-| simple | o4-mini | low | gemini-2.5-flash |
-| medium | o4-mini | high | gemini-2.5-flash |
-| complex | o3 | medium | gemini-2.5-pro |
-| security | o3 | xhigh | gemini-2.5-pro |
-
-**Agent auto-selection:** Codex for simple/medium (precise file edits, sandbox protection).
-Gemini for complex/security (larger context window helps with multi-file analysis).
-
-### Mandatory QA checklist after delegation
-
-After `ai-draft.ps1` finishes, Claude MUST:
-
-1. `git diff HEAD` — read the full diff, verify logic and intent
-2. `npx tsc --noEmit` — must be zero errors before proceeding
-3. `npx vitest run test/unit/` — no new failures allowed
-4. Check specifically for: fabricated constants/hashes, broken YAML in workflows, missing required config flags (e.g. `enableRbacAuthorization`), enum values that don't exist in schema
-5. Verify `package.json` and `doc/VERSIONS.md` were bumped
-
-Only after QA passes: commit, push, trigger CI/CD.
-
-### Additional QA for infra changes (Bicep / PowerShell / GitHub Actions)
-
-For any change touching `infra/`, `scripts/azure/`, or `.github/workflows/`, Claude MUST also verify:
-
-**Permission and identity**
-- Does this change `enableRbacAuthorization` on Key Vault? It must always be `true`, never coupled to a deploy flag.
-- Are role assignment GUIDs seeded on `principalId`, not `App.id` or other mutable values?
-- If App Services are deleted and recreated, do the managed identities still have KV access?
-
-**ARM dependency chain**
-- If a Bicep resource is made conditional (`= if (condition)`), do all child resources have explicit `dependsOn` on that resource?
-- If switching a child resource's `parent:` from a deployed resource to an `existing` reference, is ARM ordering still guaranteed?
-
-**Secret and credential sync**
-- If a KV secret (e.g. `DATABASE-URL`) is updated, is the underlying resource (e.g. PostgreSQL) also updated with the same credential — or is the skip path explicitly handled to reuse the existing credential?
-
-**Production safety**
-- `SKIP_ROLE_ASSIGNMENTS` is no longer an active workaround — #404 closed 2026-05-19, the GitHub var is unset on both environments, deploys default to `false`, and role assignments are created normally on every deploy. The `skipRoleAssignments` Bicep param still exists and must remain functional (re-deploys that toggle it must succeed in either direction), but do not assume `true` is the current operational state.
-- Does the change behave correctly with `skipRoleAssignments=false` (current operational default)?
-- Do prod-destructive scripts assert the correct subscription before acting?
-
-**ARM validation gap**
-- A green ARM deploy does NOT prove runtime correctness. Verify MSI sidecar, KV reference resolution, and `/healthz` on staging before promoting to prod.
-
----
+- **`.claude/skills/deploy-runbook/`** — which deploy workflow to use, promoting a verified ref to prod, pre-merge Bicep what-if.
+- **`.claude/skills/ai-delegation/`** — delegating to Codex/Gemini via `scripts/ai-draft.ps1` and the QA checklist afterwards.
+- **`.claude/skills/infra-change-qa/`** — the checklist for any change to `infra/`, `scripts/azure/` or `.github/workflows/`
+  (the prohibitions themselves are «Infra hard invariants» below).
+- **`.claude/skills/complexity-scan/`** — running the monthly complexity scan.
 
 ## ⛔ Infra hard invariants — NEVER violate
 

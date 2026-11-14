@@ -6,7 +6,8 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { clearArchiveMarksForCourse } from "./courseArchive.js";
 import { assertNotArchived, deleteRequiresArchivedError } from "../content/archivedGuard.js";
-import { addContentOwner } from "../content/contentOwnershipService.js";
+import { addContentOwner, deleteContentOwnersOf } from "../content/contentOwnershipService.js";
+import { lockCourseDeleteLearners, measureCourseDeleteBlocks } from "./courseDeleteGuard.js";
 import { setCourseThemes } from "./courseThemeService.js";
 import { assignCourseSlugIfMissing } from "./courseSlug.js";
 import { applyCourseVersionChange, claimCourseRevision, isCourseEverPublished, NO_SECTION_SNAPSHOT, sameLocalizedText, type CourseVersionBump, type CourseVersionChoice, type CourseVersionRequest } from "./courseVersioning.js";
@@ -325,46 +326,66 @@ export async function unpublishCourse(courseId: string, actorId?: string) {
 // #1150 skive 2a-2: `archiveCourse` og `restoreCourse` bor i courseArchive.ts. Arkiveringen tar innholdet med seg, og
 // gjenopprettingen setter det tilbake; begge i én transaksjon under innholdslåsen.
 
-export async function deleteCourse(courseId: string, actorId?: string) {
-  // #803: delete + audit commit atomically. #934 skive 4a: innholdslåsen først, så sjekkene.
-  await runContentWrite(async (tx) => {
-    const course = await tx.course.findUnique({ where: { id: courseId }, select: { id: true, archivedAt: true } });
-    if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
-    // #1151 (G4): bare et arkivert kurs kan slettes. Før sto regelen bare i klienten.
-    if (!course.archivedAt) throw deleteRequiresArchivedError({ type: "COURSE", id: courseId });
+/**
+ * #1152 skive 4a-2 (planen, «Etter gjennomlesingen» punkt 5): svaret fra de indre slettefunksjonene for kurs, modul og seksjon.
+ * Finnes elementet ikke lenger, er svaret `not_found`, ikke en feil: to workere under en utrulling, eller jobben (4c) og knappen,
+ * kan komme til samme rad. Den ytre funksjonen (ruta) gjør det til 404, som før.
+ */
+export type DeleteInTxResult = { deleted: true } | { deleted: false; reason: "not_found" };
 
-    // #660: CourseCompletion.course is onDelete: Restrict (issued certificates are achievement
-    // records we never silently destroy). Without this guard, course.delete fails with a raw FK
-    // violation and the route surfaces a generic 500. Block with a clear message.
-    // #1151: kurset er alt arkivert her, så rådet «arkiver i stedet» er borte. Det blir stående arkivert, med kursbevisene.
-    const completionCount = await tx.courseCompletion.count({ where: { courseId } });
-    if (completionCount > 0) {
-      // ⚠️ ANTALLET SOM FELT, ikke som interpolert prosa — klienten skal kunne si «3 kursbevis» på
-      // brukerens språk uten å lese tallet ut av en engelsk setning.
-      throw new DomainRuleError(
-        "course_has_completions",
-        `Cannot delete a course that has ${completionCount} completion${completionCount === 1 ? "" : "s"} ` +
-          `(issued certificates). The course stays archived and keeps the completion records.`,
-        { count: completionCount },
-      );
-    }
+/** Arbeidstid for en sletting av et kurs: deltakerlåsene (opptil 3 sekunder hver i kø bak et vedtak) og målingen av kravet. */
+const COURSE_DELETE_TX_TIMEOUT_MS = 20_000;
 
-    // #1150 skive 2a-2: elementer som fulgte kurset inn i arkivet, peker på det. Merket er et merke, ikke et eierskap: det
-    // nullstilles, og elementene blir stående arkivert.
-    await clearArchiveMarksForCourse(tx, courseId);
-    await tx.course.delete({ where: { id: courseId } });
+/**
+ * «Slett» for et kurs, i kallerens transaksjon (som holder innholdslåsen): les på nytt, vurder, slett. Kaster når kurset ikke er
+ * arkivert, eller når noe holder det igjen (courseDeleteGuard.ts). Kaskaden kaller den med `recordAudit: false` (den skriver sin
+ * egen hendelse for kurset).
+ *
+ * Rekkefølgen er bærende: deltakerlåsene tas FØR noe skrives i revisjonssporet (låserekkefølgen i db/contentLock.ts), og kravet
+ * måles FØR merkene fra kursarkiveringen nullstilles: det er merkene som sier hva som fulgte kurset inn i arkivet.
+ */
+export async function deleteCourseInTx(
+  tx: ContentWriteTx,
+  courseId: string,
+  options: { actorId?: string; recordAudit?: boolean } = {},
+): Promise<DeleteInTxResult> {
+  const course = await tx.course.findUnique({ where: { id: courseId }, select: { id: true, archivedAt: true } });
+  if (!course) return { deleted: false, reason: "not_found" };
+  // #1151 (G4): bare et arkivert kurs kan slettes. Før sto regelen bare i klienten.
+  if (!course.archivedAt) throw deleteRequiresArchivedError({ type: "COURSE", id: courseId });
+
+  // #660: kursbevis (`CourseCompletion` er `onDelete: Restrict`). #1152: fullført uten kursbevis, og besvarelser som venter. Et
+  // vedtak tar bare deltakerlåsen, så den tas for alle som har levert på kravets moduler før målingen.
+  await lockCourseDeleteLearners(tx, courseId);
+  const [blocked] = await measureCourseDeleteBlocks(courseId, tx);
+  if (blocked) throw blocked.error;
+
+  // #1150 skive 2a-2: elementer som fulgte kurset inn i arkivet, peker på det. Merket er et merke, ikke et eierskap: det
+  // nullstilles, og elementene blir stående arkivert.
+  await clearArchiveMarksForCourse(tx, courseId);
+  await tx.course.delete({ where: { id: courseId } });
+  // #1152: eierradene går med kurset (de har ingen fremmednøkkel til det).
+  await deleteContentOwnersOf(tx, "COURSE", [courseId]);
+  if (options.recordAudit !== false) {
     await recordAuditEvent(
       {
         entityType: auditEntityTypes.course,
         entityId: courseId,
         // #705: a delete is a delete — was previously mislogged as `archived`.
         action: auditActions.course.deleted,
-        actorId,
+        actorId: options.actorId,
         metadata: { courseId },
       },
       tx,
     );
-  });
+  }
+  return { deleted: true };
+}
+
+export async function deleteCourse(courseId: string, actorId?: string) {
+  // #803: delete + audit commit atomically. #934 skive 4a: innholdslåsen først, så sjekkene.
+  const result = await runContentWrite((tx) => deleteCourseInTx(tx, courseId, { actorId }), { timeout: COURSE_DELETE_TX_TIMEOUT_MS });
+  if (!result.deleted) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 }
 
 export type CourseItemInput =

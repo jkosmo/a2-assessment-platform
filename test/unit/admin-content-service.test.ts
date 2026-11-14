@@ -25,7 +25,8 @@ vi.mock("../../src/db/prisma.js", () => ({
   // #934 skive 3: en modul publisert fra egen side gir kursene den ligger i en mindre versjon — her ligger den i ingen.
   // #934 skive 4a: innholdslåsen tas med rå SQL først i transaksjonen (runContentWrite).
   // #1151: vakta mot arkivert leser modulen på transaksjonen.
-  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ course: { findMany: async () => [] }, module: { findUnique: async () => ({ archivedAt: null }) }, $executeRaw: async () => 0, $executeRawUnsafe: async () => 0 })) },
+  // #1152: slettingen spør også om lagrede kursutkast (kursets elementer og utkastene, her ingen).
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ course: { findMany: async () => [] }, courseItem: { findMany: async () => [] }, courseDraft: { findMany: async () => [] }, module: { findUnique: async () => ({ archivedAt: null }) }, $executeRaw: async () => 0, $executeRawUnsafe: async () => 0 })) },
 }));
 
 const adminContentRepositoryMock = {
@@ -62,8 +63,11 @@ vi.mock("../../src/services/auditService.js", () => ({
 
 // #787 slice 4a: createModule now assigns the creator as owner (addContentOwner → prisma.contentOwner).
 // This unit test mocks the repository/prisma, so stub the ownership side-effect out.
+// #1152: slettingen rydder eierradene.
+const deleteContentOwnersOf = vi.fn();
 vi.mock("../../src/modules/content/contentOwnershipService.js", () => ({
   addContentOwner: vi.fn(),
+  deleteContentOwnersOf,
 }));
 
 vi.mock("../../src/config/benchmarkExamples.js", () => ({
@@ -100,6 +104,7 @@ describe("admin content service", () => {
     publishModuleVersionRecord.mockReset();
     deleteModuleRecord.mockReset();
     recordAuditEvent.mockReset();
+    deleteContentOwnersOf.mockReset();
   });
 
   it("rejects module creation when validTo is before validFrom", async () => {
@@ -364,29 +369,40 @@ describe("admin content service", () => {
     });
   });
 
-  it("blocks module deletion when the module has dependencies", async () => {
-    findModuleDeleteSummary.mockResolvedValue({
-      id: "module-1",
-      title: "Module One",
-      activeVersionId: "module-version-1",
-      archivedAt: new Date("2026-11-01T00:00:00Z"),
-      _count: {
-        versions: 1,
-        submissions: 0,
-        mcqSetVersions: 1,
-        certificationStatuses: 0,
-        rubricVersions: 1,
-        promptTemplateVersions: 1,
-      },
-    });
+  // #1152: versjoner, kriterier, ledetekst og flervalgssett holder ikke lenger en arkivert modul igjen; skriveren sletter dem
+  // med modulen. Deltakerhistorikk gjør det, med hver sin kode.
+  const archivedWith = (counts: Partial<Record<"versions" | "submissions" | "certificationStatuses", number>>) => ({
+    id: "module-1",
+    title: "Module One",
+    activeVersionId: null,
+    archivedAt: new Date("2026-11-01T00:00:00Z"),
+    _count: { versions: 0, submissions: 0, mcqSetVersions: 1, certificationStatuses: 0, rubricVersions: 1, promptTemplateVersions: 1, ...counts },
+  });
 
+  it("#1152: deletes an archived module that has versions, and its owner rows", async () => {
+    findModuleDeleteSummary.mockResolvedValue(archivedWith({ versions: 2 }));
+    deleteModuleRecord.mockResolvedValue({ id: "module-1", title: "Module One" });
     const { deleteModule } = await import("../../src/modules/adminContent/index.js");
 
-    await expect(deleteModule("module-1", "admin-1")).rejects.toThrow(
-      "Module cannot be deleted because it still has dependencies:",
-    );
+    // Uten person (jobben i 4c): revisjonsraden får ingen aktør.
+    await deleteModule("module-1");
+
+    expect(deleteModuleRecord).toHaveBeenCalledWith("module-1");
+    expect(deleteContentOwnersOf).toHaveBeenCalledWith(expect.anything(), "MODULE", ["module-1"]);
+    expect(recordAuditEvent.mock.calls[0][0]).toMatchObject({ action: "module_deleted", actorId: undefined });
+  });
+
+  it("#1152: blocks deletion of a module with submissions or certifications, with a code and a count", async () => {
+    const { deleteModule } = await import("../../src/modules/adminContent/index.js");
+
+    findModuleDeleteSummary.mockResolvedValue(archivedWith({ versions: 1, submissions: 3, certificationStatuses: 1 }));
+    await expect(deleteModule("module-1", "admin-1")).rejects.toMatchObject({ code: "module_has_submissions", details: { count: 3 } });
+
+    findModuleDeleteSummary.mockResolvedValue(archivedWith({ versions: 1, certificationStatuses: 2 }));
+    await expect(deleteModule("module-1", "admin-1")).rejects.toMatchObject({ code: "module_has_certification", details: { count: 2 } });
 
     expect(deleteModuleRecord).not.toHaveBeenCalled();
+    expect(deleteContentOwnersOf).not.toHaveBeenCalled();
   });
 
   it("rejects module-version creation when a dependency belongs to another module", async () => {

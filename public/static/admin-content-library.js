@@ -391,7 +391,8 @@ function handleTableClick(btn) {
 }
 
 // #705-UX: slett en arkivert modul (terminal). Vaktet i backend — blokkeres med forklarende
-// melding hvis modulen har avhengigheter eller brukes i et kurs.
+// melding hvis modulen brukes i et kurs eller et lagret kursutkast, eller har innleveringer eller
+// sertifiseringer (#1152: hver grunn har sin kode, og teksten slås opp i `errors.api.*`).
 async function deleteModuleFromRow(moduleId, moduleTitle, btn) {
   if (!window.confirm(`Slette modulen «${moduleTitle}» permanent? Dette kan ikke angres.`)) return;
   btn.disabled = true;
@@ -571,9 +572,14 @@ function openCreateDialog() {
   window.location.href = "/admin-content/module/new/conversation";
 }
 
+// #1152 (QA-porten 4a): modulene forhåndsvisningen viste som «slettes». Sendes med ved bekreftelsen, og tjeneren sletter bare dem
+// (og bare hvis de fortsatt er kandidater). En modul som ble laget mens dialogen sto åpen, er ikke vist, og slettes ikke.
+let purgeShownModuleIds = null;
+
 // Åpne purge-dialogen, hent kandidat-forhåndsvisning fra backend og tegn listene.
 async function openPurgeDialog() {
   if (!purgeUnpublishedDialog) return;
+  purgeShownModuleIds = null;
   purgePreviewLoading.hidden = false;
   purgePreviewBody.hidden = true;
   purgeError.hidden = true;
@@ -585,6 +591,7 @@ async function openPurgeDialog() {
     const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
     const toDelete = candidates.filter((c) => !c.reasonSkipped);
     const toSkip = candidates.filter((c) => c.reasonSkipped);
+    purgeShownModuleIds = toDelete.map((c) => c.id);
 
     purgeDeleteCount.textContent = String(toDelete.length);
     purgeDeleteList.innerHTML = toDelete.length === 0
@@ -623,7 +630,7 @@ async function runPurge() {
   try {
     const result = await apiFetch("/api/admin/content/modules/purge-unpublished", getHeaders, {
       method: "POST",
-      body: JSON.stringify({ confirmation: "SLETT" }),
+      body: JSON.stringify({ confirmation: "SLETT", expectedModuleIds: purgeShownModuleIds ?? [] }),
     });
     const deleted = Array.isArray(result?.deleted) ? result.deleted.length : 0;
     const failed = Array.isArray(result?.failed) ? result.failed.length : 0;

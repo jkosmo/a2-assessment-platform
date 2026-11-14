@@ -263,7 +263,9 @@ describe("#934 skive 4a: alt som skriver innhold, holder innholdslåsen", () => 
     const { locked } = unlockedWrites(program, files);
     // Kursets elementer, kurs, moduler, modulversjoner, seksjoner, seksjonsversjoner og bilder skrives alle et sted.
     expect(locked.length).toBeGreaterThanOrEqual(50);
-    for (const owner of ["modules/course/courseCommands.ts", "modules/course/sectionCommands.ts", "modules/adminContent/adminContentRepository.ts", "modules/course/courseVersioning.ts", "modules/adminContent/contentImportService.ts", "modules/course/courseCascadeDeleteService.ts", "modules/course/assetCommands.ts"]) {
+    // #1152 skive 4a-2: kaskaden (courseCascadeDeleteService.ts) er ikke med lenger: den skriver ikke selv, men kaller
+    // slettefunksjonene i courseCommands.ts, sectionCommands.ts og adminContentCommands.ts.
+    for (const owner of ["modules/course/courseCommands.ts", "modules/course/sectionCommands.ts", "modules/adminContent/adminContentRepository.ts", "modules/course/courseVersioning.ts", "modules/adminContent/contentImportService.ts", "modules/course/assetCommands.ts"]) {
       expect(locked.some((where) => where.startsWith(`${owner}:`)), owner).toBe(true);
     }
   });
@@ -456,8 +458,6 @@ function placementViolations(activeProgram, activeFiles) {
     if (w.file !== "modules/certification/modulePass.ts") out.push(`${where(w)} skriver ModulePass utenom vedtakssporet`);
   }
   for (const w of writesOf(activeProgram, activeFiles, "courseItem")) {
-    // Slettingen av hele kurset tar kravene med seg: fremmednøkkelen står med CASCADE.
-    if (w.file === "modules/course/courseCascadeDeleteService.ts" && w.op === "deleteMany") continue;
     if (!/\bsyncModuleRequirements\(/.test(w.fnText)) out.push(`${where(w)} skriver kursets elementer uten syncModuleRequirements`);
   }
   for (const w of writesOf(activeProgram, activeFiles, "assessmentDecision")) {

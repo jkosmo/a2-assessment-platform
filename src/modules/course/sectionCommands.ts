@@ -3,11 +3,16 @@ import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { AppError, DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
-import { assertSectionNotInActiveCourse, assertSectionNotInAnyCourse, assertSectionNotInIssuedCertificate } from "./contentLifecycle.js";
+import {
+  assertSectionNotInActiveCourse,
+  assertSectionNotInAnyCourse,
+  assertSectionNotInCourseDraft,
+  assertSectionNotInIssuedCertificate,
+} from "./contentLifecycle.js";
 import { applyMinorVersionToCoursesContaining, sameLocalizedText } from "./courseVersioning.js";
 import { randomUUID } from "node:crypto";
 import { stageSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs, type IncomingSectionAsset } from "./assetCommands.js";
-import { addContentOwner } from "../content/contentOwnershipService.js";
+import { addContentOwner, deleteContentOwnersOf } from "../content/contentOwnershipService.js";
 import { assertNotArchived, deleteRequiresArchivedError } from "../content/archivedGuard.js";
 import {
   validateSectionTranslationCompleteness,
@@ -582,50 +587,65 @@ export async function restoreSectionWithCourse(
 export async function deleteSection(sectionId: string, actorId?: string) {
   // #934 skive 4a: alt etter innholdslåsen, i samme transaksjon som slettingen. Sjekket før, kunne seksjonen
   // bli lagt inn i et kurs mellom sjekken og slettingen.
-  const blobPaths = await runContentWrite(async (tx) => {
-    // #961: tittelen hentes FØR slettingen. Etterpå finnes den ingen steder — revisjonsraden er alt
-    // som er igjen, og en id alene lar ingen kjenne igjen hva som forsvant (samme form som
-    // modul-sletting, adminContentCommands.ts:376).
-    const section = await tx.courseSection.findUnique({
-      where: { id: sectionId },
-      select: { id: true, title: true, archivedAt: true },
-    });
-    if (!section) {
-      throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
-    }
-    // #1151 (G4): bare en arkivert seksjon kan slettes. Før sto regelen bare i klienten.
-    if (!section.archivedAt) throw deleteRequiresArchivedError({ type: "SECTION", id: sectionId });
-    // G2, sletting: ALLE kurs teller, også arkiverte (#1149; `CourseItem` → seksjon er `onDelete: Restrict`).
-    // Svaret navngir kursene, og sier hvilke som er arkiverte.
-    await assertSectionNotInAnyCourse(sectionId, tx);
-    // #938: G2 over dekker «ligger i et kurs NÅ». Denne dekker «sto i et kursbevis DA» — innhold
-    // som er fjernet fra kurset, men som et utstedt diplom fortsatt hviler på.
-    await assertSectionNotInIssuedCertificate(sectionId, "slettes", tx);
-    // #758: capture the section's asset blob paths before the delete — SectionAsset rows cascade away
-    // with the section, so afterwards there is nothing left to look them up from.
-    const paths = await collectSectionAssetBlobPaths([sectionId], tx);
-    // Detach activeVersion FK before deleting versions to avoid the self-reference.
-    await tx.courseSection.update({ where: { id: sectionId }, data: { activeVersionId: null } });
-    await tx.courseSectionVersion.deleteMany({ where: { sectionId } });
-    await tx.courseSection.delete({ where: { id: sectionId } });
-    // #961: sporet committes i SAMME transaksjon som slettingen — mønsteret fra #803
-    // (courseCommands.deleteCourse). Et spor som committes utenfor transaksjonen er verre enn
-    // ingen: da kan det finnes et spor for noe som ble rullet tilbake, eller mangle for noe som
-    // faktisk ble slettet. Sletting var den siste livssyklushandlingen på en seksjon uten spor.
-    await recordAuditEvent(
-      {
-        entityType: auditEntityTypes.courseSection,
-        entityId: sectionId,
-        action: auditActions.section.deleted,
-        actorId,
-        metadata: { sectionId, title: section.title },
-      },
-      tx,
-    );
-    return paths;
-  });
+  const result = await runContentWrite((tx) => deleteSectionInTx(tx, sectionId, { actorId }));
+  if (!result.deleted) throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
   // After commit: reclaim the storage (best-effort — a failed blob delete never fails the delete).
-  await reclaimAssetBlobs(blobPaths);
+  await reclaimAssetBlobs(result.blobPaths);
+}
+
+/**
+ * #1152 skive 4a-2: «Slett» for en seksjon i kallerens transaksjon (som holder innholdslåsen): les på nytt, vurder, slett. Knappen
+ * (`deleteSection`) og kaskaden går hit. Finnes seksjonen ikke lenger: `not_found`, ingen feil (se `DeleteInTxResult`,
+ * courseCommands.ts). Svarer med bildefilene; kalleren rydder dem ETTER commit (`reclaimAssetBlobs`).
+ */
+export async function deleteSectionInTx(
+  tx: ContentWriteTx,
+  sectionId: string,
+  options: { actorId?: string; source?: string } = {},
+): Promise<{ deleted: true; blobPaths: string[] } | { deleted: false; reason: "not_found" }> {
+  // #961: tittelen hentes FØR slettingen. Etterpå finnes den ingen steder — revisjonsraden er alt
+  // som er igjen, og en id alene lar ingen kjenne igjen hva som forsvant (samme form som
+  // modul-sletting, adminContentCommands.ts:376).
+  const section = await tx.courseSection.findUnique({
+    where: { id: sectionId },
+    select: { id: true, title: true, archivedAt: true },
+  });
+  if (!section) return { deleted: false, reason: "not_found" };
+  // #1151 (G4): bare en arkivert seksjon kan slettes. Før sto regelen bare i klienten.
+  if (!section.archivedAt) throw deleteRequiresArchivedError({ type: "SECTION", id: sectionId });
+  // G2, sletting: ALLE kurs teller, også arkiverte (#1149; `CourseItem` → seksjon er `onDelete: Restrict`).
+  // Svaret navngir kursene, og sier hvilke som er arkiverte.
+  await assertSectionNotInAnyCourse(sectionId, tx);
+  // #938: G2 over dekker «ligger i et kurs NÅ». Denne dekker «sto i et kursbevis DA» — innhold
+  // som er fjernet fra kurset, men som et utstedt diplom fortsatt hviler på.
+  await assertSectionNotInIssuedCertificate(sectionId, "slettes", tx);
+  // #1152: et lagret utkast til et kurs teller som bruk, som ved arkivering.
+  await assertSectionNotInCourseDraft(sectionId, tx);
+  // #758: capture the section's asset blob paths before the delete — SectionAsset rows cascade away
+  // with the section, so afterwards there is nothing left to look them up from.
+  const blobPaths = await collectSectionAssetBlobPaths([sectionId], tx);
+  // Detach activeVersion FK before deleting versions to avoid the self-reference.
+  await tx.courseSection.update({ where: { id: sectionId }, data: { activeVersionId: null } });
+  await tx.courseSectionVersion.deleteMany({ where: { sectionId } });
+  await tx.courseSection.delete({ where: { id: sectionId } });
+  // #1152: eierradene går med seksjonen.
+  await deleteContentOwnersOf(tx, "SECTION", [sectionId]);
+  // #961: sporet committes i SAMME transaksjon som slettingen — mønsteret fra #803
+  // (courseCommands.deleteCourse). Et spor som committes utenfor transaksjonen er verre enn
+  // ingen: da kan det finnes et spor for noe som ble rullet tilbake, eller mangle for noe som
+  // faktisk ble slettet. Sletting var den siste livssyklushandlingen på en seksjon uten spor.
+  // #1152: kaskaden skriver også én hendelse per seksjon, med `source`.
+  await recordAuditEvent(
+    {
+      entityType: auditEntityTypes.courseSection,
+      entityId: sectionId,
+      action: auditActions.section.deleted,
+      actorId: options.actorId,
+      metadata: { sectionId, title: section.title, ...(options.source ? { source: options.source } : {}) },
+    },
+    tx,
+  );
+  return { deleted: true, blobPaths };
 }
 
 async function assertSectionExists(sectionId: string, reader: Pick<ContentWriteTx, "courseSection"> | typeof prisma = prisma) {

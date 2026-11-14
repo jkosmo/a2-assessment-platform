@@ -641,7 +641,21 @@ export function createAdminContentWriter(client: ContentWriteTx) {
       });
     },
 
-    deleteModule(moduleId: string) {
+    /**
+     * #1152: modulen slettes med alt som bare hører til den: versjonene, flervalgsspørsmålene og -settene, kriteriene og
+     * ledetekstene. Før nektet slettingen alt som hadde versjoner. Kalles bare av `deleteModule` (adminContentCommands.ts), etter
+     * vaktene: uten innleveringer og sertifiseringer peker ingenting annet på versjonene (vurderinger og flervalgsforsøk henger på
+     * en innlevering). Rekkefølgen følger fremmednøklene, som i kaskaden og masseryddingen: den aktive pekeren nullstilles,
+     * modulversjonene (de peker på kriterier, ledetekst og flervalgssett) går først, så spørsmålene (de peker på settet), så resten.
+     * Bestått (`ModulePass`) og kurskrav (`CourseModuleRequirement`) går av seg selv (`onDelete: Cascade`).
+     */
+    async deleteModule(moduleId: string) {
+      await client.module.update({ where: { id: moduleId }, data: { activeVersionId: null } });
+      await client.moduleVersion.deleteMany({ where: { moduleId } });
+      await client.mCQQuestion.deleteMany({ where: { moduleId } });
+      await client.mCQSetVersion.deleteMany({ where: { moduleId } });
+      await client.rubricVersion.deleteMany({ where: { moduleId } });
+      await client.promptTemplateVersion.deleteMany({ where: { moduleId } });
       return client.module.delete({
         where: { id: moduleId },
         select: {

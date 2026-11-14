@@ -1776,11 +1776,24 @@ async function confirmDelete() {
 
 let pendingCascadeDelete = null; // { courseId }
 
+// #1152: en grunn med kode (kursvakta, utkastene) slås opp i `errors.api.<code>` på forfatterens språk, med tallene fra
+// `details`. Uten kode, eller uten oversettelse, står serverens norske tekst som før (#995).
+function cascadeDeleteReasonText(entry) {
+  // Overskriften over lista sier alt om et element som ikke er arkivert; serverens norske tekst ville bare gjentatt den.
+  if (entry.stays === "not_archived") return "";
+  if (entry.code) {
+    const translatedReason = apiErrorCodeText(entry.code, t, [], entry.details ?? null);
+    if (translatedReason) return translatedReason;
+  }
+  return entry.reason ?? "";
+}
+
 function cascadeDeleteEntryList(entries) {
   return `<ul class="cascade-publish-list">${(entries ?? [])
     .map((entry) => {
       const title = escapeHtml(localizedText(entry.title) || entry.id);
-      const reason = entry.reason ? `<span class="cascade-publish-blocker">${escapeHtml(entry.reason)}</span>` : "";
+      const reasonText = cascadeDeleteReasonText(entry);
+      const reason = reasonText ? `<span class="cascade-publish-blocker">${escapeHtml(reasonText)}</span>` : "";
       return `<li class="cascade-publish-item"><span class="cascade-publish-item-title">${title}</span>${reason}</li>`;
     })
     .join("")}</ul>`;
@@ -1810,8 +1823,15 @@ function renderCascadeDeletePreview(preview) {
   if (delModules.length > 0 || delSections.length > 0) {
     html += `<h3 class="cascade-delete-heading">${escapeHtml(t("courses.delete.willDelete"))}</h3>${cascadeDeleteEntryList([...delModules, ...delSections])}`;
   }
-  if (sparedModules.length > 0 || sparedSections.length > 0) {
-    html += `<h3 class="cascade-delete-heading">${escapeHtml(t("courses.delete.willKeep"))}</h3>${cascadeDeleteEntryList([...sparedModules, ...sparedSections])}`;
+  // #1152: det som ikke slettes, i to lister: delt med andre kurs, og det som ikke er arkivert (et aktivt element blir stående).
+  const spared = [...sparedModules, ...sparedSections];
+  const sparedShared = spared.filter((entry) => entry.stays !== "not_archived");
+  const sparedActive = spared.filter((entry) => entry.stays === "not_archived");
+  if (sparedShared.length > 0) {
+    html += `<h3 class="cascade-delete-heading">${escapeHtml(t("courses.delete.willKeep"))}</h3>${cascadeDeleteEntryList(sparedShared)}`;
+  }
+  if (sparedActive.length > 0) {
+    html += `<h3 class="cascade-delete-heading" data-testid="cascade-delete-stays-active">${escapeHtml(t("courses.delete.staysNotArchived"))}</h3>${cascadeDeleteEntryList(sparedActive)}`;
   }
   if (!html) {
     html = `<p class="dialog-text">${escapeHtml(t("courses.delete.onlyCourse"))}</p>`;

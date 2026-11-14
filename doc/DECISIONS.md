@@ -1866,3 +1866,66 @@ begrunnet unntak), `test/content-lock-write-guard.test.js`, `test/m2-archived-re
 
 **Plan:** `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, «Etappe 4» og «Etter gjennomlesingen».
 **Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** avgjort av produkteier; bygges i 4a
+
+## Slettingen av moduler, utkastene og eierradene (#1152 skive 4a-1, 2026-11-14)
+
+Planen sa hva; dette er valgene som ikke sto der.
+
+- **Egen kode når et utkast stopper en sletting: `delete_blocked_by_course_draft`** (`{ count, draftCourseTitles }`), ikke
+  `content_in_course_draft`. Den teksten sier «kan ikke arkiveres», og en plassholder til ville gjort den ugyldig for de andre
+  avsenderne (samme grunn som i #1150).
+- **Bare utkastene teller i den nye vakta.** Regelen er den samme som ved arkivering (`findActiveUsesOfItems`), men kursenes egne
+  lister har slettingen sin egen vakt (alle kurs, også arkiverte). Utkastet til et arkivert kurs teller ikke, som ved arkivering.
+- **Rekkefølgen i «Slett» for en modul:** arkivert → ligger i et kurs → innleveringer → sertifiseringer → utkast. Det varige
+  (historikken) sies før det forfatteren kan rydde selv (utkastet), så forfatteren ikke rydder et utkast og så møter en sperre som
+  aldri går bort. For seksjoner kommer utkastet etter kursbeviset av samme grunn.
+- **Modulen slettes av skriveren (`deleteModule` i adminContentRepository.ts), eierradene av kommandoen.** Masseryddingen sletter
+  fortsatt selv (motsatt regel), nå én modul per kall (`purgeUnpublishedModule`), så testene kan rydde én bestemt modul uten å ta
+  alle upubliserte moduler i databasen.
+- **Eierradene slettes uten egen hendelse i revisjonsloggen.** Slettingen av innholdet er hendelsen; «eier fjernet» ville sagt at
+  noen tok fra en person tilgangen.
+- **En modul som ikke finnes, er `404 module_not_found`** (før: en vanlig `Error` som ble `400 delete_module_failed`).
+
+**Håndheves:** `assertModuleNotInCourseDraft`, `assertSectionNotInCourseDraft` og `findCourseDraftUsesForDelete`
+(contentLifecycle.ts), `deleteContentOwnersOf` (contentOwnershipService.ts); `test/content-in-use-guard.test.js`,
+`test/unit/content-owner-cleanup-1152-guard.test.js`, `test/m2-content-delete-1152.test.ts`.
+**Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** valgt under byggingen av skive 4a-1; ikke avklart med produkteier
+
+## Kurssletting og kaskaden (#1152 skive 4a-2, 2026-11-14)
+
+Planen sa hva; dette er valgene som ikke sto der.
+
+- **«Venter på vurdering» måles på ALLE modulene i kursets elementliste, for alle deltakere** (rettet etter QA-porten 4a). Første
+  utgave målte bare kravets moduler. Men en delt modul som arkiveres for seg ETTER kurset, faller ut av kravet, og en sak på den
+  kan likevel være det som gjør en deltaker ferdig hvis kurset gjenopprettes. Tvil gir «beholdes». Deltakerlåsene tas for det samme
+  settet. «Fullført uten kursbevis» måler fortsatt kravet slik det var (der er tvil «ikke påkrevd», som også gir «beholdes»).
+  Deltakerne er alle, ikke bare de midt i kurset som i arkiveringsdialogen (`countCoursePendingReviews`, uendret).
+  Statusregelen er den samme (`countPendingReviewsOnModules`): manuell behandling er `UNDER_REVIEW`, og `ManualReview`-radene
+  leses ikke for seg.
+- **Rekkefølgen i «Slett» for et kurs:** kursbevis → fullført uten kursbevis → venter på vurdering. Det som ikke går bort av seg
+  selv, sies først. Kaskadens forhåndsvisning viser alle grunnene som slår til.
+- **Deltakerlåsene tas for alle som har levert på en av kursets moduler.** Et vedtak gjelder alltid en innlevering. Lesing, innlevering og
+  utstedelse tar innholdslåsen delt og venter uansett på slettingen.
+- **Et bevis registrert utenfor plattformen (`external`) teller ikke som bevis i «uten kursbevis»**, fordi utstedelsen ville
+  oppgradert det. I praksis stopper `course_has_completions` først, siden alle kursbevis teller der.
+- **Kaskaden sletter gjennom de indre funksjonene til «Slett»:** kurset først (`deleteCourseInTx`, uten den vanlige hendelsen
+  `course_deleted`; kaskaden skriver `course_cascade_deleted`), så hver eksklusive, arkiverte modul og seksjon. Modulhendelsen har
+  nå også tittelen. Kursvakta måles to ganger i kaskadens sletting (analysen og `deleteCourseInTx`, begge under de samme låsene);
+  planens «én gang per forespørsel» gjelder «Slett» og forhåndsvisningen.
+- **I kaskaden er et arkivert eksklusivt element med deltakerhistorikk eller i et utkast fortsatt en blokkering**, som før, ikke
+  «blir stående». Et eksklusivt element som ikke er arkivert, blir stående (`stays: "not_archived"`), og forhåndsvisningen viser det
+  under egen overskrift.
+- **Kaskadens blokkeringer har `code` og `details`** når grunnen har en feilkode, så klienten viser dem på forfatterens språk; den
+  norske `reason` er reserve.
+- **De indre funksjonene svarer `{ deleted: false, reason: "not_found" }` når raden er borte, og kaster for alle vaktene.** Jobben
+  (4c) kan da hoppe over en rad en annen worker tok, og fortsatt få grunnen når noe holder elementet igjen.
+
+- **Masseryddingen sletter bare det forhåndsvisningen viste** (QA-porten 4a). Klienten sender id-ene den viste som «slettes»
+  (`expectedModuleIds`); tjeneren sletter bare dem, og bare hvis de fortsatt er kandidater. Før laget tjeneren lista på nytt ved
+  bekreftelsen, og en modul laget mens dialogen sto åpen, ble slettet uten at noen så den. En side uten lista avvises med
+  `409 purge_confirmation_outdated` (ikke dagens oppførsel): slettingen kan ikke angres.
+
+**Håndheves:** `courseDeleteGuard.ts`, `deleteCourseInTx` (courseCommands.ts), `deleteModuleInTx` (adminContentCommands.ts),
+`deleteSectionInTx` (sectionCommands.ts), courseCascadeDeleteService.ts; `test/m2-course-delete-1152.test.ts`,
+`test/e2e/admin-content-delete-archived-course-1152.spec.ts`.
+**Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** valgt under byggingen av skive 4a-2; ikke avklart med produkteier

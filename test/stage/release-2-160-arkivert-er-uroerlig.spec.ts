@@ -284,8 +284,8 @@ test("E: arkivert på nytt slettes kurset og seksjonen med en gang; modulen stå
   noter("E", { fulgte: [...arkivert.fulgte].length, kurs: [kurs.status, kurs.json.error], modul: [modul.status, modul.json.error], seksjon: [seksjon.status, seksjon.json.error] });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBeLessThan(300);
   expect(seksjon.status, seksjon.tekst.slice(0, 300)).toBeLessThan(300);
-  // Kjent, eldre regel (uendret i 2.160): en modul som har hatt en lagret versjon, kan ikke slettes (`deleteModule`,
-  // «still has dependencies»; svaret er den generelle `delete_module_failed`). Den står igjen arkivert. Hører til #1152.
+  // I 2.160 kunne en modul som har hatt en lagret versjon, ikke slettes (den generelle `delete_module_failed`); den sto igjen
+  // arkivert. Fra 2.161.0 (#1152 4a-1) slettes den med versjonene sine. Testen godtar begge: slettet, eller står igjen arkivert.
   noter("E, modulen", { status: modul.status, error: modul.json.error });
   if (modul.status >= 300) {
     const etter = await api("GET", `${modulsti()}/export`);

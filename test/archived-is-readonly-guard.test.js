@@ -80,15 +80,23 @@ const EXPECTED = new Map([
   ...each(by(`${AC}#updateModuleTitle`), [`${AR}#updateModuleTitle module.update`, 1]),
   // Detaljene skrives bare av lagringen (`composeModuleVersion`), som alltid ender i `createModuleVersion` i samme transaksjon.
   ...each(by(`${AC}#createModuleVersionLocked`), [`${AR}#updateModuleDetails module.update`, 1]),
-  ...each(by(`${AC}#deleteModule`), [`${AR}#deleteModule module.delete`, 1]),
+  // #1152: skriveren sletter modulen med versjonene, flervalgsspørsmålene og -settene, kriteriene og ledetekstene (FK-rekkefølge).
+  // #1152 skive 4a-2: den indre funksjonen (`…InTx`) vurderer og sletter; knappen og kaskaden kaller den.
+  ...each(
+    by(`${AC}#deleteModuleInTx`),
+    [`${AR}#deleteModule module.delete`, 1], [`${AR}#deleteModule module.update`, 1], [`${AR}#deleteModule moduleVersion.deleteMany`, 1],
+    [`${AR}#deleteModule mCQQuestion.deleteMany`, 1], [`${AR}#deleteModule mCQSetVersion.deleteMany`, 1],
+    [`${AR}#deleteModule rubricVersion.deleteMany`, 1], [`${AR}#deleteModule promptTemplateVersion.deleteMany`, 1],
+  ),
   ...each(unntak(NY), [`${AR}#createModule module.create`, 1]),
   ...each(unntak(`${ARKIVERING}: «Arkiver», og importen som arkiverer et element den byttet ut`), [`${AR}#archiveModule module.update`, 1], [`${AR}#archiveModuleWithCourse module.update`, 1]),
   ...each(unntak(GJENOPPRETTING), [`${AR}#restoreModule module.update`, 1], [`${AR}#restoreModuleWithCourse module.update`, 1]),
   ...each(
+    // #1152: én modul per transaksjon i `purgeUnpublishedModule` (flyttet ut av løkka, så testene kan rydde én bestemt modul).
     unntak("motsatt regel (#1151 F): masseryddingen sletter bare upubliserte moduler som IKKE er arkivert (administrator, «Rydd stage»)"),
-    [`${AC}#purgeUnpublishedModules mCQQuestion.deleteMany`, 1], [`${AC}#purgeUnpublishedModules mCQSetVersion.deleteMany`, 1],
-    [`${AC}#purgeUnpublishedModules module.delete`, 1], [`${AC}#purgeUnpublishedModules moduleVersion.deleteMany`, 1],
-    [`${AC}#purgeUnpublishedModules promptTemplateVersion.deleteMany`, 1], [`${AC}#purgeUnpublishedModules rubricVersion.deleteMany`, 1],
+    [`${AC}#purgeUnpublishedModule mCQQuestion.deleteMany`, 1], [`${AC}#purgeUnpublishedModule mCQSetVersion.deleteMany`, 1],
+    [`${AC}#purgeUnpublishedModule module.delete`, 1], [`${AC}#purgeUnpublishedModule moduleVersion.deleteMany`, 1],
+    [`${AC}#purgeUnpublishedModule promptTemplateVersion.deleteMany`, 1], [`${AC}#purgeUnpublishedModule rubricVersion.deleteMany`, 1],
   ),
   ...each(
     unntak("nummererer eldre versjoner som mangler nummer (datareparasjon, innholdet endres ikke). Kalles fra publiseringen (vakt i kommandoen; gjenopprettingen med kurset er unntaket over) og kursets elementliste"),
@@ -113,7 +121,7 @@ const EXPECTED = new Map([
   ...each(by(`${SC}#updateSectionContent`), [`${SC}#updateSectionContent courseSection.update`, 1], [`${SC}#updateSectionContent courseSectionVersion.create`, 1]),
   ...each(by(`${SC}#publishSectionLocked`), [`${SC}#publishSectionLocked courseSection.update`, 1], [`${SC}#publishSectionLocked courseSectionVersion.update`, 1]),
   ...each(by(`${SC}#unpublishSection`), [`${SC}#unpublishSection courseSection.update`, 1]),
-  ...each(by(`${SC}#deleteSection`), [`${SC}#deleteSection courseSection.delete`, 1], [`${SC}#deleteSection courseSection.update`, 1], [`${SC}#deleteSection courseSectionVersion.deleteMany`, 1]),
+  ...each(by(`${SC}#deleteSectionInTx`), [`${SC}#deleteSectionInTx courseSection.delete`, 1], [`${SC}#deleteSectionInTx courseSection.update`, 1], [`${SC}#deleteSectionInTx courseSectionVersion.deleteMany`, 1]),
   ...each(unntak(NY), [`${SC}#createSection courseSection.create`, 1], [`${SC}#createSection courseSection.update`, 1], [`${SC}#createSection courseSectionVersion.create`, 1], [`${SC}#createSectionWithAssets sectionAsset.create`, 1]),
   ...each(unntak(ARKIVERING), [`${SC}#archiveSection courseSection.update`, 1], [`${SC}#archiveSectionWithCourse courseSection.update`, 1]),
   ...each(unntak(GJENOPPRETTING), [`${SC}#restoreSection courseSection.update`, 1], [`${SC}#restoreSectionWithCourse courseSection.update`, 1]),
@@ -124,7 +132,7 @@ const EXPECTED = new Map([
   ...each(by(`${CC}#claimRevisionForItemWrite`), [`${CC}#setCourseModules course.update`, 1], [`${CC}#setCourseModules courseItem.createMany`, 1], [`${CC}#setCourseModules courseItem.deleteMany`, 1]),
   ...each(by(`${CC}#publishCourse`), [`${CC}#publishCourse course.update`, 1], ["modules/course/courseSlug.ts#assignCourseSlugIfMissing course.update", 1]),
   ...each(by(`${CC}#unpublishCourse`), [`${CC}#unpublishCourse course.update`, 1]),
-  ...each(by(`${CC}#deleteCourse`), [`${CC}#deleteCourse course.delete`, 1]),
+  ...each(by(`${CC}#deleteCourseInTx`), [`${CC}#deleteCourseInTx course.delete`, 1]),
   ...each(unntak(NY), [`${CC}#createCourse course.create`, 1]),
   // Temaene: fra `updateCourse` (vakt i claimCourseRevision) og `createCourse` (nytt kurs).
   ...each(by(`${CV}#claimCourseRevision`), ["modules/course/courseThemeService.ts#setCourseThemes courseThemeAssignment.createMany", 1], ["modules/course/courseThemeService.ts#setCourseThemes courseThemeAssignment.deleteMany", 1]),
@@ -137,15 +145,8 @@ const EXPECTED = new Map([
   ...each(unntak(ARKIVERING), [`${ARK}#archiveCourse course.update`, 1]),
   ...each(unntak(GJENOPPRETTING), [`${ARK}#restoreCourse course.update`, 1]),
   ...each(unntak("merkene fra kursarkiveringen nullstilles ved gjenoppretting og sletting av kurset; elementene forblir arkivert"), [`${ARK}#clearArchiveMarksForCourse courseSection.updateMany`, 1], [`${ARK}#clearArchiveMarksForCourse module.updateMany`, 1]),
-  ...each(
-    by(`${KA}#analyzeCourseCascade`),
-    [`${KA}#cascadeDeleteCourse course.delete`, 1], [`${KA}#cascadeDeleteCourse courseItem.deleteMany`, 1],
-    [`${KA}#cascadeDeleteCourse courseSection.delete`, 1], [`${KA}#cascadeDeleteCourse courseSection.update`, 1],
-    [`${KA}#cascadeDeleteCourse courseSectionVersion.deleteMany`, 1], [`${KA}#cascadeDeleteCourse mCQQuestion.deleteMany`, 1],
-    [`${KA}#cascadeDeleteCourse mCQSetVersion.deleteMany`, 1], [`${KA}#cascadeDeleteCourse module.delete`, 1],
-    [`${KA}#cascadeDeleteCourse module.update`, 1], [`${KA}#cascadeDeleteCourse moduleVersion.deleteMany`, 1],
-    [`${KA}#cascadeDeleteCourse promptTemplateVersion.deleteMany`, 1], [`${KA}#cascadeDeleteCourse rubricVersion.deleteMany`, 1],
-  ),
+  // #1152 skive 4a-2: kaskaden skriver ikke selv lenger. Den kaller `deleteCourseInTx`, `deleteModuleInTx` og `deleteSectionInTx`
+  // (står over), som holder «slett krever arkivert» hver for seg.
 
   // ── Vedlikehold ──
   ...each(unntak(VEDLIKEHOLD), [`${LT}#collapseDuplicatedLocalizedTitles course.update`, 2], [`${LT}#collapseDuplicatedLocalizedTitles courseSection.update`, 1], [`${LT}#collapseDuplicatedLocalizedTitles module.update`, 1]),

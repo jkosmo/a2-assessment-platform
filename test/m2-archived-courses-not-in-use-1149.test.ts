@@ -278,6 +278,8 @@ describe("#1149: kaskadeslettingen og masseryddingen teller fortsatt arkiverte k
     const sharedSection = await createPublishedSection(tag("seksjon delt med arkivert kurs"));
     const sharedModule = await createPublishedModule(tag("modul delt med arkivert kurs"));
     const ownSection = await createPublishedSection(tag("seksjon bare i dette kurset"));
+    // #1152 skive 4a-2: kaskaden sletter bare arkiverte elementer. Den eksklusive seksjonen fulgte kurset inn i arkivet.
+    await prisma.courseSection.update({ where: { id: ownSection }, data: { archivedAt: new Date() } });
     await createCourse("arkivert kurs", "archived", { sectionIds: [sharedSection], moduleIds: [sharedModule] });
     // #1151: kaskaden krever et arkivert kurs.
     const course = await createCourse("kurs som slettes", "archived", { sectionIds: [sharedSection, ownSection], moduleIds: [sharedModule] });

@@ -2,6 +2,89 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.161.0 - 2026-11-14
+
+Etappe 4a av #1148: **«Slett» virker for arkivert innhold** (#1152). Det som ikke har deltakerhistorikk, kan slettes, og det
+som skal beholdes, sier hvorfor. Jobben som sletter etter seks måneder (4c) og datoen i lista (4b) kommer senere. Plan:
+`doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md` («Byggeplan etter etappe 3» og «Etter gjennomlesingen»; lest av Codex og en
+uavhengig Claude-agent før bygging). Avgjørelsene: `doc/DECISIONS.md`, «Hva som holder et arkivert kurs igjen fra sletting».
+Ingen migrering.
+
+**Hva forfatterne merker:**
+
+- En arkivert modul kan slettes, også når den har lagrede versjoner (i 2.160 kunne den ikke det, og svaret var en generell
+  engelsk feil).
+- Et arkivert kurs kan ikke slettes når en deltaker har fullført kravet uten kursbevis, eller når en besvarelse i kursets
+  moduler venter på vurdering, manuell behandling eller anke. Meldingen sier hvor mange det gjelder og hva som må til.
+- Noe som står i et lagret kursutkast, kan ikke slettes.
+
+### Skive 4a-1: elementene
+
+- **Moduler:** en arkivert modul uten innleveringer og sertifiseringer slettes med versjonene, flervalgssettene,
+  kriteriene og ledetekstene sine, i én transaksjon under innholdslåsen. Nye koder: `module_has_submissions`,
+  `module_has_certification` (med tall), `404 module_not_found` (var `400 delete_module_failed`). `actorId` er valgfri, for
+  jobben i 4c.
+- **Utkast teller som bruk ved sletting**, som ved arkivering: `delete_blocked_by_course_draft` med kursenes navn, for
+  modul, seksjon, kaskaden og masseryddingen.
+- **Eierrader** (`ContentOwner`) slettes sammen med kurs, modul og seksjon, også i kaskaden og masseryddingen. Før ble de
+  liggende. En vakt finner alle slettestedene i koden og krever opprydding.
+
+### Skive 4a-2: kurset
+
+- **Kravet måles slik det var da kurset ble arkivert**, med reglene fra utstedelsen av kursbevis
+  (`src/modules/course/courseDeleteGuard.ts`): moduler arkivert sammen med kurset er med, moduler arkivert for seg før kurset
+  og seksjoner som aldri ble publisert er ikke med. Tvil gir «beholdes». Nye koder: `course_has_completed_without_certificate`
+  og `course_has_pending_reviews` (med tall).
+- **Låsene:** slettingen tar deltakerlåsene til alle som har levert på kursets moduler før den måler, så et vedtak kan ikke
+  komme imellom.
+- **Transaksjonene:** kurs, modul og seksjon har en indre slettefunksjon som tar transaksjonen og hopper over det som alt er
+  borte. Kaskaden bruker dem.
+- **Kaskaden** bruker de samme vaktene, sletter bare arkiverte elementer (et aktivt element blir stående, og dialogen sier
+  det), og skriver en hendelse i revisjonsloggen per seksjon.
+
+### Rettet etter QA-porten (Codex, NO-GO)
+
+- **«Venter på vurdering» så bare kravets moduler.** En delt modul som senere ble arkivert for seg, falt ut, og kurset kunne
+  slettes mens en vurdering på den pågikk. Nå teller alle modulene i kurset, uansett arkivering, og deltakerlåsene gjelder
+  de samme. Mutasjonssjekket.
+- **Masseryddingen av upubliserte moduler** laget lista på nytt ved bekreftelsen, og kunne slette en modul som ble laget
+  mens dialogen sto åpen. Nå sender klienten modulene den viste (`expectedModuleIds`), og bare de slettes. En side fra før
+  får `409 purge_confirmation_outdated` (eldre feil, rettet fordi tapet ikke kan repareres).
+
+### Tester
+
+- Nye: `test/m2-content-delete-1152.test.ts`, `test/m2-course-delete-1152.test.ts` (gjennom rutene, med kontroller og en
+  telling av innleveringer, sertifiseringer, bestått og kursbevis før og etter), `test/unit/content-owner-cleanup-1152-guard.test.js`,
+  og nettleser: `admin-content-delete-archived-module-1152`, `admin-content-delete-archived-course-1152`,
+  `admin-content-purge-unpublished-1152`.
+- Mutasjonssjekket: 15 regler i 4a-1, 19 i 4a-2 og rettingene etter porten. Alle ga rød test.
+
+### Kjent
+
+- I kaskadedialogen er noen grunner til å beholde (innleveringer og sertifisering på en modul, seksjon i et kursbevis)
+  fortsatt norsk tekst uten kode, også på en-GB (#995). Dialogtittelen og meldingen etterpå er faste norske tekster.
+- `module_has_certification` nås i praksis ikke: en sertifisering kommer fra en innlevering, så `module_has_submissions` slår
+  til først. Den står som vern mot en databasefeil.
+- Manuell behandling oppdages gjennom innleveringens status (`UNDER_REVIEW`), som vedtaket setter samtidig.
+- Eierrader som ble liggende etter tidligere slettinger i prod og på stage, er ikke ryddet.
+- Et utkast på et kurs arkivert mellom 2.156 og 2.159 teller ikke som bruk.
+- Mange deltakere med saker i gang samtidig kan gi `503 content_busy` på slettingen; prøv igjen.
+- **Fra QA-porten, runde 2 (godtatt av produkteier 14.11.2026):** masseryddingen binder bekreftelsen til modulene
+  administratoren så, men ikke til tilstanden deres. Endres en vist modul mens dialogen står åpen, og er den fortsatt
+  upublisert, slettes den med det nye innholdet. Sjeldent; innhold laget med skillen kan lages på nytt fra eksportfila.
+  Rettingen (tilstand i bekreftelsen gjennom klient og tjener) ble vurdert som mer kompleksitet enn risikoen.
+- Et kurs med kursbevis måler den faste grunnen etter deltakerlåsene, så i et smalt vindu kan «Slett» svare `503
+  content_busy` i stedet for `course_has_completions`. Nytt forsøk gir riktig svar.
+- En eier som legges til samtidig som innholdet slettes, kan bli liggende som en rad uten innhold (eiertildeling tar ikke
+  innholdslåsen).
+- Kroppen til `POST …/purge-unpublished` valideres for hånd, ikke med Zod; et blankt id-element godtas (sletter ingenting
+  ekstra). Feilmeldingene i «Rydd stage» har et fast norsk prefiks.
+
+### Også med
+
+- `CLAUDE.md` trimmet (det som kan leses ut av koden, er fjernet; deploy-veiledningen, KI-delegeringen, infra-sjekklista og
+  kompleksitetsskanningen er flyttet til skills under `.claude/skills/`). Forbudene står i CLAUDE.md som før.
+
 ## 2.160.0 - 2026-11-14
 
 Etappe 3 av #1148: **arkivert er urørlig** (#1151). Et arkivert kurs, en arkivert modul eller seksjon kan leses, eksporteres,

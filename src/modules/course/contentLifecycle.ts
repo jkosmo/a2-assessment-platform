@@ -145,7 +145,8 @@ export function findActiveCoursesForModules(moduleIds: string[], locale: Support
 // Brukes av: arkivering for hånd av en modul og en seksjon (`assert…NotInActiveCourse` med «arkiveres»), importens
 // `updateExisting` (arkiverer det den byttet ut), og forhåndsvisningen av kursarkiveringen (courseArchivePreview.ts).
 // Avpublisering bruker den IKKE: et utkast som får et avpublisert element, stoppes ved publisering
-// (`course_draft_item_unusable`), og avpublisering er reversibel. Sletting teller alle kurs (`findAll…`), uendret.
+// (`course_draft_item_unusable`), og avpublisering er reversibel. Sletting teller alle kurs (`findAll…`), og fra #1152 også
+// utkastene, gjennom denne regelen (`findCourseDraftUsesForDelete` under).
 // Vakt: test/content-in-use-guard.test.js.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -296,9 +297,8 @@ function deleteBlockedError(subject: "Modulen" | "Seksjonen", courses: CourseUse
       "content_in_archived_course",
       `${subject} kan ikke slettes fordi den ligger i ${courses.length} kurs: ${quoteCourseTitles(courses)}. ` +
         `Arkiverte kurs (${archived.length}): ${quoteCourseTitles(archived)}. ` +
-        // Ingen anvisning om å gjenopprette kurset og ta elementet ut (QA-porten 2.158.0): for en modul stopper
-        // slettingen likevel på versjonene, og for en seksjon i et utstedt kursbevis på beviset. Rådet kostet et
-        // endret arkivert kurs og førte nesten aldri til sletting. Veien som virker, kommer med #1152.
+        // Ingen anvisning om å gjenopprette kurset og ta elementet ut (QA-porten 2.158.0): rådet kostet et endret arkivert
+        // kurs. Veien som virker, er å slette kurset først (#1152); da er elementet fritt.
         `Et arkivert kurs beholder innholdet sitt.`,
       {
         count: courses.length,
@@ -332,6 +332,57 @@ export async function describeModuleDeleteBlock(moduleId: string, reader: Lifecy
 export async function assertSectionNotInAnyCourse(sectionId: string, reader: LifecycleReader = prisma): Promise<void> {
   const courses = await findAllCoursesContainingSection(sectionId, reader);
   if (courses.length > 0) throw deleteBlockedError("Seksjonen", courses);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// #1152 (doc/DECISIONS.md, «Hva som holder et arkivert kurs igjen fra sletting»): et lagret UTKAST teller som bruk også ved
+// SLETTING, som ved arkivering. Ellers kunne et arkivert element som står i utkastet til et annet kurs slettes, og utkastet kunne
+// da ikke publiseres (`course_draft_item_unusable`).
+//
+// Samme regel som arkiveringen (`findActiveUsesOfItems`: utkastene til kurs som ikke er arkivert), men bare utkastene. Kursenes
+// egne lister har slettingen sin egen vakt over (ALLE kurs, også arkiverte). Står elementet både i et kurs og i et utkast, stopper
+// kurset først.
+// Brukes av: «Slett» for modul og seksjon, og masseryddingen av upubliserte moduler (forhåndsvisningen og slettingen).
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+function onlyDrafts(map: Map<string, ItemUse[]>): Map<string, ItemUse[]> {
+  const out = new Map<string, ItemUse[]>();
+  for (const [id, uses] of map) {
+    const drafts = uses.filter((use) => use.via === "draft");
+    if (drafts.length > 0) out.set(id, drafts);
+  }
+  return out;
+}
+
+/** For SLETTING: utkastene (til kurs som ikke er arkivert) som nevner elementene. Et element uten utkast står ikke i svaret. */
+export async function findCourseDraftUsesForDelete(
+  items: { moduleIds: readonly string[]; sectionIds: readonly string[] },
+  reader: LifecycleReader = prisma,
+): Promise<ItemUses> {
+  const uses = await findActiveUsesOfItems(items, {}, reader);
+  return { modules: onlyDrafts(uses.modules), sections: onlyDrafts(uses.sections) };
+}
+
+function inCourseDraftDeleteError(subject: "Modulen" | "Seksjonen", drafts: ItemUse[]): AppError {
+  // Egen kode: teksten til `content_in_course_draft` handler om arkivering.
+  return new DomainRuleError(
+    "delete_blocked_by_course_draft",
+    `${subject} kan ikke slettes fordi den står i et lagret utkast til ${drafts.length} kurs: ${quoteCourseTitles(drafts)}. ` +
+      `Ta den ut av utkastet, eller forkast utkastet, først.`,
+    { count: drafts.length, draftCourseTitles: drafts.map((use) => use.title) },
+  );
+}
+
+/** Sletting av en modul stoppes av et lagret utkast som nevner den (#1152). */
+export async function assertModuleNotInCourseDraft(moduleId: string, reader: LifecycleReader = prisma): Promise<void> {
+  const drafts = (await findCourseDraftUsesForDelete({ moduleIds: [moduleId], sectionIds: [] }, reader)).modules.get(moduleId) ?? [];
+  if (drafts.length > 0) throw inCourseDraftDeleteError("Modulen", drafts);
+}
+
+/** Sletting av en seksjon stoppes av et lagret utkast som nevner den (#1152). */
+export async function assertSectionNotInCourseDraft(sectionId: string, reader: LifecycleReader = prisma): Promise<void> {
+  const drafts = (await findCourseDraftUsesForDelete({ moduleIds: [], sectionIds: [sectionId] }, reader)).sections.get(sectionId) ?? [];
+  if (drafts.length > 0) throw inCourseDraftDeleteError("Seksjonen", drafts);
 }
 
 // #938: innhold som står i et UTSTEDT kursbevis kan aldri slettes.
@@ -560,11 +611,27 @@ const APPEAL_FINISHED_STATUSES = [AppealStatus.RESOLVED, AppealStatus.REJECTED, 
  * arkiveringen, kan deltakeren ha fullført kurset uten å få kursbevis (#1152 holder da kurset igjen fra sletting).
  */
 export async function countCoursePendingReviews(inProgress: CourseInProgress, reader: LifecycleReader = prisma): Promise<number> {
-  if (inProgress.userIds.length === 0 || inProgress.moduleIds.length === 0) return 0;
+  if (inProgress.userIds.length === 0) return 0;
+  return countPendingReviewsOnModules(inProgress.moduleIds, inProgress.userIds, reader);
+}
+
+/**
+ * Besvarelsene på modulene som venter på vurdering, manuell behandling eller anke, med regelen over. `userIds` utelatt: alle
+ * deltakere. Arkiveringen spør for deltakerne midt i kurset (`countCoursePendingReviews`); slettingen av et kurs (#1152,
+ * courseDeleteGuard.ts) for alle, fordi hvem som helst av dem kan fullføre kravet når saken er avgjort.
+ * Manuell behandling er `UNDER_REVIEW`: vedtaket som sender saken til sensor, setter statusen i samme transaksjon som saken
+ * lages, og avgjørelsen setter den til `COMPLETED`. En anke setter den samme innleveringen tilbake til `UNDER_REVIEW`.
+ */
+export async function countPendingReviewsOnModules(
+  moduleIds: readonly string[],
+  userIds: readonly string[] | undefined,
+  reader: LifecycleReader = prisma,
+): Promise<number> {
+  if (moduleIds.length === 0 || userIds?.length === 0) return 0;
   return reader.submission.count({
     where: {
-      userId: { in: inProgress.userIds },
-      moduleId: { in: inProgress.moduleIds },
+      ...(userIds ? { userId: { in: [...userIds] } } : {}),
+      moduleId: { in: [...moduleIds] },
       OR: [
         { submissionStatus: { notIn: ASSESSMENT_FINISHED_STATUSES } },
         { appeals: { some: { appealStatus: { notIn: APPEAL_FINISHED_STATUSES } } } },

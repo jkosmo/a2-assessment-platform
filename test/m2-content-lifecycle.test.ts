@@ -711,8 +711,10 @@ describe("#938 P1: slettevernet dekker gamle bevis og kaskaden", () => {
   it("kaskadesletting blokkeres når en eksklusiv seksjon står i et bevis for et annet kurs", async () => {
     // Scenariet QA fant: seksjonen ble fjernet fra sitt opprinnelige kurs, lagt EKSKLUSIVT i et
     // annet, og det andre kurset kaskadeslettes. Kaskaden slettet seksjonen direkte, uten vakta.
+    // #1152 skive 4a-2: arkivert (fulgte det nye kurset inn i arkivet). Kaskaden sletter bare arkiverte elementer; en aktiv
+    // seksjon ville blitt stående uten å bli vurdert.
     const section = await prisma.courseSection.create({
-      data: { title: JSON.stringify({ "en-GB": "Moved but certified" }) },
+      data: { title: JSON.stringify({ "en-GB": "Moved but certified" }), archivedAt: new Date() },
       select: { id: true },
     });
     const originalCourse = await prisma.course.create({

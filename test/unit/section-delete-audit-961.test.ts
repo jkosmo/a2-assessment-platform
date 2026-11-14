@@ -50,6 +50,8 @@ vi.mock("../../src/modules/course/contentLifecycle.js", () => ({
   assertSectionNotInActiveCourse: vi.fn(),
   assertSectionNotInAnyCourse,
   assertSectionNotInIssuedCertificate,
+  // #1152: et lagret kursutkast stopper også slettingen.
+  assertSectionNotInCourseDraft: vi.fn(),
 }));
 
 vi.mock("../../src/modules/course/assetCommands.js", () => ({
@@ -58,7 +60,8 @@ vi.mock("../../src/modules/course/assetCommands.js", () => ({
   stageSectionAssets: vi.fn(),
 }));
 
-vi.mock("../../src/modules/content/contentOwnershipService.js", () => ({ addContentOwner: vi.fn() }));
+// #1152: eierradene slettes med seksjonen.
+vi.mock("../../src/modules/content/contentOwnershipService.js", () => ({ addContentOwner: vi.fn(), deleteContentOwnersOf: vi.fn() }));
 
 // #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
 warmModuleGraph(async () => {

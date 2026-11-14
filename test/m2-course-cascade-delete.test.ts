@@ -44,8 +44,10 @@ const userIds: string[] = [];
 
 // A module with a full version chain (moduleVersion → rubric/prompt/mcq-set + mcqQuestion) and an
 // active (published) version, so the cascade must null the active pointer and clean up every row.
+// #1152 skive 4a-2: ARKIVERT, som om den fulgte kurset inn i arkivet. Kaskaden sletter bare arkiverte elementer; et aktivt
+// eksklusivt element blir stående (test/m2-course-delete-1152.test.ts).
 async function makeRichModule(): Promise<string> {
-  const module = await prisma.module.create({ data: { title: `CCD Module ${uniq()}` }, select: { id: true } });
+  const module = await prisma.module.create({ data: { title: `CCD Module ${uniq()}`, archivedAt: new Date() }, select: { id: true } });
   moduleIds.push(module.id);
   const rubric = await prisma.rubricVersion.create({
     data: { moduleId: module.id, versionNo: 1, criteriaJson: "{}", scalingRuleJson: "{}", active: true },
@@ -78,8 +80,9 @@ async function makeRichModule(): Promise<string> {
   return module.id;
 }
 
-async function makeSection(): Promise<string> {
-  const section = await prisma.courseSection.create({ data: { title: `CCD Section ${uniq()}` }, select: { id: true } });
+async function makeSection(archived = true): Promise<string> {
+  // #1152 skive 4a-2: arkivert, som modulen over. `false`: et bilde skal lastes opp først (et arkivert element tar ikke imot).
+  const section = await prisma.courseSection.create({ data: { title: `CCD Section ${uniq()}`, archivedAt: archived ? new Date() : null }, select: { id: true } });
   sectionIds.push(section.id);
   const version = await prisma.courseSectionVersion.create({
     data: { sectionId: section.id, versionNo: 1, bodyMarkdown: "Body", publishedAt: new Date() },
@@ -193,7 +196,7 @@ describe("Course cascade delete (#762)", () => {
   // #758: cascade-deleting a course must reclaim the exclusive sections' asset blobs from storage,
   // not just the DB rows — otherwise the images accumulate in storage forever.
   it("reclaims the exclusive sections' asset blobs from storage on cascade delete", async () => {
-    const sectionId = await makeSection();
+    const sectionId = await makeSection(false);
     await createSectionAsset({
       sectionId,
       filename: "fig.svg",
@@ -202,6 +205,7 @@ describe("Course cascade delete (#762)", () => {
     });
     const before = await prisma.sectionAsset.findFirstOrThrow({ where: { sectionId }, select: { blobPath: true } });
     await expect(getAsset(before.blobPath)).resolves.toBeInstanceOf(Buffer);
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { archivedAt: new Date() } });
 
     const courseId = await makeCourse([{ itemType: "SECTION", sectionId }]);
     const res = await request(app).post(`/api/admin/content/courses/${courseId}/cascade-delete`).set(adminHeaders).send(await asPreviewed(courseId));

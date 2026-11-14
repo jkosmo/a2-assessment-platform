@@ -319,10 +319,10 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
       // Handlingene:
       [sections, "unpublishSection", 'assertSectionNotInActiveCourse(sectionId, "avpubliseres", tx)', ALL],
       [sections, "archiveSection", 'assertSectionNotInActiveCourse(sectionId, "arkiveres", tx)', ALL],
-      [sections, "deleteSection", "assertSectionNotInAnyCourse(sectionId, tx)", ACTIVE],
+      [sections, "deleteSectionInTx", "assertSectionNotInAnyCourse(sectionId, tx)", ACTIVE],
       [modules, "unpublishModule", 'assertModuleNotInActiveCourse(moduleId, "avpubliseres", tx)', ALL],
       [modules, "archiveModule", 'assertModuleNotInActiveCourse(moduleId, "arkiveres", tx)', ALL],
-      [modules, "deleteModule", "describeModuleDeleteBlock(moduleId, tx)", ACTIVE],
+      [modules, "deleteModuleInTx", "describeModuleDeleteBlock(moduleId, tx)", ACTIVE],
     ];
     for (const [fns, name, mustCall, mustNotMatch] of expectations) {
       const body = fns.get(name);
@@ -331,6 +331,28 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
       expect(body, `${name}() skal kalle ${mustCall}`).toContain(mustCall);
       expect(mustNotMatch.test(body), `${name}() spør om feil svar (${mustNotMatch})`).toBe(false);
     }
+  });
+
+  it("#1152: slettingene spør også om lagrede kursutkast, med samme regel som arkiveringen", () => {
+    const owner = topLevelFunctions(textOf(OWNER));
+    const sections = topLevelFunctions(textOf("modules/course/sectionCommands.ts"));
+    const modules = topLevelFunctions(textOf("modules/adminContent/adminContentCommands.ts"));
+    // Vaktene går gjennom regelen «brukes andre steder» (`findActiveUsesOfItems`), og bare utkastene teller (kursene har sin egen vakt).
+    expect(owner.get("findCourseDraftUsesForDelete")).toContain("await findActiveUsesOfItems(items, {}, reader)");
+    expect(owner.get("assertModuleNotInCourseDraft")).toContain("findCourseDraftUsesForDelete({ moduleIds: [moduleId], sectionIds: [] }, reader)");
+    expect(owner.get("assertSectionNotInCourseDraft")).toContain("findCourseDraftUsesForDelete({ moduleIds: [], sectionIds: [sectionId] }, reader)");
+    // Handlingene, på transaksjonen som holder låsen.
+    expect(modules.get("deleteModuleInTx")).toContain("assertModuleNotInCourseDraft(moduleId, tx)");
+    expect(sections.get("deleteSectionInTx")).toContain("assertSectionNotInCourseDraft(sectionId, tx)");
+    // Kaskaden (#1152 skive 4a-2): forhåndsvisningen spør det samme, og slettingen går gjennom de indre funksjonene over.
+    const cascade = topLevelFunctions(textOf("modules/course/courseCascadeDeleteService.ts"));
+    expect(cascade.get("analyzeCourseCascade")).toContain("findCourseDraftUsesForDelete({ moduleIds, sectionIds }, reader)");
+    // Masseryddingen: forhåndsvisningen og slettingen under låsen spør det samme.
+    expect(modules.get("listUnpublishedPurgeCandidates")).toContain("findCourseDraftUsesForDelete({ moduleIds: candidates.map((m) => m.id), sectionIds: [] })");
+    expect(modules.get("purgeUnpublishedModule")).toContain("findCourseDraftUsesForDelete({ moduleIds: [candidate.id], sectionIds: [] }, tx)");
+    // Ingen andre bruker svaret.
+    const users = files.filter((f) => f.rel !== OWNER && /\bfindCourseDraftUsesForDelete\(/.test(f.text)).map((f) => f.rel).sort();
+    expect(users).toEqual(["modules/adminContent/adminContentCommands.ts", "modules/course/courseCascadeDeleteService.ts"]);
   });
 
   it("#1150: vaktene for arkivering spør regelen «brukes andre steder»; avpublisering spør bare kursene", () => {

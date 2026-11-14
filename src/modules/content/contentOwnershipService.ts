@@ -182,6 +182,22 @@ export async function addContentOwner(
   await (tx ? run(tx) : runInTransaction(run));
 }
 
+/**
+ * #1152: eierradene til innhold som slettes. `ContentOwner` peker på innholdet uten fremmednøkkel (fire typer i én tabell), så
+ * databasen rydder dem ikke; før ble de liggende etter hver sletting av kurs, modul og seksjon. Kalles i slettingens egen
+ * transaksjon, etter at innholdet er slettet, så radene forsvinner sammen med det eller ikke i det hele tatt. Ingen egen hendelse i
+ * revisjonsloggen: slettingen av innholdet er hendelsen. Vakt: test/unit/content-owner-cleanup-1152-guard.test.js.
+ */
+export async function deleteContentOwnersOf(
+  tx: Pick<DbTransactionClient, "contentOwner">,
+  contentType: ContentOwnerType,
+  contentIds: readonly string[],
+): Promise<number> {
+  if (contentIds.length === 0) return 0;
+  const { count } = await tx.contentOwner.deleteMany({ where: { contentType, contentId: { in: [...contentIds] } } });
+  return count;
+}
+
 // Last-owner protection: a non-admin cannot remove the final owner (would orphan the content). An
 // administrator may (it becomes unowned → admin-managed until reassigned). Audited.
 export async function removeContentOwner(input: {

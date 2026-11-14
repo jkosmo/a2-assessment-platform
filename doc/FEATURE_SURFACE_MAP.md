@@ -1503,7 +1503,7 @@ Regelen (produkteier 13.11.2026, `doc/DECISIONS.md` → «Arkiverte kurs teller 
 | Vises som «Brukt i kurs», i kursfilteret og i tematallet | bare aktive kurs teller (`archivedAt = null`, publisert eller utkast) |
 | Avpublisere | aktive kurs |
 | Arkivere (for hånd, importens utbytting, og forhåndsvisningen av kursarkiveringen) | #1150: «brukes andre steder» — aktive kurs, OG lagrede utkast (#1140) til aktive kurs |
-| Slette | alle kurs, også arkiverte (`CourseItem` → modul/seksjon er `onDelete: Restrict`) |
+| Slette | alle kurs, også arkiverte (`CourseItem` → modul/seksjon er `onDelete: Restrict`), og #1152 lagrede utkast til aktive kurs |
 
 **Der svaret bor:** `src/modules/course/contentLifecycle.ts`. Én spørring (`coursesContaining`) med et påkrevd valg, og to navn
 utad: `findActiveCoursesContaining…` og `findAllCoursesContaining…`. Det finnes ingen funksjon uten «Active» eller «All».
@@ -1518,10 +1518,10 @@ utad: `findActiveCoursesContaining…` og `findAllCoursesContaining…`. Det fin
 | Arkiver seksjon / modul for hånd | `assert…NotInActiveCourse(…, "arkiveres")` → `findActiveUsesOfItems` | #1150: aktive + utkast |
 | Kursimportens `updateExisting`: arkiver det utbyttede elementet når ingen andre kurs bruker det (`contentImportService.ts`) | `findActiveUsesOfItems` | #1150: aktive + utkast (den arkiverer, sletter ikke) |
 | Forhåndsvisningen av kursarkiveringen (`GET …/courses/:id/archive-preview`, `courseArchivePreview.ts`) | `findActiveUsesOfItems` med `excludeCourseId` = kurset | #1150: aktive + utkast, utenom kurset selv og dets eget utkast |
-| Slett seksjon (`deleteSection`) | `assertSectionNotInAnyCourse` | alle |
-| Slett modul (`deleteModule`, og forhåndssjekken i `DELETE /api/admin/content/modules/:id`) | `describeModuleDeleteBlock` | alle |
-| Kaskadeslettingens «delt med andre kurs» (`courseCascadeDeleteService.ts`) | `findAllCoursesContainingModule/Section` | alle |
-| Masseryddingen av upubliserte moduler (`listPurgeCandidates`, `purgeUnpublishedModules`) | egen telling, `_count.courseItems` | alle (den sletter) |
+| Slett seksjon (`deleteSection` → `deleteSectionInTx`) | `assertSectionNotInAnyCourse`, så #1152 `assertSectionNotInCourseDraft` | alle + utkast |
+| Slett modul (`deleteModule` → `deleteModuleInTx`, og forhåndssjekken i `DELETE /api/admin/content/modules/:id`) | `describeModuleDeleteBlock`, så #1152 `assertModuleNotInCourseDraft` | alle + utkast |
+| Kaskadeslettingens «delt med andre kurs» (`courseCascadeDeleteService.ts`) | `findAllCoursesContainingModule/Section`, og #1152 4a-2 `findCourseDraftUsesForDelete` i analysen; slettingen går gjennom `deleteModuleInTx`/`deleteSectionInTx` | alle + utkast |
+| Masseryddingen av upubliserte moduler (`listUnpublishedPurgeCandidates`, `purgeUnpublishedModule`) | egen telling, `_count.courseItems`, og #1152 `findCourseDraftUsesForDelete` (forhåndsvisningen og under låsen) | alle + utkast (den sletter) |
 
 **Spør om noe annet, og er uendret med vilje:** hvilke kurs en ny versjon gjelder i (#934: `findModulePlacements`,
 `findAffectedCourses`, `applyMinorVersionToCoursesContaining` — også arkiverte kurs), og alt på deltakersiden, som alt filtrerer
@@ -1538,6 +1538,17 @@ kurs som før (`content_in_use` for seksjoner, `409 module_in_use` for moduler).
 `errors.api.content_in_archived_course` i `public/i18n/participant-translations.js` (nb, nn, en-GB), vist av `apiErrorToast` der
 det slettes: seksjonen i editoren (`deleteSection` i `admin-content-sections.js`) og modulraden i biblioteket
 (`deleteModuleFromRow` i `admin-content-library.js`).
+
+**#1152 (4a-1), sletting som virker:** en arkivert modul uten deltakerhistorikk slettes med versjonene sine. Det som holder et
+element igjen, har hver sin kode med tekst på tre språk (`errors.api.*`): `module_has_submissions` og `module_has_certification`
+(`{ count }`), og `delete_blocked_by_course_draft` (`{ count, draftCourseTitles }`, modul og seksjon). Flatene som viser dem, er de
+samme som over, pluss «Slett» på modulsida (`deleteArchivedModule` i `admin-content-shell.js`, `moduleLifecycleErrorToast`). Eierradene
+(`ContentOwner`) slettes med kurs, modul og seksjon, også i kaskaden og masseryddingen (`deleteContentOwnersOf`). Vakter:
+`test/content-in-use-guard.test.js` (slettingene spør om utkast), `test/unit/content-owner-cleanup-1152-guard.test.js` (hvert
+slettested rydder eierradene), `test/archived-is-readonly-guard.test.js` (skriverens nye slettinger). Gjennom rutene:
+`test/m2-content-delete-1152.test.ts`. I nettleseren: `test/e2e/admin-content-delete-archived-module-1152.spec.ts`.
+
+**#1152 (4a-2), kurset:** «Slett» på et arkivert kurs stoppes også av `course_has_completed_without_certificate` og `course_has_pending_reviews` (`{ count }`, tekst på tre språk i `errors.api.*`). Flatene: «Slett» i kurslista og i det åpnede kurset (begge `openDeleteDialog` → `confirmDelete` → `apiErrorToast` i `admin-content-courses.js`), og kaskadens forhåndsvisning (`renderCascadeDeletePreview`: blokkeringer med `code` slås opp i `errors.api.*`, og elementer som ikke er arkivert, står under «Blir stående som før»). Regelen: `courseDeleteGuard.ts`. Gjennom rutene: `test/m2-course-delete-1152.test.ts`. I nettleseren: `test/e2e/admin-content-delete-archived-course-1152.spec.ts`.
 
 **Følgen forfatteren møter:** «Slett» vises bare på arkiverte elementer. Et element som bare ligger i et arkivert kurs, vises
 som ubrukt (0 kurs) og kan arkiveres, men ikke slettes. Meldingen ved sletting er derfor den som forklarer hvorfor.
@@ -1556,7 +1567,8 @@ modulbiblioteket, og viser derfor heller ikke arkiverte kurs. Modulene finnes un
 
 **Vakttesten ser bestemte skrivemåter.** Den finner `courseItem`/`courseItems` og de seks navngitte handlingene. En ny slettefunksjon
 som spør om aktive kurs, gjenbruk av `findAffectedCourses` (#934) til visning, eller `course.findMany({ include: { items } })` med
-filtrering i minnet går forbi. Aktuelt når #1152 bygger sletting.
+filtrering i minnet går forbi. #1152 4a-1 brukte de navngitte funksjonene (`findCourseDraftUsesForDelete` går gjennom
+`findActiveUsesOfItems`); jobben i 4c skal kalle de samme slettefunksjonene, ikke spørre selv.
 
 **Kjente mangler:** se versjonsnotatet for #1149 i `doc/VERSIONS.md`.
 

@@ -304,12 +304,22 @@ describe("#934 skive 4a: innholdslåsen — samtidige endringer venter på hvera
     expect((await prisma.module.findUniqueOrThrow({ where: { id: target }, select: { archivedAt: true } })).archivedAt).toBeNull();
   });
 
+  /** #1152 skive 4a-2: kursets modul og seksjon arkivert, som om de fulgte kurset inn i arkivet (fiksturen arkiverer kurset direkte). */
+  async function archiveItemsOf(course: { moduleId: string; sectionId: string }) {
+    const now = new Date();
+    await prisma.module.update({ where: { id: course.moduleId }, data: { archivedAt: now } });
+    await prisma.courseSection.update({ where: { id: course.sectionId }, data: { archivedAt: now } });
+  }
+
   it("sletting med alt innhold etter en utdatert forhåndsvisning: en delt seksjon som nå bare er i kurset, slettes ikke (409)", async () => {
     const a = await publishedCourse("kaskade-a");
     const b = await publishedCourse("kaskade-b");
     // Seksjonen til A ligger også i B, så forhåndsvisningen sier «spares».
     await prisma.courseItem.create({ data: { courseId: b.courseId, itemType: "SECTION", sectionId: a.sectionId, sortOrder: 5 } });
     await prisma.course.update({ where: { id: a.courseId }, data: { publishedAt: null, archivedAt: new Date() } }); // #1151: kaskaden krever et arkivert kurs.
+    // #1152 skive 4a-2: kaskaden sletter bare arkiverte elementer. A sine elementer fulgte kurset inn i arkivet, så seksjonen ville
+    // blitt slettet når den ble eksklusiv.
+    await archiveItemsOf(a);
     const preview = await request(app).get(`/api/admin/content/courses/${a.courseId}/cascade-delete-preview`).set(ADMIN);
     expect(preview.status).toBe(200);
     expect(preview.body.sparedSections.map((s: { id: string }) => s.id)).toContain(a.sectionId);
@@ -336,6 +346,7 @@ describe("#934 skive 4a: innholdslåsen — samtidige endringer venter på hvera
     const b = await publishedCourse("kaskade-samtidig-b");
     await prisma.courseItem.create({ data: { courseId: b.courseId, itemType: "SECTION", sectionId: a.sectionId, sortOrder: 5 } });
     await prisma.course.update({ where: { id: a.courseId }, data: { publishedAt: null, archivedAt: new Date() } }); // #1151: kaskaden krever et arkivert kurs.
+    await archiveItemsOf(a); // #1152 skive 4a-2: som over.
     const bLoaded = (await detail(b.courseId)).contentRevision;
     // Det administratoren så: seksjonen spares (den er delt).
     const preview = await request(app).get(`/api/admin/content/courses/${a.courseId}/cascade-delete-preview`).set(ADMIN);
