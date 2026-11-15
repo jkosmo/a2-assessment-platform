@@ -367,8 +367,11 @@ button:focus-visible {
   margin-bottom: 0;
 }
 
-/* Hide nav when 0 or 1 visible links — nothing useful to navigate to */
-.page-top-bar > .workspace-nav:not(:has(> .workspace-nav-link ~ .workspace-nav-link)) {
+/* Hide nav when there is nothing useful to navigate to: no link that leads AWAY from this page.
+   #1159: the rule was «fewer than two links». On /profile a participant-only user has exactly one
+   link, «Mine kurs», and it is not the page they are on — the rule hid the only way back, and the
+   profile became a dead end. One link to the page you are already on is still hidden. */
+.page-top-bar > .workspace-nav:not(:has(> .workspace-nav-link:not(.active))) {
   display: none;
 }
 

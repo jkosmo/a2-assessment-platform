@@ -137,11 +137,10 @@ test.describe("lesemodus — kurset viker når en seksjon leses (#1079)", () => 
     expect(m.kortRader, "kortene brekker til flere rader i den smale spalten").toBeGreaterThan(1);
     await expect(page.locator('.course-reading-width [data-reader-width="narrow"]')).toHaveAttribute("aria-pressed", "true");
 
-    // Huskes: ny sidelasting, samme seksjon, fortsatt smal.
+    // Huskes: ny sidelasting, samme seksjon, fortsatt smal. #1158: seksjonen står i adressen, så sidelastingen åpner den
+    // igjen av seg selv — før måtte kurset og seksjonen åpnes på nytt.
     await page.reload();
-    await page.locator(".course-accordion-header").click();
-    await expect(page.locator(".course-module-row")).toHaveCount(3);
-    await åpneSeksjonen(page);
+    await expect(page.locator("#sectionReaderBody .content-cards")).toBeVisible();
     m = await hvaSomVises(page);
     expect(m.arkBredde, "valget er husket").toBeLessThan(800);
 

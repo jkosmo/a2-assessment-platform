@@ -5,7 +5,7 @@ import { renderRolePresetControl as delRenderRolePresetControl } from "/static/r
 import { runWithBusyButton } from "/static/busy-button.js";
 import { pickLocalizedText, resolveInitialLocale } from "/static/i18n-locale.js";
 import { localizeDecisionReason } from "/static/decision-reason.js";
-import { describeApiError } from "/static/api-error.js";
+import { apiErrorStatus, describeApiError } from "/static/api-error.js";
 import {
   buildHeadline,
   planRows,
@@ -41,6 +41,13 @@ import { setHidden } from "/static/dom-visibility.js";
 import { buildCriteriaPanel, buildCriterionScoreList } from "/static/assessment-criteria.js";
 import { groupCoursesByTheme, hasAnyTheme } from "/static/course-theme-groups.js";
 import {
+  buildParticipantUrl,
+  findSequenceEntry,
+  itemOfOpenEntry,
+  readParticipantLocation,
+  sameParticipantItem,
+} from "/static/participant-location.js";
+import {
   buildModuleCardViewModels,
   courseRetakeApplies,
   deriveParticipantFlowGateState,
@@ -63,6 +70,8 @@ import {
   isEntryAvailable,
   isEntryDone,
   isEntryOutstanding,
+  resumableMcqDraft,
+  classifyMcqResume,
 } from "/static/participant-console-state.js";
 
 const output = document.getElementById("output");
@@ -150,12 +159,22 @@ const PARTICIPANT_PREVIEW_STORAGE_KEY = "adminContent.participantPreview.v1";
 const COMPLETED_MODULE_STATUSES = new Set(["COMPLETED"]);
 
 let currentQuestions = [];
+// #1160: versjonen innleveringen og flervalgsforsøket ble startet på. Står i kladden, så et forsøk på en eldre versjon ikke
+// fortsettes etter at modulen er endret (andre spørsmål → avkrysningene ville vært svar på noe annet).
+let mcqAttemptVersionId = null;
+// #1160 (QA-porten): språket spørsmålene i forsøket ble hentet på. Avkrysningene lagres som alternativenes tekst, så et
+// forsøk fortsettes på det samme språket — ellers ville «Beta» ikke funnet igjen «Bravo» etter et språkbytte.
+let mcqAttemptLocale = null;
 let currentLocale = resolveInitialLocale(supportedLocales);
 // ⚠️ Anything `setLocale` touches MUST be declared here, with the boot state — not next to the code
 // that uses it. setLocale runs during startup, so a `let` further down the file is still in its
 // temporal dead zone and throws, which kills the whole script. This has now bitten twice (#893).
 let courseDetailCache = {};        // courseId -> CourseDetail (resolved under the fetching locale)
 let courseAccordionInitialized = false;
+// #1158: elementet adressen ber om å åpne når kurset er tegnet (lenke, oppfriskning, fram/tilbake). Se openPendingItem.
+let pendingItemOpen = null;
+// #1158: «Lukk» gikk ett steg tilbake i historikken. Popstate-en som kommer etterpå, er vår egen.
+let awaitingCloseBack = false;
 let latestResult = null;
 // #549: ensures the pass celebration (confetti + banner) fires once per submission, not on every
 // result poll. Reset when the module context changes / a new submission starts.
@@ -1106,7 +1125,7 @@ function renderModules() {
     button.addEventListener("click", () => {
       // #865: the standalone module path uses the workspace at its home location. If it was moved
       // inline under a course row, collapse that and bring it home first (no-op in course-only mode).
-      collapseInlineOpen();
+      closeInlineItem();
       restoreModuleWorkspaceHome();
       activateParticipantModule(module.id);
     });
@@ -1243,6 +1262,7 @@ function activateParticipantModule(moduleId, options = {}) {
   const savedDraft = persistCurrentModuleDraft(false);
   // En lås satt mens forrige moduls resultat ble hentet, gjelder ikke denne modulen.
   releaseEarlierResultLock();
+  releaseMcqResumeLock();
   selectedModuleId = moduleId;
   courseRetakeModuleId = retakeRequired ? moduleId : null;
   courseRetakeCourseId = retakeRequired ? retakeCourseId : null;
@@ -1262,22 +1282,7 @@ function activateParticipantModule(moduleId, options = {}) {
   // #978: ⚠️ dette er det ENE stedet som med vilje ser bort fra statusen. En bestått-men-under-
   // vurdering modul skal ikke autostarte et nytt forsøk. Se begrunnelsen i /static/outcome.js.
   // #934 skive 5a-3: unntaket er en bestått som ikke lenger teller i kurset modulen ble åpnet fra. Da skal et nytt forsøk starte.
-  const retakeNow = courseRetakeApplies(retakeRequired, nextModule.participantStatus);
-  const alreadyPassed = !retakeNow && hasPassingDecision(nextModule.participantStatus?.latestDecision?.passFailTotal);
-  // 2.126.0: har deltakeren et resultat, vises det — med anke-knappen ved stryk — i stedet for at et nytt
-  // forsøk starter av seg selv. «Prøv igjen» står ved resultatet.
-  const earlierSubmissionId = previewModeEnabled || retakeNow ? null : earlierResultToShow(
-    nextModule.participantStatus,
-    readModuleDraftMap()[nextModule.id],
-    // #934 skive 5a-1: å vise forrige resultat ville merket kladden som levert, og teksten som ikke passer i feltene, ville gått tapt.
-    hasMeaningfulStoredDraft(readModuleDraftMap()[nextModule.id])
-      || orphanedDraftTexts(readModuleDraftMap()[nextModule.id], renderedSubmissionFieldIds()).length > 0,
-  );
-  if (earlierSubmissionId) {
-    showEarlierResult(nextModule.id, earlierSubmissionId).catch((error) => logApiError(error));
-  } else if (moduleIsMcqOnly(nextModule) && !alreadyPassed && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
-    createSubmissionButton.click();
-  }
+  continueModuleFlow(nextModule, retakeRequired);
 
   // v1.2.22 (#465): kollaps modullisten så modul-innholdet får mer plass. Bruker kan
   // ekspandere igjen ved å klikke «Last moduler»-knappen.
@@ -1296,6 +1301,125 @@ function activateParticipantModule(moduleId, options = {}) {
   }
 
   return true;
+}
+
+/**
+ * Hva modulen gjør når den er åpnet: viser forrige resultat, fortsetter et påbegynt flervalgsforsøk, eller starter et nytt
+ * (ren flervalg). Står for seg selv fordi #1160 kaller den en gang til når et påbegynt forsøk ikke kunne fortsettes.
+ */
+function continueModuleFlow(nextModule, retakeRequired) {
+  const retakeNow = courseRetakeApplies(retakeRequired, nextModule.participantStatus);
+  const alreadyPassed = !retakeNow && hasPassingDecision(nextModule.participantStatus?.latestDecision?.passFailTotal);
+  const draft = readModuleDraftMap()[nextModule.id];
+  // 2.126.0: har deltakeren et resultat, vises det — med anke-knappen ved stryk — i stedet for at et nytt
+  // forsøk starter av seg selv. «Prøv igjen» står ved resultatet.
+  const earlierSubmissionId = previewModeEnabled || retakeNow ? null : earlierResultToShow(
+    nextModule.participantStatus,
+    draft,
+    // #934 skive 5a-1: å vise forrige resultat ville merket kladden som levert, og teksten som ikke passer i feltene, ville gått tapt.
+    hasMeaningfulStoredDraft(draft)
+      || orphanedDraftTexts(draft, renderedSubmissionFieldIds()).length > 0,
+  );
+  // #1160: et flervalgsforsøk som er påbegynt i denne nettleseren, på den versjonen modulen har nå, fortsetter med
+  // avkrysningene. Før startet modulen et nytt forsøk hver gang den ble åpnet, og alt deltakeren hadde krysset av, var borte.
+  const resumable = earlierSubmissionId || previewModeEnabled
+    ? null
+    : resumableMcqDraft(draft, { moduleVersionId: nextModule.activeVersion?.id });
+  if (earlierSubmissionId) {
+    showEarlierResult(nextModule.id, earlierSubmissionId).catch((error) => logApiError(error));
+  } else if (resumable) {
+    resumeMcqAttempt(nextModule, resumable, retakeRequired).catch((error) => logApiError(error));
+  } else if (moduleIsMcqOnly(nextModule) && !alreadyPassed && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
+    createSubmissionButton.click();
+  }
+}
+
+// #1160: mens det påbegynte forsøket hentes, er «Opprett innlevering» låst (et klikk der ville startet et nytt forsøk ved
+// siden av), og kladden lagres ikke (den lagrede er den riktige; siden har ennå ikke innleveringen). Gjelder bare modulen den
+// ble satt for — samme mønster som `earlierResultLoading`.
+let mcqResumeLoading = null;
+
+function releaseMcqResumeLock() {
+  if (!mcqResumeLoading) return;
+  mcqResumeLoading = null;
+  createSubmissionButton.dataset.busy = "";
+}
+
+/** #1160: flervalgsdelen av kladden gjelder ikke lenger (forsøket er levert, borte eller tilhører noen andre). Resten står. */
+function forgetMcqDraft(moduleId) {
+  const moduleDrafts = readModuleDraftMap();
+  if (moduleDrafts[moduleId]?.mcq) {
+    moduleDrafts[moduleId] = { ...moduleDrafts[moduleId], mcq: null };
+    writeModuleDraftMap(moduleDrafts);
+  }
+  if (selectedModuleId === moduleId) {
+    currentQuestions = [];
+    attemptIdLabel.textContent = "-";
+    mcqAttemptVersionId = null;
+    mcqAttemptLocale = null;
+    renderQuestions();
+  }
+}
+
+/**
+ * #1160: fortsetter forsøket fra kladden. Serveren gir det ÅPNE forsøket på innleveringen tilbake (`mcq/start` er idempotent
+ * så lenge forsøket ikke er levert), med de samme spørsmålene, så avkrysningene settes inn igjen mot spørsmålene forsøket
+ * faktisk har. Ingen svar sendes. Svarer serveren med et annet forsøk, eller avviser den innleveringen (levert, vurdert, en
+ * annen deltaker), glemmes flervalgsdelen av kladden, og modulen åpnes som om den var ny.
+ */
+let mcqResumeSeq = 0;
+
+async function resumeMcqAttempt(module, saved, retakeRequired) {
+  const moduleId = module.id;
+  const request = ++mcqResumeSeq;
+  mcqResumeLoading = moduleId;
+  createSubmissionButton.dataset.busy = "true";
+  createSubmissionButton.disabled = true;
+  // QA-porten 2.164.0: spørsmålene hentes på språket forsøket ble besvart på, så avkrysningene (alternativenes tekst) finner
+  // igjen sine alternativer også etter et språkbytte. Rekkefølgen tjeneren gir er tilfeldig for hvert kall og alternativene har
+  // ingen id, så en språkuavhengig nøkkel finnes ikke uten en endring i forsøket på tjeneren.
+  const locale = saved.locale && supportedLocales.includes(saved.locale) ? saved.locale : currentLocale;
+  let outcome;
+  try {
+    const body = await apiFetch(
+      `/api/modules/${encodeURIComponent(moduleId)}/mcq/start?submissionId=${encodeURIComponent(saved.submissionId)}`,
+      headers,
+      { headers: { "x-locale": locale } },
+    );
+    outcome = { ok: true, body };
+  } catch (error) {
+    outcome = { ok: false, status: apiErrorStatus(error) };
+    console.warn("[participant] påbegynt flervalgsforsøk ble ikke hentet", error);
+  }
+  // Et nyere kall (modulen åpnet på nytt, eller en annen modul) eier modulen og låsen nå.
+  if (request !== mcqResumeSeq || selectedModuleId !== moduleId) return;
+  const verdict = classifyMcqResume(outcome, saved.attemptId);
+  if (verdict === "retry") {
+    // QA-porten 2.164.0: en feil som kan gå over (nettverket, en 5xx, for mange forespørsler) skal ikke koste svarene. Kladden
+    // står, låsen står (ingen ny innlevering, og ingen lagring som tar innleveringen ut av kladden), og modulen lukkes som når
+    // en åpning feiler: deltakeren åpner testen igjen fra kurset, og forsøket hentes på nytt.
+    showToast(t("mcq.resumeFailed"), "error");
+    closeInlineItem();
+    return;
+  }
+  releaseMcqResumeLock();
+  if (verdict === "forget") {
+    forgetMcqDraft(moduleId);
+    updateCreateSubmissionAvailability();
+    continueModuleFlow(module, retakeRequired);
+    return;
+  }
+  const body = outcome.body;
+  submissionIdLabel.textContent = saved.submissionId;
+  attemptIdLabel.textContent = body.attemptId;
+  mcqAttemptVersionId = saved.moduleVersionId;
+  mcqAttemptLocale = locale;
+  currentQuestions = body.questions;
+  flowState = { ...flowState, hasSubmission: true };
+  renderQuestions(saved.responses);
+  updateCreateSubmissionAvailability();
+  renderFlowGating();
+  persistCurrentModuleDraft(false);
 }
 
 async function ensureParticipantModuleAvailable(moduleId) {
@@ -1511,6 +1635,8 @@ function resetFlowStateForModuleContext() {
   setAssessmentProgressDetail();
   submissionIdLabel.textContent = "-";
   attemptIdLabel.textContent = "-";
+  mcqAttemptVersionId = null;
+  mcqAttemptLocale = null;
   appealIdLabel.textContent = "-";
   renderResultSummary(null);
   renderAssessmentProgress();
@@ -1833,8 +1959,13 @@ function collectCurrentMcqDraft() {
 
   const attemptId = attemptIdLabel.textContent;
   if (attemptId && attemptId !== "-") {
+    // #1160: innleveringen og versjonen forsøket hører til, så det kan fortsettes etter en oppfriskning eller en pause.
+    const submissionId = submissionIdLabel.textContent;
     return {
       attemptId,
+      submissionId: submissionId && submissionId !== "-" ? submissionId : null,
+      moduleVersionId: mcqAttemptVersionId,
+      locale: mcqAttemptLocale,
       questions: currentQuestions,
       responses,
     };
@@ -1860,6 +1991,11 @@ function persistCurrentModuleDraft(showStatus = false) {
   // ligger lagret er den riktige. Å lagre nå ville erstattet den med en uten merket — og resultatet
   // ville forsvunnet neste gang modulen ble åpnet (QA-porten 2026-11-01).
   if (earlierResultLoading === selectedModule.id) {
+    return { saved: false, meaningful: false, title: selectedModule.title };
+  }
+  // #1160: det samme mens et påbegynt forsøk hentes: siden har ennå ikke innleveringen, og en lagring nå ville tatt den ut av
+  // kladden, så forsøket ikke kunne fortsettes neste gang.
+  if (mcqResumeLoading === selectedModule.id) {
     return { saved: false, meaningful: false, title: selectedModule.title };
   }
 
@@ -1956,6 +2092,7 @@ function restoreDraftForSelectedModule(showStatus = true) {
     resetModuleDraftInputsToDefaultLocaleValues();
     currentQuestions = [];
     attemptIdLabel.textContent = "-";
+    mcqAttemptVersionId = null;
     renderQuestions();
     updateCreateSubmissionAvailability();
     if (showStatus) {
@@ -1975,10 +2112,13 @@ function restoreDraftForSelectedModule(showStatus = true) {
   if (mcqDraft && Array.isArray(mcqDraft.questions)) {
     currentQuestions = mcqDraft.questions;
     attemptIdLabel.textContent = mcqDraft.attemptId || "-";
+    mcqAttemptVersionId = mcqDraft.moduleVersionId ?? null;
+    mcqAttemptLocale = mcqDraft.locale ?? null;
     renderQuestions(mcqDraft.responses ?? {});
   } else {
     currentQuestions = [];
     attemptIdLabel.textContent = "-";
+    mcqAttemptVersionId = null;
     renderQuestions();
   }
 
@@ -2193,7 +2333,11 @@ function log(data, options = {}) {
   outputStatus.dataset.hasContent = "true";
   outputStatus.textContent = statusText;
 
-  if (notify) {
+  // #1161: et VELLYKKET svar gir ingen toast. Oppsummeringen av det («Opprett innlevering: <id>», «Request completed.»,
+  // «Updated: submission») er en linje for feilsøkingspanelet, ikke en beskjed til deltakeren: det deltakeren trenger å se,
+  // står på siden (spørsmålene, framdriften, resultatet, anken). Feil, og tekster kalleren har skrevet selv, vises som før.
+  // En ny toast for noe som gikk bra, skrives som en menneskelig, oversatt tekst der den hører hjemme (showToast(t(…))).
+  if (notify && (humanized || typeof data === "string")) {
     showToast(statusText, humanized ? "error" : inferParticipantToastType(data), toastDetail);
   }
 
@@ -2703,8 +2847,10 @@ function applySettledChrome(hasResult) {
   }
   // Maskin-ID-ene: forsøks-ID-en ligger nå bak «Vis detaljer» i kortet, der den trengs når noe skal
   // ettergås (#939). To ID-linjer i tillegg er støy over et ferdig resultat.
+  // #1161: og før resultatet er de bare feilsøking: «Forsøks-ID: <id>» under «Send test» sier deltakeren ingenting. De vises med
+  // `?debug=1`. Elementene blir stående, for siden leser id-ene fra dem (`attemptIdLabel`, `submissionIdLabel`).
   for (const node of [attemptIdLine, submissionIdLine]) {
-    if (node) setHidden(node, hasResult);
+    if (node) setHidden(node, hasResult || !isRawDebugEnabled());
   }
   // «Vurderingshandlinger er tilgjengelige.» og «Vurdering er ferdig.» sier begge noe kortet
   // allerede har sagt tydeligere.
@@ -3172,7 +3318,7 @@ function renderHistorySummary(body) {
   historySummary.dataset.hasHistory = "true";
 }
 
-async function startMcqForSubmission(moduleId, submissionId) {
+async function startMcqForSubmission(moduleId, submissionId, moduleVersionId = null) {
   if (!moduleId || !submissionId || submissionId === "-") {
     throw new Error(t("errors.createSubmissionFirst"));
   }
@@ -3182,6 +3328,8 @@ async function startMcqForSubmission(moduleId, submissionId) {
     headers,
   );
   attemptIdLabel.textContent = body.attemptId;
+  mcqAttemptVersionId = moduleVersionId;
+  mcqAttemptLocale = currentLocale;
   currentQuestions = body.questions;
   renderQuestions();
   scheduleDraftAutosave();
@@ -3205,6 +3353,7 @@ function clearCurrentModuleDraft() {
   clearAiDeclarationSelection();
   currentQuestions = [];
   attemptIdLabel.textContent = "-";
+  mcqAttemptVersionId = null;
   renderQuestions();
   resetFlowStateForModuleContext();
   setDraftStatus("cleared", selectedModule.title);
@@ -3436,7 +3585,7 @@ createSubmissionButton.addEventListener("click", async () => {
         await startAutomaticAssessmentFlow(body.submission.id);
         log({ submission: body.submission });
       } else {
-        const mcqStartBody = await startMcqForSubmission(moduleId, body.submission.id);
+        const mcqStartBody = await startMcqForSubmission(moduleId, body.submission.id, seenVersionId ?? null);
         log({
           submission: body.submission,
           mcqStarted: {
@@ -4156,11 +4305,9 @@ function applyCourseFocusState() {
 // Nettleserens tilbakeknapp skal føre samme sted som tilbake-lenka (#922). Begge retninger legger
 // en historikkoppføring, så Back/Forward vandrer mellom liste og kurs. ?courseId= er samme
 // parameter som dyplenka allerede brukte, så en oppfriskning lander på samme sted.
+// #1158: et åpent element (seksjon eller modul) hører til kurset, så det følger ikke med til et annet kurs eller lista.
 function courseFocusUrl(courseId) {
-  const url = new URL(window.location.href);
-  if (courseId) url.searchParams.set("courseId", courseId);
-  else url.searchParams.delete("courseId");
-  return `${url.pathname}${url.search}${url.hash}`;
+  return buildParticipantUrl(window.location.href, { courseId });
 }
 
 function pushCourseFocusHistory(courseId) {
@@ -4203,11 +4350,129 @@ function unfocusCourse(options = {}) {
   loadParticipantCourses().catch(() => {/* stille */});
 }
 
+// ───────────────────────────────────────────────────────────────────────────────
+// #1158: seksjonen og modulen står i adressen, ved siden av kurset (`&sectionId=` / `&moduleId=`, se
+// /static/participant-location.js). Historikken har høyst ÉN elementoppføring over kursets:
+//
+//   [kurs] → åpne et element      → [kurs, element]   (pushState, merket `participantItemOverCourse`)
+//   [kurs, element] → et annet    → [kurs, element']  (replaceState: tilbake skal til kurset, ikke gjennom alt som ble åpnet)
+//   [kurs, element] → «Lukk»      → [kurs]            (history.back(), så appens og nettleserens tilbake gjør det samme)
+//
+// En lenke rett til et element (e-post, bokmerke) legger kurset under elementet, så tilbake lukker elementet og står i kurset
+// også da. En oppfriskning har alt kurset under seg (merket overlever i history.state).
+// ───────────────────────────────────────────────────────────────────────────────
+
+function itemHistoryState(courseId, item, overCourse) {
+  return { participantCourseId: courseId ?? null, participantItem: item, participantItemOverCourse: overCourse === true };
+}
+
+/** Deltakeren har åpnet et element: adressen får det. Står det alt der (fram/tilbake, lenke, oppfriskning), skjer ingenting. */
+function recordOpenedItem() {
+  const item = itemOfOpenEntry(inlineOpen);
+  if (!item) return;
+  const courseId = inlineOpen.courseId;
+  const location = readParticipantLocation(window.location.search);
+  if (location.courseId === courseId && sameParticipantItem(location.item, item)) return;
+  try {
+    const url = buildParticipantUrl(window.location.href, { courseId, item });
+    if (location.item) {
+      window.history.replaceState(itemHistoryState(courseId, item, window.history.state?.participantItemOverCourse), "", url);
+    } else {
+      window.history.pushState(itemHistoryState(courseId, item, true), "", url);
+    }
+  } catch {/* historikk er en bekvemmelighet, ikke en forutsetning */}
+}
+
+/**
+ * Deltakeren har lukket elementet («Lukk», Escape, «Avslutt kurset»): adressen står i kurset igjen. Ligger kurset rett under i
+ * historikken, går vi dit, så nettleserens fram-knapp åpner elementet igjen, akkurat som etter nettleserens tilbake.
+ */
+function recordClosedItem() {
+  const location = readParticipantLocation(window.location.search);
+  if (!location.item) return;
+  try {
+    if (window.history.state?.participantItemOverCourse === true) {
+      awaitingCloseBack = true;
+      window.history.back();
+      return;
+    }
+    window.history.replaceState({ participantCourseId: location.courseId }, "", buildParticipantUrl(window.location.href, { courseId: location.courseId }));
+  } catch {/* historikk er en bekvemmelighet */}
+}
+
+/** Elementet i adressen finnes ikke lenger (eller kan ikke åpnes): adressen står i kurset, uten et nytt steg i historikken. */
+function dropItemFromUrl() {
+  const location = readParticipantLocation(window.location.search);
+  if (!location.item) return;
+  try {
+    window.history.replaceState({ participantCourseId: location.courseId }, "", buildParticipantUrl(window.location.href, { courseId: location.courseId }));
+  } catch {/* historikk er en bekvemmelighet */}
+}
+
+/** Lukker det åpne elementet slik deltakeren ba om det, og fører adressen med. Interne lukkinger bruker collapseInlineOpen. */
+function closeInlineItem() {
+  collapseInlineOpen();
+  recordClosedItem();
+}
+
+function showItemLinkNotice(type) {
+  const notice = document.getElementById("courseLinkNotice");
+  if (!notice) return;
+  const key = type === "SECTION" ? "courses.link.sectionUnavailable" : "courses.link.moduleUnavailable";
+  notice.setAttribute("data-i18n", key);
+  notice.textContent = t(key);
+  setHidden(notice, false);
+}
+
+/**
+ * Åpner elementet adressen ba om, når kurset det står i er tegnet. Kalles fra renderCourseDetailModules (kurset ble tegnet) og
+ * fra popstate (kurset står alt). Finnes ikke elementet i kurset, eller kan det ikke åpnes (arkivert, avpublisert, ikke i
+ * kurset lenger), står deltakeren i kurset med meldingen, og adressen mister elementet.
+ */
+function openPendingItem(courseId) {
+  const pending = pendingItemOpen;
+  if (!pending || pending.courseId !== courseId || !courseSequences[courseId]) return;
+  pendingItemOpen = null;
+  if (inlineOpen?.courseId === courseId && sameParticipantItem(itemOfOpenEntry(inlineOpen), pending)) return;
+  const entry = findSequenceEntry(courseSequences[courseId], pending);
+  if (!entry || !isEntryAvailable(entry)) {
+    collapseInlineOpen();
+    showItemLinkNotice(pending.type);
+    dropItemFromUrl();
+    return;
+  }
+  openInlineItemByEntry(courseId, entry);
+}
+
 window.addEventListener("popstate", (event) => {
   const stateCourseId = event.state && typeof event.state === "object" ? event.state.participantCourseId : undefined;
-  const target = stateCourseId ?? new URLSearchParams(window.location.search).get("courseId");
-  if (target) focusCourse(target, { pushHistory: false });
-  else unfocusCourse({ pushHistory: false });
+  const location = readParticipantLocation(window.location.search);
+  const target = stateCourseId ?? location.courseId;
+  const item = target && location.item ? location.item : null;
+  if (awaitingCloseBack) {
+    awaitingCloseBack = false;
+    // «Lukk» har alt lukket elementet. Ble et nytt åpnet før tilbake-steget kom fram, skal det stå i adressen.
+    if (inlineOpen) {
+      recordOpenedItem();
+      return;
+    }
+  }
+  pendingItemOpen = item ? { courseId: target, ...item } : null;
+  if (!target) {
+    unfocusCourse({ pushHistory: false });
+    return;
+  }
+  if (target !== focusedCourseId) {
+    // Tegningen av kurset åpner elementet (openPendingItem i renderCourseDetailModules).
+    focusCourse(target, { pushHistory: false });
+    return;
+  }
+  // Samme kurs: bare elementet har endret seg. Kurset tegnes ikke på nytt.
+  if (!item) {
+    collapseInlineOpen();
+    return;
+  }
+  openPendingItem(target);
 });
 
 document.getElementById("courseBackBtn")?.addEventListener("click", () => unfocusCourse());
@@ -4402,6 +4667,18 @@ function resolveCourseLink() {
   // Lenka i e-post om en diskusjon: tråden åpnes når kurset er tegnet (`renderCourseDetailModules`).
   const linkedThreadId = params.get("threadId");
   if (linkedThreadId) pendingDiscussionThread = { courseId: course.id, threadId: linkedThreadId };
+  // #1158: en seksjon eller modul i adressen åpnes når kurset er tegnet. Kommer deltakeren rett inn i den (e-post, bokmerke),
+  // står kurset først i adressen, og åpningen legger elementet over det: tilbake lukker elementet og står i kurset, som når det
+  // ble åpnet fra kurset. Ved en oppfriskning ligger kurset alt under (merket i history.state), og adressen står som den er.
+  const linkedItem = readParticipantLocation(window.location.search).item;
+  if (linkedItem) {
+    pendingItemOpen = { courseId: course.id, ...linkedItem };
+    if (window.history.state?.participantItemOverCourse !== true) {
+      try {
+        window.history.replaceState({ participantCourseId: course.id }, "", buildParticipantUrl(window.location.href, { courseId: course.id }));
+      } catch {/* historikk er en bekvemmelighet */}
+    }
+  }
   // Dyplenka ER allerede «kurset alene»-tilstanden, så den skal ikke legge en ekstra
   // historikkoppføring: nettleserens tilbakeknapp skal føre ut av siden, ikke til en liste
   // deltakeren aldri sto i.
@@ -4443,15 +4720,11 @@ async function resolveModuleLink(moduleId) {
   }
   const target = candidates.find((candidate) => candidate.retakeRequired) ?? candidates[0];
   if (!target) {
-    const notice = document.getElementById("courseLinkNotice");
-    if (notice) {
-      notice.setAttribute("data-i18n", "courses.link.moduleUnavailable");
-      notice.textContent = t("courses.link.moduleUnavailable");
-      setHidden(notice, false);
-    }
+    showItemLinkNotice("MODULE");
     return;
   }
-  // Adressen skrives om til den vanlige, som for ?kurs=. En oppfriskning lander i kurset.
+  // Adressen skrives om til kursets, som for ?kurs=. #1158: åpningen under legger modulen over kurset i historikken
+  // (`?courseId=…&moduleId=…`), så en oppfriskning holder modulen åpen, og tilbake står i kurset.
   try {
     const url = new URL(window.location.href);
     url.searchParams.delete("moduleId");
@@ -4461,6 +4734,9 @@ async function resolveModuleLink(moduleId) {
   focusCourse(target.courseId, { pushHistory: false });
   const entry = courseSequences[target.courseId]?.find((item) => item?.type === "MODULE" && item.moduleId === moduleId);
   if (entry && isEntryAvailable(entry)) openCourseItemEntry(target.courseId, entry);
+  // QA-porten 2.164.0: modulen står i kurset, men kan ikke åpnes (avpublisert, arkivert). Samme melding som når
+  // `?courseId=…&moduleId=…` peker på den — før sto deltakeren i kurset uten å få vite hvorfor modulen ikke åpnet seg.
+  else showItemLinkNotice("MODULE");
 }
 
 async function copyCourseLink() {
@@ -4897,6 +5173,8 @@ function renderCourseDetailModules(courseId, course) {
   // #865: re-open the inline item that was expanded before this re-render (esp. the live module
   // workspace, which was moved home during the wipe above).
   reopenInlineAfterRender(courseId, container);
+  // #1158: en seksjon eller modul fra adressen (lenke, oppfriskning, fram/tilbake) åpnes når radene står.
+  openPendingItem(courseId);
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -5003,10 +5281,12 @@ async function openInlineItemByEntry(courseId, entry) {
 
   // Clicking the already-open item collapses it (toggle).
   if (inlineOpen && inlineOpen.courseId === courseId && inlineOpen.key === key) {
-    collapseInlineOpen();
+    closeInlineItem();
     return;
   }
   collapseInlineOpen();
+  // #1158: deltakeren har gått videre fra en lenke som ikke førte fram.
+  setHidden(document.getElementById("courseLinkNotice"), true);
 
   const panel = itemWrap.querySelector(".course-inline-panel");
   const row = itemWrap.querySelector(".course-module-row");
@@ -5026,6 +5306,8 @@ async function openInlineItemByEntry(courseId, entry) {
     itemWrap.closest(".course-accordion-item")?.classList.add("course-reading");
     setHidden(panel, false);
     row?.setAttribute("aria-expanded", "true");
+    // #1158: seksjonen står i adressen fra den åpnes, så tilbake og en oppfriskning virker også mens teksten hentes.
+    recordOpenedItem();
     // ⚠️ Rull ETTER at innholdet er rendret. Sto før `await`-en, altså mot et tomt panel — og da
     // regnet nettleseren ut hvor den skulle rulle basert på en høyde som ikke fantes ennå.
     await renderSectionReaderInto(panel, courseId, entry);
@@ -5037,6 +5319,8 @@ async function openInlineItemByEntry(courseId, entry) {
   // MODULE: relocate the singleton workspace inline under this row.
   if (row) row.disabled = true;
   inlineOpen = { courseId, key, type: "MODULE", moduleId: entry.moduleId, title: entry.title };
+  // #1158: modulen står i adressen fra klikket. Et nyere klikk erstatter den; feiler åpningen, går adressen tilbake til kurset.
+  recordOpenedItem();
   try {
     // openCourseModule activates the module AND re-renders the course detail; the re-render's
     // reopenInlineAfterRender mounts the workspace into this row's panel.
@@ -5049,6 +5333,7 @@ async function openInlineItemByEntry(courseId, entry) {
   } catch (error) {
     inlineOpen = null;
     if (row) row.disabled = false;
+    if (sameParticipantItem(readParticipantLocation(window.location.search).item, { type: "MODULE", id: entry.moduleId })) recordClosedItem();
     participantErrorToast(error, "courses.loadError");
     return;
   }
@@ -5067,6 +5352,8 @@ function reopenInlineAfterRender(courseId, container) {
     // The item disappeared (e.g. module became unavailable) — release the workspace safely.
     if (inlineOpen.type === "MODULE") restoreModuleWorkspaceHome();
     inlineOpen = null;
+    // #1158: adressen skal ikke peke på et element som ikke står der.
+    dropItemFromUrl();
     // Lesemodus (#1079): uten et åpent steg ville klassen skjult hele kurset.
     container.closest(".course-accordion-item")?.classList.remove("course-reading");
     return;
@@ -5117,7 +5404,7 @@ function buildModuleInlinePanel(panel, courseId, ctx) {
       <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.module.close"))}</button>
     </div>
     <div class="course-inline-panel-body"></div>`;
-  panel.querySelector('[data-role="close"]').addEventListener("click", () => collapseInlineOpen());
+  panel.querySelector('[data-role="close"]').addEventListener("click", () => closeInlineItem());
   const body = panel.querySelector(".course-inline-panel-body");
   mountModuleWorkspaceInto(body);
   const nextBtn = buildInlineNextButton(courseId, ctx.key);
@@ -5199,7 +5486,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       <div class="course-inline-actions">${actionsMarkup}</div>
     </div>`;
 
-  panel.querySelector('[data-role="close"]').addEventListener("click", () => collapseInlineOpen());
+  panel.querySelector('[data-role="close"]').addEventListener("click", () => closeInlineItem());
   for (const button of panel.querySelectorAll("[data-reader-width]")) {
     button.addEventListener("click", () => {
       const width = button.dataset.readerWidth === "narrow" ? "narrow" : "wide";
@@ -5229,7 +5516,9 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       loadParticipantCourses().catch(() => {});
       await loadCourseDetail(courseId);
       const target = nextEntryAfter(courseId, courseItemKey(entry));
+      // #1158: neste element tar over seksjonens plass i adressen. Er det ikke noe neste likevel, står deltakeren i kurset.
       if (target) openCourseItemEntry(courseId, target);
+      else recordClosedItem();
     } catch (error) {
       markReadBtn.disabled = false;
       participantErrorToast(error, "courses.loadError");
@@ -5249,7 +5538,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     finishBtn.disabled = true;
     try {
       await postSectionRead();
-      collapseInlineOpen();
+      closeInlineItem();
       // Vent på lista: det er DEN som viser at kurset er fullført, og som utløser
       // kursbevis-feiringen. Å ikke vente ga nettopp den stille fullføringen #929 finnes for.
       await loadParticipantCourses();
@@ -5316,5 +5605,5 @@ function outstandingBeforeFinish(courseId, current) {
 
 // Escape collapses whatever inline item is open (parity with the old modal's Escape-to-close).
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && inlineOpen) collapseInlineOpen();
+  if (e.key === "Escape" && inlineOpen) closeInlineItem();
 });

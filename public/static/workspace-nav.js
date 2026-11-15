@@ -35,9 +35,10 @@ export function renderWorkspaceNavigationWithProfile({
 
   workspaceNav.innerHTML = "";
   // #975: `.workspace-nav{display:flex}` slår `hidden`-attributtet (forfatter-origin vs UA-ark).
-  // At den tomme menyen likevel forsvinner i dag skyldes en HELT ANNEN regel — `:not(:has(> …link ~
-  // …link))` i shared.css, som skjuler menyen med færre enn to lenker. Den er en lapp oppå lappen:
-  // to regler for samme intensjon, med hver sin terskel. setHidden gjør linja her sann igjen.
+  // At den tomme menyen likevel forsvinner i dag skyldes en HELT ANNEN regel i shared.css, som skjuler
+  // menyen når ingen lenke fører bort fra siden (#1159: før «færre enn to lenker», som skjulte «Mine kurs»
+  // på profilen). Den er en lapp oppå lappen: to regler for samme intensjon, med hver sin terskel.
+  // setHidden gjør linja her sann igjen.
   setHidden(workspaceNav, mainItems.length === 0);
 
   for (const item of mainItems) {

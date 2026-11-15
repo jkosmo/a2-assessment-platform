@@ -451,7 +451,14 @@ test.describe("#940 — de åtte elementene fra saken", () => {
 
     await page.locator("#resetSubmissionFlow").click();
 
+    // #1161: de to ID-linjene vises ikke lenger før resultatet heller («Forsøks-ID: <id>» under «Send test» sa deltakeren
+    // ingenting). De kommer bare tilbake med `?debug=1`; se participant-mcq-resume-1160-1161.spec.ts.
+    const debugOnly = new Set(["#attemptIdLine", "#submissionIdLine"]);
     for (const [nr, id] of Object.entries(HIDDEN_WHEN_SETTLED)) {
+      if (debugOnly.has(id)) {
+        await expect(page.locator(id), `element ${nr} (${id}) er bare for feilsøking`).toBeHidden();
+        continue;
+      }
       await expect(page.locator(id), `element ${nr} (${id}) kom ikke tilbake`).not.toHaveAttribute("hidden", /.*/);
     }
   });

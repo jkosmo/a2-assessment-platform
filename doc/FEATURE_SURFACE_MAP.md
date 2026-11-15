@@ -1812,3 +1812,43 @@ avgjøre synlighet, er spørsmålet «har personen gjort noe i kurset selv» (`f
 eller rå SQL, utenom unntakene over), `test/unit/section-read-credit-1156.test.ts` (regelen uten database, og synligheten i et fast antall spørringer på kallerens klient), `test/unit/enrollment-status-batch-1156.test.ts` (statusene for et helt kull i ett kall),
 `test/m2-section-read-across-courses-1156.test.ts` (gjennom rutene: «Mine kurs», kursdetaljen, rapporten, CSV, `/enrollments`, et
 begrenset kurs, ny hovedversjon, utboksen, slettet kurs, arkivert kurs, vilkår 9, den ukentlige e-posten, arkiverte klasser, importen).
+
+## 35. Deltakerens adresse — seksjonen og modulen i historikken (#1158)
+
+En åpnet seksjon eller modul står i adressen ved siden av kurset: `?courseId=<kurs>&sectionId=<seksjon>` eller
+`?courseId=<kurs>&moduleId=<modul>` (lesing og skriving: `public/static/participant-location.js`). Historikken har høyst ÉN
+elementoppføring over kursets: å åpne et element når adressen er kursets legger til en (`pushState`, merket
+`participantItemOverCourse`), å gå rett til et annet element erstatter den (`replaceState`), og «Lukk» går ett steg tilbake
+(`history.back()`). Derfor gjør appens og nettleserens tilbake det samme. Valget står i `doc/DECISIONS.md`, «Deltakerens
+tilbake lukker seksjonen eller modulen (#1158)».
+
+**Regelen for en ny vei inn eller ut:** en vei som åpner et element går gjennom `openInlineItemByEntry` (som skriver
+adressen med `recordOpenedItem`). En vei der DELTAKEREN lukker, bruker `closeInlineItem()`. `collapseInlineOpen()` alene er
+for interne lukkinger der adressen allerede er tatt hånd om (kursbytte, popstate, før et nytt element åpnes).
+
+| Vei | Hvor | Adressen |
+| --- | --- | --- |
+| «Les», «Gjennomfør», «Se igjen» (raden) | `renderCourseDetailModules` → `openCourseItemEntry` → `openInlineItemByEntry` | push, eller replace når et element alt står i adressen |
+| Klikk på raden som er åpen (lukker) | `openInlineItemByEntry` | `closeInlineItem` |
+| «Marker seksjon lest, og gå videre» | `renderSectionReaderInto` | neste element erstatter; uten neste: `recordClosedItem` |
+| «Gå til …» (det som gjenstår), «Neste: …» i modulen | `renderSectionReaderInto`, `buildInlineNextButton` | replace |
+| «Avslutt kurset» | `renderSectionReaderInto` | `closeInlineItem` |
+| «Lukk seksjonen», «Lukk modulen», Escape | panelene, `keydown` | `closeInlineItem` |
+| Nettleserens tilbake/fram | `popstate` | URL-en er fasiten: samme kurs → bare elementet åpnes/lukkes (kurset tegnes ikke på nytt); annet kurs → `focusCourse` + `pendingItemOpen` |
+| Oppfriskning, bokmerke, delt lenke | `resolveCourseLink` | `pendingItemOpen`; uten merket i `history.state` legges kurset under først (replace til kurs, så push av elementet) |
+| E-postlenka `?moduleId=` | `resolveModuleLink` | kursets adresse, så åpningen legger modulen over. Står modulen i kurset, men kan ikke åpnes: samme melding som over (QA-porten 2.164.0) |
+| Elementet finnes ikke / er ikke tilgjengelig | `openPendingItem` | meldingen i `#courseLinkNotice`, `dropItemFromUrl` |
+| Åpningen av en modul feiler | `openInlineItemByEntry` (catch) | `recordClosedItem` |
+| Elementet forsvinner ved en ny tegning | `reopenInlineAfterRender` | `dropItemFromUrl` |
+| Kursbytte, «← Alle kurs» | `focusCourse`, `unfocusCourse` (`courseFocusUrl` tar bort elementet) | kursnivået som før (#922) |
+| Modulkortet utenfor kurs (dev/test) | `renderModules` | `closeInlineItem` |
+
+Kursbeviset (`/certificate`) er utenfor (#1162).
+
+**Vakter:** `test/e2e/participant-item-url-1158.spec.ts` (tilbake, fram, oppfriskning, bokmerke, «Lukk» mot nettleserens
+tilbake med lik historikk, bytte uten nytt steg, utilgjengelig seksjon og modul, e-postlenka, kursnivået), `test/unit/participant-location-1158.test.js`
+(adressens form). `participant-email-links.spec.ts` sjekker at e-postlenka skriver `&moduleId=`.
+
+**Ikke dekket av test:** popstate som kommer etter at «Lukk» gikk tilbake, men et nytt element ble åpnet før det kom fram
+(`awaitingCloseBack`). «Lukk» etter en oppfriskning (kurset under er fra sidelastingen før) er målt i Chromium mot
+utviklingstjeneren: tilbake-steget blir i samme dokument, uten ny sidelasting.

@@ -100,7 +100,8 @@ test.describe("lenke til modulen", () => {
     await expect(page.locator('.course-accordion-item[data-course-id="c1"].is-focused')).toBeVisible();
     await expect(page.locator("#courseDetail_c1 #moduleWorkspace")).toBeVisible();
     await expect(page.locator("#resultSummary .result-headline")).toContainText("Ikke bestått");
-    await expect(page).toHaveURL(/\/participant\?courseId=c1$/);
+    // #1158: den vanlige adressen har nå modulen ved siden av kurset, så en oppfriskning holder modulen åpen.
+    await expect(page).toHaveURL(/\/participant\?courseId=c1&moduleId=m-1$/);
     await expect(page.locator("#courseLinkNotice")).toBeHidden();
   });
 
@@ -108,7 +109,7 @@ test.describe("lenke til modulen", () => {
     await mock(page, [{ id: "c1", moduleIds: ["annen-modul"] }, { id: "c2", moduleIds: ["m-1"] }]);
     await page.goto("/participant?moduleId=m-1");
     await expect(page.locator("#courseDetail_c2 #moduleWorkspace")).toBeVisible();
-    await expect(page).toHaveURL(/courseId=c2$/);
+    await expect(page).toHaveURL(/courseId=c2&moduleId=m-1$/);
   });
 
   test("ligger modulen i flere kurs, velges det som krever nytt forsøk, og deltakeren ser kravet", async ({ page }) => {

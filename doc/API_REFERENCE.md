@@ -349,7 +349,11 @@ apply») with `correctAnswers` — one or more of `options`, distinct, and not a
 write `questionType` and `correctAnswers` for `"multiple"` only; a `"single"` question is exported as
 before. Participant endpoints:
 
-- `GET /api/modules/:moduleId/mcq/start` returns `questionType` per question (never the answer key).
+- `GET /api/modules/:moduleId/mcq/start` returns `questionType` per question (never the answer key). It returns the
+  submission's OPEN attempt when there is one (same `attemptId`, same questions; options are reshuffled on every call), so the
+  participant page uses it to resume an attempt from its local draft (#1160). Definitive refusals have their own status since
+  2.164.0 (they were 500 `internal_error`): `404 submission_not_found` (no such submission for this user and module) and
+  `409 mcq_attempt_closed` (submitted, assessed or being processed). Any other failure is treated by the page as transient.
 - `POST /api/modules/:moduleId/mcq/submit`: each response has `selectedAnswer` (one string) **or**
   `selectedAnswers` (array, for `"multiple"`). A `"multiple"` answer is correct only when the chosen
   options equal the correct ones; a choice that is not an option makes it wrong.

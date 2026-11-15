@@ -6,7 +6,8 @@ Deltakere er de ansatte som leverer besvarelser og tar vurderinger på plattform
 
 - `/participant` — «Mine kurs»: kursene, fremdriften og kursbevisene (fullførte kurs står nederst i
   hvert tema). Siste resultat og anke ligger i modulen.
-- `/profile` — egen profil, fullførte moduler og kurs, og samtykkestatus
+- `/profile` — egen profil, fullførte moduler og kurs, og samtykkestatus. «Mine kurs» står øverst til venstre og fører
+  tilbake (#1159), også på telefon.
 
 API:
 - `GET /api/modules` — liste over tilgjengelige moduler
@@ -56,6 +57,39 @@ Fargen på merket viser status, ikke type: grønt betyr fullført for begge.
 
 Har to kurs den samme seksjonen, står den som lest i begge når du har lest den i ett av dem, og fullfører det et kurs, får du
 kursbeviset for det andre kurset like etter, eller senest når du åpner «Mine kurs» eller kursbevisene. Har kurset fått en ny versjon av seksjonen etter at du leste den, må du lese den på nytt der.
+
+**Tilbake, oppfriskning og lenker (#1158).** Seksjonen eller modulen du har åpen, står i adressen sammen med kurset. Det
+betyr:
+
+- **Tilbake lukker det du har åpent og lar deg stå i kurset.** Det gjelder nettleserens tilbake-knapp, tilbake-sveipen på
+  telefonen, «Lukk seksjonen»/«Lukk modulen» og Escape. Alle gjør det samme. Nettleserens fram-knapp åpner det igjen.
+- **Går du rett fra én seksjon til neste** («Marker seksjon lest, og gå videre», «Neste: …»), er det fortsatt bare ett steg
+  tilbake til kurset, ikke ett per seksjon du har lest.
+- **Oppdaterer du siden, eller åpner et bokmerke**, står seksjonen eller modulen åpen igjen.
+- **Lenka i e-posten om et resultat eller en anke** åpner modulen i kurset, og den står åpen også etter en oppfriskning.
+- **Er seksjonen eller modulen fjernet fra kurset, eller ikke lenger tilgjengelig**, står du i kurset med en melding om at
+  den ikke ble funnet.
+- **Tekst du har skrevet, men ikke levert**, er der når du åpner modulen igjen, også etter tilbake eller en oppfriskning
+  (kladden lagres i nettleseren).
+
+### 1c. En påbegynt flervalgstest (#1160)
+
+Krysser du av på noen spørsmål og så oppdaterer siden, lukker modulen eller tar en pause, står avkrysningene der når du
+åpner modulen igjen, i den samme testen. Ingenting er sendt inn før du trykker **Send test**.
+
+- Avkrysningene lagres i nettleseren du bruker, ikke på serveren. En annen nettleser eller en annen maskin har dem ikke.
+- Kladden gjelder i fire timer, som fritekstkladden.
+- **Er modulen endret siden du begynte** (en ny versjon kan ha andre spørsmål), starter du på en ny test uten de gamle
+  avkrysningene, så ingen svar havner på feil spørsmål.
+- Når du har levert, er avkrysningene borte fra kladden.
+- **Bytter du språk midt i testen**, står testen på språket du begynte på til du har levert, også etter en oppfriskning, så
+  avkrysningene og rekkefølgen du har satt, står der.
+- **Får siden ikke hentet testen** (nettet er borte, serveren svarer ikke), lukkes modulen med en melding om det. Svarene er
+  tatt vare på, og ingenting nytt er startet: åpne testen igjen fra kurset for å fortsette.
+
+Modulen viser ingen tekniske meldinger mens du jobber (#1161): ingen id-er når den åpnes eller etter levering. Resultatet
+står i modulen når det er klart. Id-en til innleveringen finnes under «Vis detaljer» i resultatet, til bruk om noe skal
+ettergås, som «Bevis-ID» på kursbeviset.
 
 ### 2. Forstå resultater
 

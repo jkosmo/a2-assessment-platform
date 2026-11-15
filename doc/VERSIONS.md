@@ -2,6 +2,66 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.164.0 - 2026-11-15
+
+Fire ting som hindret deltakerne, funnet i konsistenssjekken #1157 (interaksjonsdesigner-gjennomgangen): #1158, #1159, #1160 og
+#1161.
+
+**Hva deltakerne merker:**
+- **Tilbake virker i kurset (#1158).** En åpnet seksjon eller modul står i adressen. Nettleserens tilbake (også sveip på
+  telefonen) lukker den og står i kurset, i stedet for å forlate plattformen. Oppdatering og bokmerke holder den åpen, og en
+  e-postlenke til en modul overlever oppdatering. Appens «Lukk» og nettleserens tilbake gjør det samme.
+- **Profilen har en vei tilbake (#1159).** «Mine kurs» vises øverst på profilsiden også for den som bare er deltaker.
+- **En påbegynt flervalgstest beholder avkrysningene (#1160)** etter oppdatering, pause eller lukk og åpne igjen. Ingenting
+  sendes før «Send test».
+- **Ingen tekniske meldinger (#1161):** «Opprett innlevering: <id>», «Request completed.» og «Forsøks-ID» er borte.
+
+### Hva som er endret
+
+- **Adressen:** `/participant?courseId=<kurs>&sectionId=<seksjon>` og `…&moduleId=<modul>` (`public/static/participant-location.js`).
+  `?moduleId=` uten kurs er fortsatt e-postlenka og skrives om til begge. Å åpne et element legger ett steg i historikken; å
+  gå rett til neste element bytter det ut; «Lukk», Esc og «Avslutt kurset» går ett steg tilbake. Et element som ikke finnes
+  eller ikke er tilgjengelig, gir kursvisningen med en melding (ny tekst for seksjoner, nb/nn/en-GB).
+- **Profilen:** menyen skjules bare når ingen lenke fører bort fra siden man står på (før: når den hadde færre enn to lenker,
+  og en deltaker har bare «Mine kurs»).
+- **Flervalg:** avkrysningene lå alt i utkastet i nettleseren, men hver åpning laget en ny innlevering og et nytt forsøk, og da
+  forsvant de. Utkastet husker nå innleveringen og modulversjonen; ved åpning hentes det samme åpne forsøket, og
+  avkrysningene settes tilbake bare når tjeneren bekrefter det. Endret versjon eller avvist forsøk: utkastet glemmes.
+- **Meldinger:** vellykkede svar gir ikke lenger en melding nederst. «Forsøks-ID» og «Innleverings-ID» vises bare med
+  `?debug=1`. «Bevis-ID» på kursbeviset står.
+
+### Rettet etter QA-porten (Codex: GO)
+
+- **En forbigående feil tar ikke lenger svarene.** `mcq/start` svarte før 500 på alt; nå `404 submission_not_found` og
+  `409 mcq_attempt_closed` når forsøket faktisk er borte (`mcqService.ts`). Bare disse glemmer utkastet. Ved nettverksfeil,
+  5xx, 429 o.l. beholdes svarene, ingen ny innlevering lages, og deltakeren får beskjed om å åpne modulen igjen.
+- **Språkbytte midt i testen:** alternativene stokkes på nytt ved hver henting og har ingen id, og en fast stokking ville latt
+  deltakeren regne ut fasit for rekkefølgeoppgaver. En påbegynt test blir derfor stående på språket den ble startet på til
+  den er levert, også etter oppdatering. Et språkuavhengig gjenopptak krever at stokkingen lagres på forsøket (egen sak).
+- **En gammel e-postlenke til en modul som ikke lenger kan åpnes,** viser samme melding som andre lenker.
+
+### Valgt under byggingen (ikke avklart med produkteier)
+
+- «Lukk» går ett steg tilbake i historikken i stedet for å legge til et nytt, så appens og nettleserens tilbake etterlater lik
+  historikk. På kursnivå legger «← Alle kurs» fortsatt til et steg.
+- Åpnes et element direkte fra en lenke eller et bokmerke, legges kurset under, så tilbake står i kurset (motsatt av lenker
+  til et kurs, der tilbake går dit man kom fra).
+
+### Tester
+
+- Nettleser: `participant-item-url-1158` (13), `participant-mcq-resume-1160-1161` (7), `profile-way-back-1159` (4). Enhet:
+  `participant-location-1158` og `mcq-resume-draft-1160` (24). Tre eldre tester endret med vilje (e-postlenka, lesemodus,
+  resultatsammendraget).
+- Runde: enhet 3316, DOM 109, integrasjon 1343, nettleser 1113. 17 mutasjoner, alle røde.
+
+### Kjent
+
+- Utkastet i nettleseren gjelder nettleseren, ikke brukeren (fra før): en annen bruker i samme nettleserprofil kan se det.
+- Ankestatusen viser fortsatt en id («Anke innsendt: <id>»).
+- En e-postlenke til en modul som står i kurset, men ikke er tilgjengelig, åpner kurset uten melding.
+- Et element som blir utilgjengelig etter en oppdatering, etterlater to kurssteg i historikken.
+- Lesemodus skjuler «← Alle kurs» mens en seksjon er åpen; «Lukk» er eneste vei ut i appen.
+
 ## 2.163.0 - 2026-11-14
 
 **En lest seksjon teller i alle kurs deltakeren ser som har den** (#1156), slik en bestått modul gjør. Meldt fra prod

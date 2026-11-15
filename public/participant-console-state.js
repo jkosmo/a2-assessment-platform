@@ -325,6 +325,56 @@ export function earlierResultToShow(participantStatus, draft, draftIsMeaningful)
 }
 
 /**
+ * #1160: kan flervalgsforsøket i kladden fortsettes? Avkrysningene lå alltid i kladden (`mcq.responses`), men modulen startet
+ * en ny innlevering og et nytt forsøk hver gang den ble åpnet, så de ble aldri satt inn igjen. Et forsøk fortsetter når
+ * kladden vet hvilken innlevering og hvilket forsøk det var, og forsøket ble startet på den versjonen modulen har nå. En
+ * annen versjon kan ha andre spørsmål, og da ville avkrysningene vært svar på noe annet. En kladd fra før #1160 mangler
+ * innleveringen og versjonen, og fortsettes ikke.
+ *
+ * Om forsøket fortsatt er åpent, vet bare serveren; den spørres før noe vises (`resumeMcqAttempt`).
+ *
+ * @returns {{ submissionId: string, attemptId: string, moduleVersionId: string, responses: Record<string, string|string[]> } | null}
+ */
+export function resumableMcqDraft(draft, { moduleVersionId } = {}) {
+  const mcq = draft && typeof draft === "object" ? draft.mcq : null;
+  if (!mcq || typeof mcq !== "object") return null;
+  const id = (value) => (typeof value === "string" && value.trim() && value !== "-" ? value : null);
+  const attemptId = id(mcq.attemptId);
+  const submissionId = id(mcq.submissionId);
+  const savedVersionId = id(mcq.moduleVersionId);
+  if (!attemptId || !submissionId || !savedVersionId) return null;
+  if (savedVersionId !== moduleVersionId) return null;
+  const responses = mcq.responses && typeof mcq.responses === "object" && !Array.isArray(mcq.responses) ? mcq.responses : {};
+  // Språket spørsmålene ble hentet på. Svarene er alternativenes TEKST, så de må settes inn mot spørsmålene på det samme
+  // språket. En kladd uten språk (lagret av 2.164.0 før dette) leses som før, på språket siden har nå.
+  const locale = typeof mcq.locale === "string" && mcq.locale.trim() ? mcq.locale : null;
+  return { submissionId, attemptId, moduleVersionId: savedVersionId, responses, locale };
+}
+
+// #1160 (QA-porten 2.164.0): statusene som betyr at forsøket ALDRI kan fortsettes — innleveringen finnes ikke (eller er en
+// annens), forsøket er levert eller vurdert, eller forespørselen har feil form. Hvitliste, ikke svarteliste: alt annet
+// (5xx, 401, 403, 408, 429, brudd uten svar) kan gå over, og da skal svarene ikke kastes.
+const DEFINITIVE_MCQ_RESUME_STATUSES = new Set([400, 404, 409]);
+
+/**
+ * #1160: hva svaret på `mcq/start` for et påbegynt forsøk betyr.
+ *  - `resume`: samme forsøk kom tilbake — sett inn avkrysningene.
+ *  - `forget`: et endelig nei (eller et annet forsøk) — glem flervalgsdelen av kladden og åpne modulen som ny.
+ *  - `retry`:  en feil som kan gå over — behold kladden, ikke start noe nytt, la deltakeren prøve igjen.
+ *
+ * @param {{ ok: true, body: any } | { ok: false, status: number | null }} outcome
+ * @param {string} savedAttemptId
+ * @returns {"resume" | "forget" | "retry"}
+ */
+export function classifyMcqResume(outcome, savedAttemptId) {
+  if (outcome?.ok) {
+    const body = outcome.body;
+    return body && body.attemptId === savedAttemptId && Array.isArray(body.questions) ? "resume" : "forget";
+  }
+  return DEFINITIVE_MCQ_RESUME_STATUSES.has(outcome?.status) ? "forget" : "retry";
+}
+
+/**
  * #934 skive 5a-3: modulen er åpnet fra et kurs som sier at den må tas på nytt. Siste vedtak sier bestått, men det gjaldt en versjon
  * som ikke lenger teller i dette kurset. Da skal siden starte et nytt forsøk, ikke vise det gamle resultatet som om alt var i orden.
  * Har deltakeren alt begynt på nytt (strøket, eller saken vurderes), går siden som vanlig: resultatet, med anke og «Prøv igjen».

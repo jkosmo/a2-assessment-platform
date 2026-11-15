@@ -92,7 +92,9 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 |---|---|
 | `/participant` | «Mine kurs»: deltakerens kurs, kursbevis og innleveringsflyt; siste resultat og anke i modulen (#767, 2.126.0) |
 | `/participant?courseId=<id>` | Opens the course. With `&threadId=<id>` also the discussion and the thread (link in discussion e-mails, 2.138.0) |
-| `/participant?moduleId=<id>` | Finds the course the module is in, preferring one that requires a retake, opens the module and rewrites the address to `?courseId=` (link in result and appeal e-mails, 2.138.0) |
+| `/participant?courseId=<id>&sectionId=<id>` | #1158: the course with that section open in the reader. Written by the page when the participant opens a section; a reload or bookmark opens it again. A section that is not in the course, or not available, gives the course with «Vi fant ikke denne seksjonen i kurset» and drops the parameter |
+| `/participant?courseId=<id>&moduleId=<id>` | #1158: the course with that module's workspace open. Same rules as the section form (unavailable → «Vi fant ikke denne modulen …»). Back (browser or the app's «Lukk modulen») returns to `?courseId=<id>`: the history holds at most one item entry above the course entry, opening another item replaces it, and «Lukk» steps back. A direct link or bookmark places the course entry under the item |
+| `/participant?moduleId=<id>` | Finds the course the module is in, preferring one that requires a retake, opens the module and rewrites the address to `?courseId=<course>&moduleId=<id>` (link in result and appeal e-mails, 2.138.0; the module part kept since #1158, so a reload keeps it open) |
 | `/participant/completed` | 301 → `/participant` (2.126.0: «Fullførte» fjernet; kursbevis står på kurskortet, anke i modulen) |
 | `/certificate?id=<certificateId>` | Printable course certificate view (#550) |
 | `/deltakere/klasser` | Classes (cohorts) admin — list, create, members, course assignment (#645/CL-3; moved here in #765) |

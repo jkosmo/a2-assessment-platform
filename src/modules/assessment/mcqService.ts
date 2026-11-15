@@ -8,7 +8,7 @@ import { drawQuestionIds, parseQuestionOrder, questionsForAttempt, resolveMcqDra
 import { gradeMcqAnswer, questionTypeOf, shuffleOrderItems, type McqSubmittedAnswer } from "./mcqQuestionTypes.js";
 import { enqueueAssessmentJob, processSubmissionJobNow } from "./assessmentJobService.js";
 import { runInTransaction } from "../../db/transaction.js";
-import { ConflictError } from "../../errors/AppError.js";
+import { ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -36,19 +36,24 @@ export async function startMcqAttempt(
 ) {
   const submission = await mcqRepository.findSubmissionForModuleMcq(submissionId, userId, moduleId);
 
+  // #1160: avslagene under er ENDELIGE, og deltakersiden må kunne skille dem fra en forbigående feil. Den fortsetter et
+  // påbegynt forsøk fra kladden med dette kallet: et endelig avslag betyr «glem kladden og start på nytt», mens en 5xx, et
+  // tidsavbrudd eller et brudd betyr «behold svarene og prøv igjen». Som vanlige `Error` ble alle tre 500 `internal_error`.
+  // Meldingene er uendret.
   if (!submission) {
-    throw new Error("Submission not found for module.");
+    // Også en innlevering som tilhører en annen deltaker: oppslaget er på deltakeren.
+    throw new NotFoundError("Submission", "submission_not_found", "Submission not found for module.");
   }
 
   if (TERMINAL_SUBMISSION_STATUSES.has(submission.submissionStatus)) {
-    throw new Error("MCQ attempt cannot be started: assessment is already completed or under review.");
+    throw new ConflictError("mcq_attempt_closed", "MCQ attempt cannot be started: assessment is already completed or under review.");
   }
 
   let attempt = await mcqRepository.findOpenAttemptForSubmission(submission.id);
 
   if (!attempt) {
     if (submission.submissionStatus === SubmissionStatus.PROCESSING) {
-      throw new Error("MCQ attempt cannot be started: submission has already been processed.");
+      throw new ConflictError("mcq_attempt_closed", "MCQ attempt cannot be started: submission has already been processed.");
     }
     // #578: FREETEXT_ONLY modules have no MCQ set — they should never reach the MCQ flow.
     const mcqSetVersionId = submission.moduleVersion.mcqSetVersionId;

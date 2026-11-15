@@ -2087,3 +2087,84 @@ Planen og avgjørelsene over sa hva; dette er valgene som ikke sto der.
   kurset etterpå (alle deltakere, eller de tildelte).
 - **Nye kurs er begrenset som standard** (samme dag: «Nye kurs bør ikke være åpent for alle»): bare de tildelte ser et nytt
   kurs til forfatteren selv åpner det for alle.
+
+## Deltakerens tilbake lukker seksjonen eller modulen (#1158)
+
+- **Elementet står ved siden av kurset i adressen**, `?courseId=…&sectionId=…` og `?courseId=…&moduleId=…`, ikke i en egen
+  sti. Det bygger videre på kursnivåets `?courseId=`, og `moduleId` er det e-postlenka alt brukte. `?moduleId=` uten kurs er
+  fortsatt e-postlenka som finner kurset.
+- **Høyst ett element over kurset i historikken.** Å gå rett fra ett element til et annet («Marker lest, og gå videre»,
+  «Neste: …», en annen rad) erstatter oppføringen. Tilbake fører til kurset, ikke gjennom alt deltakeren har lest. Et annet
+  valg (ett steg per element) ville også vært forsvarlig, men da ville appens «Lukk» og nettleserens tilbake ført til ulike
+  steder.
+- **«Lukk» går ett steg tilbake** (`history.back()`) når kurset ligger rett under, i stedet for å legge til en ny
+  kursoppføring slik kursnivåets «← Alle kurs» gjør. Da er historikken lik etter appens og nettleserens tilbake, og
+  nettleserens fram åpner elementet igjen i begge tilfeller. Kursnivået er uendret.
+- **En lenke eller et bokmerke rett til et element legger kursets oppføring under** (erstatter, så legger til). Kursnivåets
+  dyplenke gjør det motsatte («tilbake skal føre ut av siden, ikke til en liste deltakeren aldri sto i»). Forskjellen er villet:
+  elementet åpnes inne i kurset, så deltakeren står i kurset, og saken krever at tilbake står i kurset også fra e-posten.
+  Tilbake én gang til fører ut av siden.
+- **Et element som ikke finnes eller ikke kan åpnes** gir kurset med meldingen, og elementet tas ut av adressen uten et nytt
+  steg.
+
+**Håndheves:** `public/static/participant-location.js`, `recordOpenedItem`/`recordClosedItem`/`closeInlineItem`/`openPendingItem`
+og `popstate` i `public/participant.js`; `test/e2e/participant-item-url-1158.spec.ts`, `test/unit/participant-location-1158.test.js`;
+`doc/FEATURE_SURFACE_MAP.md` § 35.
+**Sak:** #1158 · **Dato:** 2026-11-15 · **Status:** valgt under byggingen; ikke avklart med produkteier
+
+## En påbegynt flervalgstest fortsetter (#1160)
+
+- **Forsøket fortsetter, ikke bare avkrysningene.** Kladden (`participant.moduleDrafts.v1`, per modul, fire timer) hadde alt
+  avkrysningene, men modulen startet en ny innlevering og et nytt forsøk hver gang den ble åpnet. Nå bærer kladden
+  innleveringen, forsøket og versjonen, og når modulen åpnes, spør siden serveren om det samme forsøket (`GET mcq/start` med
+  den lagrede innleveringen, som gir det åpne forsøket tilbake). Svarer serveren med det samme forsøket, settes avkrysningene
+  inn igjen mot spørsmålene forsøket har. Ingen svar sendes før «Send test».
+- **Også uten avkrysninger** fortsetter et påbegynt forsøk, så det å åpne en modul ikke lager en ny innlevering hver gang.
+- **Versjonen må stemme.** Er modulen publisert på nytt siden forsøket startet, glemmes forsøket, og et nytt starter. Det er
+  den sikre siden: andre spørsmål ville gitt avkrysninger som svar på noe annet.
+- **Avviser serveren for godt** (404 `submission_not_found`: ingen eller en annens innlevering; 409 `mcq_attempt_closed`:
+  levert eller vurdert; 400; eller et annet forsøk), glemmes flervalgsdelen av kladden uten en melding, og modulen åpnes som
+  ny. Deltakeren kan ikke gjøre noe med det. (QA-porten 2.164.0: før var alle avslagene 500 `internal_error`, så de ikke kunne
+  skilles fra en tjenerfeil. `mcqService.startMcqAttempt` kaster nå `NotFoundError`/`ConflictError`; meldingene er uendret.)
+- **En feil som kan gå over** (5xx, 401, 403, 408, 429, brudd uten svar) koster ikke svarene: kladden står, ingen ny
+  innlevering startes, og modulen lukkes med «Vi fikk ikke hentet testen du har begynt på …». Deltakeren åpner testen igjen
+  fra kurset, som etter en åpning som feiler. Hvitliste over de endelige statusene, ikke over de forbigående
+  (`classifyMcqResume`).
+- **Språket.** Avkrysningene lagres som alternativenes tekst, og forsøket hentes på språket testen ble besvart på (`x-locale`
+  fra kladden), også om siden er byttet til et annet språk. Testen vises da på det språket til den er levert, slik den alt
+  gjorde i økta etter et språkbytte. En språkuavhengig nøkkel ble vurdert og valgt bort: tjeneren stokker alternativene på
+  nytt for hvert kall (`Math.random`), og alternativene har ingen id. En stokking sådd fra forsøket med en offentlig
+  algoritme ville latt deltakeren regne ut fasiten i «sett i rekkefølge» (kildeordenen ER fasiten). Riktig løsning er å
+  lagre stokkingen på forsøket (ny kolonne), og det er en egen sak. En kladd uten språk (fra før rettelsen) leses som før.
+- **Kladden er per nettleser, ikke per bruker**, som fritekstkladden. To brukere i samme nettleserprofil deler den; serveren
+  avviser en annens innlevering, så avkrysningene vises aldri for feil person (de vises først når serveren har svart).
+
+**Håndheves:** `resumableMcqDraft` og `classifyMcqResume` (participant-console-state.js), `continueModuleFlow`/`resumeMcqAttempt`
+(participant.js), `startMcqAttempt` (mcqService.ts); `test/unit/mcq-resume-draft-1160.test.js`,
+`test/e2e/participant-mcq-resume-1160-1161.spec.ts`, `test/m2-mcq-resume-1160.test.ts`.
+**Sak:** #1160 · **Dato:** 2026-11-15 · **Status:** valgt under byggingen; ikke avklart med produkteier
+
+## Ingen toast for noe som gikk bra, med mindre den er skrevet for deltakeren (#1161)
+
+- `log()` i deltakersiden viser ikke lenger en toast for et vellykket svar. Oppsummeringen («Opprett innlevering: <id>»,
+  «Request completed.», «Updated: submission», «Moduler: 3») går til feilsøkingspanelet (`?debug=1`). Feil vises som før.
+  En toast for noe som gikk bra, skrives som en oversatt tekst der den hører hjemme, slik kursnivået gjør («Kurs fullført –
+  godt jobbet!»).
+- «Forsøks-ID» og «Innleverings-ID» under knappene vises bare med `?debug=1`. Innleverings-ID-en står fortsatt under «Vis
+  detaljer» i resultatet (#939), og «Bevis-ID» på kursbeviset er urørt.
+- Meldingene var ikke koblet til noen feilsøkingsbryter, så de viste seg også i prod. `PARTICIPANT_CONSOLE_DEBUG_MODE`
+  (standard `auto`: av når `NODE_ENV=production`, som `infra/azure/main.bicep` setter) leses ikke av deltakersiden i det
+  hele tatt; panelet og nå ID-linjene styres bare av `?debug=1` i adressen.
+
+**Håndheves:** `log()` og `applySettledChrome` i `public/participant.js`; `test/e2e/participant-mcq-resume-1160-1161.spec.ts`.
+**Sak:** #1161 · **Dato:** 2026-11-15 · **Status:** valgt under byggingen; ikke avklart med produkteier
+
+## Menyen skjules bare når ingen lenke fører bort fra siden (#1159)
+
+Regelen i `shared.css` skjulte toppmenyen med færre enn to lenker. På profilen har en ren deltaker én lenke, «Mine kurs», og
+den førte bort fra siden, så profilen ble en blindvei. Nå skjules menyen når ingen lenke er en annen side enn den man står
+på. Én lenke til siden man står på (deltakeren på «Mine kurs») er fortsatt skjult. «Mine kurs» står i menyen øverst til
+venstre, der den står for alle andre, ikke ved siden av «Profil» til høyre.
+
+**Håndheves:** `.page-top-bar > .workspace-nav` i `public/static/shared.css`; `test/e2e/profile-way-back-1159.spec.ts`.
+**Sak:** #1159 · **Dato:** 2026-11-15 · **Status:** valgt under byggingen; ikke avklart med produkteier
