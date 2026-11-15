@@ -102,6 +102,33 @@ ingenting til tjeneren før «Lagre». «Forkast utkast» for seksjoner kommer i
 
 **Prinsipp 6 — konfliktsjekk:** som i «Etter gjennomlesingen», punkt 2 (versjon og tittel).
 
+## Andre gjennomlesing (Codex, 15.11.2026: «ikke klar»)
+
+Endringene går foran teksten over.
+
+1. **Ingen reserve fra seksjonens tittel.** Migreringen legger til `CourseSectionVersion.title` og fyller den for alle
+   eksisterende versjoner med dagens `CourseSection.title`, i samme migrering. Deltakerne leser alltid tittelen fra den
+   publiserte versjonen. Dermed kan endring av arbeidstittelen aldri nå deltakerne før publisering. (Erstatter «reserve for
+   versjoner fra før migreringen», og «ingen migrering» under Utrulling.) Gamle instanser under utrullingen skriver bare
+   arbeidstittelen, som nye instanser ikke viser til deltakerne. Test: en migrert, publisert seksjon får ny tittel; deltakeren
+   ser den gamle til publisering.
+2. **Figurer ved lagring: bare figurer utkastet har lagt til.** Lagringen oversetter bare figurer som utkastet bruker og den
+   publiserte versjonen ikke bruker, og som mangler oversettelser. Oversettingen (KI og bildefiler) kjøres før låsen; radene
+   oppdateres først i lagringstransaksjonen, etter revisjonssjekken. Avvises lagringen (409), endres ingen figur. Figurer som
+   den publiserte versjonen bruker, endres ikke ved lagring (å bytte ut en slik figur er utenfor denne saken og står som kjent).
+   Kildespråket lagres per figur (finnes: `SectionAsset.sourceLocale`). Test: språkbytte, og en avvist lagring med null endrede
+   figurer.
+3. **Importen bruker titlene per versjon:** `keepLiveTitle` erstattes; titler tas med i sammenligningen ved «Oppdater kurs»;
+   eksport med versjon henter tittelen fra versjonen. Test med ulik publisert og utkast-tittel for frittstående import,
+   «Oppdater kurs» og kopi av andres seksjon.
+4. **«Døp om» og masseoversetting i lista** sender versjonen de så, og får `409` ved konflikt; de lager et utkast med siste
+   utkasttekst under samme lås. Test begge retninger.
+5. **Publiseringsporten** vurderer versjonen som skal publiseres (dens tittel og tekst) og figurene den bruker som har tekst.
+   «Fyll inn det som mangler» blir en ekte flyt: fyll inn → lagre utkast → publiser på nytt. Test eldre utkast som porten holdt
+   igjen, og utkast laget av agent-API-et.
+6. **Uendret og riktig:** #934-øyeblikksbildene og lesereglene bruker den publiserte versjonen; bumpen eies av publiseringen og
+   kaskadene. Tester: å lagre endrer ikke lesingen; å publisere en ny tittel gjør det (ny versjon-id).
+
 ## Skiver
 
 Én pakke (alle fire testsamlingene i samme runde):
