@@ -181,7 +181,11 @@ test("B: en avkrysning i flervalgstesten overlever oppdatering, uten tekniske me
   await expect(page).toHaveURL(new RegExp(`moduleId=${tilstand.modul}`));
   const valg = page.locator("#mcqQuestions input[type=radio], #mcqQuestions input[type=checkbox]");
   await expect(valg.first()).toBeVisible({ timeout: 60_000 });
-  await valg.nth(1).check();
+  // Alternativene stokkes på nytt ved hver henting: sjekk det valgte alternativet etter verdien, ikke etter plassen.
+  const valgt = valg.nth(1);
+  const navnPåGruppa = await valgt.getAttribute("name");
+  const verdi = await valgt.getAttribute("value");
+  await valgt.check();
   // Vent til utkastet faktisk er lagret i nettleseren (ikke en fast pause): det bærer forsøket og avkrysningen (#1160).
   await expect
     .poll(async () => page.evaluate(() => {
@@ -192,7 +196,8 @@ test("B: en avkrysning i flervalgstesten overlever oppdatering, uten tekniske me
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(valg.first()).toBeVisible({ timeout: 60_000 });
-  await expect(valg.nth(1)).toBeChecked({ timeout: 30_000 });
+  const sammeValg = page.locator(`#mcqQuestions input[name="${navnPåGruppa}"][value="${verdi}"]`);
+  await expect(sammeValg, `alternativet «${verdi}» er ikke krysset av etter oppdateringen`).toBeChecked({ timeout: 30_000 });
   meldinger.push(...(await page.evaluate(() => (window as unknown as { __meldinger?: string[] }).__meldinger ?? [])));
   const forsøksId = await page.locator("#attemptIdLine").isVisible().catch(() => false);
   noter("B", { meldinger, forsøksIdSynlig: forsøksId, url: page.url().replace(BASE, "") });

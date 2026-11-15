@@ -173,11 +173,14 @@ async function createUser(name: string) {
   return user.id;
 }
 
-async function submit(userId: string, module: { id: string; versionId: string }, status: "SUBMITTED" | "COMPLETED" | "SUPERSEDED" | "UNDER_REVIEW") {
-  return (await prisma.submission.create({
+/** En LEVERT besvarelse med status SUBMITTED har en vurderingsjobb; `bareÅpnet` er modulen åpnet uten å levere. */
+async function submit(userId: string, module: { id: string; versionId: string }, status: "SUBMITTED" | "COMPLETED" | "SUPERSEDED" | "UNDER_REVIEW", bareÅpnet = false) {
+  const id = (await prisma.submission.create({
     data: { userId, moduleId: module.id, moduleVersionId: module.versionId, deliveryType: "text", submissionStatus: status },
     select: { id: true },
   })).id;
+  if (status === "SUBMITTED" && !bareÅpnet) await prisma.assessmentJob.create({ data: { submissionId: id, status: "PENDING" } });
+  return id;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -558,11 +561,14 @@ describe("#1150: pendingReviewCount — besvarelser som fortsatt kan få et utfa
     const avgjortAnke = await createUser("avgjort-anke");
     const avgjortSubmission = await submit(avgjortAnke, M, "COMPLETED");
     await prisma.appeal.create({ data: { submissionId: avgjortSubmission, appealedById: avgjortAnke, appealReason: "Fikstur for #1150.", appealStatus: "RESOLVED" } });
+    // KONTROLL (stage-testen 2.164.0): modulen åpnet, aldri levert — påbegynt, men venter ikke på noen vurdering.
+    const aapnet = await createUser("bare-aapnet");
+    await submit(aapnet, M, "SUBMITTED", true);
 
     const response = await preview(course.id);
     expect(response.status, JSON.stringify(response.body).slice(0, 300)).toBe(200);
-    expect(response.body.inProgressCount).toBe(5);
-    // iKo (SUBMITTED) og anket (OPEN).
+    expect(response.body.inProgressCount).toBe(6);
+    // iKo (SUBMITTED med vurderingsjobb) og anket (OPEN). Ikke den som bare åpnet.
     expect(response.body.pendingReviewCount).toBe(2);
   });
 });

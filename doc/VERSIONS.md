@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.164.1 - 2026-11-15
+
+**En modul som bare er åpnet, holder ikke lenger et arkivert kurs igjen fra sletting** (feil fra 2.161.0, #1152). En
+innlevering lages når deltakeren åpner en modul, med status `SUBMITTED`, før noe er levert. «Venter på vurdering» regnet
+den med, så et kurs der noen hadde åpnet en modul uten å levere, kunne aldri slettes, og lista viste «Beholdes: besvarelser
+venter på vurdering». Funnet av stage-testen for 2.164.0 (testkontoen åpnet en flervalgsmodul uten å levere, og kurset kunne
+ikke ryddes).
+
+- **Retting:** en innlevering med status `SUBMITTED` venter bare når den har en vurderingsjobb (fritekst får en ved
+  levering; flervalg alene avgjøres med en gang). Alle andre statuser som ikke er ferdige, venter som før, også en jobb som ga
+  opp. Gjelder «Slett», slettedatoen i lista, kaskaden og tallet i arkiveringsdialogen (`countPendingReviewsOnModules`).
+- **Rotårsak:** fiksturene i testene laget «en besvarelse som venter» som `SUBMITTED` uten vurderingsjobb, altså nøyaktig
+  tilstanden til en modul som bare er åpnet. Testene festet dermed feilen som regel (CLAUDE.md, Pre-flight 4: «Sier fiksturen
+  ALT regelen leser?»). Fiksturene lager nå en vurderingsjobb for en levert besvarelse, og en kontroll med en modul som bare er
+  åpnet, er lagt til i både slettetesten og arkiveringsdialogen. Mutasjonssjekket: uten rettingen blir begge kontrollene røde.
+- Stage-testen for 2.164.0 sjekker nå avkrysningen etter alternativets verdi, ikke plass: alternativene stokkes ved hver
+  henting.
+
 ## 2.164.0 - 2026-11-15
 
 Fire ting som hindret deltakerne, funnet i konsistenssjekken #1157 (interaksjonsdesigner-gjennomgangen): #1158, #1159, #1160 og

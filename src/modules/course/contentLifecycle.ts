@@ -700,7 +700,14 @@ export async function countPendingReviewsOnModules(
       ...(userIds ? { userId: { in: [...userIds] } } : {}),
       moduleId: { in: [...moduleIds] },
       OR: [
-        { submissionStatus: { notIn: ASSESSMENT_FINISHED_STATUSES } },
+        {
+          submissionStatus: { notIn: ASSESSMENT_FINISHED_STATUSES },
+          // En innlevering lages når deltakeren ÅPNER modulen, med status SUBMITTED, før noe er levert. Den venter ikke på
+          // noen vurdering før den har fått en vurderingsjobb (fritekst ved levering; flervalg alene avgjøres med en gang og
+          // blir COMPLETED). Uten dette holdt hver åpnet, aldri levert modul kurset igjen fra sletting for alltid (stage-testen
+          // for 2.164.0). En jobb som ga opp (FAILED), teller fortsatt: saken kan settes i gang igjen.
+          NOT: { submissionStatus: SubmissionStatus.SUBMITTED, assessmentJobs: { none: {} } },
+        },
         { appeals: { some: { appealStatus: { notIn: APPEAL_FINISHED_STATUSES } } } },
       ],
     },

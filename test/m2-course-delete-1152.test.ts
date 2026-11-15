@@ -136,10 +136,15 @@ async function read(userId: string, courseId: string, sectionId: string) {
   await prisma.courseSectionRead.create({ data: { userId, courseId, sectionId, readAt: new Date() } });
 }
 
-/** En besvarelse med status, som ikke er bestått. Direkte: vurderingen i køen. */
-async function submission(userId: string, moduleId: string, status: "SUBMITTED" | "UNDER_REVIEW" | "COMPLETED") {
+/**
+ * En besvarelse med status, som ikke er bestått. Direkte: vurderingen i køen. En LEVERT besvarelse med status SUBMITTED har en
+ * vurderingsjobb; `bareÅpnet` er modulen åpnet uten å levere (innleveringen lages ved åpning, før noe er levert).
+ */
+async function submission(userId: string, moduleId: string, status: "SUBMITTED" | "UNDER_REVIEW" | "COMPLETED", bareÅpnet = false) {
   const version = await publishedVersion(moduleId);
-  return prisma.submission.create({ data: { userId, moduleId, moduleVersionId: version.id, deliveryType: "text", submissionStatus: status }, select: { id: true } });
+  const created = await prisma.submission.create({ data: { userId, moduleId, moduleVersionId: version.id, deliveryType: "text", submissionStatus: status }, select: { id: true } });
+  if (status === "SUBMITTED" && !bareÅpnet) await prisma.assessmentJob.create({ data: { submissionId: created.id, status: "PENDING" } });
+  return created;
 }
 
 const exists = {
@@ -312,6 +317,13 @@ describe("#1152: en besvarelse som venter, holder kurset igjen til den er avgjor
       expect(deleted.status, show(deleted)).toBe(204);
     });
   }
+
+  it("KONTROLL (stage-testen 2.164.0): en modul som bare er åpnet, aldri levert (SUBMITTED uten vurderingsjobb), holder ikke kurset igjen", async () => {
+    const x = await archivedCourseWithModuleAndSection("bare åpnet");
+    await submission(await user("åpnet"), x.module, "SUBMITTED", true);
+    const deleted = await del(K(x.course));
+    expect(deleted.status, show(deleted)).toBe(204);
+  });
 
   it("en sak på en DELT modul som senere ble arkivert for seg (etter kurset), holder kurset igjen: alle kursets moduler teller", async () => {
     const { course } = await courseWithSharedModuleArchivedLater("delt sak");

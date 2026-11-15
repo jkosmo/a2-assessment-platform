@@ -148,10 +148,12 @@ async function user(name: string) {
 const publishedVersion = (moduleId: string) =>
   prisma.moduleVersion.findFirstOrThrow({ where: { moduleId, publishedAt: { not: null } }, orderBy: { createdAt: "desc" }, select: { id: true } });
 
-/** En besvarelse med status. Direkte: vurderingen i køen. */
+/** En besvarelse med status. Direkte: vurderingen i køen. En levert besvarelse med status SUBMITTED har en vurderingsjobb. */
 async function submission(userId: string, moduleId: string, status: "SUBMITTED" | "COMPLETED") {
   const version = await publishedVersion(moduleId);
-  return prisma.submission.create({ data: { userId, moduleId, moduleVersionId: version.id, deliveryType: "text", submissionStatus: status }, select: { id: true, moduleVersionId: true } });
+  const created = await prisma.submission.create({ data: { userId, moduleId, moduleVersionId: version.id, deliveryType: "text", submissionStatus: status }, select: { id: true, moduleVersionId: true } });
+  if (status === "SUBMITTED") await prisma.assessmentJob.create({ data: { submissionId: created.id, status: "PENDING" } });
+  return created;
 }
 
 /** Bestått, slik vedtakssporet skriver det. Direkte: vedtakssporet. */
