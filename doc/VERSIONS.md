@@ -53,6 +53,12 @@ tjeneren, 8 i klienten, 1 ren hjelper): hver gjorde riktig test rød. Én test m
 **QA 2.166.0** (Claude-agent; Codex var tom): GO. Rettet før commit: teksten i publiseringsdialogen sa at deltakerne i alle
 kursene ser endringen, også i kurs som ikke er publisert; en kommentar i `sectionTitle.ts` viste til en funksjon som ikke finnes.
 
+**På stage 15.11.2026 kl. 23:01** (dev e87a679b). `release-2-166-seksjonsutkast` (4/4): etter lagring var versjon 2 et utkast og
+deltakeren så den gamle tittelen og teksten i leseren og kursdetaljen; en lagring med utdatert versjon fikk 409
+`section_changed` og skrev ingenting; etter publisering så deltakeren det nye, fra en ny versjon. `2-165` (2/2), `2-164` (4/4),
+`2-163` (3/3), `2-162` (5/5), `2-161` (4/4), `2-160` (7/7), `2-88` (2/2) og `2-134` (4/4) kjørt på nytt. Første forsøk fikk 401
+på testkontoens innlogging rett etter omstarten; andre forsøk gikk.
+
 ## 2.165.0 - 2026-11-15
 
 Tre funn fra konsistenssjekken #1157, med produkteiers svar: «Vi bør gjøre ting likt mellom moduler og kurs. Nye kurs bør ikke
