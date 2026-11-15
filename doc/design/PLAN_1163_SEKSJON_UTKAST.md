@@ -71,16 +71,36 @@ Endringene går foran teksten over.
 8. **Regresjonstester** gjennom leserne: tilgjengelighet, #934-øyeblikksbilder og leseregler, #1156 lesing på tvers,
    kursutkastet (#1140) med en ny seksjon som publiseres før utkastet.
 
-## Spørsmål til produkteier
+## Avgjort av produkteier 15.11.2026: felles prinsipper
 
-A. **Tittelen.** Moduler har levende tittel: endres tittelen, ser deltakerne den med en gang, også mens innholdet er et
-   utkast. Forslag: **likt moduler** nå (tittelen lagres i samme transaksjon, men går ut straks). Å versjonere tittelen for
-   både seksjoner og moduler er en egen, større sak (berører alle steder som viser tittelen, eksport og import).
-B. **Oversetting ved lagring.** Kurs og moduler oversetter når man lagrer. Forslag: **likt** — seksjonens tekst oversettes ved
-   lagring, og den egne knappen forsvinner. Figurene (bilder med tekst) oversettes fortsatt bare når man ber om det: det koster
-   KI-kall, og en figur er felles for alle versjoner, så en oversatt figur går ut med en gang.
-C. **«Forkast utkast».** Kurs har det, moduler har det ikke. Forslag: **ikke nå** for seksjoner, likt moduler; «Forkast utkast»
-   for både moduler og seksjoner blir en egen sak (det betyr å slette de upubliserte versjonene).
+Produkteier ba om langsiktige prinsipper for oversetting, lagring, publisering og «Avbryt» på tvers av kurs, moduler og
+seksjoner, og godtok seks (doc/DECISIONS.md, «felles prinsipper»). For seksjonene i denne saken betyr det at forslagene A–C
+over er erstattet:
+
+**Prinsipp 2 — tittelen er en del av utkastet** (erstatter A, «likt moduler»):
+- Ny, valgfri kolonne `CourseSectionVersion.title` (additiv migrering). Lagringen skriver tittelen i den nye versjonen.
+- Deltakerne leser tittelen fra den publiserte versjonen, med `CourseSection.title` som reserve for versjoner fra før
+  migreringen. `CourseSection.title` blir forfatterens arbeidstittel (listene, editoren).
+- Gå gjennom alle som leser `section.title` for deltakere: leseren, kursdetaljen, «Mine kurs», rapporter, e-post, kursbevis,
+  øyeblikksbilder (#934), eksport. Eksport tar med både publisert og utkast (punkt 1 under «Etter gjennomlesingen»).
+- «Døp om» og masseoversetting av titler i lista lager et utkast som alt annet (ikke lenger live). Versjonsbumpen for tittelen
+  flyttes da også til publisering (erstatter punkt 4 under «Etter gjennomlesingen»).
+
+**Prinsipp 3 — oversetting bare ved lagring, for alt innhold** (erstatter B):
+- Seksjonens tekst og tittel oversettes ved lagring, fra språket som ble endret, og bare når feltet er endret. «Oversett»-
+  knappen fjernes. Felles hjelper med kurs og moduler (`admin-content-localized-copy.js`), med regelen «bare endrede felt»
+  som #1177/#1178 også skal få.
+- Figurene oversettes også ved lagring, men bare figurer som ikke alt er oversatt fra samme kilde (som i dag:
+  `assetCommands.ts` hopper over dem). Figurer er felles for alle versjoner og ikke versjonert: en ny figur brukes bare av
+  utkastet og er derfor ikke synlig før publisering; en figur som alt er oversatt, oversettes ikke på nytt. Kjent: erstattes
+  bildet i en figur som den publiserte versjonen bruker, går endringen ut med en gang (som i dag).
+- Oversettingen kjører utenfor innholdslåsen; revisjonen sjekkes når lagringen skrives. Feiler en oversetting, lagres det
+  som finnes, og porten ved publisering tilbyr «Fyll inn det som mangler».
+
+**Prinsipp 5 — «Avbryt»** forkaster bare endringer i fanen. Siden oversettingen (også figurene) nå skjer ved lagring, skriver
+ingenting til tjeneren før «Lagre». «Forkast utkast» for seksjoner kommer i #1179.
+
+**Prinsipp 6 — konfliktsjekk:** som i «Etter gjennomlesingen», punkt 2 (versjon og tittel).
 
 ## Skiver
 
