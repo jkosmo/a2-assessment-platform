@@ -151,7 +151,7 @@ test("en strøket modul viser resultatet og anke-knappen når den åpnes igjen i
   const publisert = await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/module-versions/${tilstand.versionId}/publish`, {});
   expect([200, 201], publisert.tekst.slice(0, 400)).toContain(publisert.status);
 
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(`Stage-test 2.126 kurs ${stempel}`), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(`Stage-test 2.126 kurs ${stempel}`), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   tilstand.kursId = kurs.json.course.id;
   expect((await api("PUT", `/api/admin/content/courses/${tilstand.kursId}/items`, { items: [{ type: "MODULE", moduleId: tilstand.moduleId }] })).status).toBe(204);

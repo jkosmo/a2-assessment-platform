@@ -61,7 +61,7 @@ async function importer(navn: string, mcq: Record<string, unknown> | undefined) 
   expect(id, svar.tekst.slice(0, 400)).toBeTruthy();
   moduler.push(id);
   // En deltaker når modulen gjennom et kurs.
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(`Stage-test skill ${navn} ${stempel}`), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(`Stage-test skill ${navn} ${stempel}`), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   kursene.push(kurs.json.course.id);
   expect((await api("PUT", `/api/admin/content/courses/${kurs.json.course.id}/items`, { items: [{ type: "MODULE", moduleId: id }] })).status).toBe(204);

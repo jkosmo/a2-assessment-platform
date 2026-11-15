@@ -112,7 +112,7 @@ import { adminUsersRouter } from "./adminUsers.js";
 import { adminSectionsRouter } from "./adminSections.js";
 import { generateLimiter, extractLimiter, intentLogLimiter } from "../middleware/rateLimiting.js";
 import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
-import { assertContentOwnership } from "../modules/content/contentOwnershipService.js";
+import { assertContentOwnership, listManageableContentIds } from "../modules/content/contentOwnershipService.js";
 import { assertArchivedBeforeLock } from "../modules/content/archivedGuard.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
@@ -463,17 +463,22 @@ adminContentRouter.get("/modules/:moduleId/export", async (request, response) =>
     return;
   }
   try {
-    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
-    // The export carries the MCQ answer key and rationale for everyone who gets this far.
+    // #1165 (produkteier 14.11.2026, «Produsenter bør kunne se hverandres innhold»): LESINGEN ER ÅPEN FOR ALLE FORFATTERE, som
+    // kursdetaljen og seksjonene. Før krevde ruta eierskap, og en produsent kunne ikke åpne en annens modul for å lese. Modulsida
+    // viser modulen skrivebeskyttet når `canManage` er usann; skriverutene er fortsatt vaktet. Se doc/DECISIONS.md, «Fagansvarlige
+    // deler innsyn», og `test/content-read-open-by-decision.test.ts`.
     //
-    // #392 (v1.1.11) stripped them for non-ADMINISTRATOR callers. That control protected
-    // nothing: assertModuleOwnership above already limits this route to an owner of THIS
-    // module or an admin, the owner authored the answers and reads them in the editor, and
-    // /modules/:id/export-package hands the same owner the same answers untouched. All it
-    // achieved was a lossy backup - export then import silently returned a module with no
-    // answer key. Product decision 2026-08-14: the key belongs in the export.
+    // The export carries the MCQ answer key and rationale. #392 (v1.1.11) stripped them for non-ADMINISTRATOR callers; product
+    // decision 2026-08-14: the key belongs in the export, and 2026-09-08 (#1031): the key is not protected from other authors
+    // either («Vi skal ikke ta høyde for å sikre oss mot juks, det er umulig»).
     const bundle = await getModuleContentBundle(request.params.moduleId);
-    response.json({ moduleExport: bundle });
+    const manageable = await listManageableContentIds({
+      contentType: "MODULE",
+      contentIds: [request.params.moduleId],
+      actorUserId: actorId,
+      roles: request.context?.roles ?? [],
+    });
+    response.json({ moduleExport: { ...bundle, canManage: manageable.has(request.params.moduleId) } });
   } catch (error) {
     if (error instanceof AppError) {
       respondWithAppError(response, error);
@@ -581,7 +586,8 @@ adminContentRouter.get("/modules/:moduleId/export-package", async (request, resp
     return;
   }
   try {
-    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    // #1165: åpen for alle forfattere, som kurseksporten (#1031) og seksjonens. «Eksporter» og «Dupliser» står på andres
+    // moduler i lista (#1046: lese- og kopihandlinger), og ga 403 her. Importen av kopien gjør den som kopierer til eier.
     // #896 S6: ?moduleVersionId= lets the workspace export the version it is showing. Omitted, the
     // historical rule applies (live version, else latest) — what the module list and course export
     // want.

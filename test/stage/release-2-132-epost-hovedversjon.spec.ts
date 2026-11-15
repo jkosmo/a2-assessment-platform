@@ -90,7 +90,7 @@ test("et nytt lesekurs: ingen mottakere; etter at testkontoen har lest alt, én 
   test.setTimeout(150_000);
   const a = await lagSeksjon("A");
   const b = await lagSeksjon("B");
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(`Stage-test 2.132 kurs ${stempel}`), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(`Stage-test 2.132 kurs ${stempel}`), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   tilstand.kursId = kurs.json.course.id;
   expect((await api("PUT", `/api/admin/content/courses/${tilstand.kursId}/items`, { items: [{ type: "SECTION", sectionId: a }, { type: "SECTION", sectionId: b }] })).status).toBe(204);

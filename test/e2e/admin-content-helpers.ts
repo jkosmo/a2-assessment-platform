@@ -46,6 +46,8 @@ type MockCourse = {
     moduleTitle?: Record<string, string> | string;
   }>;
   archivedAt?: string | null;
+  /** #1165: kan den som ser kurset, endre det? Utelatt = ja (som tjeneren før feltet fantes). */
+  canManage?: boolean;
 };
 
 type MockNavigationItem = {
@@ -81,6 +83,8 @@ export type MockModuleExport = {
   // #464-standard: baandet under terskelen. Fiksturen maa BAERE det — plassholderen i
   // innstillingspanelet regnes fra det, og uten feltet ville testen maalt fallbacken «Ingen».
   platformDefaults: { totalMin: number; borderlineBelowMin?: number | null };
+  /** #1165: kan den som ser modulen, endre den? Utelatt = ja (som tjeneren før feltet fantes). */
+  canManage?: boolean;
 };
 
 export function localizedText(base: string): Record<string, string> {
@@ -1101,6 +1105,12 @@ export async function mockCommonApis(page: Page, {
       contentType: "application/json",
       body: JSON.stringify({ courseId, allPublished: true, publishable: true, unpublishedItems: [] }),
     });
+  });
+
+  // #1164: «Publiser» spør alltid, og dialogen sier hvem som ser kurset etterpå. Standard: et åpent kurs (alle deltakere).
+  // Spesifikasjoner som måler teksten, registrerer sin egen rute (den vinner, registrert senere).
+  await page.route("**/api/admin/content/courses/*/publish-audience*", async (route: Route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ audience: { policy: "OPEN" } }) });
   });
 
   await page.route("**/api/admin/content/courses/*/publish", async (route: Route) => {

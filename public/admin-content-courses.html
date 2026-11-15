@@ -228,6 +228,11 @@
       .course-lifecycle-note { flex-basis: 100%; font-size: 12px; color: var(--color-meta); }
       .course-lifecycle-body .dialog-text { margin-bottom: var(--space-1); }
       .cascade-delete-heading { font-size: 13px; font-weight: 700; margin: var(--space-2) 0 4px; }
+      /* #1164: «Hvem ser kurset etterpå» i publiseringsdialogen og versjonsdialogen. Ingen minstehøyde: teksten er ofte én linje. */
+      .publish-audience { margin-bottom: var(--space-1); overflow-wrap: anywhere; }
+      .publish-audience .cascade-delete-heading:first-child { margin-top: 0; }
+      .publish-audience .dialog-text { margin-bottom: var(--space-1); }
+      .publish-audience .cascade-publish-item-title { min-width: 0; }
       .cascade-delete-body .cascade-publish-blocker { display: block; color: var(--color-meta); font-size: 12px; }
 
       /* ── Cascade-publish item list (#734) ────────────────────────────────── */
@@ -300,6 +305,8 @@
       <h2 class="dialog-title" id="cascadePublishTitle">Publiser kurs og innhold</h2>
       <p class="dialog-text" id="cascadePublishText">Kurset har upublisert innhold.</p>
       <div id="cascadePublishList" class="cascade-publish-list-wrap"></div>
+      <!-- #1164: hvem som ser kurset etter publiseringen (GET …/publish-audience). Tegnes av `publishAudienceHtml`. -->
+      <div id="cascadePublishAudience" class="publish-audience" hidden></div>
       <!-- #934 skive 3: mindre eller hovedversjon — bare når kurset har kursbevis (samme valg som i skjemaet). -->
       <div id="cascadePublishVersion" hidden></div>
       <div class="dialog-actions">
@@ -333,6 +340,8 @@
     <dialog id="courseVersionDialog" aria-labelledby="courseVersionTitle">
       <h2 class="dialog-title" id="courseVersionTitle"></h2>
       <p class="dialog-text" id="courseVersionText"></p>
+      <!-- #1164: «Publiser utkastet» spør om versjonen og sier hvem som ser kurset etterpå, i samme dialog. -->
+      <div id="courseVersionAudience" class="publish-audience" hidden></div>
       <div id="courseVersionChoiceHost"></div>
       <div class="dialog-actions">
         <button type="button" id="courseVersionSaveBtn" class="btn btn-primary"></button>

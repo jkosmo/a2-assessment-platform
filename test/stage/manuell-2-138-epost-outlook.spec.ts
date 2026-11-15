@@ -120,7 +120,7 @@ test("sender en e-post av hver type til kontoen som er logget inn", async () => 
   const bestått = await flervalgsmodul("bestått");
   const strøket = await flervalgsmodul("ikke bestått");
   const sensor = await fritekstmodul();
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(`E-posttest ${stempel} om github.com`), certificationLevel: "basic", discussionsEnabled: true });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(`E-posttest ${stempel} om github.com`), certificationLevel: "basic", discussionsEnabled: true });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   const kursId = kurs.json.course.id as string;
   const satt = await api("PUT", `/api/admin/content/courses/${kursId}/items`, { items: [bestått, strøket, sensor].map((moduleId) => ({ type: "MODULE", moduleId })) });
@@ -131,7 +131,7 @@ test("sender en e-post av hver type til kontoen som er logget inn", async () => 
   // #1142: et kurs med en egen modul som testen aldri leverer i, så det ikke er påbegynt når e-posten om nye kurs samles.
   // Modulen kan ikke deles med hovedkurset: en innlevering på en modul gjør alle kurs med modulen påbegynt.
   const urørt = await flervalgsmodul("nytt kurs");
-  const nyttKurs = await api("POST", "/api/admin/content/courses", { title: L(`E-posttest nytt kurs ${stempel}`), certificationLevel: "basic" });
+  const nyttKurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(`E-posttest nytt kurs ${stempel}`), certificationLevel: "basic" });
   expect(nyttKurs.status, nyttKurs.tekst.slice(0, 300)).toBe(201);
   const nyttKursId = nyttKurs.json.course.id as string;
   const nyttSatt = await api("PUT", `/api/admin/content/courses/${nyttKursId}/items`, { items: [{ type: "MODULE", moduleId: urørt }] });

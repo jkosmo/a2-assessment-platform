@@ -730,7 +730,9 @@ model Course {
   certificationLevel String?
   // #496/EN-1: OPEN = visible to everyone (current behavior, default for existing courses);
   // RESTRICTED = visible/available only to enrolled users.
-  enrollmentPolicy   CourseEnrollmentPolicy  @default(OPEN)
+  // #1164: nye kurs fra appen er RESTRICTED (`NEW_COURSE_ENROLLMENT_POLICY`, courseCommands.ts). Standardverdien her er
+  // med vilje latt stå, og gjelder bare rader opprettet utenom `createCourse` (testfiksturer).
+  enrollmentPolicy  CourseEnrollmentPolicy  @default(OPEN)
   // #495/T-QA-1: kurs-master av/på for diskusjon. Default true => eksisterende publiserte
   // kurs får diskusjon på når feature lander (besluttet 2026-06-27). Effektiv regel for et
   // item: Course.discussionsEnabled && CourseItem.discussionsEnabled.

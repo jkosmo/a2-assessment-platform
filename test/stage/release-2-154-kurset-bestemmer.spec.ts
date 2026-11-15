@@ -129,7 +129,7 @@ test("lesing, innlevering, flervalg og resultat med kurset oppgitt: som før, og
   tilstand.modulB = await lagModul("modul B");
   tilstand.versjonA = await publiserModulversjon(tilstand.modulA, "A");
   tilstand.versjonB = await publiserModulversjon(tilstand.modulB, "B");
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(`Stage-test 2.154 kurs ${stempel}`), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(`Stage-test 2.154 kurs ${stempel}`), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   tilstand.kursId = kurs.json.course.id;
   expect((await api("PUT", `/api/admin/content/courses/${tilstand.kursId}/items`, {

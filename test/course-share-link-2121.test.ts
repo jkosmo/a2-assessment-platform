@@ -28,7 +28,8 @@ let moduleId = "";
 const titleFor = (nb: string) => ({ "en-GB": `${nb} (en)`, nb, nn: nb });
 
 async function createPublishableCourse(nb: string) {
-  const created = await request(app).post("/api/admin/content/courses").set(owner).send({ title: titleFor(nb) });
+  // #1164: et nytt kurs er begrenset som standard; fiksturen trenger et åpent kurs og sier det.
+  const created = await request(app).post("/api/admin/content/courses").set(owner).send({ title: titleFor(nb), enrollmentPolicy: "OPEN" });
   expect(created.status).toBe(201);
   const id = created.body.course.id as string;
   createdCourseIds.push(id);

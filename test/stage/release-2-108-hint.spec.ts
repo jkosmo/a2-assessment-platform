@@ -73,7 +73,7 @@ test("kursimport: går gjennom, og funnene meldes per test — også at svaret g
   const seksjon = await api("POST", "/api/admin/content/sections", { title: tre(`Stage-test 1119 seksjon ${Date.now()}`), bodyMarkdown: tre(SEKSJON) });
   expect(seksjon.status, seksjon.tekst).toBe(201);
   tilstand.sectionId = seksjon.json.section.id;
-  const kurs = await api("POST", "/api/admin/content/courses", { title: tre(`Stage-test 1119 kurs ${Date.now()}`) });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: tre(`Stage-test 1119 kurs ${Date.now()}`) });
   expect(kurs.status, kurs.tekst).toBe(201);
   tilstand.courseIds.push(kurs.json.course.id);
   const plass = await api("PUT", `/api/admin/content/courses/${kurs.json.course.id}/items`, { items: [{ type: "SECTION", sectionId: tilstand.sectionId }, { type: "MODULE", moduleId: tilstand.moduleId }] });

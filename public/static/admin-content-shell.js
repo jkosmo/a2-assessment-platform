@@ -2586,7 +2586,8 @@ async function loadModule(moduleId, options = {}) {
 
   // `resumeEditing`: the module list and old links use it to mean "open this module ready to edit".
   // #1151 skive 3c: ikke for en arkivert modul — et utkast der står som «ulagret» uten noe sted å lagre det.
-  const resumedIntoDraft = resumeEditing && !moduleIsArchived() && createSessionDraftFromLoadedModule();
+  // #1165: heller ikke for en annens modul (skrivebeskyttet).
+  const resumedIntoDraft = resumeEditing && !moduleIsLocked() && createSessionDraftFromLoadedModule();
   renderPreview();
   // QA round 6: reloading on `?tab=settings` selected the tab, drew the panel before the module
   // had arrived — "load a module to see the settings" — and then never drew it again. The author
@@ -3537,9 +3538,28 @@ function moduleIsArchived() {
   return Boolean(bundle?.module?.archivedAt);
 }
 
+/**
+ * #1165 (produkteier 14.11.2026, «Produsenter bør kunne se hverandres innhold»): en annens modul åpnes skrivebeskyttet. Tjeneren
+ * sier `canManage` (eier eller administrator) i `/export`; skriverutene avviser den som ikke kan. Sida bruker den samme sperren
+ * som for en arkivert modul (#1151), med sin egen linje. Uten feltet (eldre tjener) regnes modulen som redigerbar, som lista.
+ */
+function moduleCanManage() {
+  return bundle?.canManage !== false;
+}
+
+/** Feltene og Lagre er sperret: modulen er arkivert, eller den som ser den, kan ikke endre den. */
+function moduleIsLocked() {
+  return moduleIsArchived() || (Boolean(bundle) && !moduleCanManage());
+}
+
 function moduleArchivedNoticeHtml() {
-  if (!moduleIsArchived()) return "";
-  return `<p class="archived-notice" role="status" data-module-archived-notice>${escapeHtml(t("shell.module.archivedNotice"))}</p>`;
+  if (moduleIsArchived()) {
+    return `<p class="archived-notice" role="status" data-module-archived-notice>${escapeHtml(t("shell.module.archivedNotice"))}</p>`;
+  }
+  if (bundle && !moduleCanManage()) {
+    return `<p class="archived-notice" role="status" data-module-readonly-notice>${escapeHtml(t("adminContent.readOnlyNotice"))}</p>`;
+  }
+  return "";
 }
 
 /**
@@ -3548,7 +3568,7 @@ function moduleArchivedNoticeHtml() {
  * som havner inni en sperret `<fieldset>`, er sperret uten at noen av dem må huske det.
  */
 function applyModuleArchivedLock() {
-  const on = moduleIsArchived();
+  const on = moduleIsLocked();
   // Rediger og Forhåndsvisning deler boksen. I Forhåndsvisning skal forfatteren prøve øvelsene («Sjekk deg selv») slik en
   // deltaker gjør — det skriver ingenting (QA-porten #1151). `renderPreview` kalles ved hvert bytte inn og ut av Forhåndsvisning.
   for (const lock of document.querySelectorAll("[data-module-archived-lock]")) {
@@ -3558,6 +3578,8 @@ function applyModuleArchivedLock() {
 
 /** Handlingsraden for en arkivert modul: lese og ta med seg, gjenopprette, slette. Ikke «Dupliser» (produkteier 13.11). */
 function archivedModuleActions() {
+  // #1165: den som ikke kan endre modulen, kan bare ta den med seg. Gjenopprett og Slett er eiernes.
+  if (!moduleCanManage()) return [{ key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() }];
   return [
     { key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
     { key: "restore", labelKey: "ui.action.restore", action: () => restoreArchivedModule() },
@@ -3632,7 +3654,7 @@ function createModuleFormPage() {
     // Lagre-flyten kjøres av skallet (saveFromHeader); «false» lar form-page.js la tilstanden stå til
     // skallet melder fra gjennom isDirty.
     // #1151 skive 3c: en arkivert modul har ingen Lagre/Avbryt. Leses hver gang hodet tegnes (som kursets).
-    save: { onSave: async () => { saveFromHeader(); return false; }, onDiscard: discardFromHeader, get hidden() { return moduleIsArchived(); } },
+    save: { onSave: async () => { saveFromHeader(); return false; }, onDiscard: discardFromHeader, get hidden() { return moduleIsLocked(); } },
     isDirty: () => moduleDirtyKind() !== null,
     body: () => "",
   });
@@ -3702,7 +3724,8 @@ const WS_ACTION_ORDER = ["publish", "unpublish", "generateContent", "resumeChatE
 function renderWorkspaceActions(actions) {
   // #1151 skive 3c: for en arkivert modul er raden alltid den samme, uansett hvilken flyt som tegner den (modulen lastet,
   // et utkast klart, språkbytte). Ett sted, så ingen vei inn kan tegne «Publiser» eller «Erstatt fra fil» på den.
-  if (moduleIsArchived()) {
+  // #1165: det samme for en annens modul: bare «Eksporter» (`archivedModuleActions`).
+  if (moduleIsLocked()) {
     workspaceActionChoices = archivedModuleActions();
     formPage?.refreshHeader();
     refreshModuleHeaderState();
@@ -5163,7 +5186,8 @@ const settingsTab = createSettingsTab({
   get latestSavedModuleVersionId() { return latestSavedModuleVersionId; }, set latestSavedModuleVersionId(v) { latestSavedModuleVersionId = v; },
   get formPage() { return formPage; },
   // #1151 skive 3c: Innstillinger for en arkivert modul — lesbare, uten Lagre og uten «Gjenopprett» på versjonene.
-  get moduleArchived() { return moduleIsArchived(); },
+  // #1165: også en annens modul (skrivebeskyttet) — samme sperre.
+  get moduleArchived() { return moduleIsLocked(); },
   get newModulePlaceholder() { return newModulePlaceholder; }, set newModulePlaceholder(v) { newModulePlaceholder = v; },
   get LEVEL_SCOPE_DEFAULTS() { return LEVEL_SCOPE_DEFAULTS; },
   get CERTIFICATION_LEVELS() { return CERTIFICATION_LEVELS; },

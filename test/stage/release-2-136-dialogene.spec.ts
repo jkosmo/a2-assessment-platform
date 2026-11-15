@@ -106,7 +106,7 @@ test("forhåndsvisningen sier hvilken vei dialogen skal gå, og publiseringen vi
 
 test("kurset er ute, og forhåndsvisningen eller `pending-versions` stemmer med bryteren", async () => {
   test.setTimeout(120_000);
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(`Stage-test 2.136 kurs ${stempel}`), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(`Stage-test 2.136 kurs ${stempel}`), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   tilstand.kursId = kurs.json.course.id;
   expect((await api("PUT", `/api/admin/content/courses/${tilstand.kursId}/items`, { items: [{ type: "MODULE", moduleId: tilstand.moduleId }] })).status).toBe(204);

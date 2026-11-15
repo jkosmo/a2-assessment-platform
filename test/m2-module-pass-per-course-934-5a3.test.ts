@@ -89,7 +89,8 @@ async function setItems(courseId: string, moduleIds: string[]) {
 }
 
 async function newCourse(moduleIds: string[], options: { publish?: boolean } = {}) {
-  const created = await request(app).post("/api/admin/content/courses").set(admin()).send({ title: T(tag("kurs")), certificationLevel: "basic", sortOrder: 2 });
+  // #1164: et nytt kurs er begrenset som standard; fiksturen trenger et åpent kurs og sier det.
+  const created = await request(app).post("/api/admin/content/courses").set(admin()).send({ title: T(tag("kurs")), certificationLevel: "basic", sortOrder: 2, enrollmentPolicy: "OPEN" });
   expect(created.status, JSON.stringify(created.body).slice(0, 300)).toBe(201);
   const courseId = created.body.course.id as string;
   await setItems(courseId, moduleIds);

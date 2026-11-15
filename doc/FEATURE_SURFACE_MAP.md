@@ -1852,3 +1852,45 @@ tilbake med lik historikk, bytte uten nytt steg, utilgjengelig seksjon og modul,
 **Ikke dekket av test:** popstate som kommer etter at «Lukk» gikk tilbake, men et nytt element ble åpnet før det kom fram
 (`awaitingCloseBack`). «Lukk» etter en oppfriskning (kurset under er fra sidelastingen før) er målt i Chromium mot
 utviklingstjeneren: tilbake-steget blir i samme dokument, uten ny sidelasting.
+
+## 36. Nye kurs og publisering av kurs — hver vei som oppretter et kurs, og dialogen før publisering (#1164)
+
+**Standarden (produkteier 14.11.2026, «Nye kurs bør ikke være åpent for alle»):** et nytt kurs er BEGRENSET. Regelen bor i ÉN
+funksjon, `createCourse` (`NEW_COURSE_ENROLLMENT_POLICY`, courseCommands.ts). Skjemaets standard i databasen (`@default(OPEN)`)
+er latt stå og gjelder bare rader opprettet utenom (testfiksturer).
+
+| Vei som oppretter et kurs | Hvor | Synligheten |
+| --- | --- | --- |
+| «Nytt kurs» i kursbyggeren | `saveCourse` (admin-content-courses.js) → `POST /courses` | skjemaet står på «Begrenset» og sender det |
+| Agent-API-et (skillen, agent-token) | `POST /courses` (`agentTokenScope.ts`) | utelatt → `createCourse` → begrenset |
+| «Importer som nytt kurs» | `POST /courses/import` `createNew` → `importCourseFromEnvelope` → `createCourse` | eksporten bærer ingen synlighet → begrenset |
+| «Oppdater dette kurset» / `replaceExisting` | samme rute | eksisterende kurs, synligheten røres ikke |
+| Dupliser kurs | finnes ikke | — (kommer den, må den gå gjennom `createCourse`) |
+
+**Publiseringen** («Publiser» i lista og i hodet, «Publiser utkastet»): dialogen spør alltid, og sier hvem som ser kurset etterpå
+(`GET …/publish-audience`, `coursePublishAudience.ts`, regnet på tjeneren). Én dialog: `openCoursePublishDialog` (lista over
+upublisert innhold og versjonsspørsmålet står i den samme), og ved «Publiser utkastet» med versjonsspørsmål står hvem som ser
+kurset i versjonsdialogen (`askCourseVersion` med `audience`).
+
+**Vakter:** `test/unit/new-course-default-guard-1164.test.ts` (dekningsvakt: ingen kode i `src/` oppretter en kursrad utenom
+`createCourse`), `test/m2-course-publish-1164.test.ts` (hver vei, kontrollene, publikummet), `test/e2e/admin-content-course-publish-dialog-1164.spec.ts`.
+
+## 37. Andres kurs og moduler — skrivebeskyttet lesing (#1165)
+
+Produkteier 14.11.2026: «Produsenter bør kunne se hverandres innhold.» Lesingen er åpen; skrivingen er eiernes. Tjeneren sier
+`canManage` (eier eller administrator), klienten bruker sperren fra arkivert innhold (#1151).
+
+| Flate | Lesingen | Hva den som ikke eier, ser |
+| --- | --- | --- |
+| Kurslista | `GET /courses` (`canManage` per rad) | «Åpne», «Eksporter», merket «Kun for eier» |
+| Kurset | `GET /courses/:id` (`canManage`), `…/items`, `…/draft`, `…/export-package` | linja `data-course-readonly-notice`, `fieldset[data-course-archived-lock]`, ingen Lagre/Avbryt, bare «Eksporter»; importen tilbyr ikke «Oppdater dette kurset» |
+| Modullista | `GET /modules/library` (`canManage` per rad) | «Åpne», «Dupliser», «Eksporter», merket |
+| Modulsida | `GET /modules/:id/export` (`moduleExport.canManage`) | linja `data-module-readonly-notice`, `[data-module-archived-lock]`, ingen Lagre/Avbryt, bare «Eksporter», Innstillinger uten Lagre og «Gjenopprett» på versjoner |
+| «Dupliser»/«Eksporter» modul | `GET /modules/:id/export-package` | kopien eies av den som kopierer |
+| Seksjoner | uendret (hadde det fra før, `canManage` i detaljen) | |
+
+Vaktet som før (forspill til en skriving, eller personopplysninger): `…/pending-versions`, `…/archive-preview`,
+`…/restore-preview`, `…/enrollments`, `…/publish-audience`, `modules/:id/passed-count`, `…/publish-preview-versioned`.
+
+**Vakter:** `test/m2-content-read-by-producers-1165.test.ts` (lesingen; HVER skriverute på `/courses/:courseId` og
+`/modules/:moduleId` som tabell, dekningsvakt mot ruterne), `test/e2e/admin-content-readonly-others-1165.spec.ts` (1280 og 390 px).

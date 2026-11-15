@@ -265,7 +265,7 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
   test("seksjonen publiseres og legges i et publisert testkurs", async () => {
     const publisert = await api("POST", `/api/admin/content/sections/${sectionId}/publish`);
     expect(publisert.status, publisert.tekst.slice(0, 300)).toBe(200);
-    const kurs = await api("POST", "/api/admin/content/courses", { title: three(TITTEL) });
+    const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: three(TITTEL) });
     expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
     courseId = (kurs.json.course as { id: string }).id;
     const del2 = await api("POST", "/api/admin/content/sections", { title: three(TITTEL_2), bodyMarkdown: three(`# ${TITTEL_2}\n\nLaget av den automatiske stage-testen. Kan slettes.`), draft: true, clientRef: "stage-test-del-2" });

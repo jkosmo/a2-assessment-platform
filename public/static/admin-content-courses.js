@@ -387,33 +387,83 @@ function courseHasDraft(course) {
 
 // #734: publishing a course must never leave it containing unavailable (draft/archived) modules or
 // sections (invariant I1). Before publishing we ask the API which items are unpublished and whether
-// each is publishable. If everything is already live we publish directly (unchanged behaviour). If
-// there are unpublished items we open the cascade-publish dialog: it offers to publish them together
+// each is publishable. If there are unpublished items the dialog offers to publish them together
 // with the course, or — when some item cannot be published — explains what must be fixed first and
 // blocks publishing (no "course only" escape hatch, which would violate I1).
+//
+// #1164 (produkteier 14.11.2026, «Vi bør gjøre ting likt mellom moduler og kurs»): «Publiser» spør ALLTID, også når alt
+// innholdet alt er publisert, og dialogen sier hvem som ser kurset etterpå (`GET …/publish-audience`, regnet på tjeneren).
+// Én dialog: spørsmålet om versjon (#934) står i den samme når kurset har kursbevis og nytt innhold går ut.
 async function publishCourseInAdmin(courseId, triggerButton = null) {
   if (!courseId) return;
-  if (triggerButton) triggerButton.disabled = true;
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.setAttribute("aria-busy", "true");
+  }
 
   let preview;
+  let audience;
   try {
-    preview = await apiFetch(
-      `/api/admin/content/courses/${encodeURIComponent(courseId)}/publish-preview`,
-      getHeaders,
-    );
+    [preview, audience] = await Promise.all([
+      apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/publish-preview`, getHeaders),
+      loadPublishAudience(courseId),
+    ]);
   } catch (err) {
     apiErrorToast(err);
+    triggerButton?.removeAttribute("aria-busy");
     if (triggerButton) triggerButton.disabled = false;
     return;
   }
+  triggerButton?.removeAttribute("aria-busy");
 
-  // Everything already published — keep the direct-publish behaviour (no dialog).
-  if (preview?.allPublished) {
-    await commitCoursePublish(courseId, false, triggerButton);
+  const allPublished = preview?.allPublished === true;
+  const result = await openCoursePublishDialog({
+    mode: !allPublished && !preview?.publishable ? "blocked" : allPublished ? "plain" : "cascade",
+    items: preview?.unpublishedItems ?? [],
+    audience,
+    // #934 skive 3: nytt innhold går live i et kurs med kursbevis — samme valg som i skjemaet og «Publiser nye versjoner». Bare
+    // når innhold går ut med kurset: et kurs der alt alt er publisert, publiseres uten nytt innhold (ruta spør ikke).
+    versionCourse: !allPublished && preview?.publishable && Number(preview?.course?.certificateHolders) > 0 ? preview.course : null,
+  });
+  if (!result) {
+    returnFocusTo(triggerButton);
     return;
   }
+  await commitCoursePublish(courseId, !allPublished, triggerButton, result.versionAnswer);
+}
 
-  openCascadePublishDialog(courseId, preview, triggerButton);
+/** #1164: hvem som ser kurset etter publiseringen. `fromDraft`: med synligheten i kursets lagrede utkast. */
+async function loadPublishAudience(courseId, { fromDraft = false } = {}) {
+  const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/publish-audience${fromDraft ? "?draft=1" : ""}`, getHeaders);
+  return body?.audience ?? null;
+}
+
+/**
+ * #1164: avsnittet «Hvem ser kurset etterpå». Et åpent kurs: alle deltakere. Et begrenset: klassene med antall, de enkeltvis
+ * tildelte og tallet i alt (en person i flere klasser telles én gang, på tjeneren). Ingen tildelt: at ingen ser det ennå.
+ */
+function publishAudienceHtml(audience) {
+  if (!audience) return "";
+  const heading = `<h3 class="cascade-delete-heading">${escapeHtml(t("courses.publishDialog.audienceHeading"))}</h3>`;
+  if (audience.policy === "OPEN") {
+    return `<section data-publish-audience="open">${heading}<p class="dialog-text">${escapeHtml(t("courses.publishDialog.audienceOpen"))}</p></section>`;
+  }
+  const classes = Array.isArray(audience.classes) ? audience.classes : [];
+  const individuals = Number(audience.individualCount) || 0;
+  const total = Number(audience.totalCount) || 0;
+  if (classes.length === 0 && individuals === 0) {
+    return `<section data-publish-audience="none">${heading}<p class="dialog-text">${escapeHtml(t("courses.publishDialog.audienceNone"))}</p></section>`;
+  }
+  const count = (n) => tf(n === 1 ? "courses.publishDialog.participantsOne" : "courses.publishDialog.participantsMany", { n });
+  const rows = [
+    ...classes.map((klass) => `<li class="cascade-publish-item" data-audience-class="${escapeHtml(klass.id)}"><span class="item-type-badge">${escapeHtml(t("courses.publishDialog.classBadge"))}</span> <span class="cascade-publish-item-title">${escapeHtml(klass.name)}</span> <span class="course-lifecycle-note">${escapeHtml(count(Number(klass.memberCount) || 0))}</span></li>`),
+    individuals > 0 ? `<li class="cascade-publish-item" data-audience-individuals><span class="cascade-publish-item-title">${escapeHtml(tf("courses.publishDialog.individuals", { n: individuals }))}</span></li>` : "",
+  ].join("");
+  return `<section data-publish-audience="restricted">${heading}
+    <p class="dialog-text">${escapeHtml(t("courses.publishDialog.audienceRestricted"))}</p>
+    <ul class="cascade-publish-list">${rows}</ul>
+    <p class="dialog-text" data-audience-total>${escapeHtml(tf(total === 1 ? "courses.publishDialog.totalOne" : "courses.publishDialog.totalMany", { n: total }))}</p>
+  </section>`;
 }
 
 // POST the publish. `publishItems` cascades the unpublished modules/sections; false is the plain
@@ -446,15 +496,13 @@ async function commitCoursePublish(courseId, publishItems, triggerButton = null,
       return;
     }
     apiErrorToast(err);
-    if (triggerButton) triggerButton.disabled = false;
+    returnFocusTo(triggerButton);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Cascade-publish dialog (#734)
+// Publiseringsdialogen (#734, #1164)
 // ---------------------------------------------------------------------------
-
-let pendingCascadePublish = null; // { courseId, triggerButton }
 
 function cascadeItemTypeLabel(type) {
   return type === "SECTION"
@@ -523,92 +571,103 @@ function renderCascadeItemList(items, { showBlockers }) {
     .join("")}</ul>`;
 }
 
-// Data-driven so wording/options can be adjusted (or a future option added) without restructuring.
-// Two modes: `confirm` (all items publishable → offer cascade) and `blocked` (some item cannot be
-// published → explain + block, only a close action).
-function openCascadePublishDialog(courseId, preview, triggerButton) {
-  if (!cascadePublishDialog) {
-    // Defensive fallback: without the dialog, do not silently publish broken content.
-    showToast(t("courses.publish.unpublishedFirst"), "error");
-    if (triggerButton) triggerButton.disabled = false;
-    return;
-  }
-
-  pendingCascadePublish = { courseId, triggerButton };
-  const blocked = !preview?.publishable;
-  const items = preview?.unpublishedItems ?? [];
-  // #934 skive 3: nytt innhold går live i et kurs med kursbevis — samme valg som i skjemaet og «Publiser nye
-  // versjoner» (én felles hjelper). Mindre er standard, så dialogen har alltid et svar.
+/**
+ * #1164: publiseringsdialogen for kurset, som et løfte (samme form som `askCourseVersion`). Svarer `{ versionAnswer }` når
+ * forfatteren publiserer, og `null` ved Avbryt, Lukk og Esc. Ingenting sendes herfra; kalleren publiserer.
+ *
+ * Tre utgaver:
+ *   - `plain`: alt innholdet er alt publisert (eller «Publiser utkastet»). Bare hvem som ser kurset etterpå.
+ *   - `cascade` (#734): upublisert innhold publiseres sammen med kurset. Lista, hvem som ser det, og (#934) versjonen når
+ *     kurset har kursbevis (`versionCourse`).
+ *   - `blocked` (#734): noe kan ikke publiseres. Lista med grunnene, og bare «Lukk» (I1).
+ */
+function openCoursePublishDialog({ mode, items = [], audience = null, versionCourse = null, title = "", confirmLabel = "" }) {
+  const dialog = cascadePublishDialog;
+  const titleEl = document.getElementById("cascadePublishTitle");
+  const textEl = document.getElementById("cascadePublishText");
+  const listEl = document.getElementById("cascadePublishList");
+  const audienceEl = document.getElementById("cascadePublishAudience");
   const versionHost = document.getElementById("cascadePublishVersion");
-  const asksVersion = !blocked && Number(preview?.course?.certificateHolders) > 0;
-  pendingCascadePublish.asksVersion = asksVersion;
-  pendingCascadePublish.course = preview?.course ?? null;
+  const confirmBtn = document.getElementById("cascadePublishConfirmBtn");
+  const cancelBtn = document.getElementById("cascadePublishCancelBtn");
+  if (!dialog || typeof dialog.showModal !== "function" || !confirmBtn || !cancelBtn) {
+    // Defensive fallback: without the dialog, do not silently publish.
+    showToast(t("courses.publish.unpublishedFirst"), "error");
+    return Promise.resolve(null);
+  }
+  const blocked = mode === "blocked";
+
+  if (titleEl) {
+    titleEl.textContent = title || (blocked
+      ? (t("adminContent.courses.cascadePublish.blockedTitle") || t("courses.publish.blockedTitle"))
+      : mode === "cascade"
+        ? (t("adminContent.courses.cascadePublish.confirmTitle") || t("courses.publish.cascadeTitle"))
+        : t("courses.publishDialog.title"));
+  }
+  if (textEl) {
+    const text = blocked
+      ? (t("adminContent.courses.cascadePublish.blockedText") || t("courses.publish.blockedBody"))
+      : mode === "cascade"
+        ? (t("adminContent.courses.cascadePublish.confirmText") || t("courses.publish.cascadeBody"))
+        : "";
+    textEl.textContent = text;
+    setHidden(textEl, !text);
+  }
+  if (listEl) listEl.innerHTML = mode === "plain" ? "" : renderCascadeItemList(items, { showBlockers: blocked });
+  // Hvem som ser kurset, står ikke i den sperrede utgaven: der publiseres ingenting.
+  if (audienceEl) {
+    audienceEl.innerHTML = blocked ? "" : publishAudienceHtml(audience);
+    setHidden(audienceEl, blocked || !audience);
+  }
+  const asksVersion = !blocked && versionCourse != null;
   if (versionHost) {
     setHidden(versionHost, !asksVersion);
     if (asksVersion) {
-      mountCourseVersionChoice(versionHost, "cascadeCourseVersion", preview.course);
+      mountCourseVersionChoice(versionHost, "cascadeCourseVersion", versionCourse);
       const heading = document.createElement("p");
       heading.className = "dialog-text";
-      heading.innerHTML = `<strong>${escapeHtml(t("courses.version.pendingHeading"))}</strong><br>${escapeHtml(courseVersionHoldersText(preview.course))}`;
+      heading.innerHTML = `<strong>${escapeHtml(t("courses.version.pendingHeading"))}</strong><br>${escapeHtml(courseVersionHoldersText(versionCourse))}`;
       versionHost.prepend(heading);
     } else {
       versionHost.innerHTML = "";
     }
   }
+  confirmBtn.textContent = confirmLabel || (mode === "cascade"
+    ? (t("adminContent.courses.cascadePublish.confirmBtn") || t("courses.publish.cascadeConfirm"))
+    : t("courses.publishDialog.confirm"));
+  // No primary action when something is un-publishable — only a close action (I1).
+  setHidden(confirmBtn, blocked);
+  confirmBtn.disabled = false;
+  cancelBtn.textContent = blocked
+    ? (t("adminContent.courses.cascadePublish.closeBtn") || t("ui.action.close"))
+    : (t("adminContent.courses.cascadePublish.cancelBtn") || t("ui.action.cancel"));
 
-  const titleEl = document.getElementById("cascadePublishTitle");
-  const textEl = document.getElementById("cascadePublishText");
-  const listEl = document.getElementById("cascadePublishList");
-  const confirmBtn = document.getElementById("cascadePublishConfirmBtn");
-  const cancelBtn = document.getElementById("cascadePublishCancelBtn");
-
-  if (titleEl) {
-    titleEl.textContent = blocked
-      ? (t("adminContent.courses.cascadePublish.blockedTitle") || t("courses.publish.blockedTitle"))
-      : (t("adminContent.courses.cascadePublish.confirmTitle") || t("courses.publish.cascadeTitle"));
-  }
-  if (textEl) {
-    textEl.textContent = blocked
-      ? (t("adminContent.courses.cascadePublish.blockedText") ||
-          t("courses.publish.blockedBody"))
-      : (t("adminContent.courses.cascadePublish.confirmText") ||
-          t("courses.publish.cascadeBody"));
-  }
-  if (listEl) listEl.innerHTML = renderCascadeItemList(items, { showBlockers: blocked });
-
-  if (confirmBtn) {
-    confirmBtn.textContent = t("adminContent.courses.cascadePublish.confirmBtn") || t("courses.publish.cascadeConfirm");
-    // No cascade primary action when something is un-publishable — only a close action (I1).
-    setHidden(confirmBtn, blocked);
-  }
-  if (cancelBtn) {
-    cancelBtn.textContent = blocked
-      ? (t("adminContent.courses.cascadePublish.closeBtn") || t("ui.action.close"))
-      : (t("adminContent.courses.cascadePublish.cancelBtn") || t("ui.action.cancel"));
-  }
-
-  cascadePublishDialog.showModal();
-}
-
-function initCascadePublishDialog() {
-  const confirmBtn = document.getElementById("cascadePublishConfirmBtn");
-  const cancelBtn = document.getElementById("cascadePublishCancelBtn");
-  confirmBtn?.addEventListener("click", async () => {
-    if (!pendingCascadePublish) return;
-    const { courseId, triggerButton, asksVersion, course } = pendingCascadePublish;
-    const versionAnswer = asksVersion ? courseVersionAnswer(document.getElementById("cascadePublishVersion"), "cascadeCourseVersion", course) : undefined;
-    // #934 skive 4b: over 200 mottakere uten det ekstra «ja»: dialogen står åpen, og ingenting publiseres.
-    if (asksVersion && !versionAnswer) return;
-    pendingCascadePublish = null;
-    confirmBtn.disabled = true;
-    cascadePublishDialog.close();
-    await commitCoursePublish(courseId, true, triggerButton, versionAnswer);
-    confirmBtn.disabled = false;
-  });
-  cancelBtn?.addEventListener("click", () => {
-    cascadePublishDialog?.close();
-    if (pendingCascadePublish?.triggerButton) pendingCascadePublish.triggerButton.disabled = false;
-    pendingCascadePublish = null;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      confirmBtn.removeEventListener("click", onConfirm);
+      cancelBtn.removeEventListener("click", onCancel);
+      dialog.removeEventListener("close", onClose);
+      if (dialog.open) dialog.close();
+      resolve(value);
+    };
+    const onConfirm = () => {
+      const versionAnswer = asksVersion ? courseVersionAnswer(versionHost, "cascadeCourseVersion", versionCourse) : undefined;
+      // #934 skive 4b: over 200 mottakere uten det ekstra «ja»: dialogen står åpen, og ingenting publiseres.
+      if (asksVersion && !versionAnswer) return;
+      finish({ versionAnswer });
+    };
+    const onCancel = () => finish(null);
+    // Esc lukker dialogen: det er et nei.
+    const onClose = () => finish(null);
+    confirmBtn.addEventListener("click", onConfirm);
+    cancelBtn.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onClose);
+    dialog.showModal();
+    // Fokus på Avbryt: publiseringen kan ikke trekkes tilbake, og Enter skal ikke publisere ved et uhell.
+    cancelBtn.focus();
   });
 }
 
@@ -882,7 +941,7 @@ function courseItemChanges(beforeKey, afterList) {
  *
  * #1140 etappe 2: «Publiser utkastet» bruker den samme dialogen, med knappen «Publiser som {x.y}» (`saveKey`).
  */
-function askCourseVersion(course, changes, { saveKey = "courses.version.save" } = {}) {
+function askCourseVersion(course, changes, { saveKey = "courses.version.save", audience = null } = {}) {
   const dialog = document.getElementById("courseVersionDialog");
   const host = document.getElementById("courseVersionChoiceHost");
   const saveBtn = document.getElementById("courseVersionSaveBtn");
@@ -899,6 +958,13 @@ function askCourseVersion(course, changes, { saveKey = "courses.version.save" } 
     courseVersionHoldersText(course),
     parts.length > 0 ? tf("courses.version.changes", { list: parts.join(", ") }) : "",
   ].filter(Boolean).join(" ");
+  // #1164: ved «Publiser utkastet» sier den samme dialogen hvem som ser kurset etterpå (to dialoger etter hverandre ville spurt
+  // to ganger om én handling). Lagringen sender ingen `audience`, og da står avsnittet skjult.
+  const audienceEl = document.getElementById("courseVersionAudience");
+  if (audienceEl) {
+    audienceEl.innerHTML = publishAudienceHtml(audience);
+    setHidden(audienceEl, !audience);
+  }
   cancelBtn.textContent = t("courses.version.cancel");
   const minor = Number.isInteger(course.versionMinor) ? course.versionMinor : 0;
   mountCourseVersionChoice(host, "courseVersionChoice", course, (choice) => {
@@ -1011,9 +1077,16 @@ function getListPage() {
       const ctitle = escapeHtml(course.title);
       // #787 slice 5: eier/admin styrer om rediger/livssyklus-handlingene vises (speiler eierskaps-vakta).
       const canManage = course.canManage !== false;
-      // ⚠️ #1029: merket sier «Kun for eier», ikke «Skrivebeskyttet» — etter #943 er også LESING
-      // eierskapsvaktet, og et merke som lover mer enn flaten gir er verre enn ikke noe merke.
-      if (!canManage) return [`<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`];
+      // #1165 (produkteier 14.11.2026, «Produsenter bør kunne se hverandres innhold»): den som ikke eier kurset, kan åpne det for å
+      // lese (skjemaet er skrivebeskyttet) og eksportere det (lesing, #1031). Bare det hen kan gjøre, står i raden; merket sier
+      // at endringene er eiernes.
+      if (!canManage) {
+        return [
+          `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`,
+          `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`,
+          `<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`,
+        ];
+      }
       // #705: samme handlings-rekkefølge som modul/seksjon — Publiser⇄Avpubliser, Arkiver⇄Gjenopprett.
       // Publiser vises bare for et utkast som har innhold (samme krav som canPublishCourse i detaljvisningen).
       const publishToggle = lifecycle === "archived" ? ""
@@ -1130,7 +1203,9 @@ async function handleImportCoursePackageFile(event) {
     // som nytt kurs. En fil fra et annet miljø peker på et kurs som ikke finnes, og går som før.
     const originCourseId = payload?.course?.course?.origin?.courseId;
     const existing = originCourseId ? await findImportTargetCourse(originCourseId) : null;
-    const choice = existing ? await askImportChoice(existing) : "createNew";
+    // #1165: kurset kan nå leses av alle forfattere. Den som ikke kan endre det, kan bare importere fila som nytt kurs, som før
+    // (før svarte lesingen 403, og fila gikk som nytt kurs).
+    const choice = existing && existing.canManage !== false ? await askImportChoice(existing) : "createNew";
     chosen = choice;
     if (choice === "cancel") return;
     if (choice === "updateExisting") {
@@ -2059,7 +2134,8 @@ async function renderDetailView(courseId) {
   });
 
   const certLevel = formSource?.certificationLevel ?? "";
-  const enrollmentPolicy = formSource?.enrollmentPolicy ?? "OPEN";
+  // #1164 (produkteier 14.11.2026): et nytt kurs er begrenset (bare de tildelte ser det), som tjeneren gjør når feltet mangler.
+  const enrollmentPolicy = formSource?.enrollmentPolicy ?? "RESTRICTED";
   // #495/T-QA-4: default på for nye kurs og når feltet mangler (eldre detaljer).
   const discussionsEnabled = formSource?.discussionsEnabled !== false;
   // 2.119.0: e-post til kursets eiere om nye spørsmål; på når feltet mangler.
@@ -2072,7 +2148,8 @@ async function renderDetailView(courseId) {
     moduleCount: courseModules.filter(it => it.type === "MODULE").length,
   });
 
-  pendingVersions = course ? await loadPendingVersions(courseId) : null;
+  // #1165: «Publiser nye versjoner» er eiernes; ruta er vaktet, og en annens kurs spør ikke.
+  pendingVersions = course && course.canManage !== false ? await loadPendingVersions(courseId) : null;
   // 2.102.0: temaene kurset kan velge blant. Kom ikke lista, vises ikke valget — og da sendes
   // heller ingen themeIds ved lagring, så kursets temaer ikke viskes ut av en feil.
   const availableThemes = await loadAvailableThemes();
@@ -2100,7 +2177,8 @@ function courseDetailBodyHtml() {
   const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, discussionOwnerNotifications, sortOrder, availableThemes, themeIds } = courseDetail;
   // #1150 skive 2b: et arkivert kurs kan ikke lagres (elementlista avvises med `course_item_archived` når innholdet fulgte kurset
   // inn). Feltene, elementlista og innstillingene står sperret til kurset er gjenopprettet; eierpanelet lagrer for seg og er åpent.
-  const lockOpen = courseIsArchived() ? `<fieldset class="course-archived-lock" disabled data-course-archived-lock>` : "";
+  // #1165: det samme for en annens kurs (skrivebeskyttet, `courseIsLocked`).
+  const lockOpen = courseIsLocked() ? `<fieldset class="course-archived-lock" disabled data-course-archived-lock>` : "";
   const lockClose = lockOpen ? "</fieldset>" : "";
   return `<div class="detail-layout">
     <div data-form-tab="rediger">${lockOpen}
@@ -2323,7 +2401,7 @@ function getCourseFormPage() {
     tabs: { items: () => [{ id: "rediger", label: t("ui.tab.edit") }, { id: "innstillinger", label: t("ui.tab.settings") }], initial: "rediger" },
     body: () => courseDetailBodyHtml(),
     // #1150 skive 2b: et arkivert kurs har ingen Lagre/Avbryt (se `courseIsArchived`). Leses hver gang hodet tegnes.
-    save: { onSave: () => saveCourse(courseDetail?.courseId ?? null), get hidden() { return courseIsArchived(); } },
+    save: { onSave: () => saveCourse(courseDetail?.courseId ?? null), get hidden() { return courseIsLocked(); } },
     afterRender: () => bindCourseDetail(),
   });
   courseFormPage.installGuards();
@@ -2342,6 +2420,10 @@ function courseDetailActions() {
   // #1140 etappe 2: rett etter Lagre og Avbryt, og bare når kurset har et lagret utkast. «Publiser utkastet» bare for et
   // publisert kurs (serveren avviser ellers); «Forkast utkast» alltid, så et utkast aldri står uten en vei ut.
   const draftLoaded = courseDraft != null && courseHasDraft(c);
+  // #1165: en annens kurs leses og eksporteres; resten er eiernes (tjeneren avviser det med 403).
+  if (courseIsReadOnly()) {
+    return [`<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`];
+  }
   return [
     draftLoaded && isLiveLifecycle(lifecycle) && !courseDraft.unreadable
       ? `<button type="button" id="publishCourseDraftBtn" class="row-action-btn" data-action="publish-draft" data-course-id="${cid}">${escapeHtml(t("courses.draft.publishAction"))}</button>`
@@ -2377,9 +2459,29 @@ function courseIsArchived() {
   return Boolean(course) && lifecycleOf(course) === "archived";
 }
 
+/**
+ * #1165 (produkteier 14.11.2026, «Produsenter bør kunne se hverandres innhold»): den som ikke eier kurset (og ikke er
+ * administrator), ser det skrivebeskyttet. Tjeneren sier `canManage` i detaljen; skriverutene avviser uansett. Samme sperre som
+ * det arkiverte kurset, med sin egen linje. Uten feltet (eldre tjener) regnes kurset som redigerbart, som lista gjør.
+ */
+function courseIsReadOnly() {
+  const course = courseDetail?.course;
+  return Boolean(course) && course.canManage === false;
+}
+
+/** Feltene, elementlista og Lagre er sperret: kurset er arkivert, eller den som ser det, kan ikke endre det. */
+function courseIsLocked() {
+  return courseIsArchived() || courseIsReadOnly();
+}
+
 function courseArchivedNoticeHtml() {
-  if (!courseIsArchived()) return "";
-  return `<p class="course-archived-notice" role="status" data-course-archived-notice>${escapeHtml(t("courses.archivedNotice"))}</p>`;
+  if (courseIsArchived()) {
+    return `<p class="course-archived-notice" role="status" data-course-archived-notice>${escapeHtml(t("courses.archivedNotice"))}</p>`;
+  }
+  if (courseIsReadOnly()) {
+    return `<p class="course-archived-notice" role="status" data-course-readonly-notice>${escapeHtml(t("adminContent.readOnlyNotice"))}</p>`;
+  }
+  return "";
 }
 
 // Etter en livssyklushandling: bli på kurset når man står i det, ellers lista.
@@ -2427,6 +2529,8 @@ function courseDraftStateHtml(course) {
   // #1150 skive 2b: et arkivert kurs har sin egen linje (`courseArchivedNoticeHtml`), og rådet «publiser kurset igjen» gjelder
   // ikke før det er gjenopprettet. «Forkast utkast» står fortsatt i handlingsraden (kurs arkivert med utkast før 2.159.0).
   if (lifecycleOf(course) === "archived") return "";
+  // #1165: rådet «publiser kurset igjen, eller forkast utkastet» er eiernes. En annen ser bare linja om hvem som lagret det.
+  if (!isLiveLifecycle(lifecycleOf(course)) && courseIsReadOnly()) return "";
   if (!isLiveLifecycle(lifecycleOf(course))) {
     return `<p class="course-draft-notice" role="status" data-course-draft-notice>${escapeHtml(t("courses.draft.notLiveNotice"))}</p>`;
   }
@@ -2490,18 +2594,35 @@ async function publishCourseDraftFromForm() {
     // serveren, og svarer `course_version_required` hvis spørsmålet trengs.
     const changes = publishedCourseItemsKey === null ? null : courseItemChanges(publishedCourseItemsKey, courseModules);
     const listChanged = publishedCourseItemsKey !== null && courseItemsKey(courseModules) !== publishedCourseItemsKey;
+    // #1164: hvem som ser kurset etter publiseringen, med synligheten i utkastet. Kom ikke svaret, publiseres ingenting.
+    let audience;
+    try {
+      audience = await loadPublishAudience(courseId, { fromDraft: true });
+    } catch (err) {
+      showCourseDraftError(err);
+      return;
+    }
     let answer;
     if (listChanged && Number(course.certificateHolders) > 0) {
-      answer = await askCourseVersion(course, changes, { saveKey: "courses.draft.publishAs" });
-      if (answer === null) return;
+      // Spørsmålet om versjon og hvem som ser kurset, i én dialog.
+      answer = await askCourseVersion(course, changes, { saveKey: "courses.draft.publishAs", audience });
+      if (answer === null) return returnFocusTo(document.getElementById("publishCourseDraftBtn"));
+    } else {
+      const confirmed = await openCoursePublishDialog({
+        mode: "plain",
+        audience,
+        title: t("courses.publishDialog.draftTitle"),
+        confirmLabel: t("courses.draft.publishAction"),
+      });
+      if (!confirmed) return returnFocusTo(document.getElementById("publishCourseDraftBtn"));
     }
-    await commitCourseDraftPublish(courseId, course, answer, changes);
+    await commitCourseDraftPublish(courseId, course, answer, changes, false, audience);
   } finally {
     courseDraftActionRunning = false;
   }
 }
 
-async function commitCourseDraftPublish(courseId, course, answer, changes, retried = false) {
+async function commitCourseDraftPublish(courseId, course, answer, changes, retried = false, audience = null) {
   const draft = courseDraft;
   try {
     const result = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/draft/publish`, getHeaders, {
@@ -2515,9 +2636,9 @@ async function commitCourseDraftPublish(courseId, course, answer, changes, retri
     if (!retried && answer === undefined && apiErrorCode(err) === "course_version_required") {
       const holders = Number(apiErrorBody(err)?.details?.certificateHolders);
       const asked = { ...course, certificateHolders: Number.isFinite(holders) && holders > 0 ? holders : course.certificateHolders };
-      const again = await askCourseVersion(asked, changes ?? { added: 0, removed: 0, moved: 0 }, { saveKey: "courses.draft.publishAs" });
+      const again = await askCourseVersion(asked, changes ?? { added: 0, removed: 0, moved: 0 }, { saveKey: "courses.draft.publishAs", audience });
       if (again === null) return;
-      await commitCourseDraftPublish(courseId, asked, again, changes, true);
+      await commitCourseDraftPublish(courseId, asked, again, changes, true, audience);
       return;
     }
     showCourseDraftError(err);
@@ -3008,7 +3129,10 @@ async function saveCourse(courseId, { beforePublish = false } = {}) {
 
   const collectedValues = collectLocaleValues();
   const certLevel = document.getElementById("certLevel")?.value ?? "";
-  const enrollmentPolicy = document.getElementById("enrollmentPolicy")?.value === "RESTRICTED" ? "RESTRICTED" : "OPEN";
+  // #1164: bare en verdi feltet faktisk har, sendes. Uten feltet sendes ingenting (et nytt kurs blir begrenset på tjeneren, et
+  // lagret beholder sin) — før ble et manglende felt til «Åpen».
+  const policyValue = document.getElementById("enrollmentPolicy")?.value;
+  const enrollmentPolicy = policyValue === "OPEN" || policyValue === "RESTRICTED" ? policyValue : undefined;
   const discussionsEnabled = document.getElementById("discussionsEnabled")?.checked !== false;
   const discussionOwnerNotifications = document.getElementById("discussionOwnerNotifications")?.checked !== false;
   // #1093: tomt felt sendes som null (alfabetisk); et tall sendes som tall.
@@ -3330,7 +3454,6 @@ async function init() {
   }
 
   initDeleteDialog();
-  initCascadePublishDialog();
   initPendingPublishDialog();
   initCascadeDeleteDialog();
   initCourseArchiveDialog();

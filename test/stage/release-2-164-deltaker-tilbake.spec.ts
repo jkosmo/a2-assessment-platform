@@ -121,7 +121,7 @@ test("testdata: et publisert kurs med en seksjon og en flervalgsmodul", async ()
   const publisert = await api("POST", `/api/admin/content/modules/${tilstand.modul}/module-versions/${versjon.json.moduleVersion.id}/publish`, {});
   expect([200, 201], publisert.tekst.slice(0, 300)).toContain(publisert.status);
 
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(navn("kurs")), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(navn("kurs")), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   tilstand.kurs = kurs.json.course.id as string;
   expect((await api("PUT", `${kurssti(tilstand.kurs)}/items`, { items: [{ type: "SECTION", sectionId: tilstand.seksjon }, { type: "MODULE", moduleId: tilstand.modul }] })).status).toBe(204);

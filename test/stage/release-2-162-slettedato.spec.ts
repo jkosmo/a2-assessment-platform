@@ -160,7 +160,7 @@ test("B: en seksjon som bare ligger i et arkivert kurs uten kursbevis, får kurs
   expect(seksjon.status, seksjon.tekst.slice(0, 300)).toBe(201);
   tilstand.seksjon = seksjon.json.section.id as string;
   expect((await api("POST", `${seksjonssti(tilstand.seksjon)}/publish`)).status).toBe(200);
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(navn("kurs")), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(navn("kurs")), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   tilstand.kurs = kurs.json.course.id as string;
   expect((await api("PUT", `${kurssti(tilstand.kurs)}/items`, { items: [{ type: "SECTION", sectionId: tilstand.seksjon }] })).status).toBe(204);

@@ -115,7 +115,7 @@ test("kurset får temaet, og «Mine kurs» viser det under temaet — og alfabet
   expect(seksjon.status, seksjon.tekst.slice(0, 300)).toBe(201);
   seksjonId = seksjon.json.section.id;
   expect((await api("POST", `/api/admin/content/sections/${seksjonId}/publish`)).status).toBe(200);
-  const kurs = await api("POST", "/api/admin/content/courses", { title: tre(`Stage-test 2.102 kurs ${stempel}`), certificationLevel: "basic", themeIds: [temaId] });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: tre(`Stage-test 2.102 kurs ${stempel}`), certificationLevel: "basic", themeIds: [temaId] });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   kursId = kurs.json.course.id;
   expect((await api("PUT", `/api/admin/content/courses/${kursId}/items`, { items: [{ type: "SECTION", sectionId: seksjonId }] })).status).toBe(204);

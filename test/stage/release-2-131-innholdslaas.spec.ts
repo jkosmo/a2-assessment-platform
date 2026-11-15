@@ -77,7 +77,7 @@ test("et nytt kurs får elementene uten teller, publiseres, og kursdetaljen send
   test.setTimeout(120_000);
   const a = await lagSeksjon("A");
   const b = await lagSeksjon("B");
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(`Stage-test 2.131 kurs ${stempel}`), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(`Stage-test 2.131 kurs ${stempel}`), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   tilstand.kursId = kurs.json.course.id;
   const items = await api("PUT", `/api/admin/content/courses/${tilstand.kursId}/items`, { items: [{ type: "SECTION", sectionId: a }, { type: "SECTION", sectionId: b }] });

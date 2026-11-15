@@ -102,7 +102,7 @@ test("et kurs i gang har seilbåten, og linja fylles fra høyre; fullført er he
     tilstand.seksjoner.push(id);
     expect((await api("POST", `/api/admin/content/sections/${id}/publish`)).status).toBe(200);
   }
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(`Stage-test 2.130.1 kurs ${stempel}`), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(`Stage-test 2.130.1 kurs ${stempel}`), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   tilstand.kursId = kurs.json.course.id;
   const items = tilstand.seksjoner.map((sectionId) => ({ type: "SECTION", sectionId }));

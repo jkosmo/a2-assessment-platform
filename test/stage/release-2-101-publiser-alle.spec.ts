@@ -85,7 +85,7 @@ async function kursMedJustertFil(navn: string) {
   const sectionId = seksjon.json.section.id as string;
   seksjonIder.push(sectionId);
   expect((await api("POST", `/api/admin/content/sections/${sectionId}/publish`)).status).toBe(200);
-  const kurs = await api("POST", "/api/admin/content/courses", { title: tre(`Stage-test 2.101 kurs ${navn} ${stempel}`) });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: tre(`Stage-test 2.101 kurs ${navn} ${stempel}`) });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   const courseId = kurs.json.course.id as string;
   kursIder.push(courseId);

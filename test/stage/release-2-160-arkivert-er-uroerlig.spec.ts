@@ -151,7 +151,7 @@ test("testdata: et publisert kurs med en publisert modul og en publisert seksjon
   expect(løs.status, løs.tekst.slice(0, 300)).toBe(201);
   tilstand.løsSeksjon = løs.json.section.id;
 
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(KURS), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(KURS), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   tilstand.kurs = kurs.json.course.id;
   const elementer = await api("PUT", `${kurssti()}/items`, { items: [{ type: "SECTION", sectionId: tilstand.seksjon }, { type: "MODULE", moduleId: tilstand.modul }] });

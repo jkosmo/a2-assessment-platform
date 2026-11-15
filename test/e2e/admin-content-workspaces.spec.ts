@@ -3932,6 +3932,10 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator('[data-action="publish"][data-course-id="course-1"]')).toBeVisible();
 
     await page.locator('[data-action="publish"][data-course-id="course-1"]').click();
+    // #1164: «Publiser» spør først, og sier hvem som ser kurset. Ingenting publiseres før ja.
+    await expect(page.locator("#cascadePublishDialog")).toBeVisible();
+    expect(state.mutableCourses[0]?.publishedAt ?? null).toBeNull();
+    await page.locator("#cascadePublishConfirmBtn").click();
 
     await expect.poll(() => state.mutableCourses[0]?.publishedAt ?? null).toBe("2026-04-18T12:00:00.000Z");
     await expect(page.locator('[data-action="publish"][data-course-id="course-1"]')).toHaveCount(0);

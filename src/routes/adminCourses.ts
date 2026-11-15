@@ -58,6 +58,7 @@ import {
   type CourseDraftRow,
 } from "../modules/course/courseDraft.js";
 import { courseBodySchema, courseItemListSchema } from "../modules/course/courseSchemas.js";
+import { getCoursePublishAudience } from "../modules/course/coursePublishAudience.js";
 import { analyzeCourseArchive, analyzeCourseRestore } from "../modules/course/courseArchivePreview.js";
 import { prisma } from "../db/prisma.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
@@ -435,6 +436,13 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
     const hasDraft = (await findCourseDraft(prisma, course.id)) != null;
+    // #1165: lesingen er åpen for alle forfattere; skjemaet viser kurset skrivebeskyttet for den som ikke kan endre det.
+    const manageable = await listManageableContentIds({
+      contentType: "COURSE",
+      contentIds: [course.id],
+      actorUserId: request.context?.userId ?? "",
+      roles: request.context?.roles ?? [],
+    });
     const detail: AdminCourseDetail = {
       id: course.id,
       title: course.title,
@@ -455,6 +463,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       majorEmailRecipients: await countMajorVersionRecipients(prisma, course.id),
       contentRevision: course.contentRevision,
       hasDraft,
+      canManage: manageable.has(course.id),
       lifecycle: deriveContentLifecycle({ archivedAt: course.archivedAt, publishedAt: course.publishedAt, hasDraft }),
       modules: course.modules.map((cm) => ({
         moduleId: cm.moduleId,
@@ -826,6 +835,30 @@ adminCoursesRouter.get("/:courseId/publish-preview", async (request, response, n
   try {
     const preview = await getCoursePublishPreview(request.params.courseId);
     response.json(preview);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #1164: hvem som ser kurset etter publiseringen — teksten i dialogen før «Publiser» og «Publiser utkastet». `?draft=1`: med
+// synligheten i kursets lagrede utkast. Vaktet som publiseringen den er forspillet til (#943-mønsteret, som `pending-versions`):
+// den lister klassene kurset er tildelt.
+adminCoursesRouter.get("/:courseId/publish-audience", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  try {
+    // `?draft=1`: synligheten i kursets lagrede utkast, det som gjelder etter «Publiser utkastet». Et utkast som ikke kan leses,
+    // kan bare forkastes, aldri publiseres; da står kursets egen.
+    let policy: "OPEN" | "RESTRICTED" | undefined;
+    if (request.query.draft === "1" || request.query.draft === "true") {
+      const draft = await findCourseDraft(prisma, request.params.courseId);
+      if (draft) {
+        try {
+          policy = readCourseDraftPayload(draft).enrollmentPolicy;
+        } catch {
+          policy = undefined;
+        }
+      }
+    }
+    response.json({ audience: await getCoursePublishAudience(request.params.courseId, { policy }) });
   } catch (error) {
     next(error);
   }

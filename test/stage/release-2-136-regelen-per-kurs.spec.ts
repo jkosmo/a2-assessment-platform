@@ -52,7 +52,7 @@ async function nyVersjon(navn: string) {
 }
 
 async function nyttKurs(navn: string) {
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(`Stage-test regel ${navn} ${stempel}`), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(`Stage-test regel ${navn} ${stempel}`), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   const id = kurs.json.course.id as string;
   expect((await api("PUT", `/api/admin/content/courses/${id}/items`, { items: [{ type: "MODULE", moduleId: t.moduleId }] })).status).toBe(204);

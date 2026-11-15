@@ -22,7 +22,8 @@ async function seksjon(tittel: string) {
 async function kurs(tag: string, medBevis: boolean) {
   const stempel = `${tag}-${Date.now()}-${Math.round(Math.random() * 1e6)}`;
   const s = await seksjon(`934 erstatt ${stempel}`);
-  const opprettet = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`934 erstatt ${stempel}`) });
+  // #1164: et nytt kurs er begrenset som standard; fiksturen trenger et åpent kurs og sier det.
+  const opprettet = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`934 erstatt ${stempel}`), enrollmentPolicy: "OPEN" });
   expect(opprettet.status).toBe(201);
   const courseId = opprettet.body.course.id as string;
   expect((await request(app).put(`/api/admin/content/courses/${courseId}/items`).set(admin).send({ items: [{ type: "SECTION", sectionId: s }] })).status).toBe(204);

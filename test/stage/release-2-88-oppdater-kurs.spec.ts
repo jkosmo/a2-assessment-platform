@@ -82,7 +82,7 @@ async function lagKurs(navn: string) {
   const sectionId = (seksjon.json.section as { id: string }).id;
   seksjonIder.push(sectionId);
   expect((await api("POST", `/api/admin/content/sections/${sectionId}/publish`)).status).toBe(200);
-  const kurs = await api("POST", "/api/admin/content/courses", { title: tre(`Stage-test 1095 kurs ${navn} ${stempel}`) });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: tre(`Stage-test 1095 kurs ${navn} ${stempel}`) });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   const courseId = (kurs.json.course as { id: string }).id;
   kursIder.push(courseId);

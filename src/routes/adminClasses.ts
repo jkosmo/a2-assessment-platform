@@ -160,6 +160,13 @@ adminClassesRouter.delete("/:classId/members/:userId", requireContentOwnership("
   }
 });
 
+// #1166 / produkteier 14.11.2026 (doc/DECISIONS.md, «Svar fra produkteier på #1157, første runde»): DEN SOM EIER EN KLASSE,
+// KAN TILDELE KURS VEDKOMMENDE IKKE EIER, VIA KLASSEN. Det er villet, ikke et hull: klassen er eierens eget verktøy for å
+// samle deltakere. Derfor sjekkes bare klassens eierskap her, ikke kursets. Enkeltvis tildeling fra kurset
+// (`POST /courses/:courseId/enrollments`) krever fortsatt at man eier kurset. `test/m2-class-lifecycle-locks-1166.test.ts`
+// fester begge.
+const CLASS_OWNER_ASSIGNS_ANY_COURSE = requireContentOwnership("CLASS", "classId");
+
 // #943: makkeren til `/members` — samme skjerm, samme kall, samme vakt. Uten den kunne en fremmed
 // SMO lese hvilke kurs en klasse er tildelt, og med hvilke frister.
 adminClassesRouter.get("/:classId/courses", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
@@ -170,7 +177,7 @@ adminClassesRouter.get("/:classId/courses", requireContentOwnership("CLASS", "cl
   }
 });
 
-adminClassesRouter.post("/:classId/courses", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
+adminClassesRouter.post("/:classId/courses", CLASS_OWNER_ASSIGNS_ANY_COURSE, async (request: Request<{ classId: string }>, response, next) => {
   const parsed = assignCourseSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });

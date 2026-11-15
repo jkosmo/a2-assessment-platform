@@ -59,7 +59,8 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     s1 = await seksjon(`Innledning ${stempel}`, "Første versjon av innledningen.");
     s2 = await seksjon(`Gammel del ${stempel}`, "Denne tas ut.");
     m1 = await publisertModul(`Test ${stempel}`);
-    const opprettet = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Justert kurs ${stempel}`), sortOrder: 2 });
+    // #1164: et nytt kurs er begrenset som standard; fiksturen trenger et åpent kurs og sier det.
+    const opprettet = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Justert kurs ${stempel}`), sortOrder: 2, enrollmentPolicy: "OPEN" });
     expect(opprettet.status).toBe(201);
     courseId = opprettet.body.course.id as string;
     const elementer = await request(app).put(`/api/admin/content/courses/${courseId}/items`).set(admin).send(await withRevision(courseId, { items: [{ type: "SECTION", sectionId: s1 }, { type: "SECTION", sectionId: s2 }, { type: "MODULE", moduleId: m1 }] }));
@@ -314,7 +315,8 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     const annet = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Annet kurs ${stempel}`) });
     expect((await request(app).put(`/api/admin/content/courses/${annet.body.course.id}/items`).set(admin).send(await withRevision(annet.body.course.id, { items: [{ type: "SECTION", sectionId: deltSeksjon }] }))).status).toBe(204);
 
-    const opprettet = await request(app).post("/api/admin/content/courses").set(smo).send({ title: tre(`Fagansvarligs kurs ${stempel}`) });
+    // #1164: et nytt kurs er begrenset som standard; fiksturen trenger et åpent kurs og sier det.
+    const opprettet = await request(app).post("/api/admin/content/courses").set(smo).send({ title: tre(`Fagansvarligs kurs ${stempel}`), enrollmentPolicy: "OPEN" });
     expect(opprettet.status, JSON.stringify(opprettet.body).slice(0, 300)).toBe(201);
     const smoKurs = opprettet.body.course.id as string;
     const elementer = await request(app).put(`/api/admin/content/courses/${smoKurs}/items`).set(smo).send(await withRevision(smoKurs, { items: [
@@ -450,7 +452,8 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
 
   it("etter oppdateringen: seksjonen meldes med nyere utkast, og «publiser» gjør den nye versjonen levende for deltakeren", async () => {
     const del = await seksjon(`Publiseres etterpå ${stempel}`, "Gammel tekst som deltakeren ser.");
-    const kurs = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Publiseringskurs ${stempel}`) });
+    // #1164: et nytt kurs er begrenset som standard; fiksturen trenger et åpent kurs og sier det.
+    const kurs = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Publiseringskurs ${stempel}`), enrollmentPolicy: "OPEN" });
     const kursId = kurs.body.course.id as string;
     expect((await request(app).put(`/api/admin/content/courses/${kursId}/items`).set(admin).send(await withRevision(kursId, { items: [{ type: "SECTION", sectionId: del }, { type: "MODULE", moduleId: m1 }] }))).status).toBe(204);
     expect((await request(app).post(`/api/admin/content/courses/${kursId}/publish`).set(admin)).status).toBe(200);

@@ -111,7 +111,7 @@ test("1. et lesekurs publiseres som 1.0, og testkontoen får kursbevis for versj
   noter("versjon", json.version);
   const a = await lagSeksjon("A");
   const b = await lagSeksjon("B");
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(KURSNAVN), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(KURSNAVN), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   tilstand.kursId = kurs.json.course.id;
   expect((await api("PUT", `/api/admin/content/courses/${tilstand.kursId}/items`, { items: [{ type: "SECTION", sectionId: a }, { type: "SECTION", sectionId: b }] })).status).toBe(204);

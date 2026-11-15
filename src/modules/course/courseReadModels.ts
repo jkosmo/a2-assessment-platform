@@ -130,6 +130,8 @@ export interface AdminCourseDetail {
   /** #1140 etappe 2: har kurset et lagret utkast? Utkastet selv hentes med `GET …/draft`. Et publisert kurs med utkast har
    *  `lifecycle: "published_with_draft"`; et avpublisert kurs kan ha en utkastrad liggende igjen (`hasDraft` sann, `draft`). */
   hasDraft: boolean;
+  /** #1165: kan den som spør endre kurset (eier eller administrator)? Lesingen er åpen for alle forfattere. */
+  canManage: boolean;
   lifecycle: ContentLifecycle;
   modules: Array<{
     moduleId: string;

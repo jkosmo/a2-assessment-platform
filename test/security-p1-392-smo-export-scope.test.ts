@@ -27,8 +27,9 @@ const moduleBody = {
   title: { "en-GB": "Export Scope Test Module", nb: "Eksportomfangsmodul", nn: "Eksportomfangsmodul" },
 };
 
-// #392 established two controls on module export. The SCOPE control stands: an SMO may only
-// export a module they own. The answer-key redaction was removed on 2026-08-14 - it hid the
+// #392 established two controls on module export. ⚠️ SNUDD 2026-11-15 (#1165): the SCOPE control is gone by product decision
+// («Produsenter bør kunne se hverandres innhold», 2026-11-14; doc/DECISIONS.md). Any author may READ another author's module,
+// like courses and sections; only the owners may change it. The test below now pins that asymmetry. The answer-key redaction was removed on 2026-08-14 - it hid the
 // key from the very person who wrote it, while /export-package handed the same owner the same
 // key anyway, and its only real effect was a lossy backup (export -> import lost the answers
 // with no warning).
@@ -37,7 +38,7 @@ describe("Security P1 #392: SMO content scope on module export", () => {
     await prisma.$disconnect();
   });
 
-  it("SMO-B is denied export of a module owned by SMO-A", async () => {
+  it("#1165: SMO-B can read a module owned by SMO-A (canManage false), but not change it", async () => {
     const createRes = await request(app)
       .post("/api/admin/content/modules")
       .set(smoAHeaders)
@@ -48,7 +49,15 @@ describe("Security P1 #392: SMO content scope on module export", () => {
     const exportBRes = await request(app)
       .get(`/api/admin/content/modules/${moduleId}/export`)
       .set(smoBHeaders);
-    expect(exportBRes.status).toBe(403);
+    expect(exportBRes.status).toBe(200);
+    expect(exportBRes.body.moduleExport.canManage).toBe(false);
+    // The control that makes the line above worth something: writing is still the owners'.
+    const renameB = await request(app)
+      .patch(`/api/admin/content/modules/${moduleId}/title`)
+      .set(smoBHeaders)
+      .send({ title: { "en-GB": "Taken", nb: "Tatt", nn: "Teken" } });
+    expect(renameB.status).toBe(403);
+    expect(renameB.body.error).toBe("content_ownership");
 
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });

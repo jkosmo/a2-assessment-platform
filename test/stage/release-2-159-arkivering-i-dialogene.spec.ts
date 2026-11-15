@@ -169,7 +169,7 @@ test("testdata: et publisert kurs med egen modul, egen seksjon og en modul som o
   const publiser = await fag("POST", `${kurssti()}/publish`);
   expect(publiser.status, publiser.tekst.slice(0, 600)).toBe(200);
 
-  const annet = await fag("POST", "/api/admin/content/courses", { title: L(ANNET_KURS), certificationLevel: "basic" });
+  const annet = await fag("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(ANNET_KURS), certificationLevel: "basic" });
   expect(annet.status, annet.tekst.slice(0, 300)).toBe(201);
   tilstand.annet = annet.json.course.id;
   expect((await fag("PUT", `${kurssti(tilstand.annet)}/items`, { items: [{ type: "MODULE", moduleId: tilstand.delt }] })).status).toBe(204);

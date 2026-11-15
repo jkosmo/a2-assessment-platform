@@ -236,6 +236,8 @@ function getListPage() {
       const isArchived = lifecycle === "archived";
       // #787 slice 5: eier/admin styrer om redigerings-/livssyklus-handlingene vises (speiler eierskaps-
       // vakta). Dupliser/Eksporter beholdes — de er lese-/kopi-handlinger som ikke vaktes av eierskap.
+      // #1165: før svarte eksporten 403 for en annens modul, og «Dupliser» ga en rød melding. Nå er lesingen åpen (doc/DECISIONS.md),
+      // og kopien eies av den som kopierer.
       const canManage = m.canManage !== false;
       const id = escapeHtml(m.id);
       const title = escapeHtml(m.title ?? m.id);
@@ -243,7 +245,8 @@ function getListPage() {
       const isPublished = lifecycle === "published" || lifecycle === "published_with_draft";
       return [
         // #896 S3c: knappen sier hva den gjør — åpner modulen.
-        canManage ? `<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>` : "",
+        // #1165 (produkteier 14.11.2026): også for den som ikke eier modulen. Modulsida viser den skrivebeskyttet.
+        `<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`,
         // #894: omdøping er en langt vanligere handling enn innholdsredigering, og krever ingen av
         // trinnene rundt. Egen knapp, ikke klikk på navnet — et klikk i raden åpner elementet.
         // #1151 skive 3c: ikke på en arkivert modul. Tjeneren avviser omdøpingen (`module_archived`), og «Dupliser» er

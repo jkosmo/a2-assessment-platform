@@ -45,7 +45,7 @@ test("kursbevis for 1.0, så ny hovedversjon: e-posten skal komme innen noen min
   test.skip(Boolean(process.env.RYDD_KURS), "rydder");
   test.setTimeout(150_000);
   const a = await lagSeksjon("A");
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(`E-posttest ${stempel}`), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(`E-posttest ${stempel}`), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   const kursId = kurs.json.course.id as string;
   expect((await api("PUT", `/api/admin/content/courses/${kursId}/items`, { items: [{ type: "SECTION", sectionId: a }] })).status).toBe(204);

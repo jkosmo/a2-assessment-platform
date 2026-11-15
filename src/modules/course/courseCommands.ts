@@ -108,6 +108,18 @@ export async function assertContentUsableInCourse(
   }
 }
 
+/**
+ * #1164 (produkteier 14.11.2026, doc/DECISIONS.md): «Nye kurs bør ikke være åpent for alle.» Et nytt kurs er BEGRENSET: bare de
+ * som er tildelt (klasser eller enkeltvis) ser det, til forfatteren selv åpner det for alle. Gjelder hver vei som oppretter et
+ * kurs, for alle går hit: «Nytt kurs» i kursbyggeren og agent-API-et (`POST /courses`), og «Importer som nytt kurs»
+ * (`importCourseFromEnvelope`). Eksisterende kurs er urørt (ingen datamigrering).
+ *
+ * ⚠️ Skjemaets standardverdi (`@default(OPEN)` i schema.prisma) er IKKE regelen og er latt stå: den gjelder bare rader som
+ * opprettes utenom denne funksjonen (testfiksturer). `test/unit/new-course-default-guard-1164.test.ts` sikrer at ingen kode i
+ * `src/` oppretter kurs andre steder.
+ */
+export const NEW_COURSE_ENROLLMENT_POLICY = "RESTRICTED" as const;
+
 export async function createCourse(input: {
   title: string;
   description?: string | null;
@@ -130,7 +142,7 @@ export async function createCourse(input: {
         title: input.title,
         description: input.description ?? null,
         certificationLevel: input.certificationLevel ?? null,
-        ...(input.enrollmentPolicy ? { enrollmentPolicy: input.enrollmentPolicy } : {}),
+        enrollmentPolicy: input.enrollmentPolicy ?? NEW_COURSE_ENROLLMENT_POLICY,
         ...(input.discussionsEnabled !== undefined ? { discussionsEnabled: input.discussionsEnabled } : {}),
         ...(input.discussionOwnerNotifications !== undefined ? { discussionOwnerNotifications: input.discussionOwnerNotifications } : {}),
         ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),

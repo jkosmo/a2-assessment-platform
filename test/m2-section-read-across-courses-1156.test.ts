@@ -386,7 +386,8 @@ describe("#1156: «Oppdater kurs» kopierer den seneste lesingen fra alle kurs t
   }
 
   async function publishedCourse(headers: Record<string, string>, sectionIds: string[]) {
-    const created = await request(app).post("/api/admin/content/courses").set(headers).send({ title: tre(tag("kurs")) });
+    // #1164: et nytt kurs er begrenset som standard; fiksturen trenger et åpent kurs og sier det.
+    const created = await request(app).post("/api/admin/content/courses").set(headers).send({ title: tre(tag("kurs")), enrollmentPolicy: "OPEN" });
     expect(created.status, JSON.stringify(created.body).slice(0, 300)).toBe(201);
     const id = created.body.course.id as string;
     const items = await request(app).put(`/api/admin/content/courses/${id}/items`).set(headers).send(await withRevision(id, { items: sectionIds.map((sectionId) => ({ type: "SECTION", sectionId })) }));

@@ -2,6 +2,41 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.165.0 - 2026-11-15
+
+Tre funn fra konsistenssjekken #1157, med produkteiers svar: «Vi bør gjøre ting likt mellom moduler og kurs. Nye kurs bør ikke
+være åpent for alle» og «Produsenter bør kunne se hverandres innhold». Valgene som ikke sto i svarene, står i DECISIONS
+(«Valgt under byggingen av #1164, #1165 og #1166»).
+
+**Hva produsentene merker:**
+- **Nye kurs er begrenset (#1164).** Et kurs laget med «Nytt kurs», agent-API-et eller «Importer som nytt kurs» er bare synlig
+  for dem det tildeles, til noen gjør det åpent. Et uttrykkelig valg står, også «Åpen». Eksisterende kurs er urørt.
+- **«Publiser» sier hvem som får se kurset (#1164).** Dialogen før publisering viser «alle deltakere» for et åpent kurs, og
+  ellers klassene kurset er tildelt med antall medlemmer, enkeltpersoner og antall i alt. Kurslista og kurshodet bruker den
+  samme dialogen; den spør nå også når alt innholdet alt er publisert. Feiler hentingen, publiseres ingenting.
+- **Produsenter kan åpne hverandres kurs og moduler (#1165)**, lese og eksportere dem, og duplisere moduler (kopien er
+  ens egen). Bare eierne kan endre; skjermen sier det («Du kan lese, men bare eierne kan endre»). Før manglet «Åpne» på
+  andres kurs i lista, og en annens modul svarte 403.
+- **Klasser (#1166):** sletting av en klasse og tildeling av et kurs sjekker nå under en radlås, så en arkivering av kurset
+  eller en sletting av klassen samtidig ikke slipper gjennom. At en klasseeier kan tildele andres kurs til klassen sin, var
+  regelen fra før; den har nå et navn (`CLASS_OWNER_ASSIGNS_ANY_COURSE`) og en test.
+
+**Tester:** `m2-course-publish-1164`, `m2-content-read-by-producers-1165`, `m2-class-lifecycle-locks-1166`,
+`unit/new-course-default-guard-1164` (stopper en ny vei til å lage kurs utenom `createCourse`), e2e
+`admin-content-course-publish-dialog-1164` og `admin-content-readonly-others-1165`. Stage-testene som lager kurs, ber nå om
+`enrollmentPolicy: "OPEN"`: ellers ville stage-kontoen ikke sett sine egne testkurs. Ny stage-test
+`release-2-165-kurs-begrenset`.
+
+**Kjent (ikke rettet):**
+- «Importer som nytt kurs» fra et publisert kurs gir et kurs som er publisert og begrenset, uten dialog og uten beskjed. Ingen
+  deltakere ser det før noen gjør det åpent eller tildeler det.
+- Delingslenkas «Kopier» er sperret på andres kurs, sammen med resten av «Innstillinger».
+- Seksjoner er ikke skrivebeskyttet for andre enn eieren på samme måte som kurs og moduler.
+- Antallet i publiseringsdialogen tar ikke med Entra-klasser eller deltakere som har startet via en arkivert klasse.
+- «Avpubliser» på kurs bruker fortsatt nettleserens bekreftelsesboks.
+- Skill-dokumentasjonen nevner ikke at nye kurs er begrenset.
+- Noen kommentarer om eierskap i koden (ownership-wording-1029) beskriver den gamle regelen.
+
 ## 2.164.1 - 2026-11-15
 
 **En modul som bare er åpnet, holder ikke lenger et arkivert kurs igjen fra sletting** (feil fra 2.161.0, #1152). En

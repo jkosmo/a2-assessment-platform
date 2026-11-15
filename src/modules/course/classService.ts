@@ -45,6 +45,19 @@ async function assertClassWritable(tx: DbTransactionClient, classId: string, act
   }
 }
 
+/**
+ * #688: et arkivert kurs kan ikke tildeles en klasse. #1166: lest og sjekket i tildelingens transaksjon, med kursets rad låst
+ * (`FOR SHARE`). En arkivering (`archiveCourse`, en UPDATE på samme rad) som kommer samtidig, venter til tildelingen er ferdig;
+ * en som kom først, sees her.
+ */
+async function assertCourseAssignable(tx: DbTransactionClient, courseId: string): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ archivedAt: Date | null }>>`SELECT "archivedAt" FROM "Course" WHERE "id" = ${courseId} FOR SHARE`;
+  if (rows.length === 0) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+  if (rows[0].archivedAt) {
+    throw new DomainRuleError("course_archived", "Cannot assign an archived course.");
+  }
+}
+
 export async function createClass(input: { name: string; description?: string | null }, actorId: string | null) {
   const name = input.name?.trim();
   // ⚠️ #999: DENNE SKAL IKKE HA KODE — den er UNÅBAR fra API-et.
@@ -115,23 +128,29 @@ export async function archiveClass(classId: string, actorId: string | null) {
 // listene viser for modul, kurs og seksjon («Slett» finnes bare på arkiverte rader), men her er den
 // også håndhevet på tjenersiden: `DELETE /:classId` arkiverte før, og en gammel klient som fortsatt
 // sender DELETE for «Arkiver» skal få et avslag, ikke en sletting.
+//
+// #1166: «arkivert» sjekkes i slettetransaksjonen, etter at klassens rad er låst (`FOR UPDATE`), som `courseArchive.ts` gjør
+// med kurset. Før ble klassen lest og sjekket før transaksjonen: en gjenoppretting som kom imellom, gjorde klassen aktiv, og
+// slettingen gikk likevel. Nå venter slettingen på gjenopprettingen, og ser at klassen er aktiv.
 export async function deleteClass(classId: string, actorId: string | null) {
-  const klass = await requireClass(classId);
-  if (klass.isSystem) {
-    throw new DomainRuleError(
-      "system_class_immutable",
-      "System classes cannot be deleted.",
-      { action: "delete" },
-    );
-  }
-  if (!klass.archivedAt) {
-    throw new DomainRuleError(
-      "class_not_archived",
-      "Archive the class before deleting it.",
-      { action: "delete" },
-    );
-  }
   await runInTransaction(async (tx) => {
+    const rows = await tx.$queryRaw<Array<{ name: string; isSystem: boolean; archivedAt: Date | null }>>`SELECT "name", "isSystem", "archivedAt" FROM "Class" WHERE "id" = ${classId} FOR UPDATE`;
+    if (rows.length === 0) throw new NotFoundError("Class", "class_not_found", "Class not found.");
+    const klass = rows[0];
+    if (klass.isSystem) {
+      throw new DomainRuleError(
+        "system_class_immutable",
+        "System classes cannot be deleted.",
+        { action: "delete" },
+      );
+    }
+    if (!klass.archivedAt) {
+      throw new DomainRuleError(
+        "class_not_archived",
+        "Archive the class before deleting it.",
+        { action: "delete" },
+      );
+    }
     const repo = createClassRepository(tx);
     await repo.deleteClass(classId);
     // Eierradene har ingen fremmednøkkel til klassen (ContentOwner peker på innhold av fire typer),
@@ -294,19 +313,17 @@ export async function listClassCourseAssignments(classId: string, locale: Suppor
 // #1142: tildelingen sender ingen e-post selv. Jobben i workeren ser det nye paret (person, kurs) i neste runde, og
 // medlemmene får én samlet e-post om nye kurs et kvarter etter siste endring (courseAssignmentNotice.ts). Den gamle e-posten
 // per kurs herfra (#684, fire-and-forget) er fjernet; jobben dekker også veiene den ikke så (nytt medlem, publisering).
+//
+// #1166: kursets arkivtilstand sjekkes i transaksjonen, etter at kursets rad er låst (`FOR SHARE`), slik klassen alt var
+// (`assertClassWritable`). Før ble kurset lest før transaksjonen, og bare klassen ble låst: en arkivering av kurset som kom
+// imellom, gjorde sjekken ugyldig, og tildelingen gikk til et arkivert kurs. Fremmednøkkelen fra tildelingen låser bare
+// kursets nøkkel, og en arkivering endrer ikke nøkkelen; derfor den egne låsen. Låseorden: klassen, så kurset.
+//
+// ⚠️ Kursets EIERSKAP sjekkes ikke her, med vilje: se `CLASS_OWNER_ASSIGNS_ANY_COURSE` (adminClasses.ts).
 export async function assignCourseToClass(courseId: string, classId: string, dueAt: Date | null, actorId: string | null) {
-  await requireClass(classId);
-  const course = await prisma.course.findUnique({
-    where: { id: courseId },
-    select: { id: true, archivedAt: true },
-  });
-  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
-  // #688: archived courses are retired and must not be assignable to a class.
-  if (course.archivedAt) {
-    throw new DomainRuleError("course_archived", "Cannot assign an archived course.");
-  }
   await runInTransaction(async (tx) => {
     await assertClassWritable(tx, classId, "assign_course");
+    await assertCourseAssignable(tx, courseId);
     const repo = createClassRepository(tx);
     await repo.assignCourseToClass(courseId, classId, dueAt, actorId);
     await recordAuditEvent(

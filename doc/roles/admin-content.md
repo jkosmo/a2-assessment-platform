@@ -14,7 +14,7 @@ API:
 - `PUT/DELETE /api/admin/content/modules/:id` — rediger og slett moduler
 - `POST /api/admin/content/modules/:id/publish` — publiser modulversjon
 - `POST /api/admin/modules/:id/archive` — arkiver modul
-- `GET/POST /api/admin/content/courses` — liste og opprett kurs
+- `GET/POST /api/admin/content/courses` — liste og opprett kurs (et nytt kurs er begrenset, #1164)
 - `PUT /api/admin/content/courses/:id` — rediger kurs
 - `POST /api/admin/content/courses/:id/publish` — publiser kurs
 - `POST /api/admin/content/courses/:id/archive` — arkiver kurs
@@ -149,6 +149,33 @@ Velg etter hva du er ute etter: en kopi ved siden av, eller nytt innhold i modul
 5. Juster rekkefølgen med pil opp/ned
 6. Lagre
 7. Klikk **Publiser** når kurset er klart for deltakere
+
+#### Hvem ser et nytt kurs (#1164)
+
+Et nytt kurs er **begrenset**: bare de som er tildelt kurset (via en klasse eller enkeltvis) ser det. Det gjelder også et kurs
+du importerer som nytt, og kurs som lages med skillen. Vil du at alle deltakere skal se det, velger du **Åpen** under
+**Innstillinger → Synlighet**. Kurs som fantes fra før, er ikke endret.
+
+#### Publisere et kurs (#1164)
+
+**Publiser** og **Publiser utkastet** spør før noe skjer, og dialogen sier **hvem som ser kurset etterpå**:
+
+- **Alle deltakere** når kurset er åpent. Det står i «Mine kurs» hos alle så snart det er publisert, og har deltakerne sett
+  det, kan det ikke trekkes tilbake.
+- **De tildelte** når kurset er begrenset: klassene med antall deltakere, hvor mange som er tildelt enkeltvis, og tallet i alt
+  (en person i flere klasser telles én gang). Er ingen tildelt, sier dialogen at ingen ser kurset ennå.
+
+Har kurset innhold som ikke er publisert, står det i den samme dialogen, og publiseres sammen med kurset. Har noen kursbevis,
+og innholdet er endret, spør den samme dialogen om det er en mindre eller en hovedversjon. **Avbryt** eller Esc publiserer
+ingenting. Ved **Publiser utkastet** gjelder synligheten slik den står i utkastet.
+
+#### Andres kurs og moduler (#1165)
+
+Du kan åpne kurs og moduler andre produsenter eier, for å lese dem. Under statusmerket står «Du kan lese, men bare eierne kan
+endre». Feltene er sperret, Lagre og Avbryt er borte, og i handlingsraden står bare **Eksporter**. Eierne ser du under
+**Innstillinger**. I listene står **Åpne** og **Eksporter** på andres kurs, og **Åpne**, **Dupliser** og **Eksporter** på andres
+moduler, med merket «Kun for eier». En kopi du lager med **Dupliser**, eier du selv. Vil du endre noe i en annens kurs eller
+modul, ber du en av eierne legge deg til som eier.
 
 #### Arkivere og gjenopprette et kurs (2.159.0)
 

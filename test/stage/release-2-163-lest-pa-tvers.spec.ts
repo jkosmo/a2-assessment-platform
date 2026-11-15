@@ -64,7 +64,7 @@ async function lagSeksjon(hva: string): Promise<string> {
 }
 
 async function lagKurs(hva: string, seksjoner: string[]): Promise<string> {
-  const k = await api("POST", "/api/admin/content/courses", { title: L(navn(hva)), certificationLevel: "basic" });
+  const k = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(navn(hva)), certificationLevel: "basic" });
   expect(k.status, k.tekst.slice(0, 300)).toBe(201);
   const id = k.json.course.id as string;
   expect((await api("PUT", `${kurssti(id)}/items`, { items: seksjoner.map((sectionId) => ({ type: "SECTION", sectionId })) })).status).toBe(204);

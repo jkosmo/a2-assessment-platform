@@ -154,7 +154,7 @@ test("B: et arkivert kurs med egen modul og seksjon slettes, og så elementene",
   laget.seksjoner.push(seksjonId);
   expect((await api("POST", `${seksjonssti(seksjonId)}/publish`)).status).toBe(200);
 
-  const kurs = await api("POST", "/api/admin/content/courses", { title: L(navn("kurs B")), certificationLevel: "basic" });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: L(navn("kurs B")), certificationLevel: "basic" });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   const kursId = kurs.json.course.id as string;
   laget.kurs.push(kursId);

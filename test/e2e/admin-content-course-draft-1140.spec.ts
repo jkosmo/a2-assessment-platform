@@ -279,6 +279,16 @@ function draftWith(items: Array<Item & DraftItemFlags>, overrides: Partial<NonNu
 
 const actions = (page: Page) => page.locator(".form-page-actions");
 
+/**
+ * #1164: «Publiser utkastet» spør nå alltid. Uten versjonsspørsmålet er det publiseringsdialogen (hvem som ser kurset
+ * etterpå); ingenting sendes før forfatteren sier ja. Testene her gjelder det som skjer etterpå, så de sier ja.
+ */
+async function publishDraftAndConfirm(page: Page) {
+  await actions(page).locator('[data-action="publish-draft"]').click();
+  await expect(page.locator("#cascadePublishDialog")).toBeVisible();
+  await page.locator("#cascadePublishConfirmBtn").click();
+}
+
 test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
   test("«Lagre» på et publisert kurs: PUT …/draft med feltene og loaded, ingen versjonsspørsmål, melding, og merket etter lagring", async ({ page }) => {
     // Med kursbevis og endret liste: før kom «Hva slags endring er dette?» her. Nå avgjøres versjonen når utkastet publiseres.
@@ -370,7 +380,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
 
   test("«Publiser utkastet» uten spørsmål: lista er som publisert (bare navnet endret), selv med kursbevis", async ({ page }) => {
     const state = await openBuilder(page, { course: { certificateHolders: 42, majorEmailRecipients: 42 }, draft: draftWith(PUBLISHED_ITEMS) });
-    await actions(page).locator('[data-action="publish-draft"]').click();
+    await publishDraftAndConfirm(page);
     await expect.poll(() => writes(state).length).toBe(1);
     await expect(page.locator("#courseVersionDialog")).toBeHidden();
     expect(writes(state)[0].path).toBe(`${API}/draft/publish`);
@@ -429,7 +439,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
       draft: draftWith([{ type: "SECTION", id: "sec-b", title: "Seksjon B" }, { type: "MODULE", id: "mod-a", title: "Modul A" }]),
     });
     state.failNext.publish = { status: 400, body: { error: "course_version_required", message: "x", details: { certificateHolders: 2 } } };
-    await actions(page).locator('[data-action="publish-draft"]').click();
+    await publishDraftAndConfirm(page);
     await expect(page.locator("#courseVersionDialog")).toBeVisible();
     await expect(page.locator("#courseVersionText")).toContainText("2 deltakere har kursbevis for versjon 3.");
     await page.locator("#courseVersionSaveBtn").click();
@@ -442,7 +452,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
   test("ulagrede endringer lagres før publisering, og publiseringen sender det nye utkastets teller", async ({ page }) => {
     const state = await openBuilder(page, { draft: draftWith(PUBLISHED_ITEMS) });
     await page.locator("#title-nb").fill("Generativ KI 2028");
-    await actions(page).locator('[data-action="publish-draft"]').click();
+    await publishDraftAndConfirm(page);
     await expect.poll(() => writes(state).length).toBe(2);
     expect(writes(state)[0].method).toBe("PUT");
     expect(writes(state)[0].path).toBe(`${API}/draft`);
@@ -530,7 +540,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
   test("409 course_draft_changed ved publisering og forkasting: banner, ingenting lastes på nytt", async ({ page }) => {
     const state = await openBuilder(page, { draft: draftWith(PUBLISHED_ITEMS) });
     state.failNext.publish = { status: 409, body: { error: "course_draft_changed", message: "x", details: { courseId: "course-1" } } };
-    await actions(page).locator('[data-action="publish-draft"]').click();
+    await publishDraftAndConfirm(page);
     await expect(page.locator("#formErrorBanner")).toContainText("Noen andre har endret utkastet etter at du åpnet kurset.");
 
     state.failNext.discard = { status: 409, body: { error: "course_draft_changed", message: "x", details: { courseId: "course-1" } } };
@@ -603,7 +613,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
         ] },
       },
     };
-    await actions(page).locator('[data-action="publish-draft"]').click();
+    await publishDraftAndConfirm(page);
     const banner = page.locator("#formErrorBanner");
     await expect(banner).toContainText("Ett eller flere elementer i utkastet er arkivert, slettet eller ikke publisert.");
     await expect(banner).toContainText("Dette må rettes: «Modul A» (arkivert), «Seksjon B» (ikke publisert), «mod-gone» (slettet).");
@@ -693,7 +703,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     expect(writes(state)).toHaveLength(0);
 
     await page.locator("#title-nb").fill("Generativ KI 2027");
-    await actions(page).locator('[data-action="publish-draft"]').click();
+    await publishDraftAndConfirm(page);
     await expect.poll(() => writes(state).length).toBe(2);
     expect(writes(state).map((w) => w.path)).toEqual([`${API}/draft`, `${API}/draft/publish`]);
   });
