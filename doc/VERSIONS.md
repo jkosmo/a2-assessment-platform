@@ -27,6 +27,10 @@ være åpent for alle» og «Produsenter bør kunne se hverandres innhold». Val
 `enrollmentPolicy: "OPEN"`: ellers ville stage-kontoen ikke sett sine egne testkurs. Ny stage-test
 `release-2-165-kurs-begrenset`.
 
+**På stage 15.11.2026 kl. 14:36** (dev cf0f90b7). `release-2-165-kurs-begrenset` (2/2): kurset uten valg ble begrenset, det
+med «Åpen» åpent; `publish-audience` svarte «begrenset, 0» og «åpent»; etter publisering så stage-kontoen bare det åpne.
+`2-164` (4/4), `2-163` (3/3), `2-162` (5/5), `2-161` (4/4), `2-160` (7/7) og `2-154` (3/3) kjørt på nytt med `OPEN` i kursene.
+
 **Kjent (ikke rettet):**
 - «Importer som nytt kurs» fra et publisert kurs gir et kurs som er publisert og begrenset, uten dialog og uten beskjed. Ingen
   deltakere ser det før noen gjør det åpent eller tildeler det.
