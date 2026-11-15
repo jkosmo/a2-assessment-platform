@@ -20,6 +20,15 @@ ikke ryddes).
 - Stage-testen for 2.164.0 sjekker nå avkrysningen etter alternativets verdi, ikke plass: alternativene stokkes ved hver
   henting.
 
+**På stage 15.11.2026 kl. 12:15** (dev 6b5e7fc0). Testkurset som ble liggende fra den første kjøringen, viste nå «Slettes
+15.05.2027» og lot seg slette. `release-2-164-deltaker-tilbake` (4/4): seksjonen i adressen, tilbake står i kurset, oppdatering
+holder den åpen; avkrysningen overlever oppdatering; ingen tekniske meldinger og ingen «Forsøks-ID». `2-163` (3/3), `2-162`
+(5/5), `2-161` (4/4), `2-160` (7/7), `2-158` (6/6) og `2-159` (6/6) kjørt på nytt.
+
+**Kjent (samme slags, ikke rettet):** en MODUL som bare er åpnet, aldri levert, kan heller ikke slettes: innleveringen som
+lages ved åpning, teller som besvarelse (`module_has_submissions`). Å rette det betyr å slette tomme innleveringer og forsøk
+sammen med modulen.
+
 ## 2.164.0 - 2026-11-15
 
 Fire ting som hindret deltakerne, funnet i konsistenssjekken #1157 (interaksjonsdesigner-gjennomgangen): #1158, #1159, #1160 og
