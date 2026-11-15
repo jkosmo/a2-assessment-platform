@@ -32,9 +32,9 @@ describe("describeApiError — koden er kontrakten", () => {
 
     const nb = describeApiError(error, tFor("nb"));
     expect(nb.headline).toBe(adminContentTranslations.nb["errors.api.content_ownership"]);
-    // ⚠️ #1029: sto «du eier» her. Ordlyden endret seg da tekstene sluttet å love lesetilgang de
-    // ikke gir — etter #943 avvises også LESING, og «du kan bare endre innhold du eier» sendte
-    // brukeren for å lete etter en redigeringsknapp som ikke var problemet.
+    // ⚠️ #1029: sto «du eier» her. Ordlyden ble «tilgang» da #943 også avviste LESING. Lesingen er åpnet igjen for
+    // produsenter (seksjoner 2026-09-08, kurs og moduler i #1165), men avslaget gjelder fortsatt skriving og lesing som
+    // forbereder en skriving eller viser personopplysninger — «tilgang» dekker begge (test/unit/ownership-wording-1029.test.ts).
     //
     // Påstanden er fortsatt den samme: overskriften skal være NORSK prosa fra tabellen, ikke
     // serverens engelske setning. Linja over sjekker at den ER tabellens tekst; denne at teksten

@@ -2,6 +2,7 @@ import { prisma } from "../../db/prisma.js";
 import type { ReportFilters } from "../reporting/types.js";
 import { findModuleProgress, type ModuleProgressInput } from "./moduleCredit.js";
 import { sectionAvailableWhere } from "./sectionAvailability.js";
+import { publishedSectionTitle, publishedSectionTitleSelect } from "./sectionTitle.js";
 import { countCertificateHolders, loadSectionReadRules, readCountsForCurrentVersion, type SectionSnapshot } from "./courseVersioning.js";
 import type { LearnerContentTx } from "../../db/contentLock.js";
 
@@ -334,7 +335,8 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
                 activeVersion: { select: { publishedAt: true } },
               },
             },
-            section: { select: { id: true, title: true } },
+            // #1163: tittelen deltakeren ser, er den publiserte versjonens — ikke arbeidstittelen.
+            section: { select: { id: true, ...publishedSectionTitleSelect } },
           },
         })
         .then((items) =>
@@ -369,7 +371,8 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
             // konstruksjon; de utilgjengelige er allerede filtrert bort.
             required: item.itemType === "SECTION" ? true : item.module?.archivedAt == null,
             module: item.module ? { id: item.module.id, title: item.module.title } : null,
-            section: item.section,
+            // #1163: `title` er allerede den publiserte. Arbeidstittelen kommer ikke ut av deltakerdøra.
+            section: item.section ? { id: item.section.id, title: publishedSectionTitle(item.section) } : null,
           })),
         );
     },

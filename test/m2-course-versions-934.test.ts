@@ -642,22 +642,44 @@ describe("#934 skive 3 — alle veier inn går gjennom den delte funksjonen", ()
     expect(await version(nytt.id)).toEqual({ versionMajor: 1, versionMinor: 0 });
   });
 
-  it("en seksjon lagret, publisert eller omdøpt fra sin EGEN side gir kursene den ligger i en mindre versjon", async () => {
+  // #1163: bumpen eies av publiseringen. Lagring, «Døp om» og den gamle `PUT …/content` lager et utkast og gir INGEN ny
+  // versjon; publiseringen gir nøyaktig én, og en ny publisering av samme versjon ingen. Før #1163 sa denne testen at lagring og
+  // omdøping også ga en mindre versjon hver (de gikk live med en gang).
+  it("#1163: en seksjon lagret eller omdøpt fra sin EGEN side gir ingen ny versjon; publiseringen gir nøyaktig én", async () => {
     const { course } = await courseWithOnePassedModule("seksjonside");
     const seksjon = await createPublishedSection("seksjonside");
     await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: seksjon.id, sortOrder: 2 } });
-    // Lagret med alle språk: lagring ER publisering (latest-wins).
-    const lagret = await request(app).put(`/api/admin/content/sections/${seksjon.id}/content`).set(admin()).send({ bodyMarkdown: L("Ny tekst.") });
+    const detalj = async () => (await request(app).get(`/api/admin/content/sections/${seksjon.id}`).set(admin())).body.section as { versionNo: number; title: string };
+
+    // Lagret: et utkast, ingen versjon.
+    let fane = await detalj();
+    const lagret = await request(app).put(`/api/admin/content/sections/${seksjon.id}`).set(admin())
+      .send({ title: L("Seksjon"), bodyMarkdown: L("Ny tekst."), expectedVersionNo: fane.versionNo, expectedTitle: fane.title });
     expect(lagret.status, JSON.stringify(lagret.body).slice(0, 300)).toBe(200);
+    expect(await version(course.id)).toEqual({ versionMajor: 1, versionMinor: 0 });
+
+    // Den gamle lagringen (faner fra før): heller ingen versjon.
+    expect((await request(app).put(`/api/admin/content/sections/${seksjon.id}/content`).set(admin()).send({ bodyMarkdown: L("Gammel fane.") })).status).toBe(200);
+    expect(await version(course.id)).toEqual({ versionMajor: 1, versionMinor: 0 });
+
+    // Publisert fra egen side: én mindre versjon.
+    fane = await detalj();
+    expect((await request(app).post(`/api/admin/content/sections/${seksjon.id}/publish`).set(admin()).send({ expectedVersionNo: fane.versionNo })).status).toBe(200);
     expect(await version(course.id)).toEqual({ versionMajor: 1, versionMinor: 1 });
-    // Publisert fra egen side.
-    await prisma.courseSectionVersion.create({ data: { sectionId: seksjon.id, versionNo: 9, bodyMarkdown: JSON.stringify(L("Enda nyere.")) } });
-    expect((await request(app).post(`/api/admin/content/sections/${seksjon.id}/publish`).set(admin())).status).toBe(200);
-    expect(await version(course.id)).toEqual({ versionMajor: 1, versionMinor: 2 });
-    // Omdøpt.
-    const navn = await request(app).patch(`/api/admin/content/sections/${seksjon.id}/title`).set(admin()).send({ title: L(`Nytt navn ${Date.now()}`) });
+    // Samme versjon publisert på nytt: ingenting gikk live, ingen versjon.
+    expect((await request(app).post(`/api/admin/content/sections/${seksjon.id}/publish`).set(admin()).send({ expectedVersionNo: fane.versionNo })).status).toBe(200);
+    expect(await version(course.id)).toEqual({ versionMajor: 1, versionMinor: 1 });
+
+    // Omdøpt i lista: et utkast, ingen versjon.
+    fane = await detalj();
+    const navn = await request(app).patch(`/api/admin/content/sections/${seksjon.id}/title`).set(admin())
+      .send({ title: L(`Nytt navn ${Date.now()}`), expectedVersionNo: fane.versionNo, expectedTitle: fane.title });
     expect(navn.status, JSON.stringify(navn.body).slice(0, 300)).toBe(200);
-    expect(await version(course.id)).toEqual({ versionMajor: 1, versionMinor: 3 });
+    expect(await version(course.id)).toEqual({ versionMajor: 1, versionMinor: 1 });
+    // Det nye navnet publisert: én til.
+    fane = await detalj();
+    expect((await request(app).post(`/api/admin/content/sections/${seksjon.id}/publish`).set(admin()).send({ expectedVersionNo: fane.versionNo })).status).toBe(200);
+    expect(await version(course.id)).toEqual({ versionMajor: 1, versionMinor: 2 });
   });
 
   it("en modul publisert fra sin EGEN side gir kursene den ligger i en mindre versjon (eget valg per kurs: skive 5)", async () => {

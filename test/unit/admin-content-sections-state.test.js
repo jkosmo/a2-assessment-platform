@@ -5,6 +5,8 @@ import {
   hasSavableContent,
   detectSectionRoute,
   safeReturnTo,
+  sectionRevisionFields,
+  showsSectionDraftLine,
 } from "../../public/static/admin-content-sections-state.js";
 
 // #524 (U1): coverage for the section editor's pure locale-validation logic. This is the class of bug
@@ -160,5 +162,29 @@ describe("#1052 — ruten bærer returnTo videre", () => {
   it("uten returnTo er den null, ikke undefined", () => {
     expect(detectSectionRoute("?id=sec1").returnTo).toBeNull();
     expect(detectSectionRoute("").returnTo).toBeNull();
+  });
+});
+
+// #1163: det redigereren tar vare på fra en seksjonsdetalj — det fanen så (sendes med ved lagring og publisering) og det
+// deltakerne ser (stripen).
+describe("#1163 — revisjonen og stripen i seksjonsredigereren", () => {
+  it("tar versjonen, den rå tittelen og det deltakerne ser fra detaljen", () => {
+    const detail = { versionNo: 3, title: '{"nb":"A"}', publishedVersionNo: 2, draftSavedAt: "2026-11-15T10:00:00.000Z" };
+    expect(sectionRevisionFields(detail)).toEqual({ versionNo: 3, loadedTitle: '{"nb":"A"}', publishedVersionNo: 2, draftSavedAt: "2026-11-15T10:00:00.000Z" });
+  });
+
+  it("et felt svaret ikke har, står som før — men et felt som er null, er null", () => {
+    const før = { versionNo: 3, loadedTitle: "T", publishedVersionNo: 2, draftSavedAt: "x" };
+    // Publiseringens svar: ingen tittel og ikke noe utkast.
+    expect(sectionRevisionFields({ versionNo: 3, publishedVersionNo: 3, draftSavedAt: null }, før)).toEqual({ versionNo: 3, loadedTitle: "T", publishedVersionNo: 3, draftSavedAt: null });
+    expect(sectionRevisionFields({}, før)).toEqual(før);
+  });
+
+  it("stripen står bare for en publisert seksjon med et utkast over, når versjonen deltakerne ser er kjent", () => {
+    expect(showsSectionDraftLine({ published: true, hasUnpublishedChanges: true, publishedVersionNo: 1 })).toBe(true);
+    // Kontroller: ingen utkast; aldri publisert; ukjent versjon.
+    expect(showsSectionDraftLine({ published: true, hasUnpublishedChanges: false, publishedVersionNo: 1 })).toBe(false);
+    expect(showsSectionDraftLine({ published: false, hasUnpublishedChanges: true, publishedVersionNo: 1 })).toBe(false);
+    expect(showsSectionDraftLine({ published: true, hasUnpublishedChanges: true, publishedVersionNo: null })).toBe(false);
   });
 });

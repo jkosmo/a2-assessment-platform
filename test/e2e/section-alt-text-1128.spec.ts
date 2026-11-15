@@ -31,10 +31,11 @@ async function mockBase(page: Page, altWarnings: unknown[]) {
   await page.route("**/api/admin/content/sections", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [{ id: "sec-x", title: tittel, activeVersionId: "v1", archivedAt: null, versionNo: 1, courseCount: 0, updatedAt: "2026-10-26T08:00:00.000Z", lifecycle: "published", canManage: true }] }) }),
   );
-  await page.route("**/api/admin/content/sections/sec-x", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: sek }) }));
-  await page.route("**/api/admin/content/sections/sec-x/title", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: sek }) }));
-  await page.route("**/api/admin/content/sections/sec-x/content", (route: Route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: sek, altWarnings }) }),
+  // #1163: GET er detaljen; PUT til samme adresse er redigererens ene lagring, som bærer funnet.
+  await page.route("**/api/admin/content/sections/sec-x", (route: Route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { ...sek, versionNo: 2, hasUnpublishedChanges: true }, altWarnings }) })
+      : route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { ...sek, versionNo: 1 } }) }),
   );
 }
 
@@ -43,6 +44,8 @@ test("lagring med et bilde uten beskrivelse: lagret, og varselet nevner bildet",
   await page.goto("/admin-content/sections?id=sec-x");
   await page.locator("#markdownInput").fill("Slik ser testen ut.\n\n![Enhetstest](asset:a)");
   await page.locator("#formSaveBtn").click();
+  // #1163: kvitteringen sier at det er lagret som utkast, og varselet står etter.
+  await expect(page.locator(".toast--warning .toast__message").last()).toContainText("Lagret som utkast.");
   await expect(page.locator(".toast--warning .toast__message").last()).toContainText("Noen bilder er ikke beskrevet:");
   await expect(page.locator(".toast--warning .toast__detail").last()).toContainText("Bildet «Enhetstest» har en tittel som beskrivelse.");
 });

@@ -177,6 +177,26 @@ endre». Feltene er sperret, Lagre og Avbryt er borte, og i handlingsraden står
 moduler, med merket «Kun for eier». En kopi du lager med **Dupliser**, eier du selv. Vil du endre noe i en annens kurs eller
 modul, ber du en av eierne legge deg til som eier.
 
+#### Endre en seksjon: lagre er et utkast (fra 2.166.0, #1163)
+
+**Lagre** på en seksjon lagrer et utkast, akkurat som på kurs og moduler. **Deltakerne ser ikke endringen før du publiserer
+den**, verken teksten eller tittelen. Før 2.166.0 gikk en lagret seksjon ut til deltakerne med en gang; det gjør den ikke lenger.
+
+- Etter lagring står «Lagret som utkast. Deltakerne ser ikke endringen før den er publisert.» Under statusmerket står
+  «Utkast lagret … Deltakerne ser versjon X til utkastet er publisert.», og merket «Nyere utkast».
+- **Publiser ny versjon** (i seksjonen eller i lista) viser først hvilke kurs som får den nye teksten og tittelen. Ingenting
+  skjer før du trykker **Publiser**. Kursene seksjonen står i, får da en ny mindre versjon, slik de fikk ved lagring før.
+- **Døp om** og **Oversett det som mangler** i seksjonslista lager også et utkast. Det nye navnet ses av deltakerne når du
+  publiserer seksjonen.
+- En **ny seksjon** lagres som utkast. Publiser den når den er klar.
+- Har noen andre lagret seksjonen etter at du åpnet den, lagres ingenting, og du får beskjed. Kopier det du skrev, last siden
+  på nytt og gjør endringen igjen.
+- **Oversett** i seksjonen virker som før: den fyller inn de andre språkene i skjemaet, og du lagrer selv. Figurene som oversettes,
+  gjelder med en gang (de er felles for alle versjoner).
+
+Modulen viser den samme linja under merket når du har et nyere utkast åpent: «Deltakerne ser versjon X til utkastet er
+publisert.»
+
 #### Arkivere og gjenopprette et kurs (2.159.0)
 
 **Arkiver** (i kurslista, eller i handlingsraden når kurset er åpnet) viser først hva som skjer, og ingenting skjer før du
@@ -236,6 +256,9 @@ noe i kurset selv. Rapporten for kurset tar med dem som har lest kursets seksjon
 
 **Kan jeg redigere en publisert modul?**
 Ja, redigeringer lagres som ny kladd. Den publiserte versjonen forblir aktiv til du publiserer kladden.
+
+**Kan jeg redigere en publisert seksjon? (2.166.0)**
+Ja, på samme måte: lagringen er et utkast, og deltakerne leser den publiserte versjonen (tekst og tittel) til du publiserer.
 
 **Hva skjer med eksisterende besvarelser om jeg avpubliserer en modul?**
 Allerede leverte besvarelser ferdigbehandles. Ingen nye besvarelser kan leveres på en avpublisert modul.

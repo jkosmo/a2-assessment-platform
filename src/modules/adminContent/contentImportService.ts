@@ -122,6 +122,8 @@ type StagedImportSection = {
   sectionId: string;
   title: string;
   bodyMarkdown: string;
+  // #1163: det deltakerne så ved kilden, når fila bar et utkast over det (`publishedVersion`). Samme bilder, samme omskriving.
+  published?: { title: string; bodyMarkdown: string };
   stagedAssets: Array<{ id: string; rowData: StagedSectionAsset["rowData"] }>;
   blobPaths: string[];
 };
@@ -139,9 +141,12 @@ async function stageSectionForImport(
   const serializedMarkdown = serializeRequired(section.bodyMarkdown);
   const title = serializeRequired(section.title);
   const assets = section.assets ?? [];
+  const published = section.publishedVersion
+    ? { title: serializeRequired(section.publishedVersion.title), bodyMarkdown: serializeRequired(section.publishedVersion.bodyMarkdown) }
+    : undefined;
 
   if (assets.length === 0) {
-    return { sectionId, title, bodyMarkdown: serializedMarkdown, stagedAssets: [], blobPaths: [] };
+    return { sectionId, title, bodyMarkdown: serializedMarkdown, ...(published ? { published } : {}), stagedAssets: [], blobPaths: [] };
   }
 
   let staged: StagedSectionAsset[];
@@ -171,6 +176,7 @@ async function stageSectionForImport(
     sectionId,
     title,
     bodyMarkdown: remapAssetRefs(serializedMarkdown, idMap),
+    ...(published ? { published: { title: published.title, bodyMarkdown: remapAssetRefs(published.bodyMarkdown, idMap) } } : {}),
     stagedAssets,
     blobPaths: staged.flatMap((asset) => asset.blobPaths),
   };
@@ -198,17 +204,28 @@ async function persistStagedSection(
   // The gate state is returned now, exactly as `importModulePayload` already does for modules.
   options?: { draft?: boolean; agent?: AgentAuthoringContext },
 ): Promise<{ sectionId: string; heldBackByTranslationGate: boolean }> {
+  // #1163: bar fila et utkast over den publiserte versjonen, og seksjonen skal publiseres (kursimporten «nytt kurs»), blir den
+  // publiserte versjonen v1 (aktiv, gjennom porten som før) og utkastet v2, upublisert over. Uten dette ville utkastet gått rett
+  // ut til deltakerne i det nye kurset. Lander seksjonen som utkast uansett (`draft: true`), er det bare utkastet som teller.
+  const published = options?.draft ? undefined : staged.published;
   const created = await createSection(
     {
       id: staged.sectionId,
-      title: staged.title,
-      bodyMarkdown: staged.bodyMarkdown,
+      title: published?.title ?? staged.title,
+      bodyMarkdown: published?.bodyMarkdown ?? staged.bodyMarkdown,
       actorId,
       draft: options?.draft,
       agent: options?.agent,
     },
     tx,
   );
+  if (published) {
+    await tx.courseSectionVersion.create({
+      data: { sectionId: staged.sectionId, versionNo: 2, title: staged.title, bodyMarkdown: staged.bodyMarkdown, publishedBy: null, publishedAt: null },
+    });
+    // Arbeidstittelen er utkastets, som etter en lagring.
+    await tx.courseSection.update({ where: { id: staged.sectionId }, data: { title: staged.title } });
+  }
   for (const asset of staged.stagedAssets) {
     await tx.sectionAsset.create({ data: { id: asset.id, sectionId: staged.sectionId, ...asset.rowData } });
   }
@@ -242,6 +259,12 @@ function stripAudit(value: unknown): unknown {
 }
 function samePayload(a: unknown, b: unknown): boolean {
   return JSON.stringify(stripAudit(a)) === JSON.stringify(stripAudit(b));
+}
+
+// #1163: det «Oppdater dette kurset» sammenligner for en seksjon — det en ny versjon ville bære: tittel, tekst og bilder.
+// `publishedVersion` er med i fila for import som nytt kurs og sammenlignes ikke (oppdateringen legger bare et utkast klar).
+function sectionUpdateComparable(p: SectionExportPayload) {
+  return { title: p.title, bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [] };
 }
 
 // Porten en modulpakke må gjennom for å publiseres ved import — samme som publiser-knappen (#956).
@@ -498,13 +521,13 @@ export async function importModuleFromEnvelope(
 //   2. `replaceExisting` appends a NEW, inactive version to an existing section, so a live section
 //      keeps serving its current version until the author reviews the import and publishes.
 // #1095/#916: en ny, UPUBLISERT versjon på en seksjon som finnes. Den levende versjonen rører
-// vi ikke; forfatteren publiserer den nye i seksjonens egen flate. Tittelen følger samme regel som
-// seksjonsimporten (#931 pkt 3): en levende seksjon beholder sin, et utkast tar filas.
+// vi ikke; forfatteren publiserer den nye i seksjonens egen flate.
+// #1163: tittelen følger med i versjonen (erstatter #931 pkt 3s `keepLiveTitle`). Deltakerne leser den publiserte versjonens
+// tittel, så filas tittel kan alltid bli arbeidstittelen uten å nå noen før den er publisert.
 async function appendInactiveSectionVersion(
   tx: ContentWriteTx,
   staged: StagedImportSection,
   targetSectionId: string,
-  keepLiveTitle: boolean,
 ): Promise<{ sectionVersionId: string; versionNo: number }> {
   // #1151: en arkivert seksjon får ingen ny versjon, verken fra seksjonsimporten eller fra kursets «Oppdater dette kurset».
   await assertNotArchived(tx, { type: "SECTION", id: targetSectionId });
@@ -515,12 +538,13 @@ async function appendInactiveSectionVersion(
   });
   await tx.courseSection.update({
     where: { id: targetSectionId },
-    data: keepLiveTitle ? { updatedAt: new Date() } : { title: staged.title, updatedAt: new Date() },
+    data: { title: staged.title, updatedAt: new Date() },
   });
   const created = await tx.courseSectionVersion.create({
     data: {
       sectionId: targetSectionId,
       versionNo: (last?.versionNo ?? 0) + 1,
+      title: staged.title,
       bodyMarkdown: staged.bodyMarkdown,
       publishedBy: null,
       publishedAt: null,
@@ -595,12 +619,8 @@ export async function importSectionFromEnvelope(
   const payload = envelope.section;
 
   let targetSectionId: string | undefined;
-  // #931 pkt 3: en LEVENDE seksjon beholder tittelen sin til forfatteren publiserer. Kroppen lander
-  // som inaktiv versjon (riktig), men tittelen lå på seksjonsraden og ble skrevet med én gang:
-  // deltakeren fikk «Kapittel 9: Revisjon» over Kapittel 1-kroppen, og en fullt oversatt tittel
-  // kunne byttes mot en ettspråks uten at gaten så det. Tittelen er ikke versjonert, så det eneste
-  // ærlige er å la den stå på en publisert seksjon; forfatteren bytter den bevisst etterpå.
-  let keepLiveTitle = false;
+  // #931 pkt 3: en LEVENDE seksjon beholder tittelen sin til forfatteren publiserer. #1163: det gjør den nå av seg selv —
+  // tittelen ligger i den nye, upubliserte versjonen, og deltakerne leser den publiserte versjonens tittel.
   if (options.mode === "replaceExisting") {
     if (!options.targetSectionId) {
       throw new Error("targetSectionId is required when mode is replaceExisting.");
@@ -614,7 +634,6 @@ export async function importSectionFromEnvelope(
     }
     // #1151: en arkivert seksjon avvises i `appendInactiveSectionVersion`, etter låsen; bildene som alt er lastet opp, ryddes bort.
     targetSectionId = existing.id;
-    keepLiveTitle = existing.activeVersionId !== null;
   }
 
   // #796's split: blob I/O BEFORE the transaction, DB rows inside it.
@@ -629,10 +648,9 @@ export async function importSectionFromEnvelope(
           // slettet mens bildene ble lastet opp.
           const current = await tx.courseSection.findUnique({ where: { id: targetSectionId }, select: { activeVersionId: true } });
           if (!current) throw new Error("Target section not found for replaceExisting.");
-          keepLiveTitle = current.activeVersionId !== null;
-          // Content becomes a new INACTIVE version — the section's live content does not change
+          // Content (and, #1163, title) becomes a new INACTIVE version — what participants see does not change
           // until the author publishes (and passes the gate).
-          await appendInactiveSectionVersion(tx, staged, targetSectionId, keepLiveTitle);
+          await appendInactiveSectionVersion(tx, staged, targetSectionId);
           sectionId = targetSectionId;
         } else {
           // Always a draft on this door, so the gate result adds nothing the caller does not
@@ -659,8 +677,6 @@ export async function importSectionFromEnvelope(
               sectionId,
               sectionVersionId: latest.id,
               mode: options.mode,
-              // #931 pkt 3: sant bare når importen lot den levende tittelen stå.
-              ...(keepLiveTitle ? { titleKeptLive: true } : {}),
               assetCount: staged.stagedAssets.length,
               sourcePublishedAt: payload.audit?.publishedAt ?? null,
               sourceVersionNo: payload.audit?.sourceVersionNo ?? null,
@@ -730,7 +746,7 @@ export async function importCourseFromEnvelope(
   type Replacement =
     | { type: "SECTION"; newId: string; liveSection: SectionExportPayload | null }
     | { type: "MODULE"; liveModule: ModuleExportPayload | null };
-  const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean; replace?: Replacement; keep?: boolean }>();
+  const updateTargets = new Map<number, { targetId: string; replace?: Replacement; keep?: boolean }>();
   const stagedCopies = new Map<number, StagedImportSection>();
   const keptUnownedIds: CourseUpdateSummary["keptUnownedIds"] = [];
   const unchangedIds: string[] = [];
@@ -764,14 +780,12 @@ export async function importCourseFromEnvelope(
     planBasis = await courseUpdateBasis(prisma, options.targetCourseId, updatePlan, { course: targetCourse, items: existingItems });
     for (const entry of updatePlan.entries) {
       if (entry.action !== "update") continue;
-      let keepLiveTitle = false;
       let currentVersionNo: number | null = null;
       let newestVersionId: string | null = null;
       let activeVersionId: string | null = null;
       if (entry.type === "SECTION") {
         const section = await prisma.courseSection.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
         activeVersionId = section?.activeVersionId ?? null;
-        keepLiveTitle = activeVersionId != null;
         const newest = await prisma.courseSectionVersion.findFirst({ where: { sectionId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { id: true, versionNo: true } });
         currentVersionNo = newest?.versionNo ?? null;
         newestVersionId = newest?.id ?? null;
@@ -820,39 +834,37 @@ export async function importCourseFromEnvelope(
         if (entry.type === "SECTION" && fileItem.type === "SECTION") {
           const newest = newestVersionId ? await queries.buildSectionExportPayload(entry.targetId, undefined, newestVersionId) : null;
           // Fila er lest gjennom skjemaet (standardverdier, ukjente nøkler); den ferske pakken må samme vei.
-          // Bare det byttet faktisk BRUKER teller: brødtekst og bilder. Tittelen følger elementet (#931)
-          // og brukes ikke av byttet — en ren tittelendring skal ikke bytte (og nullstille) noe.
-          // Tittelen teller når kopien ville brukt den: en fremmed seksjon uten levende versjon får
-          // kopien med fila sin tittel (ingen levende tittel å beholde).
-          const brukt = (p: SectionExportPayload) => ({ bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [], ...(activeVersionId ? {} : { title: p.title }) });
+          // Bare det byttet faktisk BRUKER teller: tittel, brødtekst og bilder. #1163: tittelen er en del av versjonen (kopiens
+          // v2 får filas tittel, deltakerne ser v1s til den er publisert), så en ren tittelendring er en endring som andre.
+          const brukt = sectionUpdateComparable;
           if (newest && samePayload(brukt(sectionExportPayloadSchema.parse(newest)), brukt(fileItem.section))) {
             keptUnownedIds.push({ type: "SECTION", id: entry.targetId, reason: "unchanged" });
-            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keep: true });
             continue;
           }
           const liveSection = activeVersionId ? await queries.buildSectionExportPayload(entry.targetId, undefined, activeVersionId) : null;
           if (liveSection && !evaluateSectionTranslationGate({ title: serializeRequired(liveSection.title), bodyMarkdown: serializeRequired(liveSection.bodyMarkdown) }).ok) {
             keptUnownedIds.push({ type: "SECTION", id: entry.targetId, reason: "not_publishable" });
-            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keep: true });
             continue;
           }
-          updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, replace: { type: "SECTION", newId: randomUUID(), liveSection } });
+          updateTargets.set(entry.index, { targetId: entry.targetId, replace: { type: "SECTION", newId: randomUUID(), liveSection } });
         } else if (entry.type === "MODULE" && fileItem.type === "MODULE") {
           const newest = newestVersionId ? (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null }, newestVersionId)).module ?? null : null;
           // Samme for moduler: byttet bruker versjonen (oppgave, rubrikk, prompt, flervalg), ikke
           // tittel, beskrivelse eller nivå.
           if (newest && samePayload(moduleExportPayloadSchema.parse(newest).activeVersion, fileItem.module.activeVersion)) {
             keptUnownedIds.push({ type: "MODULE", id: entry.targetId, reason: "unchanged" });
-            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keep: true });
             continue;
           }
           const liveModule = activeVersionId ? (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null })).module ?? null : null;
           if (liveModule && !moduleImportGate(liveModule).valid) {
             keptUnownedIds.push({ type: "MODULE", id: entry.targetId, reason: "not_publishable" });
-            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keep: true });
             continue;
           }
-          updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, replace: { type: "MODULE", liveModule } });
+          updateTargets.set(entry.index, { targetId: entry.targetId, replace: { type: "MODULE", liveModule } });
         }
         continue;
       }
@@ -863,21 +875,19 @@ export async function importCourseFromEnvelope(
         let same = false;
         if (entry.type === "SECTION" && fileItem.type === "SECTION") {
           const newest = sectionExportPayloadSchema.parse(await queries.buildSectionExportPayload(entry.targetId, undefined, newestVersionId));
-          // Tittelen teller bare når oppdateringen faktisk ville brukt den: på en seksjon uten
-          // levende versjon (keepLiveTitle er usann) følger tittelen fila (#931).
-          const brukt = (p: SectionExportPayload) => ({ bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [], ...(keepLiveTitle ? {} : { title: p.title }) });
-          same = samePayload(brukt(newest), brukt(fileItem.section));
+          // #1163: tittelen teller alltid — den er en del av versjonen oppdateringen ville lagt klar.
+          same = samePayload(sectionUpdateComparable(newest), sectionUpdateComparable(fileItem.section));
         } else if (entry.type === "MODULE" && fileItem.type === "MODULE") {
           const newest = (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null }, newestVersionId)).module;
           same = Boolean(newest) && samePayload(moduleExportPayloadSchema.parse(newest).activeVersion, fileItem.module.activeVersion);
         }
         if (same) {
           unchangedIds.push(entry.targetId);
-          updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle, keep: true });
+          updateTargets.set(entry.index, { targetId: entry.targetId, keep: true });
           continue;
         }
       }
-      updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle });
+      updateTargets.set(entry.index, { targetId: entry.targetId });
     }
   }
 
@@ -1044,7 +1054,7 @@ export async function importCourseFromEnvelope(
                 if (persisted.heldBackByTranslationGate) {
                   throw new DomainRuleError("replacement_not_publishable", `The live version of section ${target.targetId} cannot be republished as your copy (publish gate).`, { type: "SECTION", id: target.targetId });
                 }
-                await appendInactiveSectionVersion(tx, staged, newId, true);
+                await appendInactiveSectionVersion(tx, staged, newId);
               } else {
                 await persistStagedSection(tx, staged, options.actorId, { draft: true });
               }
@@ -1099,14 +1109,13 @@ export async function importCourseFromEnvelope(
               const staged = stagedSections.get(i);
               if (!staged) throw new Error("Internal: section was not staged before the import transaction.");
               if (target) {
-                const version = await appendInactiveSectionVersion(tx, staged, target.targetId, target.keepLiveTitle);
+                const version = await appendInactiveSectionVersion(tx, staged, target.targetId);
                 courseItemInputs.push({ type: "SECTION", sectionId: target.targetId });
                 summary.updatedSections += 1;
                 await elementAudit(auditEntityTypes.courseSection, target.targetId, auditActions.adminContent.sectionImported, {
                   sectionId: target.targetId,
                   sectionVersionId: version.sectionVersionId,
                   versionNo: version.versionNo,
-                  ...(target.keepLiveTitle ? { titleKeptLive: true } : {}),
                   assetCount: staged.stagedAssets.length,
                 });
               } else {

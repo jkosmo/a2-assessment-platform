@@ -192,10 +192,17 @@ describe("#1128 varsel om alt-tekst som bare er en tittel", () => {
     const ny = await request(app).post("/api/admin/content/sections").set(admin).send({ title: tre(`Alt-tekst ${stempel}`), bodyMarkdown: svak });
     expect(ny.status, JSON.stringify(ny.body).slice(0, 300)).toBe(201);
     expect(ny.body.altWarnings).toEqual([{ code: "alt_is_title", alt: "Enhetstest" }]);
-    const lagret = await request(app).put(`/api/admin/content/sections/${ny.body.section.id}/content`).set(admin).send({ bodyMarkdown: god });
+    // #1163: redigererens ene lagring (`PUT …/:id`) med det fanen lastet. Den gamle `PUT …/content` står bare for faner fra før.
+    const id = ny.body.section.id as string;
+    const lagre = async (bodyMarkdown: Record<string, string>) => {
+      const fane = (await request(app).get(`/api/admin/content/sections/${id}`).set(admin)).body.section;
+      return request(app).put(`/api/admin/content/sections/${id}`).set(admin).send({ title: tre(`Alt-tekst ${stempel}`), bodyMarkdown, expectedVersionNo: fane.versionNo, expectedTitle: fane.title });
+    };
+    const lagret = await lagre(god);
     expect(lagret.status, JSON.stringify(lagret.body).slice(0, 300)).toBe(200);
     expect(lagret.body.altWarnings).toEqual([]);
-    const igjen = await request(app).put(`/api/admin/content/sections/${ny.body.section.id}/content`).set(admin).send({ bodyMarkdown: svak });
+    const igjen = await lagre(svak);
+    expect(igjen.status).toBe(200);
     expect(igjen.body.altWarnings).toEqual([{ code: "alt_is_title", alt: "Enhetstest" }]);
   });
 

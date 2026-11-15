@@ -83,10 +83,12 @@ test, choose which and how many yourself, at most half the set.
 
 Rules the list must respect:
 
-- The **title** of a section that is live, and the **title, description and level** of any
-  module, are not changed by the import — they belong to the element, not to its version. They
-  are set in the admin UI; say so rather than changing them in the file. (The title of a section
-  that is still a draft does follow the file.)
+- The **title of a section** belongs to its version: a changed title in the file goes into the new
+  version that is laid ready, and participants keep seeing the old title until the author
+  publishes it, like the text. A title change alone counts as `changed`.
+- The **title, description and level** of any module are not changed by the import — they belong
+  to the module, not to its version. They are set in the admin UI; say so rather than changing
+  them in the file.
 - The **course's own title, description and level** are written straight onto the course at
   import, without a version to review. They have their own line in the change list, `course`,
   and stay `unchanged` unless the author asks.

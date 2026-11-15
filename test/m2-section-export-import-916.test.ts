@@ -281,12 +281,12 @@ describe("#916 standalone section import", () => {
       .send({ payload: envelope, mode: "replaceExisting", targetId });
     expect(allowed.status, JSON.stringify(allowed.body)).toBe(201);
 
-    const after = await prisma.courseSection.findUnique({ where: { id: targetId } });
+    const after = await prisma.courseSection.findUnique({ where: { id: targetId }, include: { activeVersion: true } });
     expect(after?.activeVersionId).toBe(liveVersionId);
-    // #931 pkt 3: den LEVENDE tittelen står. Før ble «Ny tekst …» skrevet rett på seksjonsraden, så
-    // deltakeren fikk den nye tittelen over den gamle kroppen — og en fullt oversatt tittel kunne
-    // byttes mot en ettspråks uten at gaten så det.
-    expect(JSON.parse(after!.title)).toEqual(målTittel);
+    // #931 pkt 3 / #1163: den LEVENDE tittelen står for deltakerne — nå fordi den ligger i den publiserte versjonen. Pakkens
+    // tittel er arbeidstittelen og tittelen i den nye, upubliserte versjonen.
+    expect(JSON.parse(after!.activeVersion!.title!)).toEqual(målTittel);
+    expect(JSON.parse(after!.title).nb).toMatch(/^Ny tekst/);
     const newest = await latestVersionOf(targetId);
     expect(newest!.id).not.toBe(liveVersionId);
     expect(newest!.versionNo).toBe(2);
@@ -397,7 +397,9 @@ describe("#916 section publish gate (#896 S4 applied to sections)", () => {
     expect(published.body.section.activeVersionId).not.toBeNull();
   });
 
-  it("holds a content save back from auto-publish instead of failing it — the text is never lost", async () => {
+  // #1163: lagring publiserer ikke lenger, så porten holder ingen lagring tilbake — den stopper publiseringen. Teksten lagres
+  // som før (utkast), svaret bærer ikke lenger `translationGate`, og «Publiser» gir 422 med feltet.
+  it("a content save is a draft, also with a language hole — the text is never lost, and the gate answers at publish", async () => {
     const { id } = await createSection(smoOwner, {
       title: L(`Levende ${Date.now()}`),
       bodyMarkdown: L("# Komplett"),
@@ -405,13 +407,16 @@ describe("#916 section publish gate (#896 S4 applied to sections)", () => {
     const liveVersionId = (await prisma.courseSection.findUnique({ where: { id } }))!.activeVersionId;
     expect(liveVersionId).not.toBeNull();
 
+    const tab = (await request(app).get(`/api/admin/content/sections/${id}`).set(smoOwner)).body.section;
     const save = await request(app)
-      .put(`/api/admin/content/sections/${id}/content`)
+      .put(`/api/admin/content/sections/${id}`)
       .set(smoOwner)
-      .send({ bodyMarkdown: { nb: "# Nytt, bare på norsk" } });
+      .send({ title: JSON.parse(tab.title), bodyMarkdown: { nb: "# Nytt, bare på norsk" }, expectedVersionNo: tab.versionNo, expectedTitle: tab.title });
     expect(save.status).toBe(200);
-    expect(save.body.translationGate.heldBack).toBe(true);
-    expect((save.body.translationGate.issues as Array<{ field: string }>).map((i) => i.field)).toEqual(["bodyMarkdown"]);
+    expect(save.body).not.toHaveProperty("translationGate");
+    const gate = await request(app).post(`/api/admin/content/sections/${id}/publish`).set(smoOwner).send({ expectedVersionNo: 2 });
+    expect(gate.status).toBe(422);
+    expect((gate.body.issues as Array<{ field: string }>).map((i) => i.field)).toEqual(["bodyMarkdown"]);
     // #931 pkt 4: SVARET på lagringen skal vise det som ble lagret — ikke den aktive kroppen gaten
     // nektet å flytte. Før: `{ bodyMarkdown: <v1>, hasUnpublishedChanges: false }` rett etter at
     // forfatteren skrev en side tekst. Editoren leste bare gate-feltene, så det var usynlig der —

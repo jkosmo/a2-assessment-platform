@@ -7,8 +7,10 @@ import { pickLocalizedText, resolveInitialLocale, createTranslator } from "/stat
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, hydrateContentAssetImages } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 // #1046 C5: samme datohjelper som Moduler og Kurs («28. aug. 2026»), ikke «28.8.2026».
-import { createDateFormatter } from "/static/format-display.js";
+import { createDateFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
+// #1163: stripens tidspunkt, som kursets («Utkast lagret 15.11.2026, 14:05»).
+const formatDateTime = createDateTimeFormatter(() => currentLocale, "");
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { describeImportError } from "/static/import-error.js";
@@ -21,6 +23,7 @@ import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf, retentionLineHtml } 
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { createListPage } from "/static/list-page.js";
+import { setHidden } from "/static/dom-visibility.js";
 import {
   lagretTittelkart,
   manglendeSpraak,
@@ -37,6 +40,8 @@ import {
   nonEmptyLocales,
   hasSavableContent,
   detectSectionRoute,
+  sectionRevisionFields,
+  showsSectionDraftLine,
 } from "/static/admin-content-sections-state.js";
 
 // ---------------------------------------------------------------------------
@@ -304,8 +309,8 @@ function getListPage() {
       else if (action === "rename") omdopSeksjonIRad(id, btn, item);
       else if (action === "export") exportSectionPackage(id, btn);
       else if (action === "duplicate") duplicateSection(id, btn);
-      else if (action === "publish") sectionLifecycle(id, "publish", "published");
-      else if (action === "publish-new") sectionLifecycle(id, "publish", "newVersionPublished");
+      else if (action === "publish") publishFromList(item, "published");
+      else if (action === "publish-new") publishFromList(item, "newVersionPublished");
       else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
       else if (action === "archive") { if (window.confirm(L("confirmArchive"))) sectionLifecycle(id, "archive", "archived"); }
       else if (action === "restore") sectionLifecycle(id, "restore", "restored");
@@ -359,18 +364,26 @@ async function omdopSeksjonIRad(sectionId, btn, item) {
     onCancel: () => getListPage().renderTable(),
     onSave: async (nyTittel, spraak) => {
       try {
+        // #1163: et nytt navn er et utkast, og lista sender det den så (versjon og tittel). 409 hvis noen har lagret siden.
         await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}/title`, getHeaders, {
           method: "PATCH",
-          body: JSON.stringify({ title: { ...kart, [spraak]: nyTittel } }),
+          body: JSON.stringify({ title: { ...kart, [spraak]: nyTittel }, ...listRevision(item) }),
         });
-        showToast(t("ui.rename.saved"), "success");
+        showToast(L("renameSavedDraft"), "success");
         renderListView();
       } catch (err) {
         apiErrorToast(err);
-        getListPage().renderTable();
+        if (apiErrorCode(err) === "section_changed") renderListView();
+        else getListPage().renderTable();
       }
     },
   });
+}
+
+/** #1163: det en rad i lista så — nyeste versjon og arbeidstittelen — som `expectedVersionNo`/`expectedTitle`. */
+function listRevision(row) {
+  if (row?.latestVersionNo == null) return {};
+  return { expectedVersionNo: row.latestVersionNo, ...(typeof row.title === "string" ? { expectedTitle: row.title } : {}) };
 }
 
 /** #894: oversett seksjonstitlene som mangler språk — de synlige, i én runde. */
@@ -390,9 +403,11 @@ async function oversettManglendeSeksjonstitler(seksjoner) {
       // ⚠️ HELE språkkartet sendes. Seksjonenes tittel-PATCH ERSTATTER verdien (adminSections.ts),
       // i motsetning til modulenes, som slår sammen. En delvis patch ville slettet de andre
       // språkene — og det ville sett ut som en vellykket oversetting.
+      // #1163: hver tittel blir et utkast, med versjonen lista så. En seksjon noen har lagret siden, avvises (409) og telles
+      // som ikke oversatt.
       lagre: (seksjon, nye) => apiFetch(`/api/admin/content/sections/${encodeURIComponent(seksjon.id)}/title`, getHeaders, {
         method: "PATCH",
-        body: JSON.stringify({ title: { ...lagretTittelkart(seksjon.title), ...nye } }),
+        body: JSON.stringify({ title: { ...lagretTittelkart(seksjon.title), ...nye }, ...listRevision(seksjon) }),
       }),
     });
     await renderListView();
@@ -408,6 +423,79 @@ async function renderListView() {
   // Har forfatteren åpnet en seksjon i mellomtiden, ville lista blitt tegnet over skjemaet, og ulagret tekst var borte.
   if (detectRoute().view === "editor") return;
   await getListPage().reload().catch(() => undefined);
+}
+
+/**
+ * #1163: dialogen før en seksjon publiseres, i samme mønster som kursets (#1164, `openCoursePublishDialog`): hvilke kurs som
+ * får den nye teksten. Svarer `true` når forfatteren publiserer, `false` ved Avbryt, Lukk og Esc. Ingenting sendes herfra.
+ */
+function openSectionPublishDialog(courses) {
+  const dialog = document.getElementById("sectionPublishDialog");
+  const textEl = document.getElementById("sectionPublishText");
+  const listEl = document.getElementById("sectionPublishCourses");
+  const confirmBtn = document.getElementById("sectionPublishConfirmBtn");
+  const cancelBtn = document.getElementById("sectionPublishCancelBtn");
+  if (!dialog || typeof dialog.showModal !== "function" || !confirmBtn || !cancelBtn) {
+    // Uten dialogen publiseres ingenting i det stille.
+    showToast(L("publishDialogMissing"), "error");
+    return Promise.resolve(false);
+  }
+  const list = Array.isArray(courses) ? courses : [];
+  const titleEl = document.getElementById("sectionPublishTitle");
+  if (titleEl) titleEl.textContent = L("publishDialogTitle");
+  if (textEl) textEl.textContent = list.length > 0 ? tf("sections.publishDialogCourses", { count: list.length }) : L("publishDialogNoCourses");
+  if (listEl) {
+    listEl.innerHTML = list.length > 0 ? `<ul class="section-publish-courses">${list.map((c) => `<li>${escapeHtml(c.title ?? c.id)}</li>`).join("")}</ul>` : "";
+    setHidden(listEl, list.length === 0);
+  }
+  confirmBtn.textContent = L("publishDialogConfirm");
+  cancelBtn.textContent = t("ui.action.cancel");
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      confirmBtn.removeEventListener("click", onConfirm);
+      cancelBtn.removeEventListener("click", onCancel);
+      dialog.removeEventListener("close", onClose);
+      if (dialog.open) dialog.close();
+      resolve(value);
+    };
+    const onConfirm = () => finish(true);
+    const onCancel = () => finish(false);
+    const onClose = () => finish(false);
+    confirmBtn.addEventListener("click", onConfirm);
+    cancelBtn.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onClose);
+    dialog.showModal();
+    // Fokus på Avbryt: publiseringen når deltakerne, og Enter skal ikke publisere ved et uhell.
+    cancelBtn.focus();
+  });
+}
+
+
+/** #1163: publiseringens feil — porten (422) med felt og språk, ellers den felles kodetabellen (også 409 `section_changed`). */
+function publishErrorToast(err) {
+  const gate = translationGateMessage("gateBlocked", gateIssuesFrom(err));
+  if (gate) showToast(gate, "error"); else apiErrorToast(err);
+}
+
+/** #1163: «Publiser» og «Publiser ny versjon» i lista: dialogen, så publiseringen av versjonen raden viste. */
+async function publishFromList(item, toastKey) {
+  if (!item) return;
+  if (!(await openSectionPublishDialog(item.courses))) return;
+  try {
+    await apiFetch(`/api/admin/content/sections/${encodeURIComponent(item.id)}/publish`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify(item.latestVersionNo != null ? { expectedVersionNo: item.latestVersionNo } : {}),
+    });
+    showToast(L(toastKey));
+    renderListView();
+  } catch (err) {
+    publishErrorToast(err);
+    // 409: noen har lagret en nyere versjon. Lista hentes på nytt, så neste klikk gjelder den.
+    if (apiErrorCode(err) === "section_changed") renderListView();
+  }
 }
 
 // #705: én felles handler for de fire livssyklus-overgangene (POST .../{action}).
@@ -736,7 +824,7 @@ function getFormPage() {
     // #1151 skive 3c: merket som før, og for en arkivert seksjon linja om hvorfor den ikke kan endres (som kurset og modulen).
     statusHtml: () => {
       const item = sectionHeaderItem();
-      return item ? lifecycleBadge(item, tNav) + sectionArchivedNoticeHtml() : "";
+      return item ? lifecycleBadge(item, tNav) + sectionArchivedNoticeHtml() + sectionDraftLineHtml() : "";
     },
     t: tNav,
     actions: () => sectionActions(),
@@ -790,6 +878,23 @@ function sectionHeaderItem() {
 function sectionArchivedNoticeHtml() {
   if (!editing?.id || !editing.archivedAt) return "";
   return `<p class="archived-notice" role="status" data-section-archived-notice>${escapeHtml(L("archivedNotice"))}</p>`;
+}
+
+/** #1163: legg det fanen nå har sett (versjon, tittel) og det deltakerne ser, inn i seksjonen. */
+function applySectionRevision(session, detail) {
+  Object.assign(session, sectionRevisionFields(detail, session));
+}
+
+/**
+ * #1163: «Utkast lagret … Deltakerne ser versjon X til utkastet er publisert.» Kursets tekst uten navn (`lineNoName`): ingen
+ * versjonstabell vet hvem som lagret.
+ */
+function sectionDraftLineHtml() {
+  if (!editing?.id || editing.archivedAt) return "";
+  if (!showsSectionDraftLine({ published: Boolean(editing.activeVersionId), hasUnpublishedChanges: editing.hasUnpublishedChanges, publishedVersionNo: editing.publishedVersionNo })) return "";
+  const time = editing.draftSavedAt ? formatDateTime(editing.draftSavedAt) : "";
+  const text = tf("courses.draft.lineNoName", { time, version: editing.publishedVersionNo });
+  return `<p class="course-draft-line" data-section-draft-line>${escapeHtml(text)}</p>`;
 }
 
 function sectionActions() {
@@ -932,7 +1037,7 @@ async function renderEditorView(sectionId) {
   // #1154: også kalt direkte («Erstatt fra fil» henter seksjonen på nytt), så visningen telles her og ikke bare i ruta.
   viewToken += 1;
   const stillHere = sameView();
-  const session = { id: sectionId, title: { nb: "", nn: "", "en-GB": "" }, body: { nb: "", nn: "", "en-GB": "" }, editLocale: currentLocale, activeVersionId: null, archivedAt: null };
+  const session = { id: sectionId, title: { nb: "", nn: "", "en-GB": "" }, body: { nb: "", nn: "", "en-GB": "" }, editLocale: currentLocale, activeVersionId: null, archivedAt: null, courses: [] };
   editing = session;
 
   if (sectionId) {
@@ -944,6 +1049,9 @@ async function renderEditorView(sectionId) {
       session.body = parseLocalized(data.section.bodyMarkdown);
       session.activeVersionId = data.section.activeVersionId ?? null;
       session.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
+      // #1163: det fanen så — sendes med ved lagring og publisering — og det deltakerne ser (stripen, dialogen).
+      applySectionRevision(session, data.section);
+      session.courses = Array.isArray(data.section.courses) ? data.section.courses : [];
       // Uten merket (eldre svar) antas eierskap, som i lista: tjeneren vakter skrivingen uansett.
       session.canManage = data.section.canManage !== false;
       session.archivedAt = data.section.archivedAt ?? null;
@@ -976,21 +1084,26 @@ function refreshSectionLifecycleUI() {
 
 async function toggleSectionLifecycle(action, btn) {
   if (!editing?.id || !btn) return;
-  btn.disabled = true;
   // #1154: svaret legges i seksjonen handlingen ble startet i. Hodet tegnes fra den som vises nå.
   const session = editing;
+  // #1163: publiseringen spør først, som kursets: hvilke kurs som får den nye teksten. Avbryt sender ingenting.
+  if (action === "publish" && !(await openSectionPublishDialog(session.courses))) return;
+  btn.disabled = true;
   try {
-    const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}/${action}`, getHeaders, { method: "POST" });
+    // #1163: versjonen forfatteren så. Har noen lagret en nyere mens dialogen sto åpen, svarer tjeneren 409 og publiserer ingenting.
+    const body = action === "publish" && session.versionNo != null ? JSON.stringify({ expectedVersionNo: session.versionNo }) : undefined;
+    const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}/${action}`, getHeaders, { method: "POST", ...(body ? { body } : {}) });
     const hadNewVersion = action === "publish" && session.hasUnpublishedChanges && Boolean(session.activeVersionId);
     session.activeVersionId = data.section?.activeVersionId ?? null;
     session.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
     session.archivedAt = data.section?.archivedAt ?? null;
+    session.publishedVersionNo = data.section?.publishedVersionNo ?? null;
+    session.draftSavedAt = null;
     showToast(L(action === "publish" ? (hadNewVersion ? "newVersionPublished" : "published") : "unpublished"));
     refreshSectionLifecycleUI();
   } catch (err) {
     // #916: same gate rendering as the list's Publiser — both are the same door.
-    const gate = translationGateMessage("gateBlocked", gateIssuesFrom(err));
-    if (gate) showToast(gate, "error"); else apiErrorToast(err);
+    publishErrorToast(err);
   } finally {
     btn.disabled = false;
   }
@@ -1054,19 +1167,19 @@ async function persistSection({ silent } = {}) {
     return false;
   }
   try {
-    let heldBack = null;
     // #1128: bilder med en tittel som alt-tekst — lagret likevel, men kvitteringen sier det.
     let altWarnings = [];
     if (!session.id) {
+      // #1163: en ny seksjon lagres som utkast, som en ny modul og et nytt kurs. Den publiseres med «Publiser».
       const data = await apiFetch("/api/admin/content/sections", getHeaders, {
         method: "POST",
-        body: JSON.stringify({ title, bodyMarkdown }),
+        body: JSON.stringify({ title, bodyMarkdown, draft: true }),
       });
       session.id = data.section.id;
       session.activeVersionId = data.section.activeVersionId ?? null;
       session.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
       session.archivedAt = data.section.archivedAt ?? null;
-      heldBack = data.translationGate?.heldBack ? data.translationGate.issues : null;
+      applySectionRevision(session, data.section);
       altWarnings = data.altWarnings ?? [];
       // Forfatteren har gått videre: seksjonen er laget, men adressen og skjermen tilhører en annen visning nå.
       // `false` og ikke `true`: skjemasida ville ellers merket visningen som står der NÅ, som «Alt lagret».
@@ -1076,38 +1189,29 @@ async function persistSection({ silent } = {}) {
       // Første lagring lager seksjonen: hodet får eierpanel, Eksporter osv. — tegn sida på nytt.
       getFormPage().render();
     } else {
-      await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}/title`, getHeaders, {
-        method: "PATCH",
-        body: JSON.stringify({ title }),
-      });
-      // Ingen sjekk mellom de to kallene: forfatteren ba om å lagre, og en halv lagring er verre enn en hel.
-      const contentRes = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}/content`, getHeaders, {
+      // #1163: ÉN lagring — tittel og tekst i én transaksjon, med versjonen og tittelen fanen lastet. Har noen lagret siden,
+      // svarer tjeneren 409 `section_changed` og skriver ingenting; teksten står i fanen.
+      const res = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}`, getHeaders, {
         method: "PUT",
-        body: JSON.stringify({ bodyMarkdown }),
+        body: JSON.stringify({ title, bodyMarkdown, expectedVersionNo: session.versionNo ?? 0, expectedTitle: session.loadedTitle ?? "" }),
       });
-      // Lagring publiserer (latest-wins) — oppdater status så merkelappen blir riktig.
-      session.activeVersionId = contentRes.section?.activeVersionId ?? null;
-      session.hasUnpublishedChanges = Boolean(contentRes.section?.hasUnpublishedChanges);
-      heldBack = contentRes.translationGate?.heldBack ? contentRes.translationGate.issues : null;
-      altWarnings = contentRes.altWarnings ?? [];
+      session.activeVersionId = res.section?.activeVersionId ?? null;
+      session.hasUnpublishedChanges = Boolean(res.section?.hasUnpublishedChanges);
+      // Revisjonen etter HVER lagring: neste lagring i samme fane sender den nye versjonen, ikke den fanen åpnet med.
+      applySectionRevision(session, res.section);
+      altWarnings = res.altWarnings ?? [];
       if (!stillHere()) return false;
     }
     // #705: hold status-merkelappen + Publiser/Avpubliser-knappen i editoren i synk etter lagring.
     refreshSectionLifecycleUI();
-    // #916: the save always lands, but the publish gate may have held the activation back. Saying
-    // only "Lagret" would let the author believe participants can read text that is not live.
-    const gateMessage = heldBack ? translationGateMessage("gateHeldBack", heldBack) : null;
-    if (gateMessage) {
-      showToast(gateMessage, "error");
-      if (status) status.textContent = gateMessage;
-      return true;
-    }
     if (!silent) {
+      // #1163: lagret er ikke publisert. Meldingen sier at deltakerne ikke ser endringen før den er publisert.
+      const saved = L("savedDraft");
       const alt = describeAltWarnings(altWarnings, t, tf);
       // Overskriften i selve meldingen: toast.js viser ikke samme tekst to ganger.
-      if (alt.length > 0) showToast(`${L("saved")} ${t("altCheck.heading")}`, "warning", alt.join(" "));
-      else showToast(L("saved"));
-      if (status) status.textContent = L("saved");
+      if (alt.length > 0) showToast(`${saved} ${t("altCheck.heading")}`, "warning", alt.join(" "));
+      else showToast(saved);
+      if (status) status.textContent = saved;
     }
     return true;
   } catch (err) {

@@ -216,6 +216,8 @@ test("publish gate: the block names field and language instead of leaking the se
 
   await page.goto("/admin-content/sections");
   await (await revealRowAction(page, page.locator('[data-action="publish"][data-id="sec-916"]'))).click();
+  // #1163: publiseringen spør først (hvilke kurs som får teksten).
+  await page.locator("#sectionPublishConfirmBtn").click();
 
   const toast = toastOf(page);
   await expect(toast).toContainText("Kan ikke publisere");
@@ -224,10 +226,15 @@ test("publish gate: the block names field and language instead of leaking the se
   await expect(toast).not.toContainText("bodyMarkdown");
 });
 
-test("held-back save: the author is told it was saved but not published, and how to fix it", async ({ page }) => {
+// #1163: før stod det her at en lagring porten holdt igjen, ga den røde meldingen «Lagret, men ikke publisert …». Nå lagrer
+// redigereren alltid et utkast (en ny seksjon med `draft: true`), porten gjelder bare publiseringen, og meldingen sier at
+// deltakerne ikke ser endringen før den er publisert — uansett hva et svar fra en eldre tjener måtte bære.
+test("lagring er et utkast: ingen rød «Lagret, men ikke publisert», men at deltakerne ikke ser det før det er publisert", async ({ page }) => {
   await mockBaseApis(page);
+  const opprettet: Array<Record<string, unknown>> = [];
   await page.route("**/api/admin/content/sections", (route: Route) => {
     if (route.request().method() === "POST") {
+      opprettet.push(route.request().postDataJSON() as Record<string, unknown>);
       return route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -269,11 +276,11 @@ test("held-back save: the author is told it was saved but not published, and how
   await page.getByRole("button", { name: /^Lagre$/ }).click();
 
   const toast = toastOf(page);
-  // A plain "Seksjon lagret." here is the confusion this exists to prevent: the author would
-  // believe participants can read text that is not live.
-  await expect(toast).toContainText("Lagret, men ikke publisert");
-  await expect(toast).toContainText("tittelen");
-  await expect(toast).toContainText("Oversett fra dette språket");
+  await expect.poll(() => opprettet.length).toBe(1);
+  expect(opprettet[0]).toMatchObject({ draft: true });
+  // A plain "Seksjon lagret." would let the author believe participants can read text that is not live.
+  await expect(toast).toContainText("Lagret som utkast. Deltakerne ser ikke endringen før den er publisert.");
+  await expect(toast).not.toContainText("Lagret, men ikke publisert");
 });
 
 // ————————————————————————————————————————————————————————————————————————————————————————————

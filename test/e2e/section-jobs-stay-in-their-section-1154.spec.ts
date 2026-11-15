@@ -214,16 +214,15 @@ test.describe("#1154 — en jobb skriver bare i visningen den startet i", () => 
 
   test("en lagring i A som blir ferdig mens forfatteren skriver i B, merker ikke B som «Alt lagret»", async ({ page }) => {
     await mockSeksjoner(page);
-    await page.route("**/api/admin/content/sections/sec-a/title", (route: Route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-a" } }) }),
-    );
     const svar = tilbakeholdt();
     const lagret: string[] = [];
-    await page.route("**/api/admin/content/sections/sec-a/content", async (route: Route) => {
+    // #1163: lagringen er ett kall, `PUT …/sec-a` (GET til samme adresse er detaljen og går videre til mocken over).
+    await page.route("**/api/admin/content/sections/sec-a", async (route: Route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
       svar.kall += 1;
       lagret.push(route.request().postData() ?? "");
       await svar.port;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-a", activeVersionId: "v2", archivedAt: null, hasUnpublishedChanges: false } }) });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-a", activeVersionId: "v1", archivedAt: null, versionNo: 2, hasUnpublishedChanges: true } }) });
     });
     // Forfatteren forlater A mens lagringen går. Skjemaet er fortsatt ulagret, så tilbake-knappen spør (#1155): OK.
     page.on("dialog", (dialog) => void dialog.accept());

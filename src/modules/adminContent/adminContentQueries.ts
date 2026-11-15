@@ -4,6 +4,7 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText, localesPresent } from "../../i18n/content.js";
 import { deriveContentLifecycle } from "../content/lifecycle.js";
 import { findActiveCoursesForModules } from "../course/contentLifecycle.js";
+import { sectionVersionTitle } from "../course/sectionTitle.js";
 import { createRetentionContext, evaluateArchivedItems, type ArchivedRetention } from "../content/archivedRetention.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
 import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
@@ -387,20 +388,35 @@ export async function buildSectionExportPayload(
     }
   }
 
+  // #1163: tittelen hører til versjonen. Eksporten av en bestemt versjon (byttet av et fremmed element, #1095) tar den
+  // versjonens tittel; reserven er arbeidstittelen, for en versjon gammel kode laget uten tittel.
+  const versionPayload = (version: { title?: string | null; bodyMarkdown: string | null; publishedAt: Date | string | null; versionNo: number }) => {
+    const title = sectionVersionTitle(version, section.title);
+    return {
+      title: (decodeLocalizedText(title) as never) ?? (title as never),
+      bodyMarkdown: (version.bodyMarkdown ? decodeLocalizedText(version.bodyMarkdown) : "") as never,
+      audit: {
+        // The source's publish state travels with the payload but never decides the destination's:
+        // a standalone section import always lands unpublished (#916), and a course import runs the
+        // imported section through the same gate as any other publish.
+        publishedAt: version.publishedAt ? new Date(version.publishedAt).toISOString() : null,
+        publishedBy: null,
+        publishedByEmail: null,
+        sourceVersionNo: version.versionNo ?? null,
+      },
+    };
+  };
+
+  // #1163 («Etter gjennomlesingen» punkt 1): har seksjonen et utkast over den publiserte versjonen, bærer pakken BEGGE —
+  // utkastet som hovedinnhold (det forfatteren arbeider i, som før) og det deltakerne ser i `publishedVersion`. Importen
+  // «nytt kurs» gjenskaper det slik det var: den publiserte aktiv, utkastet upublisert over. Uten det ville et utkast gått
+  // rett ut til deltakerne i det nye kurset. Bare når kalleren ikke ba om en bestemt versjon.
+  const active = section.activeVersion;
+  const publishedVersion = !versionId && active && active.id !== sourceVersion.id ? versionPayload(active) : null;
+
   return {
-    title: (decodeLocalizedText(section.title) as never) ?? (section.title as never),
-    bodyMarkdown: (sourceVersion?.bodyMarkdown
-      ? decodeLocalizedText(sourceVersion.bodyMarkdown)
-      : "") as never,
-    audit: {
-      // The source's publish state travels with the payload but never decides the destination's:
-      // a standalone section import always lands unpublished (#916), and a course import runs the
-      // imported section through the same gate as any other publish.
-      publishedAt: sourceVersion?.publishedAt ? new Date(sourceVersion.publishedAt).toISOString() : null,
-      publishedBy: null,
-      publishedByEmail: null,
-      sourceVersionNo: sourceVersion?.versionNo ?? null,
-    },
+    ...versionPayload(sourceVersion),
+    ...(publishedVersion ? { publishedVersion: publishedVersion as never } : {}),
     ...(assets.length > 0 ? { assets: assets as never } : {}),
   };
 }

@@ -118,5 +118,8 @@ the author uploads in the admin UI. Where you can reach the platform and have a 
 the drafts through the API instead. Both are described in
 [references/check-and-produce.md](references/check-and-produce.md).
 
+A new course — created through the API or imported as a new course — is **restricted**: only the
+participants it is assigned to see it until the author opens it to everyone. Tell the author.
+
 Close every delivery with what was made, which checks ran, where the author imports it, and:
 *"Alt er opprettet som utkast — gjennomgå og publiser manuelt i admin-UI."*

@@ -58,6 +58,8 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     expect(await knapp.evaluate((el) => Boolean(el.closest("details.row-more")))).toBe(false);
 
     await knapp.click();
+    // #1163: dialogen først; publiseringen går ved «Publiser».
+    await page.locator("#sectionPublishConfirmBtn").click();
     await expect.poll(() => publisert).toEqual(["sec-ny"]);
     await expect(page.locator(".toast__message")).toContainText("Ny versjon publisert.");
     await expect(page.locator('[data-action="publish-new"]')).toHaveCount(0);
@@ -92,25 +94,27 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     await expect(knapp).toHaveText("Publiser ny versjon");
 
     await knapp.click();
+    // #1163: dialogen først.
+    await page.locator("#sectionPublishConfirmBtn").click();
     await expect.poll(() => publiseringer).toBe(1);
     await expect(page.locator(".toast__message")).toContainText("Ny versjon publisert.");
     await expect(page.locator("#sectionPublishNewBtn")).toHaveCount(0);
     await expect(page.locator(".status-chip")).toHaveCount(0);
   });
 
-  test("knappene i hodet virker også etter at hodet er tegnet på nytt: tilbakeholdt lagring → «Publiser ny versjon» publiserer; så virker «Avpubliser»", async ({ page }) => {
+  test("knappene i hodet virker også etter at hodet er tegnet på nytt: lagret utkast → «Publiser ny versjon» publiserer; så virker «Avpubliser»", async ({ page }) => {
     // QA-porten (2.88.3): hodet tegnes på nytt etter lagring og publisering; en lytter på det gamle
     // elementet gjorde knappene døde til sida ble lastet på nytt.
     await mockBase(page);
     await page.route("**/api/admin/content/sections", (route: Route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [rad("sec-x", "published")] }) }),
     );
-    const sek = { id: "sec-x", title: tittel, bodyMarkdown: JSON.stringify({ nb: "Tekst", nn: "Tekst", "en-GB": "Text" }), activeVersionId: "v1", archivedAt: null, hasUnpublishedChanges: false, assets: [] };
-    await page.route("**/api/admin/content/sections/sec-x", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: sek }) }));
-    await page.route("**/api/admin/content/sections/sec-x/title", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: sek }) }));
-    // Lagringen holdes tilbake av porten: den nye versjonen står upublisert.
-    await page.route("**/api/admin/content/sections/sec-x/content", (route: Route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { ...sek, hasUnpublishedChanges: true }, translationGate: { heldBack: true, issues: [{ field: "bodyMarkdown", missingLocales: ["nn", "en-GB"] }] } }) }),
+    const sek = { id: "sec-x", title: tittel, bodyMarkdown: JSON.stringify({ nb: "Tekst", nn: "Tekst", "en-GB": "Text" }), activeVersionId: "v1", archivedAt: null, hasUnpublishedChanges: false, versionNo: 1, publishedVersionNo: 1, assets: [] };
+    // #1163: GET er detaljen; PUT til samme adresse er lagringen, som alltid lager et upublisert utkast.
+    await page.route("**/api/admin/content/sections/sec-x", (route: Route) =>
+      route.request().method() === "PUT"
+        ? route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { ...sek, versionNo: 2, hasUnpublishedChanges: true } }) })
+        : route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: sek }) }),
     );
     const kall: string[] = [];
     await page.route("**/api/admin/content/sections/sec-x/publish", (route: Route) => {
@@ -129,6 +133,7 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     // Hodet er tegnet på nytt: merket og knappen er der — og knappen virker.
     await expect(page.locator(".status-chip")).toHaveText("Nyere utkast");
     await page.locator("#sectionPublishNewBtn").click();
+    await page.locator("#sectionPublishConfirmBtn").click();
     await expect.poll(() => kall).toEqual(["publish"]);
     await expect(page.locator("#sectionPublishNewBtn")).toHaveCount(0);
     // Hodet er tegnet på nytt igjen: «Avpubliser» virker også.

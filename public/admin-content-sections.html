@@ -76,6 +76,14 @@
       .preview-pane img { max-width: 100%; height: auto; }
       .preview-pane iframe { max-width: 100%; }
       .editor-status { font-size: 13px; color: var(--color-meta); }
+      /* #1163: publiseringsdialogen, som kursets (admin-content-courses.html). Rammen og bakteppet kommer fra shared.css. */
+      #sectionPublishDialog { box-sizing: border-box; max-width: min(480px, calc(100vw - 24px)); }
+      .dialog-title { font-size: 18px; font-weight: 700; margin: 0 0 var(--space-1); }
+      .dialog-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
+      .dialog-actions { display: flex; gap: 8px; flex-direction: column; margin-top: var(--space-2); }
+      .dialog-cancel { background: none; border: 1px solid var(--color-border-soft); border-radius: var(--radius-button); padding: 8px 16px; font-size: 14px; cursor: pointer; color: var(--color-meta); }
+      .dialog-cancel:hover { background: var(--color-row-hover); }
+      .section-publish-courses { margin: 0 0 var(--space-2); padding-left: 20px; font-size: 14px; overflow-wrap: anywhere; }
     </style>
   </head>
   <body>
@@ -102,6 +110,18 @@
         <div class="page-loading">Laster…</div>
       </div>
     </main>
+
+    <!-- #1163: publiseringsdialogen for en seksjon, i samme mønster som kursets (#1164): hvilke kurs som får den nye teksten.
+         Tekstene settes når den åpnes (`openSectionPublishDialog`). -->
+    <dialog id="sectionPublishDialog" aria-labelledby="sectionPublishTitle">
+      <h2 class="dialog-title" id="sectionPublishTitle">Publiser seksjonen</h2>
+      <p class="dialog-text" id="sectionPublishText"></p>
+      <div id="sectionPublishCourses"></div>
+      <div class="dialog-actions">
+        <button type="button" id="sectionPublishConfirmBtn" class="btn btn-primary">Publiser</button>
+        <button type="button" class="dialog-cancel" id="sectionPublishCancelBtn">Avbryt</button>
+      </div>
+    </dialog>
 
     <script type="module" src="/static/admin-content-sections.js"></script>
     <script type="module" src="/static/content-blocks.js"></script>

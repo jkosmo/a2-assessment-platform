@@ -9,6 +9,7 @@ import {
   createSectionWithAssets,
   updateSectionTitle,
   updateSectionContent,
+  saveSection,
   getSection,
   listSections,
   publishSection,
@@ -22,6 +23,7 @@ import {
   MAX_ASSET_BYTES,
 } from "../modules/course/index.js";
 import { findActiveCoursesForSections } from "../modules/course/contentLifecycle.js";
+import { sectionVersionTitle } from "../modules/course/sectionTitle.js";
 import { createRetentionContext, evaluateArchivedItems, retentionRequested, type ArchivedRetention } from "../modules/content/archivedRetention.js";
 import {
   localizedTextPatchSchema,
@@ -97,8 +99,25 @@ const createSectionSchema = z.object({
   // and its `asset:<sourceId>` markdown refs are remapped to the new asset ids.
   assets: z.array(authoringSectionAssetSchema).optional(),
 });
-const titleSchema = z.object({ title: localizedTextPatchSchema });
+// #1163: det fanen så (prinsipp 6). `expectedTitle` er arbeidstittelen slik tjeneren sendte den (rå tekst).
+const revisionFields = {
+  expectedVersionNo: z.number().int().min(0),
+  expectedTitle: z.string(),
+};
+// «Døp om» og masseoversettingen sender det lista så. En fane fra før #1163 sender det ikke (se `updateSectionTitle`).
+const titleSchema = z.object({
+  title: localizedTextPatchSchema,
+  expectedVersionNo: revisionFields.expectedVersionNo.optional(),
+  expectedTitle: revisionFields.expectedTitle.optional(),
+});
 const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
+// #1163: redigererens ene lagring. Revisjonen er påkrevd: uten den kan tjeneren ikke vite om fanen er utdatert.
+const saveSchema = z.object({
+  title: localizedTextPatchSchema,
+  bodyMarkdown: localizedTextPatchSchema,
+  ...revisionFields,
+});
+const publishSchema = z.object({ expectedVersionNo: z.number().int().min(1).optional() }).optional();
 // `variant: "moduleText"` (modularbeidsflatens forhåndsvisning, #1051): modulens tekst tegnes uten øvelsene
 // steg for steg, skriv selv og repetisjonskort, slik deltakeren får den (ContentBlockVariant).
 const previewSchema = z.object({
@@ -113,31 +132,43 @@ const localizeSchema = z.object({
   targetLocale: generationLocaleSchema,
 }).refine((v) => Boolean(v.title || v.bodyMarkdown), { message: "At least one field is required." });
 
+type SectionVersionRow = { id: string; bodyMarkdown: string; versionNo: number; title?: string | null; createdAt?: Date };
 type SectionWithActiveVersion = {
   id: string;
   title: string;
   activeVersionId: string | null;
   archivedAt: Date | null;
   updatedAt: Date;
-  activeVersion?: { id?: string; bodyMarkdown?: string; versionNo: number } | null;
+  activeVersion?: Partial<SectionVersionRow> & { versionNo: number } | null;
   // #916: the newest version, whether or not it is the active one. The editor must show what was
   // last SAVED — the translation gate can hold a save back from activation, and reading only the
   // active version would make the author's own text disappear on reload.
-  versions?: Array<{ id: string; bodyMarkdown: string; versionNo: number }>;
+  // #1163: lagring publiserer ikke lenger, så den nyeste er utkastet forfatteren arbeider i.
+  versions?: SectionVersionRow[];
 };
 
+/**
+ * #1163: detaljen bærer BEGGE versjonene. `versionNo`/`bodyMarkdown`/`title` er det redigerbare (den nyeste versjonen og
+ * arbeidstittelen); `publishedVersionNo`/`publishedTitle` er det deltakerne ser. Stripen «Deltakerne ser versjon X til utkastet
+ * er publisert» leser de to; uten dem ville den kalt utkastet «det deltakerne ser». `title` er den rå teksten redigereren sender
+ * tilbake som `expectedTitle`.
+ */
 function toDetail(section: SectionWithActiveVersion) {
   const latest = section.versions?.[0] ?? null;
   const editable = latest ?? section.activeVersion ?? null;
+  const hasUnpublishedChanges = Boolean(latest && section.activeVersionId && latest.id !== section.activeVersionId);
   return {
     id: section.id,
     title: section.title,
     activeVersionId: section.activeVersionId,
     versionNo: editable?.versionNo ?? null,
     bodyMarkdown: editable?.bodyMarkdown ?? null,
-    // True when the newest version is not the published one — i.e. a save was held back by the
-    // translation gate. The list/editor can say "lagret, ikke publisert" without guessing.
-    hasUnpublishedChanges: Boolean(latest && section.activeVersionId && latest.id !== section.activeVersionId),
+    // True when the newest version is not the published one — a saved draft waiting to be published.
+    hasUnpublishedChanges,
+    publishedVersionNo: section.activeVersionId ? section.activeVersion?.versionNo ?? null : null,
+    publishedTitle: section.activeVersionId && section.activeVersion ? sectionVersionTitle(section.activeVersion, section.title) : null,
+    // Når utkastet ble lagret (stripens tidspunkt). Bare når det finnes et utkast over den publiserte versjonen.
+    draftSavedAt: hasUnpublishedChanges && latest?.createdAt ? latest.createdAt.toISOString() : null,
     updatedAt: section.updatedAt.toISOString(),
     archivedAt: section.archivedAt?.toISOString() ?? null,
   };
@@ -379,6 +410,8 @@ adminSectionsRouter.get("/", async (request, response, next) => {
           // #705: status-merkelappen i lista trenger activeVersionId (Publisert vs Utkast).
           activeVersionId: s.activeVersionId,
           versionNo: s.activeVersion?.versionNo ?? null,
+          // #1163: nummeret på den nyeste versjonen (utkastet). «Døp om», masseoversettingen og «Publiser» sender det med.
+          latestVersionNo: s.versions[0]?.versionNo ?? null,
           updatedAt: s.updatedAt.toISOString(),
           archivedAt: s.archivedAt?.toISOString() ?? null,
           // #1046 steg B: tilstanden regnet ut av tjeneren, samme ord for modul, kurs og seksjon.
@@ -477,7 +510,9 @@ adminSectionsRouter.get("/:sectionId", async (request, response, next) => {
       actorUserId: request.context?.userId ?? "",
       roles: request.context?.roles ?? [],
     });
-    response.json({ section: { ...toDetail(section), canManage: manageable.has(section.id) } });
+    // #1163: publiseringsdialogen sier hvilke kurs som får den nye teksten — de aktive kursene seksjonen står i (som lista).
+    const courses = (await findActiveCoursesForSections([section.id])).get(section.id) ?? [];
+    response.json({ section: { ...toDetail(section), canManage: manageable.has(section.id), courses } });
   } catch (error) {
     next(error);
   }
@@ -490,10 +525,15 @@ adminSectionsRouter.patch("/:sectionId/title", requireContentOwnership("SECTION"
     return;
   }
   try {
+    // #1163: et nytt navn er et utkast. Det lista så, sendes med; uten det (en fane fra før) lagres utkastet uten sjekk.
+    const revision = parsed.data.expectedVersionNo !== undefined
+      ? { expectedVersionNo: parsed.data.expectedVersionNo, expectedTitle: parsed.data.expectedTitle }
+      : undefined;
     const section = await updateSectionTitle(
       request.params.sectionId,
       localizedTextCodec.serialize(parsed.data.title),
       request.context?.userId,
+      revision,
     );
     response.json({ section: toDetail(section) });
   } catch (error) {
@@ -501,6 +541,32 @@ adminSectionsRouter.patch("/:sectionId/title", requireContentOwnership("SECTION"
   }
 });
 
+// #1163: redigererens ENE lagring — tittel og tekst i én transaksjon under innholdslåsen, med det fanen lastet. Lager en ny,
+// upublisert versjon; deltakerne ser den publiserte til noen publiserer. 409 `section_changed`: noen har lagret siden, og
+// ingenting er skrevet.
+adminSectionsRouter.put("/:sectionId", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
+  const parsed = saveSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const section = await saveSection(
+      request.params.sectionId,
+      {
+        title: localizedTextCodec.serialize(parsed.data.title),
+        bodyMarkdown: localizedTextCodec.serialize(parsed.data.bodyMarkdown),
+      },
+      { expectedVersionNo: parsed.data.expectedVersionNo, expectedTitle: parsed.data.expectedTitle },
+    );
+    response.json({ section: toDetail(section), altWarnings: altTextWarnings(parsed.data.bodyMarkdown) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Den gamle lagringen av teksten. #1163: står ett utrullingsvindu for faner fra før, og publiserer ikke lenger — den lager et
+// utkast (den trygge retningen). Fjernes i en senere utrulling.
 adminSectionsRouter.put("/:sectionId/content", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
   const parsed = contentSchema.safeParse(request.body);
   if (!parsed.success) {
@@ -513,9 +579,7 @@ adminSectionsRouter.put("/:sectionId/content", requireContentOwnership("SECTION"
       localizedTextCodec.serialize(parsed.data.bodyMarkdown),
       request.context?.userId,
     );
-    // #916: the save always succeeds — but when the gate held it back, the new version was stored
-    // WITHOUT being activated, and the client has to say so instead of showing a plain "Lagret".
-    response.json({ section: toDetail(section), ...translationGatePayload(section), altWarnings: altTextWarnings(parsed.data.bodyMarkdown) });
+    response.json({ section: toDetail(section), altWarnings: altTextWarnings(parsed.data.bodyMarkdown) });
   } catch (error) {
     next(error);
   }
@@ -574,8 +638,16 @@ adminSectionsRouter.post("/:sectionId/assets/localize", requireContentOwnership(
 // #705: enhetlig livssyklus — seksjoner får samme Publiser/Avpubliser/Arkiver/Gjenopprett som
 // moduler/kurs. Bruk-lås (G2) håndheves i kommandolaget og gir 400 med navngitte kurs.
 adminSectionsRouter.post("/:sectionId/publish", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
+  // #1163: versjonen forfatteren så i dialogen. Valgfri: lista i en fane fra før, og API-kallere uten den, publiserer den nyeste.
+  const parsed = publishSchema.safeParse(request.body && Object.keys(request.body).length > 0 ? request.body : undefined);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
   try {
-    const section = await publishSection(request.params.sectionId, request.context?.userId);
+    const section = await publishSection(request.params.sectionId, request.context?.userId, undefined, {
+      expectedVersionNo: parsed.data?.expectedVersionNo,
+    });
     response.json({ section: toDetail(section) });
   } catch (error) {
     // #916: the translation gate blocks with the SAME body shape as the module publish route

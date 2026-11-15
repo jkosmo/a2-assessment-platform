@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { courseRepository, createCourseRepository, computeCourseStatus, getSection, recordSectionRead, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
 import { findSectionReadCredit } from "../modules/course/sectionReadCredit.js";
+import { publishedSectionTitle } from "../modules/course/sectionTitle.js";
 import { prisma } from "../db/prisma.js";
 import { pairKey } from "../modules/course/learnerVisibility.js";
 import { runContentReadForLearner } from "../db/contentLock.js";
@@ -429,7 +430,9 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
     if (!section) {
       throw new NotFoundError("CourseSection", "section_not_found", "Section not found.");
     }
-    const localizedTitle = localizeContentText(locale, section.title) ?? section.title;
+    // #1163: tittelen fra den publiserte versjonen, som teksten under. Arbeidstittelen kan være et upublisert utkast.
+    const participantTitle = publishedSectionTitle(section);
+    const localizedTitle = localizeContentText(locale, participantTitle) ?? participantTitle;
     const localizedBody = localizeContentText(locale, section.activeVersion?.bodyMarkdown ?? "") ?? "";
     // #934 skive 5a-1: `sectionVersionId` er versjonen teksten kom fra. Siden sender den tilbake når deltakeren har lest.
     response.json({

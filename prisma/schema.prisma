@@ -1150,6 +1150,10 @@ model CourseSectionVersion {
   sectionId         String
   versionNo         Int
   bodyMarkdown      String // lokalisert JSON av markdown-tekst, per locale
+  // #1163: tittelen er en del av versjonen (lokalisert JSON som `CourseSection.title`). Deltakerne leser den publiserte
+  // versjonens tittel; `CourseSection.title` er forfatterens arbeidstittel. Null bare for en versjon gammel kode laget under
+  // utrullingen: da gjelder seksjonens tittel (`sectionVersionTitle`, sectionTitle.ts).
+  title             String?
   publishedBy       String?
   publishedAt       DateTime?
   createdAt         DateTime        @default(now())

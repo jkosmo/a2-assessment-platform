@@ -1,6 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
-import { AppError, DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { AppError, ConflictError, DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { sectionVersionTitle } from "./sectionTitle.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import {
@@ -60,15 +61,12 @@ export function remapAssetRefs(serializedMarkdown: string, idMap: Map<string, st
 // |------|-----------|
 // | `publishSection` (author's button, and the course cascade's publish step) | throws 422 `publish_blocked_by_validation` |
 // | `createSection` with auto-publish (`draft` not set) | held back to DRAFT; the write succeeds |
-// | `updateSectionContent` (saving IS publishing for sections) | the new version is stored but NOT activated |
 // | standalone section import (#916) | always lands unpublished by decision, so it never reaches the gate |
 //
-// Why the two save doors hold back instead of throwing: for a module, saving a draft and
-// publishing are separate actions, so blocking publish costs the author nothing. A section has no
-// draft-save — every save publishes. Failing the save would mean an author writing in Norwegian
-// could not store their work at all, which trades a language bug for data loss. Holding the
-// activation back keeps both the text and the rule, and mirrors the module IMPORT door, which
-// resolves exactly the same conflict the same way.
+// #1163: «Lagre» publiserer ikke lenger (`saveSection`, `updateSectionTitle`, `updateSectionContent` lager et utkast), så
+// porten gjelder bare publiseringen — og den måler versjonen som publiseres, med dens tittel. Den gamle døra
+// «lagring holdes tilbake» finnes ikke lenger. Oppretting uten `draft: true` publiserer fortsatt og har fortsatt porten (holdt
+// tilbake i stedet for å kaste, så teksten aldri går tapt).
 export type SectionTranslationGate = {
   /** True when the section may become (or stay) the participant-visible active version. */
   ok: boolean;
@@ -86,9 +84,8 @@ export function evaluateSectionTranslationGate(input: {
 }
 
 // Section CRUD + versioning (#485/B1) for course learning sections (#476).
-// Mirrors Module/ModuleVersion: editing content publishes an immutable new
-// version and re-points activeVersionId (latest-wins in v1.3.x). Localized
-// fields (title, bodyMarkdown) arrive already serialized to JSON strings by the
+// #1163: som Module/ModuleVersion — en lagring lager en ny, upublisert versjon (med tittel og tekst), og «Publiser» peker
+// `activeVersionId` på den. Localized fields (title, bodyMarkdown) arrive already serialized to JSON strings by the
 // route layer, exactly like createCourse.
 
 // AA-2 (#650): `draft: true` keeps the section in Utkast (activeVersionId stays
@@ -121,6 +118,8 @@ export async function createSection(input: {
       data: {
         sectionId: section.id,
         versionNo: 1,
+        // #1163: tittelen hører til versjonen.
+        title: input.title,
         bodyMarkdown: input.bodyMarkdown,
         publishedBy: keepAsDraft ? null : input.actorId ?? null,
         publishedAt: keepAsDraft ? null : new Date(),
@@ -233,75 +232,127 @@ export async function createSectionWithAssets(input: {
   };
 }
 
-export async function updateSectionTitle(sectionId: string, title: string, actorId?: string) {
-  // #934 skive 3: seksjonens navn står i kursene den ligger i — en endring er levende innhold der, og gir
-  // dem en mindre versjon. Samme tekst lagret på nytt er ingen endring.
-  // #934 skive 4a: innholdslåsen først; kursene seksjonen ligger i, leses etter den.
-  return runContentWrite(async (tx) => {
-    await assertSectionExists(sectionId, tx);
-    // #1151: en arkivert seksjon får ikke nytt navn (også omdøping i lista).
-    await assertNotArchived(tx, { type: "SECTION", id: sectionId });
-    const previous = await tx.courseSection.findUniqueOrThrow({ where: { id: sectionId }, select: { title: true } });
-    const section = await tx.courseSection.update({
-      where: { id: sectionId },
-      data: { title },
-      include: { activeVersion: true },
-    });
-    if (!sameLocalizedText(previous.title, title)) await applyMinorVersionToCoursesContaining(tx, { sectionId }, actorId);
-    return section;
+// =========================================================================
+// #1163 skive 1: «Lagre» lager et utkast (doc/design/PLAN_1163_SEKSJON_UTKAST.md)
+// =========================================================================
+// Alle tre veiene som lagrer en seksjon — redigererens ene lagring (`saveSection`), «Døp om» og masseoversettingen i lista
+// (`updateSectionTitle`), og den gamle `PUT …/content` for faner fra før utrullingen (`updateSectionContent`) — går hit:
+// en NY, upublisert versjon med tittel og tekst, og arbeidstittelen (`CourseSection.title`) settes til tittelen i den. Ingenting
+// når deltakerne før noen publiserer, og kursene får ingen ny versjon her (den hører til publiseringen, `publishSection`).
+
+/** #1163 (prinsipp 6): det fanen så da den ble åpnet. Er seksjonen lagret siden, avvises skrivingen (409 `section_changed`). */
+export type SectionRevisionCheck = {
+  /** Nummeret på den nyeste versjonen fanen lastet (`versionNo` i detaljen, `latestVersionNo` i lista). */
+  expectedVersionNo: number;
+  /** Arbeidstittelen fanen lastet, slik tjeneren sendte den (rå tekst). Fanger en tittel gammel kode skrev uten ny versjon. */
+  expectedTitle?: string;
+};
+
+function assertSectionRevision(
+  sectionId: string,
+  current: { title: string; latestVersionNo: number | null },
+  revision: SectionRevisionCheck | undefined,
+) {
+  if (!revision) return;
+  const versionChanged = (current.latestVersionNo ?? 0) !== revision.expectedVersionNo;
+  const titleChanged = revision.expectedTitle !== undefined && revision.expectedTitle !== current.title;
+  if (versionChanged || titleChanged) {
+    throw new ConflictError(
+      "section_changed",
+      "The section was saved somewhere else after you opened it. Nothing was saved; copy your text and reload the section.",
+      { sectionId, expectedVersionNo: revision.expectedVersionNo, currentVersionNo: current.latestVersionNo, titleChanged },
+    );
+  }
+}
+
+const sectionDraftInclude = { activeVersion: true, versions: { orderBy: { versionNo: "desc" as const }, take: 1 } };
+
+/** Den ene skriveren av et seksjonsutkast. Kalleren holder innholdslåsen og har sjekket at seksjonen finnes og ikke er arkivert. */
+async function writeSectionDraft(
+  client: ContentWriteTx,
+  sectionId: string,
+  latestVersionNo: number | null,
+  draft: { title: string; bodyMarkdown: string },
+) {
+  await client.courseSectionVersion.create({
+    data: {
+      sectionId,
+      versionNo: (latestVersionNo ?? 0) + 1,
+      title: draft.title,
+      bodyMarkdown: draft.bodyMarkdown,
+      publishedBy: null,
+      publishedAt: null,
+    },
+  });
+  return client.courseSection.update({
+    where: { id: sectionId },
+    data: { title: draft.title, updatedAt: new Date() },
+    include: sectionDraftInclude,
   });
 }
 
-export async function updateSectionContent(sectionId: string, bodyMarkdown: string, actorId?: string, tx?: ContentWriteTx) {
-  // #934 skive 4a: alt etter innholdslåsen — også tittelen språkporten måler, så den ikke er fra før en
-  // samtidig navneendring.
-  const run = async (client: ContentWriteTx) => {
-    const existing = await client.courseSection.findUnique({
-      where: { id: sectionId },
-      select: { id: true, title: true },
-    });
-    if (!existing) {
-      throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+/** Seksjonen og nummeret på den nyeste versjonen, etter låsen. Kaster `section_not_found` og `section_archived` (#1151). */
+async function loadSectionForDraft(client: ContentWriteTx, sectionId: string) {
+  const existing = await client.courseSection.findUnique({ where: { id: sectionId }, select: { id: true, title: true } });
+  if (!existing) {
+    throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+  }
+  // #1151: en arkivert seksjon lagres ikke og får ikke nytt navn (også omdøping i lista).
+  await assertNotArchived(client, { type: "SECTION", id: sectionId });
+  const latest = await client.courseSectionVersion.findFirst({
+    where: { sectionId },
+    orderBy: { versionNo: "desc" },
+    select: { versionNo: true, title: true, bodyMarkdown: true },
+  });
+  return { title: existing.title, latest };
+}
+
+/**
+ * #1163: redigererens lagring. Tittel og tekst i ÉN transaksjon under innholdslåsen, med det fanen lastet (`revision`).
+ * Lager en ny, upublisert versjon; ingenting skrives ved 409.
+ */
+export async function saveSection(
+  sectionId: string,
+  input: { title: string; bodyMarkdown: string },
+  revision: SectionRevisionCheck,
+) {
+  return runContentWrite(async (tx) => {
+    const current = await loadSectionForDraft(tx, sectionId);
+    assertSectionRevision(sectionId, { title: current.title, latestVersionNo: current.latest?.versionNo ?? null }, revision);
+    return writeSectionDraft(tx, sectionId, current.latest?.versionNo ?? null, input);
+  });
+}
+
+/**
+ * «Døp om» og masseoversettingen av titler i lista (#894). #1163: et nytt navn er et utkast som alt annet — en ny versjon med
+ * den nye tittelen og teksten i det siste utkastet. Samme navn som før gir ingen ny versjon.
+ *
+ * `revision` er det lista så. Uten den (en fane fra før utrullingen) lagres utkastet uten konfliktsjekk, i ett
+ * utrullingsvindu, som `updateSectionContent` under.
+ */
+export async function updateSectionTitle(sectionId: string, title: string, _actorId?: string, revision?: SectionRevisionCheck) {
+  // #934 skive 4a: innholdslåsen først.
+  return runContentWrite(async (tx) => {
+    const current = await loadSectionForDraft(tx, sectionId);
+    assertSectionRevision(sectionId, { title: current.title, latestVersionNo: current.latest?.versionNo ?? null }, revision);
+    const unchanged = sameLocalizedText(current.title, title) && sameLocalizedText(sectionVersionTitle(current.latest, current.title), title);
+    if (unchanged || !current.latest) {
+      // En seksjon har alltid minst én versjon (`createSection`); uten en finnes det ingen tekst å legge et utkast på.
+      return tx.courseSection.update({ where: { id: sectionId }, data: unchanged ? { updatedAt: new Date() } : { title }, include: sectionDraftInclude });
     }
-    // #1151: en arkivert seksjon lagres ikke. Før fikk den en aktiv versjon her («arkivert og publisert», brudd på I3).
-    await assertNotArchived(client, { type: "SECTION", id: sectionId });
+    return writeSectionDraft(tx, sectionId, current.latest.versionNo, { title, bodyMarkdown: current.latest.bodyMarkdown });
+  });
+}
 
-    // #916: door 3. Saving a section IS publishing it (latest-wins), so the gate belongs here too.
-    // The version is always written — the author's text is never lost — but it only becomes the
-    // active, participant-visible one when every gated field carries all three locales.
-    const gate = evaluateSectionTranslationGate({ title: existing.title, bodyMarkdown });
-    const heldBackByTranslationGate = !gate.ok;
-
-    const last = await client.courseSectionVersion.findFirst({
-      where: { sectionId },
-      orderBy: { versionNo: "desc" },
-      select: { versionNo: true },
-    });
-    const version = await client.courseSectionVersion.create({
-      data: {
-        sectionId,
-        versionNo: (last?.versionNo ?? 0) + 1,
-        bodyMarkdown,
-        publishedBy: heldBackByTranslationGate ? null : actorId ?? null,
-        publishedAt: heldBackByTranslationGate ? null : new Date(),
-      },
-    });
-    const section = await client.courseSection.update({
-      where: { id: sectionId },
-      // Held back: activeVersionId is left exactly as it was. A live section keeps serving the
-      // last complete version rather than being silently unpublished (which G2 forbids anyway for
-      // a section that sits in a course); a draft section stays a draft.
-      data: heldBackByTranslationGate
-        ? { updatedAt: new Date() }
-        : { activeVersionId: version.id, updatedAt: new Date() },
-      // #931 pkt 4: se createSectionWithAssets — uten `versions` svarer en tilbakeholdt lagring
-      // med den aktive (gamle) kroppen, og `hasUnpublishedChanges` blir false.
-      include: { activeVersion: true, versions: { orderBy: { versionNo: "desc" }, take: 1 } },
-    });
-    // #934 skive 3: lagring ER publisering (latest-wins) — den nye teksten er levende i hvert kurs seksjonen
-    // ligger i, og de får en mindre versjon. Holdt tilbake av språkporten: ingenting gikk live.
-    if (!heldBackByTranslationGate) await applyMinorVersionToCoursesContaining(client, { sectionId }, actorId);
-    return { ...section, heldBackByTranslationGate, translationGateIssues: gate.issues };
+/**
+ * Den gamle lagringen av teksten (`PUT …/content`), for faner fra før #1163. Står ett utrullingsvindu og publiserer ikke lenger:
+ * en ny, upublisert versjon med seksjonens arbeidstittel. Uten konfliktsjekk, som før. `tx` brukes av tester.
+ */
+export async function updateSectionContent(sectionId: string, bodyMarkdown: string, _actorId?: string, tx?: ContentWriteTx) {
+  // #934 skive 4a: alt etter innholdslåsen.
+  const run = async (client: ContentWriteTx) => {
+    const current = await loadSectionForDraft(client, sectionId);
+    return writeSectionDraft(client, sectionId, current.latest?.versionNo ?? null, { title: current.title, bodyMarkdown });
   };
   return tx ? run(tx) : runContentWrite(run);
 }
@@ -310,10 +361,9 @@ export function getSection(sectionId: string) {
   return prisma.courseSection.findUnique({
     where: { id: sectionId },
     include: {
+      // Den publiserte versjonen: det deltakerne ser (tekst og, #1163, tittel).
       activeVersion: true,
-      // #916: the editor must show what the author last SAVED, not only what is live. Since the
-      // gate can hold a save back from activation, reading only `activeVersion` would make the
-      // author's own text vanish on reload — the newest version is the one being edited.
+      // #916/#1163: redigereren viser det forfatteren sist LAGRET — den nyeste versjonen, publisert eller ikke.
       versions: { orderBy: { versionNo: "desc" }, take: 1 },
     },
   });
@@ -325,13 +375,14 @@ export function listSections() {
     include: {
       activeVersion: { select: { id: true, versionNo: true, publishedAt: true } },
       // #1046 steg B: nyeste versjon, så `lifecycle` kan si «published_with_draft» som for moduler.
-      versions: { orderBy: { versionNo: "desc" }, take: 1, select: { id: true } },
+      // #1163: og nummeret, som «Døp om» og masseoversettingen sender med (`expectedVersionNo`).
+      versions: { orderBy: { versionNo: "desc" }, take: 1, select: { id: true, versionNo: true } },
     },
   });
 }
 
-// #705: enhetlig livssyklus for seksjoner (symmetri med modul/kurs). Seksjoner auto-publiseres
-// ved lagring; disse handlingene gir samme Publiser/Avpubliser/Arkiver/Gjenopprett-vokabular.
+// #705: enhetlig livssyklus for seksjoner (symmetri med modul/kurs): samme Publiser/Avpubliser/Arkiver/Gjenopprett-vokabular.
+// #1163: lagring publiserer ikke lenger; «Publiser» er det eneste som gjør en ny versjon synlig for deltakerne.
 
 // Publiser: re-pek activeVersionId til siste versjon (krever at det finnes en versjon med innhold).
 // #934 skive 3: `tx` lar «Publiser nye versjoner» publisere alle elementene og øke kursets versjon i ÉN
@@ -342,17 +393,21 @@ export async function publishSection(
   tx?: ContentWriteTx,
   // #934 skive 3: «Publiser nye versjoner» og «Publiser kurs» avgjør kursets versjon selv, med forfatterens
   // svar. Alle andre (seksjonens egen side) gir kursene seksjonen ligger i en mindre versjon.
-  options?: { courseVersionHandledByCaller?: boolean },
+  // #1163: `expectedVersionNo` er versjonen forfatteren så i dialogen. Er det kommet en nyere, publiseres ingenting (409
+  // `section_changed`). Uten den (kurskaskaden, faner fra før utrullingen) publiseres den nyeste, som før.
+  options?: PublishSectionOptions,
 ) {
   // #934 skive 4a: sjekkene og skrivingen i samme låste transaksjon.
   return tx ? publishSectionLocked(tx, sectionId, actorId, options) : runContentWrite((locked) => publishSectionLocked(locked, sectionId, actorId, options));
 }
 
+type PublishSectionOptions = { courseVersionHandledByCaller?: boolean; expectedVersionNo?: number };
+
 async function publishSectionLocked(
   reader: ContentWriteTx,
   sectionId: string,
   actorId: string | undefined,
-  options?: { courseVersionHandledByCaller?: boolean },
+  options?: PublishSectionOptions,
 ) {
   const section = await reader.courseSection.findUnique({
     where: { id: sectionId },
@@ -367,7 +422,7 @@ async function publishSectionLocked(
   const latest = await reader.courseSectionVersion.findFirst({
     where: { sectionId },
     orderBy: { versionNo: "desc" },
-    select: { id: true, bodyMarkdown: true, publishedAt: true },
+    select: { id: true, versionNo: true, title: true, bodyMarkdown: true, publishedAt: true },
   });
   if (!latest) {
     // #999: se forklaringen over.
@@ -376,11 +431,20 @@ async function publishSectionLocked(
       "The section has no content to publish.",
     );
   }
+  // #1163: publiseringen gjelder versjonen forfatteren så.
+  if (options?.expectedVersionNo !== undefined && latest.versionNo !== options.expectedVersionNo) {
+    throw new ConflictError(
+      "section_changed",
+      "The section was saved somewhere else after you opened it. Nothing was published; reload the section.",
+      { sectionId, expectedVersionNo: options.expectedVersionNo, currentVersionNo: latest.versionNo, titleChanged: false },
+    );
+  }
   // #916: door 1 — the explicit publish action, and the step the course cascade calls. Blocking,
   // not a warning: this is the moment the text reaches a participant who may not read the one
   // language it exists in. The issues carry `field` + `missingLocales` so the UI can offer to
   // translate exactly the gaps (#896 S4's contract), not re-parse a sentence.
-  const gate = evaluateSectionTranslationGate({ title: section.title, bodyMarkdown: latest.bodyMarkdown });
+  // #1163: porten måler versjonen som publiseres — dens tittel og tekst.
+  const gate = evaluateSectionTranslationGate({ title: sectionVersionTitle(latest, section.title), bodyMarkdown: latest.bodyMarkdown });
   if (!gate.ok) {
     throw new AppError(
       "publish_blocked_by_validation",

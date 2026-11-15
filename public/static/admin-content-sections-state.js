@@ -68,6 +68,30 @@ export function safeReturnTo(value) {
   return value;
 }
 
+/**
+ * #1163: det redigereren tar vare på fra en seksjonsdetalj (GET, lagring, publisering). `versionNo` og `loadedTitle` er det
+ * fanen så, og sendes med som `expectedVersionNo`/`expectedTitle`; `publishedVersionNo` og `draftSavedAt` er stripen
+ * «Deltakerne ser versjon X til utkastet er publisert». Et felt svaret ikke har (publiseringens svar har ikke utkastets
+ * tidspunkt), står som det var.
+ */
+export function sectionRevisionFields(detail, previous = {}) {
+  const has = (key) => detail && Object.prototype.hasOwnProperty.call(detail, key);
+  return {
+    versionNo: has("versionNo") ? detail.versionNo ?? null : previous.versionNo ?? null,
+    loadedTitle: has("title") && typeof detail.title === "string" ? detail.title : previous.loadedTitle ?? null,
+    publishedVersionNo: has("publishedVersionNo") ? detail.publishedVersionNo ?? null : previous.publishedVersionNo ?? null,
+    draftSavedAt: has("draftSavedAt") ? detail.draftSavedAt ?? null : previous.draftSavedAt ?? null,
+  };
+}
+
+/**
+ * #1163: skal stripen stå? Bare når en publisert seksjon har et lagret utkast over det deltakerne ser, og vi vet hvilken versjon
+ * de ser. Et utkast som aldri er publisert, har ingen deltakere å si noe om.
+ */
+export function showsSectionDraftLine({ published, hasUnpublishedChanges, publishedVersionNo }) {
+  return Boolean(published && hasUnpublishedChanges && publishedVersionNo != null);
+}
+
 export function detectSectionRoute(search) {
   const params = new URLSearchParams(search ?? "");
   const returnTo = safeReturnTo(params.get("returnTo"));

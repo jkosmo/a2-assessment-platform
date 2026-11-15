@@ -13,6 +13,7 @@ import {
   translations as adminContentTranslations,
 } from "/static/i18n/admin-content-translations.js";
 import { resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
+import { createDateTimeFormatter } from "/static/format-display.js";
 import {
   apiFetch,
   buildConsoleHeaders,
@@ -69,7 +70,11 @@ import {
 
 let currentLocale = resolveInitialLocale(supportedLocales);
 
-const { t, tf } = createTranslator(adminContentTranslations, () => currentLocale);
+// Menyspråket som funksjon: oversettelsene og (#1163) tidspunktet i stripen leser det herfra.
+const menuLocale = () => currentLocale;
+const { t, tf } = createTranslator(adminContentTranslations, menuLocale);
+// #1163: tidspunktet i stripen «Utkast lagret …», som kursets.
+const formatModuleDraftTime = createDateTimeFormatter(menuLocale, "");
 
 // #972: `err.message` fra apiFetch er "<status>: <hele JSON-kroppen>" — rå JSON på serverens språk.
 // `apiErrorText` slår opp KODEN i den delte tabellen (api-error.js) og gir en setning på
@@ -3522,7 +3527,18 @@ function moduleStatusBadgesHtml() {
     ? `<span class="status-chip">${escapeHtml(t("adminContent.lifecycle.newerDraft"))}</span>`
     : lifecycleBadge({ lifecycle: "draft" }, t));
   else if (liveNo == null && bundle) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
-  return parts.join(" ") + moduleArchivedNoticeHtml();
+  return parts.join(" ") + moduleArchivedNoticeHtml() + moduleDraftLineHtml(loaded, loadedIsLive, liveNo);
+}
+
+/**
+ * #1163: stripen under merket, som på kurset og seksjonen: «Utkast lagret … Deltakerne ser versjon X til utkastet er publisert.»
+ * Bare når det lastede utkastet er nyere enn en publisert versjon. Kursets tekst uten navn (`lineNoName`): ingen
+ * versjonstabell vet hvem som lagret.
+ */
+function moduleDraftLineHtml(loaded, loadedIsLive, liveNo) {
+  if (!bundle || moduleIsArchived() || !loaded || loadedIsLive || liveNo == null) return "";
+  const time = loaded.createdAt ? formatModuleDraftTime(loaded.createdAt) : "";
+  return `<p class="course-draft-line" data-module-draft-line>${escapeHtml(tf("courses.draft.lineNoName", { time, version: liveNo }))}</p>`;
 }
 
 // ---------------------------------------------------------------------------

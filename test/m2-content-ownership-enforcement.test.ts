@@ -42,6 +42,16 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
 
     expect((await request(app).put(`/api/admin/content/sections/${id}/content`).set(smoA).send({ bodyMarkdown: "# owner" })).status).toBe(200);
     expect((await request(app).put(`/api/admin/content/sections/${id}/content`).set(admin).send({ bodyMarkdown: "# admin" })).status).toBe(200);
+
+    // #1163: redigererens ene lagring (`PUT …/:id`) og publiseringen står bak samme vakt.
+    const fane = (await request(app).get(`/api/admin/content/sections/${id}`).set(smoA)).body.section;
+    const lagring = { title: L("Enf section"), bodyMarkdown: "# S2", expectedVersionNo: fane.versionNo, expectedTitle: fane.title };
+    const bSave = await request(app).put(`/api/admin/content/sections/${id}`).set(smoB).send(lagring);
+    expect(bSave.status).toBe(403);
+    expect(bSave.body.error).toBe("content_ownership");
+    const bPublish = await request(app).post(`/api/admin/content/sections/${id}/publish`).set(smoB).send({ expectedVersionNo: fane.versionNo });
+    expect(bPublish.status).toBe(403);
+    expect((await request(app).put(`/api/admin/content/sections/${id}`).set(smoA).send(lagring)).status).toBe(200);
   });
 
   // #1046 D3: DELETE arkiverte før; nå arkiverer POST /archive og DELETE sletter for godt (bare en

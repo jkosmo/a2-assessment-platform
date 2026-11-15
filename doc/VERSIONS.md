@@ -2,6 +2,57 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.166.0 - 2026-11-15
+
+«Lagre» på en seksjon lager et utkast, slik det gjør på kurs og moduler (#1163, skive 1). Produkteier 14.11.2026: «La oss gjøre
+det likt», og prinsippene for lagring og publisering 15.11.2026. Valgene som ikke sto i planen, står i DECISIONS («Valgt under
+byggingen av #1163, skive 1»).
+
+**Hva produsentene merker:**
+- **Endringer i en seksjon når ikke deltakerne før de publiseres.** Det gjelder teksten og tittelen. Etter lagring står «Lagret
+  som utkast. Deltakerne ser ikke endringen før den er publisert.», og under merket «Utkast lagret … Deltakerne ser versjon X
+  til utkastet er publisert.» Før 2.166.0 gikk en lagret seksjon ut med en gang.
+- **«Publiser» spør først** og sier hvilke kurs som får den nye teksten, i redigereren og i lista. Det er publiseringen som gir
+  kursene en ny mindre versjon, ikke lagringen.
+- **«Døp om» og «Oversett det som mangler» i seksjonslista lager et utkast.** Det nye navnet ses når seksjonen publiseres.
+- **En ny seksjon lagres som utkast.** Den røde meldingen «Lagret, men ikke publisert …» er borte; mangler et språk, sier
+  publiseringen det.
+- **Har noen andre lagret seksjonen etter at du åpnet den,** lagres ingenting, og meldingen sier hva du gjør.
+- **Modulen** har fått den samme linja under merket når et nyere utkast er åpent.
+- **Eksport og import:** en eksportert seksjon med et utkast bærer både det publiserte og utkastet. «Importer som nytt kurs»
+  lager dem slik de var (det publiserte aktivt, utkastet over), så et utkast går ikke ut i det nye kurset. En ren
+  tittelendring i fila teller nå som en endring ved «Oppdater dette kurset».
+- **Skillet:** dokumentasjonen sier at nye kurs er begrenset, og at en seksjons tittel følger versjonen.
+
+**Utrulling:** én migrering, bare tillegg: `CourseSectionVersion.title`, fylt for alle versjoner med seksjonens tittel i dag.
+Gamle faner som lagrer under og etter utrullingen, treffer de gamle rutene, som nå lager et utkast i stedet for å publisere.
+
+**Tester:** ny `m2-section-draft-1163` (rutene og deltakerens lesere: kursdetaljen, leseren, lesingen, aktivitetsrapporten,
+øyeblikksbildet, to kurs med samme seksjon; konfliktsjekken i begge retninger mot «Døp om» og masseoversettingen; porten på
+versjonens tittel, også i kurskaskaden; eksport og import som nytt kurs, frittstående, «Oppdater dette kurset» og kopi av en
+annens seksjon), `m2-course-versions-934` (nøyaktig én kursversjon per vei), e2e `section-draft-1163` og modulens stripe.
+Omskrevet fordi de sa at lagring publiserer: `m2-admin-sections`, `m2-mcq-cue-warnings-1119`, `m2-content-ownership-enforcement`,
+`m2-course-update-import-1095`, `m2-section-export-import-916`, e2e 1095, 1128, 1154 og 916, og vakta `archived-is-readonly-guard`.
+Lokalt 15.11.2026: enhet 3326/3326, DOM 109/109, integrasjon 1425/1425, e2e 1152/1152. Mutasjonssjekk av 28 regler (19 på
+tjeneren, 8 i klienten, 1 ren hjelper): hver gjorde riktig test rød. Én test målte ikke regelen sin ved første forsøk
+(versjonssjekken: den andre lagringen byttet også tittelen, så tittelsjekken fanget det); den lagrer nå med samme tittel.
+
+**Kjent (ikke rettet):**
+- Seksjonens «Oversett» finnes fortsatt, og figurene den oversetter, gjelder med en gang (de er felles for alle versjoner).
+  Oversetting ved lagring kommer i skive 2. (#1163)
+- De gamle rutene (`PUT …/content`, og `PATCH …/title` uten versjon) lagrer uten konfliktsjekk i én utrulling. (#1163)
+- En seksjon som aldri er publisert, i et publisert kurs, blir publisert ved «Importer som nytt kurs», som før.
+- «Forkast utkast» for seksjoner finnes ikke ennå. (#1179)
+- Vedlikeholdsskriptet for titler (`localizedTitleCleanup`) rydder seksjonens arbeidstittel, ikke titlene i versjonene.
+- Utrullingsvinduet: lagrer noen på en gammel instans mens utrullingen pågår, får den publiserte versjonen ingen tittel, og
+  deltakerne ser da arbeidstittelen, også en senere utkasttittel, til seksjonen publiseres. «Døp om» på en gammel instans endrer
+  bare arbeidstittelen. Krever en lagring i et vindu på noen minutter, og gjelder bare tittelen. Lukkes med en migrering i
+  neste versjon som fyller tomme titler i versjonene (QA 2.166.0).
+- En gammel fane som lagrer etter utrullingen, sier «Seksjon lagret» selv om det nå er et utkast; hodet viser «Nyere utkast».
+
+**QA 2.166.0** (Claude-agent; Codex var tom): GO. Rettet før commit: teksten i publiseringsdialogen sa at deltakerne i alle
+kursene ser endringen, også i kurs som ikke er publisert; en kommentar i `sectionTitle.ts` viste til en funksjon som ikke finnes.
+
 ## 2.165.0 - 2026-11-15
 
 Tre funn fra konsistenssjekken #1157, med produkteiers svar: «Vi bør gjøre ting likt mellom moduler og kurs. Nye kurs bør ikke
@@ -41,8 +92,8 @@ utrullingen (søndag kveld, ingen trafikk ennå).
 - Seksjoner er ikke skrivebeskyttet for andre enn eieren på samme måte som kurs og moduler. (#1180)
 - Antallet i publiseringsdialogen tar ikke med Entra-klasser eller deltakere som har startet via en arkivert klasse. (#1181)
 - «Avpubliser» på kurs bruker fortsatt nettleserens bekreftelsesboks. (#1168)
-- Skill-dokumentasjonen nevner ikke at nye kurs er begrenset. (Rettes i neste versjon.)
-- Noen kommentarer om eierskap i koden (ownership-wording-1029) beskriver den gamle regelen. (Rettes i neste versjon.)
+- Skill-dokumentasjonen nevner ikke at nye kurs er begrenset. (Rettet i 2.166.0.)
+- Noen kommentarer om eierskap i koden (ownership-wording-1029) beskriver den gamle regelen. (Rettet i 2.166.0.)
 
 ## 2.164.1 - 2026-11-15
 

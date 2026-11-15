@@ -2245,3 +2245,58 @@ som manglet) og at publiseringsporten ikke så kursets navn og beskrivelse.
 
 **Sporing:** seksjoner i #1163 (prinsipp 2, 3 og 6; 5 med «Forkast utkast» i egen sak), moduler og kurs i egne saker.
 **Status:** avgjort av produkteier.
+
+## Valgt under byggingen av #1163, skive 1 (2026-11-15)
+
+Planen (`doc/design/PLAN_1163_SEKSJON_UTKAST.md`) og prinsippene over sa hva. Dette er valgene som ikke sto der.
+
+**Tittelen i versjonen:**
+- **En versjon uten tittel leser seksjonens tittel.** Migreringen fyller tittelen for alle versjoner som finnes, så en tom tittel
+  kan bare komme fra gammel kode i utrullingsvinduet (den skriver ikke kolonnen). Da gjelder `CourseSection.title`, slik det
+  gjorde for gammel kode. Reserven bor ett sted (`sectionVersionTitle`, sectionTitle.ts) og gjelder bare `null`: en versjon med
+  tittel leses alltid fra seg selv. Andre gjennomlesing ville ha ingen reserve; uten den ville en versjon gammel kode publiserte
+  i vinduet stått uten tittel for deltakerne.
+- **Arbeidstittelen følger det nyeste utkastet.** Hver vei som skriver en versjon (lagring, «Døp om», den gamle `…/content`,
+  importen), setter `CourseSection.title` til versjonens tittel. Lister og redigereren viser altså tittelen i det forfatteren
+  arbeider i; deltakerne ser den publiserte versjonens.
+
+**Lagringen og konfliktsjekken:**
+- **`expectedTitle` er den rå teksten tjeneren sendte**, og sammenlignes ord for ord. Redigereren tolker en ren streng som
+  menyspråket, så å sende tilbake et tolket kart ville gitt 409 for en tittel ingen hadde rørt.
+- **Den gamle `PUT …/content` og `PATCH …/title` uten revisjon lagrer et utkast uten sjekk, én utrulling.** «Klienten er
+  utdatert» (`409 client_outdated`) ble vurdert og valgt bort: en gammel fane ville mistet lagringen sin, og et utkast er den
+  trygge retningen (ingenting når deltakerne). Fanen viser «Nyere utkast» og «Publiser ny versjon» etter lagringen, fordi svaret
+  sier det. Rutene fjernes i en senere utrulling.
+- **`expectedVersionNo` er valgfri på «Publiser».** Kurskaskaden og «Publiser nye versjoner» har sin egen sjekk av hva som er
+  nytt, og en fane fra før sender den ikke. Redigereren og lista sender den alltid. Samme kode, `section_changed`, for lagring og
+  publisering; meldingen sier «Ingenting ble endret».
+- **Samme navn på nytt i «Døp om» gir ingen versjon.** Et nytt navn gir et utkast med teksten i det nyeste utkastet, ikke den
+  publiserte teksten: ellers ville en omdøping kastet et lagret utkast.
+- **Lagringen lager alltid en versjon**, også når ingenting er endret. Redigereren lagrer bare når noe er endret.
+
+**Publiseringen:**
+- **Dialogen lister de aktive kursene** seksjonen står i (samme liste som «Brukt i kurs» i seksjonslista, kurstitlene på bokmål
+  som der). Uten kurs sier den at ingen deltakere ser seksjonen før den legges inn i et kurs. Fokus på Avbryt, som kursets.
+- **Stripen** bruker kursets tekst uten navn: tidspunktet er når utkastet ble lagret (versjonens `createdAt`), versjonen er
+  seksjonens versjonsnummer (`3`), og for modulen det publiserte nummeret (`1.2`).
+
+**Eksport og import:**
+- **Hovedinnholdet i pakken er fortsatt den nyeste versjonen; det deltakerne ser, står i `publishedVersion`.** Det omvendte ble
+  vurdert. Med den nyeste som hovedinnhold er «Oppdater dette kurset» og skillet (som justerer det forfatteren arbeider i)
+  uendret, og en eldre tjener som ikke kjenner feltet, importerer som før.
+- **Bare «Importer som nytt kurs» bruker `publishedVersion`** (v1 publisert gjennom porten, v2 utkastet over). Veiene som uansett
+  lander som utkast (frittstående import, nye seksjoner i «Oppdater dette kurset»), tar bare det nyeste: en eldre, upublisert
+  versjon under ville bare vært støy.
+- **Tittelen teller i sammenligningen ved «Oppdater dette kurset», også for en seksjon forfatteren ikke eier.** En ren
+  tittelendring i en annens seksjon gir nå en egen kopi (v1 det deltakerne ser, med den gamle tittelen; v2 fila). Før #1163 sto
+  den, fordi tittelen lå på seksjonen og ikke ble brukt av byttet; nå ville tittelen ellers forsvunnet uten beskjed.
+
+**Utenfor skive 1, som før:** «Oversett» i seksjonen fyller inn språkene i skjemaet (ingenting skrives) og oversetter figurene
+med en gang (figurene er felles for alle versjoner). Oppretting uten `draft: true` publiserer fortsatt (API-ets standard).
+
+**Håndheves:** `saveSection`, `updateSectionTitle`, `updateSectionContent`, `writeSectionDraft`, `publishSection`
+(sectionCommands.ts); `sectionVersionTitle`/`publishedSectionTitle` (sectionTitle.ts); `buildSectionExportPayload`,
+`persistStagedSection`, `appendInactiveSectionVersion`, `sectionUpdateComparable`; `persistSection`, `openSectionPublishDialog`,
+`publishFromList`, `listRevision` (admin-content-sections.js), `moduleDraftLineHtml` (admin-content-shell.js);
+`test/m2-section-draft-1163.test.ts`, `test/m2-course-versions-934.test.ts`, `test/e2e/section-draft-1163.spec.ts`.
+**Sak:** #1163 · **Dato:** 2026-11-15 · **Status:** valgt under byggingen; ikke avklart med produkteier

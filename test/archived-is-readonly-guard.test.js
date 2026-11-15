@@ -114,13 +114,16 @@ const EXPECTED = new Map([
   ...each(by(`${CI}#importCourseFromEnvelope`), [`${CI}#importCourseFromEnvelope course.update`, 2]),
   ...each(unntak(`${ARKIVERING}: «Oppdater dette kurset» arkiverer et element den byttet ut (et alt arkivert element røres ikke)`), [`${CI}#importCourseFromEnvelope courseSection.update`, 1]),
   ...each(unntak(`${NY}: seksjonen importen lager`), [`${CI}#persistStagedSection sectionAsset.create`, 1]),
+  // #1163: utkastet over den publiserte versjonen, når fila bar begge (`publishedVersion`) — på seksjonen importen nettopp laget.
+  ...each(unntak(`${NY}: seksjonen importen lager (utkastet over den publiserte versjonen, #1163)`), [`${CI}#persistStagedSection courseSectionVersion.create`, 1], [`${CI}#persistStagedSection courseSection.update`, 1]),
 
   // ── Seksjon ──
   ...each(by(`${AS}#createSectionAsset`), [`${AS}#createSectionAsset sectionAsset.create`, 1]),
   ...each(by(`${AS}#localizeSectionAssets`), [`${AS}#localizeSectionAssets sectionAsset.updateMany`, 1]),
   ...each(unntak(VEDLIKEHOLD), [`${AS}#repairUnreadableSvgAssets sectionAsset.update`, 1]),
-  ...each(by(`${SC}#updateSectionTitle`), [`${SC}#updateSectionTitle courseSection.update`, 1]),
-  ...each(by(`${SC}#updateSectionContent`), [`${SC}#updateSectionContent courseSection.update`, 1], [`${SC}#updateSectionContent courseSectionVersion.create`, 1]),
+  // #1163: de tre lagringene (`saveSection`, `updateSectionTitle`, `updateSectionContent`) leser seksjonen gjennom
+  // `loadSectionForDraft`, som holder vakta, og skriver utkastet i `writeSectionDraft`.
+  ...each(by(`${SC}#loadSectionForDraft`), [`${SC}#updateSectionTitle courseSection.update`, 1], [`${SC}#writeSectionDraft courseSectionVersion.create`, 1], [`${SC}#writeSectionDraft courseSection.update`, 1]),
   ...each(by(`${SC}#publishSectionLocked`), [`${SC}#publishSectionLocked courseSection.update`, 1], [`${SC}#publishSectionLocked courseSectionVersion.update`, 1]),
   ...each(by(`${SC}#unpublishSection`), [`${SC}#unpublishSection courseSection.update`, 1]),
   // #1152 skive 4b: reglene er `sectionDeleteRules` (se `moduleDeleteRules` over).

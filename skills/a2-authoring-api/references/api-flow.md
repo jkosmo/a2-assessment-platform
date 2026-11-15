@@ -65,6 +65,8 @@ bodies are JSON; all calls carry `Authorization: Bearer <token>`.
    command does it, `"mode": "createNew"` and `"autoPublish": false`. Both are required. The
    answer holds the module's id and links.
 4. **The course** — `POST /api/admin/content/courses` with the title, description and level.
+   A new course is **restricted** (`RESTRICTED`): only participants it is assigned to see it, until
+   the author opens it to everyone in the admin UI. Say so when you deliver.
 5. **The course's order** — `PUT /api/admin/content/courses/<courseId>/items` with the items,
    each `ref` replaced by the id its section or module got.
 

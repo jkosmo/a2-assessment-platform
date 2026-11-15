@@ -53,3 +53,23 @@ test.describe("modulhodet sier «Nyere utkast» når skjemaet viser en lagring o
     await expect(tilstand.locator(".status-badge--draft")).toHaveCount(0);
   });
 });
+
+// #1163: stripen under merket, som på kurset og seksjonen: «Deltakerne ser versjon X til utkastet er publisert.»
+test.describe("#1163 — modulen sier hvilken versjon deltakerne ser mens et nyere utkast er åpent", () => {
+  const stripe = (page: Page) => page.locator("#moduleFormHead [data-module-draft-line]");
+
+  test("publisert med en nyere lagring åpen: stripen nevner den publiserte versjonen", async ({ page }) => {
+    await aapneModul(page, { live: LIVE, lastet: UTKAST });
+    await expect(stripe(page)).toHaveCount(1);
+    await expect(stripe(page)).toHaveText(/(Deltakerne ser versjon|Participants see version) 1\.2/);
+  });
+
+  test("kontroll: aldri publisert, og den publiserte åpen — ingen stripe", async ({ page }) => {
+    await aapneModul(page, { live: null, lastet: UTKAST });
+    await expect(page.locator("#moduleFormHead .status-badge--draft")).toBeVisible();
+    await expect(stripe(page)).toHaveCount(0);
+    await aapneModul(page, { live: LIVE, lastet: LIVE });
+    await expect(page.locator("#moduleFormHead .status-badge--published")).toBeVisible();
+    await expect(stripe(page)).toHaveCount(0);
+  });
+});

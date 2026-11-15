@@ -2,6 +2,7 @@ import { prisma } from "../../db/prisma.js";
 import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { publishCourse } from "./courseCommands.js";
 import { publishSection, evaluateSectionTranslationGate } from "./sectionCommands.js";
+import { sectionVersionTitle } from "./sectionTitle.js";
 import { publishModuleVersion } from "../adminContent/adminContentCommands.js";
 import { createCourseRepository } from "./courseRepository.js";
 import { evaluateModulePublishGate, flattenStoredLocalized } from "../adminContent/modulePublishGate.js";
@@ -323,7 +324,7 @@ async function evaluateSection(sectionId: string, reader: PublishReader): Promis
   const latest = await reader.courseSectionVersion.findFirst({
     where: { sectionId },
     orderBy: { versionNo: "desc" },
-    select: { id: true, bodyMarkdown: true },
+    select: { id: true, title: true, bodyMarkdown: true },
   });
   // 2.101.0: som for moduler — en nyere versjon enn den levende er også «ikke publisert ennå».
   const pending = unpublished || (latest !== null && latest.id !== section.activeVersionId);
@@ -358,7 +359,7 @@ async function evaluateSection(sectionId: string, reader: PublishReader): Promis
   // own publish route about what "complete" means — otherwise the author is told different things
   // depending on which button they pressed. `publishSection` throws on the same condition; reporting
   // it here means the cascade refuses up front and publishes NOTHING, rather than failing mid-way.
-  const gate = evaluateSectionTranslationGate({ title: section.title, bodyMarkdown: latest.bodyMarkdown });
+  const gate = evaluateSectionTranslationGate({ title: sectionVersionTitle(latest, section.title), bodyMarkdown: latest.bodyMarkdown }); // #1163: versjonen som publiseres
   if (!gate.ok) {
     return {
       unpublished,

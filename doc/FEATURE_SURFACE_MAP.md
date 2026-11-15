@@ -992,6 +992,12 @@ for". User docs: `doc/DISCUSSIONS_GUIDE.md`. Design: `doc/DISCUSSIONS_DESIGN.md`
 
 ## 24. Publishing a learning section — four doors (#916)
 
+> **#1163 (2.166.0): saving no longer publishes.** The «Content save» row below is gone: `saveSection`,
+> `updateSectionTitle` and the legacy `updateSectionContent` all write an unpublished version (§ 38), so the gate applies only
+> to `publishSection` and the course cascade — and it measures **the version being published** (its `title` and
+> `bodyMarkdown`), not the working title. «Create with auto-publish» is unchanged (the API default; the editor now sends
+> `draft: true`). The text below is the #916 history.
+
 The section counterpart to § 18. Same rule, different mechanics: a module has a draft-save that is
 separate from publishing, while **saving a section publishes it** (latest-wins). So the gate cannot
 simply refuse every door — refusing a save would mean an author writing in one language could not
@@ -1894,3 +1900,46 @@ Vaktet som før (forspill til en skriving, eller personopplysninger): `…/pendi
 
 **Vakter:** `test/m2-content-read-by-producers-1165.test.ts` (lesingen; HVER skriverute på `/courses/:courseId` og
 `/modules/:moduleId` som tabell, dekningsvakt mot ruterne), `test/e2e/admin-content-readonly-others-1165.spec.ts` (1280 og 390 px).
+
+## 38. En seksjon: «Lagre» er et utkast, og tittelen er en del av versjonen (#1163 skive 1, 2.166.0)
+
+Produkteier 14.–15.11.2026 («La oss gjøre det likt», og prinsippene i `doc/DECISIONS.md`). `CourseSectionVersion.title` er
+tittelen deltakerne ser (fra den publiserte versjonen); `CourseSection.title` er arbeidstittelen (lister, redigereren).
+
+**Veiene som skriver en seksjonsversjon** (alle upubliserte, unntatt der det står):
+
+| Vei | Hvor | Konfliktsjekk |
+| --- | --- | --- |
+| Redigererens lagring | `PUT /sections/:id` → `saveSection` → `writeSectionDraft` | `expectedVersionNo` + `expectedTitle`, påkrevd |
+| «Døp om» og «Oversett det som mangler» i lista | `PATCH /sections/:id/title` → `updateSectionTitle` → `writeSectionDraft` | valgfri (faner fra før: uten) |
+| Gammel lagring (faner fra før, én utrulling) | `PUT /sections/:id/content` → `updateSectionContent` → `writeSectionDraft` | ingen |
+| Ny seksjon | `POST /sections` → `createSection` (v1; **publisert** uten `draft: true` — API-ets standard, fikstur og import) | — |
+| Import: ny versjon på en seksjon som finnes | `appendInactiveSectionVersion` (frittstående «Erstatt fra fil», «Oppdater dette kurset», kopiens v2) | kursimportens plan (`courseUpdateBasis`) |
+| Import som nytt kurs med `publishedVersion` | `persistStagedSection`: v1 = det publiserte, v2 = utkastet | — |
+
+**Det eneste som gjør en versjon synlig:** `publishSection` (seksjonens «Publiser», lista, kurskaskaden, «Publiser nye
+versjoner»), med porten på versjonens tittel og tekst, og den ene mindre versjonen i kursene (`applyMinorVersionToCoursesContaining`
+bare når `activeVersionId` faktisk flyttes). Unntak som står: oppretting uten `draft: true`, og gjenoppretting med kurset
+(`restoreSectionWithCourse` setter tilbake den forrige publiserte versjonen).
+
+**Leserne av seksjonens tittel på deltakersiden** — alle gjennom `publishedSectionTitle` (`src/modules/course/sectionTitle.ts`):
+
+| Leser | Hvor |
+| --- | --- |
+| Kursdetaljen (`items[].title`) | `findCourseItemsForParticipant` (courseRepository.ts) — døra gir bare den publiserte tittelen (kursbeviset og kursrapporten går gjennom samme dør, men leser bare id-ene) |
+| Leseren | `GET /api/courses/:courseId/sections/:sectionId` (routes/courses.ts) |
+| Aktivitetsrapporten («Aktivitet» under Deltakere) | `getActivityRecent` (reporting/activityReport.ts) |
+| Eksporten (forfatterside, men bærer det deltakerne ser) | `buildSectionExportPayload`: tittelen per versjon, `publishedVersion` ved utkast |
+
+Ingen titler i: #934-øyeblikksbildene (`sectionVersionsJson` er id-er), kursbevisets `sectionSnapshotJson` (id-er), e-postene
+(ingen nevner seksjoner), «Mine kurs» (bare tall). Forfattersidene (lister, kursbyggeren, `GET …/courses/:id/items`, utkastet
+til et kurs, slettedialogene) viser arbeidstittelen med vilje.
+
+**Klienten:** én lagring (`persistSection`), revisjonen etter hver lagring (`applySectionRevision`), stripen
+(`sectionDraftLineHtml`, og `moduleDraftLineHtml` i admin-content-shell.js), dialogen (`openSectionPublishDialog`, også fra
+lista: `publishFromList`), og lista sender `latestVersionNo` (`listRevision`).
+
+**Vakter:** `test/m2-section-draft-1163.test.ts` (rutene, deltakerens lesere, konfliktene, porten, eksport/import),
+`test/m2-course-versions-934.test.ts` (nøyaktig én versjon per vei), `test/archived-is-readonly-guard.test.js` (skriverne),
+`test/unit/admin-content-sections-state.test.js`, `test/e2e/section-draft-1163.spec.ts`,
+`test/e2e/admin-content-module-header-newer-draft.spec.ts` (modulens stripe).

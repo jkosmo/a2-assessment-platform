@@ -40,14 +40,22 @@ describe("Admin course-section management", () => {
     expect(listResponse.status).toBe(200);
     expect((listResponse.body.sections as Array<{ id: string }>).some((s) => s.id === sectionId)).toBe(true);
 
-    // Editing content publishes a new immutable version (latest-wins).
+    // #1163: a save stores a new immutable version as a DRAFT — the published one stays active until «Publiser».
+    const v1Active = createResponse.body.section.activeVersionId as string;
     const updateResponse = await request(app)
-      .put(`/api/admin/content/sections/${sectionId}/content`)
+      .put(`/api/admin/content/sections/${sectionId}`)
       .set(adminHeaders)
-      .send({ bodyMarkdown: { "en-GB": "# Hello\n\nSecond body.", nb: "# Hei 2", nn: "# Hei 2" } });
+      .send({
+        title: { "en-GB": detailResponse.body.section.title ? JSON.parse(detailResponse.body.section.title)["en-GB"] : "x", nb: "Seksjon", nn: "Seksjon" },
+        bodyMarkdown: { "en-GB": "# Hello\n\nSecond body.", nb: "# Hei 2", nn: "# Hei 2" },
+        expectedVersionNo: detailResponse.body.section.versionNo,
+        expectedTitle: detailResponse.body.section.title,
+      });
     expect(updateResponse.status).toBe(200);
     expect(updateResponse.body.section.versionNo).toBe(2);
     expect(updateResponse.body.section.bodyMarkdown).toContain("Second body.");
+    expect(updateResponse.body.section.activeVersionId).toBe(v1Active);
+    expect(updateResponse.body.section.hasUnpublishedChanges).toBe(true);
 
     const versionCount = await prisma.courseSectionVersion.count({ where: { sectionId } });
     expect(versionCount).toBe(2);

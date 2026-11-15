@@ -3,6 +3,7 @@ import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { isSettledSubmission, SETTLED_SUBMISSION_STATUSES } from "../submission/submissionOutcome.js";
+import { publishedSectionTitle, publishedSectionTitleSelect } from "../course/sectionTitle.js";
 
 // #1099: «Aktivitet» under Deltakere — samlet aktivitet over tid og hvem som er aktive, for alle kurs.
 //
@@ -397,7 +398,7 @@ export async function getActivityRecent(userId: string, locale: SupportedLocale,
       orderBy: { readAt: "desc" },
       // Kopierte lesinger (se distinctReads) kan ta plass; hent litt ekstra.
       take: limit * 2,
-      select: { userId: true, courseId: true, readAt: true, section: { select: { title: true } }, course: { select: { title: true } } },
+      select: { userId: true, courseId: true, readAt: true, section: { select: publishedSectionTitleSelect }, course: { select: { title: true } } },
     }),
     prisma.submission.findMany({
       where: { userId },
@@ -422,7 +423,7 @@ export async function getActivityRecent(userId: string, locale: SupportedLocale,
   ]);
 
   const events: Array<ActivityRecentEvent & { t: number }> = [
-    ...distinctReads(reads).map((r) => ({ type: "read" as const, t: r.readAt.getTime(), at: r.readAt.toISOString(), courseTitle: r.course ? title(r.course.title) : null, itemTitle: title(r.section.title) })),
+    ...distinctReads(reads).map((r) => ({ type: "read" as const, t: r.readAt.getTime(), at: r.readAt.toISOString(), courseTitle: r.course ? title(r.course.title) : null, itemTitle: title(publishedSectionTitle(r.section)) })),
     ...submissions.map((s) => ({ type: "submitted" as const, t: s.submittedAt.getTime(), at: s.submittedAt.toISOString(), courseTitle: null, itemTitle: title(s.module.title) })),
     ...passedSubmissions.flatMap((s) => {
       const at = passedAt(s);

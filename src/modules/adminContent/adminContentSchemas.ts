@@ -723,10 +723,19 @@ export const sectionAssetExportSchema = z.object({
 // unchanged. Sections legitimately have partial locales (an author may fill only
 // nb), so the export uses the patch schema (string OR partial object), not the
 // strict all-three-locale localizedTextSchema (#512 follow-up).
+// #1163: `title` og `bodyMarkdown` er den NYESTE versjonen (det forfatteren arbeider i). Har seksjonen et utkast over den
+// publiserte versjonen, står det deltakerne ser, i `publishedVersion` (tittel og tekst for seg). Bildene er felles for begge.
+// Valgfri: en fil uten den (eldre filer, skillet) importeres som før, og en eldre tjener hopper over den.
+export const sectionPublishedVersionSchema = z.object({
+  title: localizedTextPatchSchema,
+  bodyMarkdown: localizedTextPatchSchema,
+  audit: exportAuditSchema.optional(),
+});
 export const sectionExportPayloadSchema = z.object({
   title: localizedTextPatchSchema,
   bodyMarkdown: localizedTextPatchSchema,
   audit: exportAuditSchema.optional(),
+  publishedVersion: sectionPublishedVersionSchema.optional(),
   assets: z.array(sectionAssetExportSchema).optional(),
 });
 

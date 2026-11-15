@@ -43,6 +43,7 @@ export {
   remapAssetRefs,
   updateSectionTitle,
   updateSectionContent,
+  saveSection,
   getSection,
   listSections,
   publishSection,
@@ -52,6 +53,7 @@ export {
   deleteSection,
   SECTION_CREATE_BODY_LIMIT_BYTES,
   type SectionAssetImportInput,
+  type SectionRevisionCheck,
 } from "./sectionCommands.js";
 export {
   createSectionAsset,
