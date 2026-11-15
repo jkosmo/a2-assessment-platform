@@ -31,15 +31,18 @@ være åpent for alle» og «Produsenter bør kunne se hverandres innhold». Val
 med «Åpen» åpent; `publish-audience` svarte «begrenset, 0» og «åpent»; etter publisering så stage-kontoen bare det åpne.
 `2-164` (4/4), `2-163` (3/3), `2-162` (5/5), `2-161` (4/4), `2-160` (7/7) og `2-154` (3/3) kjørt på nytt med `OPEN` i kursene.
 
+**I prod 15.11.2026 kl. 17:15** (cf0f90b7). App og worker viser 2.165.0; ingen feillinjer og ingen 5xx i loggene etter
+utrullingen (søndag kveld, ingen trafikk ennå).
+
 **Kjent (ikke rettet):**
 - «Importer som nytt kurs» fra et publisert kurs gir et kurs som er publisert og begrenset, uten dialog og uten beskjed. Ingen
-  deltakere ser det før noen gjør det åpent eller tildeler det.
-- Delingslenkas «Kopier» er sperret på andres kurs, sammen med resten av «Innstillinger».
-- Seksjoner er ikke skrivebeskyttet for andre enn eieren på samme måte som kurs og moduler.
-- Antallet i publiseringsdialogen tar ikke med Entra-klasser eller deltakere som har startet via en arkivert klasse.
-- «Avpubliser» på kurs bruker fortsatt nettleserens bekreftelsesboks.
-- Skill-dokumentasjonen nevner ikke at nye kurs er begrenset.
-- Noen kommentarer om eierskap i koden (ownership-wording-1029) beskriver den gamle regelen.
+  deltakere ser det før noen gjør det åpent eller tildeler det. (#1172)
+- Delingslenkas «Kopier» er sperret på andres kurs, sammen med resten av «Innstillinger». (Ingen sak: bare lesing, sjelden.)
+- Seksjoner er ikke skrivebeskyttet for andre enn eieren på samme måte som kurs og moduler. (#1180)
+- Antallet i publiseringsdialogen tar ikke med Entra-klasser eller deltakere som har startet via en arkivert klasse. (#1181)
+- «Avpubliser» på kurs bruker fortsatt nettleserens bekreftelsesboks. (#1168)
+- Skill-dokumentasjonen nevner ikke at nye kurs er begrenset. (Rettes i neste versjon.)
+- Noen kommentarer om eierskap i koden (ownership-wording-1029) beskriver den gamle regelen. (Rettes i neste versjon.)
 
 ## 2.164.1 - 2026-11-15
 
