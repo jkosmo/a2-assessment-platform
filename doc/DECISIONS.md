@@ -2168,3 +2168,80 @@ venstre, der den står for alle andre, ikke ved siden av «Profil» til høyre.
 
 **Håndheves:** `.page-top-bar > .workspace-nav` i `public/static/shared.css`; `test/e2e/profile-way-back-1159.spec.ts`.
 **Sak:** #1159 · **Dato:** 2026-11-15 · **Status:** valgt under byggingen; ikke avklart med produkteier
+
+## Valgt under byggingen av #1164, #1165 og #1166 (2026-11-15)
+
+Produkteiers svar på #1157 (over) sa hva. Dette er valgene som ikke sto der.
+
+**#1164, nye kurs begrenset:**
+- **Regelen bor i `createCourse`, ikke i databasen.** `NEW_COURSE_ENROLLMENT_POLICY = "RESTRICTED"` brukes når kalleren ikke sier
+  noe. Skjemaets `@default(OPEN)` er latt stå: 61 testfiler oppretter kurs rett i databasen og forutsetter åpne kurs, og alle veier
+  i appen går gjennom `createCourse` («Nytt kurs», agent-API-et, «Importer som nytt kurs»). En dekningsvakt
+  (`test/unit/new-course-default-guard-1164.test.ts`) stopper en ny vei utenom. Ingen migrering; eksisterende kurs er urørt.
+- **Et uttrykkelig valg står**, også `OPEN` fra API-et. Skjemaet sender bare en verdi feltet faktisk har; før ble et manglende
+  felt til «Åpen».
+- **«Importer som nytt kurs» gir et begrenset kurs også fra et åpent**: eksporten bærer ikke synligheten, og den som importerer,
+  har ikke valgt noe.
+
+**#1164, dialogen før publisering:**
+- **Hvem som ser kurset, regnes på tjeneren** (`GET …/publish-audience`), vaktet som publiseringen (den lister klassene kurset er
+  tildelt). Klassene er de aktive, med antall medlemmer som kan nås; «i alt» er publikummet fra `resolveCourseAudience` (én gang
+  per person). Et åpent kurs får ingen tall: «alle deltakere» er svaret.
+- **Én dialog.** Kurslistas og hodets «Publiser» bruker den samme dialogen i tre utgaver (bare hvem som ser det; med upublisert
+  innhold; sperret). Den spør nå også når alt innholdet alt er publisert; før publiserte det direkte. Versjonsspørsmålet (#934)
+  står i den samme. Ved «Publiser utkastet» med versjonsspørsmål står hvem som ser kurset i versjonsdialogen, ikke i en dialog
+  til etter den.
+- **Utkastets synlighet gjelder ved «Publiser utkastet»** (`?draft=1`): det er den som gjelder etter publiseringen.
+- **Feiler hentingen, publiseres ingenting**, og knappen virker igjen. Å publisere uten å si hvem som ser det, er det saken skulle
+  stoppe.
+- **Fokus på Avbryt** når dialogen åpner: publiseringen kan ikke trekkes tilbake.
+
+**#1165, andres kurs og moduler:**
+- **Modulens lesing åpnet på samme måte som kursets**: `GET /modules/:id/export` og `…/export-package` krever ikke lenger eierskap,
+  og `/export` sier `canManage`. Fasiten følger med (avgjort 2026-09-08, #1031).
+- **«Dupliser» på andres moduler er lov** (som seksjonenes, #1046), siden deling er ønsket: kopien eies av den som kopierer. Før
+  sto knappen der og ga 403.
+- **Forspill til en skriving er fortsatt vaktet** (`pending-versions`, `archive-preview`, `restore-preview`, `publish-audience`,
+  `passed-count`, `publish-preview-versioned`), og `/enrollments` (personopplysninger).
+- **Sperren er den fra arkivert innhold (#1151)**, med sin egen linje («Du kan lese, men bare eierne kan endre»). I hodet står bare
+  «Eksporter». Lista viser «Åpne» og «Eksporter» (kurs), og «Åpne», «Dupliser» og «Eksporter» (moduler), med merket «Kun for eier»;
+  tittelen på merket sier nå «kan endre», ikke «kan åpne».
+- **Importen av en fil fra en annens kurs spør ikke** om å oppdatere det (den som ikke eier kurset, kan ikke), men importerer som
+  nytt, som før da lesingen svarte 403.
+
+**#1166, klassene:**
+- **Låsene er radlåser, ikke innholdslåsen.** Slettingen låser klassens rad (`FOR UPDATE`) og sjekker etterpå; tildelingen låser
+  klassen og så kurset (`FOR SHARE`) og sjekker etterpå. En arkivering av kurset (en UPDATE på raden) venter da på tildelingen, og
+  omvendt. Innholdslåsen ville gitt `503 content_busy` etter 3 sekunder bak en lang kursarkivering.
+- **Den navngitte regelen** heter `CLASS_OWNER_ASSIGNS_ANY_COURSE` (adminClasses.ts): ruta sjekker klassens eierskap, ikke kursets.
+
+**Håndheves:** `createCourse` (courseCommands.ts), `coursePublishAudience.ts`, `openCoursePublishDialog`, `courseIsReadOnly` og
+`moduleCanManage`; `deleteClass`, `assignCourseToClass`, `CLASS_OWNER_ASSIGNS_ANY_COURSE`; `test/m2-course-publish-1164.test.ts`,
+`test/m2-content-read-by-producers-1165.test.ts`, `test/m2-class-lifecycle-locks-1166.test.ts`,
+`test/unit/new-course-default-guard-1164.test.ts`, `test/e2e/admin-content-course-publish-dialog-1164.spec.ts`,
+`test/e2e/admin-content-readonly-others-1165.spec.ts`.
+**Sak:** #1164, #1165, #1166 · **Dato:** 2026-11-15 · **Status:** valgt under byggingen; ikke avklart med produkteier
+
+## Oversetting, lagring, publisering og «Avbryt»: felles prinsipper for kurs, moduler og seksjoner (2026-11-15)
+
+Godtatt av produkteier 15.11.2026 («Godtar prinsippene»), etter at kartleggingen viste fire ulike regler for oversetting
+(kurs og moduler oversatte alle andre språk ved hver lagring, seksjoner bare med «Oversett», tema og lister fylte bare inn det
+som manglet) og at publiseringsporten ikke så kursets navn og beskrivelse.
+
+1. **«Lagre» lager et utkast; «Publiser» er det eneste som gjør noe synlig for deltakerne.** Tema har ingen egen
+   deltakerversjon og lagres direkte, som før.
+2. **Alt deltakerne ser, også tittelen, er en del av utkastet.** Kurs gjør det alt (#1140). Moduler og seksjoner skal få
+   tittelen inn i utkastet, så en ny, maskinoversatt tittel ikke går ut før innholdet.
+3. **Oversetting skjer bare ved lagring, for alt innhold, også figurer** (produkteier: «alt innhold kun oversettes ved
+   lagring»). Ingen egne «Oversett»-knapper. Oversettingen går fra språket som ble endret, og bare for feltene som faktisk ble
+   endret; felt som ikke er rørt, og figurer som alt er oversatt fra samme kilde, oversettes ikke på nytt.
+4. **Publiseringen sjekker at alt deltakerne ser, finnes på alle tre språk**, også kursets navn og beskrivelse. Mangler noe
+   (en oversetting feilet), tilbys «Fyll inn det som mangler».
+5. **«Avbryt» og «Forkast utkast» er to ting.** «Avbryt» forkaster det som er endret i fanen siden sist lagring og rører
+   ingenting som er lagret; fordi oversettingen skjer ved lagring, finnes det ikke noe på tjeneren «Avbryt» ikke kan angre.
+   «Forkast utkast» sletter et lagret, upublisert utkast; deltakerne ser fortsatt den publiserte versjonen. Kurs, moduler og
+   seksjoner skal ha begge.
+6. **Lagringen avvises hvis noen andre har lagret i mellomtiden** (konfliktsjekk), for alle tre.
+
+**Sporing:** seksjoner i #1163 (prinsipp 2, 3 og 6; 5 med «Forkast utkast» i egen sak), moduler og kurs i egne saker.
+**Status:** avgjort av produkteier.
