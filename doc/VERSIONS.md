@@ -23,8 +23,8 @@ som vokter at en lagring der figuren alt er oversatt, ikke endrer eller sletter 
 rutene gir 404 og skriver ingenting (med kontroll), og «Døp om» uten versjon gir 400. Fire stage-tester (2-78, 2-81, 2-133 og den
 manuelle 934) lagrer og publiserer gjennom en felles hjelper (`test/stage/seksjonLagring.ts`).
 
-**Kjent (ikke rettet, fra 2.167.0):** lagringen som oversetter figurer, har ingen fartsgrense; en ny figur som ikke ble oversatt
-første gang, har ikke lagret kildespråket.
+**Kjent (ikke rettet, fra 2.167.0):** lagringen som oversetter figurer, har ingen fartsgrense (#1182); en ny figur som ikke ble
+oversatt første gang, har ikke lagret kildespråket (#1183). Testen for kurstildelingsvarsler er ustabil i full kjøring (#1184).
 
 **QA 2.168.0** (Codex): GO med fire funn, alle rettet før commit:
 - integrasjonstesten for arkiverte seksjoner (`m2-archived-readonly-1151`) og stage-testen `2-160` brukte fortsatt de gamle rutene;
