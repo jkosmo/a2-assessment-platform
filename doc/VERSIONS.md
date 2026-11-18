@@ -134,6 +134,11 @@ deltakeren så den gamle tittelen og teksten i leseren og kursdetaljen; en lagri
 `2-163` (3/3), `2-162` (5/5), `2-161` (4/4), `2-160` (7/7), `2-88` (2/2) og `2-134` (4/4) kjørt på nytt. Første forsøk fikk 401
 på testkontoens innlogging rett etter omstarten; andre forsøk gikk.
 
+**I prod 18.11.2026 kl. 19:41** (e87a679b, uten stage-leddet). App og worker viser 2.166.0, og begge svarer friskt på `/healthz`.
+Migreringen gikk uten feillinjer, og ingen seksjonskall feilet. Loggene viser tre 503-svar på `/healthz` 19:22–19:23 under
+omstarten. Den gamle workeren fikk én «Timed out fetching a new connection» 19:32, rett før byttet. Den nye startet 19:38 og har
+vært frisk siden. 2.167.0 venter til en senere kveld.
+
 ## 2.165.0 - 2026-11-15
 
 Tre funn fra konsistenssjekken #1157, med produkteiers svar: «Vi bør gjøre ting likt mellom moduler og kurs. Nye kurs bør ikke
