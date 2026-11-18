@@ -37,6 +37,12 @@ Et bredere søk etterpå fant tre linjer til i FEATURE_SURFACE_MAP.
 (`S(id, "/content")`), slapp gjennom. Sjekken som fanger dette, er å søke på det rutene ender med (`"/content"`, `assets/localize`)
 uten noe foran.
 
+**På stage 18.11.2026 kl. 21:14** (dev ce1e6d08). Utrullingen gikk rent. Stage-testene er kjørt én fil om gangen:
+- `2-160` (7/7): et arkivert kurs, en arkivert modul og en arkivert seksjon avviser «Døp om» med versjon og lagringen med
+  `section_archived`, og ingenting endres. Etter gjenoppretting går «Døp om» med versjon igjen.
+- `2-78` (26/26) og `2-81` (10/10): figurene oversettes ved lagring med ekte oversetting, i begge oppsett, med de samme etikettene.
+- `2-133` (3/3): lagret og publisert gir ny versjon. `2-163` (3/3), `2-166` (4/4) og `2-167` (3/3) er også grønne.
+
 ## 2.167.0 - 2026-11-18
 
 Seksjonen oversettes når den lagres, og «Fyll inn det som mangler» fyller inn, lagrer og publiserer (#1163, skive 2). Produkteier
