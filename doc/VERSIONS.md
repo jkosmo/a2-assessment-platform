@@ -77,6 +77,10 @@ oversetting: bare den endrede teksten ble oversatt, fra bokmål til nynorsk og e
 utkast; «Avbryt» skrev ingenting. `2-166` (4/4), `2-158-1` (4/4, «Oversett»-delen hoppet over), `2-165` (2/2), `2-163` (3/3),
 `2-160` (7/7) og `2-88` (2/2) kjørt på nytt.
 
+**I prod 18.11.2026 kl. 20:09** (fde1aff6, uten stage-leddet). Den kom samme kveld som 2.166.0, slik at vinduet med tomme
+versjonstitler bare varte i omtrent en halv time. App og worker viser 2.167.0, og begge svarer friskt på `/healthz`. Loggene har
+ingen feillinjer og ingen 5xx etter utrullingen. #1163 er lukket.
+
 ## 2.166.0 - 2026-11-15
 
 «Lagre» på en seksjon lager et utkast, slik det gjør på kurs og moduler (#1163, skive 1). Produkteier 14.11.2026: «La oss gjøre
