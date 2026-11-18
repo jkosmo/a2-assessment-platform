@@ -43,6 +43,9 @@ uten noe foran.
 - `2-78` (26/26) og `2-81` (10/10): figurene oversettes ved lagring med ekte oversetting, i begge oppsett, med de samme etikettene.
 - `2-133` (3/3): lagret og publisert gir ny versjon. `2-163` (3/3), `2-166` (4/4) og `2-167` (3/3) er også grønne.
 
+**I prod 18.11.2026 kl. 22:04** (ce1e6d08, uten stage-leddet). App og worker viser 2.168.0, og begge svarer friskt på `/healthz`.
+Loggene etter utrullingen har ingen feillinjer. De eneste 5xx-svarene er tre 503 på `/healthz` under omstarten.
+
 ## 2.167.0 - 2026-11-18
 
 Seksjonen oversettes når den lagres, og «Fyll inn det som mangler» fyller inn, lagrer og publiserer (#1163, skive 2). Produkteier
