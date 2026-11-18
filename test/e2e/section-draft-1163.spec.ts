@@ -24,6 +24,13 @@ async function mockBase(page: Page) {
   await page.route("**/api/admin/content/sections/preview", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ html: "<p>forhåndsvisning</p>" }) }),
   );
+  // #1163 skive 2: lagringen oversetter det som er endret. Oversetteren svarer `[<mål>] <kilde>`.
+  await page.route("**/api/admin/content/sections/localize", (route: Route) => {
+    const body = route.request().postDataJSON() as Record<string, string>;
+    const out: Record<string, string> = {};
+    for (const field of ["title", "bodyMarkdown"]) if (body[field]) out[field] = `[${body.targetLocale}] ${body[field]}`;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(out) });
+  });
   await page.addInitScript(() => {
     try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
   });

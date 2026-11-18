@@ -191,11 +191,30 @@ den**, verken teksten eller tittelen. Før 2.166.0 gikk en lagret seksjon ut til
 - En **ny seksjon** lagres som utkast. Publiser den når den er klar.
 - Har noen andre lagret seksjonen etter at du åpnet den, lagres ingenting, og du får beskjed. Kopier det du skrev, last siden
   på nytt og gjør endringen igjen.
-- **Oversett** i seksjonen virker som før: den fyller inn de andre språkene i skjemaet, og du lagrer selv. Figurene som oversettes,
-  gjelder med en gang (de er felles for alle versjoner).
 
 Modulen viser den samme linja under merket når du har et nyere utkast åpent: «Deltakerne ser versjon X til utkastet er
 publisert.»
+
+#### Seksjonen oversettes når du lagrer (fra 2.167.0, #1163)
+
+Seksjonen har **ingen «Oversett»-knapp** lenger. Du skriver på ett språk og trykker **Lagre**; da oversettes det du har endret
+til de andre språkene, og alt lagres i samme utkast. Mens det pågår, står «Lagrer og oversetter …», og siden er sperret.
+
+- **Bare det du har endret, oversettes**, og fra språket du endret det på. Har du bare rettet teksten, oversettes ikke tittelen
+  (og omvendt). Har du selv skrevet på to språk, blir begge stående; bare det tredje oversettes.
+- **Figurer (SVG-tegninger med tekst)** som du har satt inn i utkastet, oversettes i samme lagring. En figur som alt er oversatt,
+  oversettes ikke på nytt, heller ikke når du skriver på et annet språk. En figur deltakerne alt ser i den publiserte versjonen,
+  endres ikke ved lagring.
+- **Feiler en oversetting**, lagres det som finnes, og meldingen sier hvilket språk som mangler. Det språket står da tomt i
+  utkastet (ikke med den gamle oversettelsen). Når du publiserer, stopper kontrollen og tilbyr **Fyll inn det som mangler**:
+  den oversetter det som mangler, lagrer utkastet og publiserer. Du kan også skrive det som mangler selv og lagre.
+- **Avbryt** forkaster det du har endret siden sist lagring. Ingenting er sendt eller oversatt før du lagrer, så Avbryt rører
+  ikke noe som er lagret.
+- Har noen andre lagret seksjonen etter at du åpnet den, lagres ingenting (heller ikke oversettelsene), og teksten din står i
+  skjemaet som du hadde den.
+
+**Fyll inn det som mangler** finnes både i seksjonen og i seksjonslista, på meldingen som kommer når publiseringen stopper. Den
+gjelder også eldre utkast og utkast som agent-API-et har laget. Lykkes ikke alt, lagres det som lyktes, og ingenting publiseres.
 
 #### Arkivere og gjenopprette et kurs (2.159.0)
 

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
-import { runContentWrite } from "../../db/contentLock.js";
+import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { assertNotArchived, assertNotArchivedBeforeLock } from "../content/archivedGuard.js";
 import { putAsset, getAsset, deleteAsset } from "./assetStorage.js";
@@ -550,6 +550,178 @@ export async function localizeSectionAssets(
   }
 
   return { localizedAssetCount, skippedAssetCount, targetLocales };
+}
+
+// =========================================================================
+// #1163 skive 2 — figurene oversettes ved lagring (prinsipp 3; PLAN_1163 «Andre gjennomlesing» punkt 2)
+// =========================================================================
+//
+// Redigererens lagring (`saveSection`) oversetter figurene utkastet har lagt til: figurer teksten i utkastet viser til, som den
+// publiserte versjonen IKKE viser til, og som mangler oversettelser. Figurene er felles for alle versjoner (ikke versjonert), så
+// en figur deltakerne alt ser, endres ikke ved en lagring — den ville gått ut med en gang.
+//
+// To halvdeler, som den låste skrivingen krever:
+//   - `prepareDraftFigureTranslations`: språkmodellen og de nye bildefilene, FØR låsen. Ingen rad skrives.
+//   - `applyDraftFigureTranslations`: radene, INNE I lagringstransaksjonen, etter revisjonssjekken. Avvises lagringen (409), skrives
+//     ingen rad, og kalleren rydder de nye filene.
+// Den gamle knappen («Oversett», `localizeSectionAssets` over) står ett utrullingsvindu for faner fra før skive 2.
+
+const ASSET_REF_PATTERN = /asset:([a-zA-Z0-9_-]+)/g;
+
+/** Figurene en lagret tekst viser til (`asset:<id>`), på alle språk. */
+export function assetRefsIn(serializedMarkdown: string | null | undefined): Set<string> {
+  const refs = new Set<string>();
+  for (const match of String(serializedMarkdown ?? "").matchAll(ASSET_REF_PATTERN)) refs.add(match[1]!);
+  return refs;
+}
+
+type FigureState = { sourceLocale: string | null; localizedBlobPaths: unknown; layoutVariants: unknown };
+
+/**
+ * Hvilke språk en figur mangler. Kildespråket er det figuren har lagret (`sourceLocale`); har den ikke noe (en ny opplasting),
+ * er det språket lagringen kom fra (`fallback`). En figur som har alle de andre språkene, i hvert oppsett, mangler ingenting —
+ * også når forfatteren nå skriver på et annet språk enn figuren ble oversatt fra (språkbytte oversetter ikke på nytt).
+ */
+export function figureMissingLocales(asset: FigureState, fallback: SupportedLocale): { from: SupportedLocale; missing: SupportedLocale[] } {
+  const stored = SUPPORTED_LOCALES.find((locale) => locale === asset.sourceLocale);
+  const from = stored ?? fallback;
+  const wide = readLocalizedBlobPaths(asset.localizedBlobPaths);
+  const layouts = Object.values(readLayoutVariants(asset.layoutVariants));
+  const has = (paths: Record<string, string>, locale: string) => typeof paths[locale] === "string" && paths[locale].length > 0;
+  const missing = SUPPORTED_LOCALES.filter((locale) => locale !== from && (!has(wide, locale) || layouts.some((layout) => !has(layout.localizedBlobPaths, locale))));
+  return { from, missing };
+}
+
+/** Én figur oversatt før låsen: det raden skal få, og raden slik den var (`seen`). Endret den seg før lagringen, skrives ingenting. */
+export type PreparedFigureTranslation = {
+  assetId: string;
+  seen: string;
+  data: { sourceLocale: SupportedLocale; localizedBlobPaths: Record<string, string>; layoutVariants?: Record<string, StoredLayoutVariant> };
+  /** Filene som ble skrevet for denne figuren. Ryddes bort hvis raden ikke skrives. */
+  newPaths: string[];
+};
+
+const figureStateKey = (asset: FigureState) =>
+  JSON.stringify([asset.sourceLocale ?? null, readLocalizedBlobPaths(asset.localizedBlobPaths), readLayoutVariants(asset.layoutVariants)]);
+
+/**
+ * Oversetter figurene utkastet har lagt til, før låsen. Bare de språkene figuren mangler; det som finnes, beholdes. En figur som
+ * feiler (språkmodellen, lageret), står i `failed` og er urørt; lagringen går likevel (prinsipp 3: «lagres det som finnes»).
+ */
+export async function prepareDraftFigureTranslations(
+  sectionId: string,
+  draftBodyMarkdown: string,
+  sourceLocale: SupportedLocale,
+): Promise<{ prepared: PreparedFigureTranslation[]; failed: string[] }> {
+  const section = await prisma.courseSection.findUnique({
+    where: { id: sectionId },
+    select: { activeVersionId: true, activeVersion: { select: { bodyMarkdown: true } } },
+  });
+  if (!section) return { prepared: [], failed: [] };
+  const published = section.activeVersionId ? assetRefsIn(section.activeVersion?.bodyMarkdown) : new Set<string>();
+  const added = [...assetRefsIn(draftBodyMarkdown)].filter((id) => !published.has(id));
+  if (added.length === 0) return { prepared: [], failed: [] };
+
+  const assets = await prisma.sectionAsset.findMany({
+    where: { sectionId, id: { in: added }, mimeType: SVG_MIME_TYPE },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, blobPath: true, filename: true, sourceLocale: true, localizedBlobPaths: true, layoutVariants: true },
+  });
+
+  const prepared: PreparedFigureTranslation[] = [];
+  const failed: string[] = [];
+  for (const asset of assets) {
+    const { from, missing } = figureMissingLocales(asset, sourceLocale);
+    if (missing.length === 0) continue;
+    const newPaths: string[] = [];
+    try {
+      const baseSvg = (await getAsset(asset.blobPath)).toString("utf8");
+      // En figur uten tekst har ingenting å oversette, og mangler derfor ingenting.
+      if (!svgHasText(baseSvg)) continue;
+      const originals = extractSvgTexts(baseSvg);
+      if (originals.length === 0) continue;
+
+      const wide = { ...readLocalizedBlobPaths(asset.localizedBlobPaths) };
+      const layouts = Object.entries(readLayoutVariants(asset.layoutVariants)) as Array<[AssetLayout, StoredLayoutVariant]>;
+      const layoutSvgs = new Map<AssetLayout, string>();
+      for (const [layout, variant] of layouts) layoutSvgs.set(layout, (await getAsset(variant.blobPath)).toString("utf8"));
+      const layoutPaths = new Map<AssetLayout, Record<string, string>>(layouts.map(([layout, variant]) => [layout, { ...variant.localizedBlobPaths }]));
+
+      for (const target of missing) {
+        // Samme oversettelse i hvert oppsett (se `localizeSectionAssets`): ett kall per språk.
+        const translated = await localizeSvgTexts({ texts: originals, sourceLocale: from as GenerationLocale, targetLocale: target as GenerationLocale });
+        const translationMap: Record<string, string> = {};
+        originals.forEach((original, index) => {
+          const value = translated[index];
+          if (typeof value === "string" && value.length > 0) translationMap[original] = value;
+        });
+        if (!wide[target]) {
+          const localizedSvg = applySvgTextTranslations(baseSvg, translationMap);
+          if (localizedSvg) {
+            const path = `sections/${sectionId}/${randomUUID()}-${target}-${asset.filename}`;
+            await putAsset(path, Buffer.from(localizedSvg, "utf8"), SVG_MIME_TYPE);
+            newPaths.push(path);
+            wide[target] = path;
+          }
+        }
+        for (const [layout, svg] of layoutSvgs) {
+          const paths = layoutPaths.get(layout)!;
+          if (paths[target]) continue;
+          const localizedLayoutSvg = applySvgTextTranslations(svg, translationMap);
+          if (!localizedLayoutSvg) continue;
+          const path = `sections/${sectionId}/${randomUUID()}-${layout}-${target}-${asset.filename}`;
+          await putAsset(path, Buffer.from(localizedLayoutSvg, "utf8"), SVG_MIME_TYPE);
+          newPaths.push(path);
+          paths[target] = path;
+        }
+      }
+
+      const layoutVariants = Object.fromEntries(layouts.map(([layout, variant]) => [layout, { blobPath: variant.blobPath, localizedBlobPaths: layoutPaths.get(layout)! }]));
+      const data = { sourceLocale: from, localizedBlobPaths: wide, ...(layouts.length > 0 ? { layoutVariants } : {}) };
+      if (newPaths.length > 0) prepared.push({ assetId: asset.id, seen: figureStateKey(asset), data, newPaths });
+      // Et språk som ikke ble laget (oversettelsen kunne ikke legges inn), er fortsatt en mangel.
+      if (figureMissingLocales({ sourceLocale: from, localizedBlobPaths: wide, layoutVariants }, from).missing.length > 0) failed.push(asset.id);
+    } catch (error) {
+      console.warn(`[figure-translation] section ${sectionId}, asset ${asset.id}:`, error instanceof Error ? error.message : error);
+      await reclaimAssetBlobs(newPaths);
+      failed.push(asset.id);
+    }
+  }
+  return { prepared, failed };
+}
+
+/**
+ * Skriver figurene `prepareDraftFigureTranslations` laget, i lagringens transaksjon (kalleren holder låsen og har sjekket
+ * revisjonen og at seksjonen ikke er arkivert). Lest på nytt under låsen: en figur den publiserte versjonen nå viser til, eller en
+ * rad som er endret siden oversettingen startet, skrives ikke. De står i `skipped`, og kalleren rydder filene deres etter commit.
+ */
+export async function applyDraftFigureTranslations(
+  tx: ContentWriteTx,
+  sectionId: string,
+  prepared: readonly PreparedFigureTranslation[],
+): Promise<{ applied: string[]; skipped: PreparedFigureTranslation[] }> {
+  if (prepared.length === 0) return { applied: [], skipped: [] };
+  const section = await tx.courseSection.findUnique({
+    where: { id: sectionId },
+    select: { activeVersionId: true, activeVersion: { select: { bodyMarkdown: true } } },
+  });
+  const published = section?.activeVersionId ? assetRefsIn(section.activeVersion?.bodyMarkdown) : new Set<string>();
+  const rows = await tx.sectionAsset.findMany({
+    where: { sectionId, id: { in: prepared.map((p) => p.assetId) } },
+    select: { id: true, sourceLocale: true, localizedBlobPaths: true, layoutVariants: true },
+  });
+  const current = new Map(rows.map((row) => [row.id, figureStateKey(row)]));
+  const applied: string[] = [];
+  const skipped: PreparedFigureTranslation[] = [];
+  for (const figure of prepared) {
+    if (published.has(figure.assetId) || current.get(figure.assetId) !== figure.seen) {
+      skipped.push(figure);
+      continue;
+    }
+    await tx.sectionAsset.updateMany({ where: { id: figure.assetId, sectionId }, data: figure.data });
+    applied.push(figure.assetId);
+  }
+  return { applied, skipped };
 }
 
 // =========================================================================

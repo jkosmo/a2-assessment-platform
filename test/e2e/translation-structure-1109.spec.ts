@@ -3,7 +3,7 @@ import { buildMockModuleExport, localizedText, mockCommonApis } from "./admin-co
 
 // #1109: tjeneren forkaster oversettelsen til et språk som endret rammene (422
 // `translation_structure_changed`). Her: at klienten sier fra til forfatteren og ikke lagrer språket —
-// i seksjonseditoren («Oversett fra dette språket») og i modulens lagring fra Rediger.
+// i seksjonseditoren (#1163 skive 2: oversettingen skjer ved «Lagre») og i modulens lagring fra Rediger.
 
 const NL = String.fromCharCode(10);
 const SECTION_BODY = [":::sjekk Hvilken kilde er viktigst?", "- [ ] Innkallingen", "- [x] Notatene", ":::"].join(NL);
@@ -51,9 +51,18 @@ async function mockSectionApis(page: Page) {
   return created;
 }
 
+async function newSection(page: Page, body: string) {
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/admin-content/sections");
+  await page.getByRole("button", { name: /Ny seksjon/ }).click();
+  await page.locator("#titleInput").fill("Kilder");
+  await page.locator("#markdownInput").fill(body);
+  await page.locator("#formSaveBtn").click();
+}
+
 test.describe("#1109 — en oversettelse som endret rammene, lagres ikke", () => {
   test("#1112: er det kilden som har en ramme som ikke tegnes, sier meldingen at kilden må rettes", async ({ page }) => {
-    await mockSectionApis(page);
+    const created = await mockSectionApis(page);
     await page.route("**/api/admin/content/sections/localize", async (route: Route) => {
       const body = route.request().postDataJSON() as { targetLocale: string };
       if (body.targetLocale === "nn") {
@@ -69,19 +78,16 @@ test.describe("#1109 — en oversettelse som endret rammene, lagres ikke", () =>
       }
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "Sources", bodyMarkdown: "Text." }) });
     });
-    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
-    await page.goto("/admin-content/sections");
-    await page.getByRole("button", { name: /Ny seksjon/ }).click();
-    await page.locator("#titleInput").fill("Kilder");
-    await page.locator("#markdownInput").fill(["- et punkt", SECTION_BODY].join(NL));
-    await page.locator("#translateBtn").click();
+    await newSection(page, ["- et punkt", SECTION_BODY].join(NL));
 
     await expect(page.getByText(/Ikke oversatt til Norsk nynorsk: kilden har en blokk som ikke vises \(:::sjekk\)/)).toBeVisible();
-    // Ikke den generelle meldingen om at oversettelsen endret blokkene — den ber forfatteren prøve igjen.
+    // Ikke den generelle meldingen om at oversettelsen endret blokkene.
     await expect(page.getByText(/oversettelsen endret blokkene/)).toHaveCount(0);
+    await expect.poll(() => created.length).toBe(1);
+    expect(created[0]!.bodyMarkdown.nn).toBeUndefined();
   });
 
-  test("seksjonseditoren: språket som ble avvist står urørt, forfatteren får beskjed, de andre oversettes", async ({ page }) => {
+  test("seksjonseditoren: språket som ble avvist, lagres ikke; forfatteren får beskjed; de andre oversettes og lagres", async ({ page }) => {
     const created = await mockSectionApis(page);
     const requested: string[] = [];
     await page.route("**/api/admin/content/sections/localize", async (route: Route) => {
@@ -94,99 +100,89 @@ test.describe("#1109 — en oversettelse som endret rammene, lagres ikke", () =>
         body: JSON.stringify({ title: "Sources", bodyMarkdown: [":::check Which source matters most?", "- [ ] The invitation", "- [x] The notes", ":::"].join(NL) }),
       });
     });
+    await newSection(page, SECTION_BODY);
 
-    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
-    await page.goto("/admin-content/sections");
-    await page.getByRole("button", { name: /Ny seksjon/ }).click();
-    await page.locator("#titleInput").fill("Kilder");
-    await page.locator("#markdownInput").fill(SECTION_BODY);
-    await page.locator("#translateBtn").click();
-
-    // Beskjeden sier hvilket språk og hvorfor — ikke «Oversatt», og ikke en rå feilkode.
-    const toast = page.getByText(/Ikke oversatt til Norsk nynorsk: oversettelsen endret blokkene/);
-    await expect(toast).toBeVisible();
+    // Beskjeden sier hvilket språk og hvorfor — ikke en rå feilkode.
+    await expect(page.getByText(/Ikke oversatt til Norsk nynorsk: oversettelsen endret blokkene/)).toBeVisible();
     await expect(page.getByText("translation_structure_changed")).toHaveCount(0);
-    await expect(page.getByText(/Oversatt — se over/)).toHaveCount(0);
     await expect.poll(() => [...requested].sort()).toEqual(["en-GB", "nn"]);
 
-    // Engelsk er oversatt; nynorsk står som før (tom, i en ny seksjon) — ingen kildekopi.
+    // Lagringen sender ikke nynorsk — ingen kildekopi.
+    await expect.poll(() => created.length).toBe(1);
+    const saved = created[0]!;
+    expect(Object.keys(saved.bodyMarkdown).sort()).toEqual(["en-GB", "nb"]);
+    expect(saved.bodyMarkdown.nn).toBeUndefined();
+    expect(saved.title.nn).toBeUndefined();
+
+    // Engelsk er oversatt; nynorsk står tomt.
     await page.locator('[data-form-locale="en-GB"]').click();
     await expect(page.locator("#titleInput")).toHaveValue("Sources");
     await page.locator('[data-form-locale="nn"]').click();
     await expect(page.locator("#titleInput")).toHaveValue("");
     await expect(page.locator("#markdownInput")).toHaveValue("");
-
-    // Lagringen sender ikke nynorsk. (Feilvarselet blir stående til det lukkes, som alle feilvarsler.)
-    await page.getByRole("button", { name: "Lukk varsel" }).click();
-    await page.locator('[data-form-locale="nb"]').click();
-    await page.locator("#formSaveBtn").click();
-    await expect.poll(() => created.length).toBeGreaterThan(0);
-    const saved = created[created.length - 1]!;
-    expect(Object.keys(saved.bodyMarkdown).sort()).toEqual(["en-GB", "nb"]);
-    expect(saved.bodyMarkdown.nn).toBeUndefined();
-    expect(saved.title.nn).toBeUndefined();
   });
 
-  test("seksjonseditoren, kontroll: når alle språk kommer gjennom, står det «Oversatt» som før", async ({ page }) => {
-    await mockSectionApis(page);
+  test("seksjonseditoren, kontroll: når alle språk kommer gjennom, lagres alle tre og ingenting sies om oversettingen", async ({ page }) => {
+    const created = await mockSectionApis(page);
     await page.route("**/api/admin/content/sections/localize", async (route: Route) => {
       const body = route.request().postDataJSON() as { targetLocale: string };
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: `T-${body.targetLocale}`, bodyMarkdown: SECTION_BODY }) });
     });
-    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
-    await page.goto("/admin-content/sections");
-    await page.getByRole("button", { name: /Ny seksjon/ }).click();
-    await page.locator("#titleInput").fill("Kilder");
-    await page.locator("#markdownInput").fill(SECTION_BODY);
-    await page.locator("#translateBtn").click();
-    await expect(page.getByText(/Oversatt — se over/)).toBeVisible();
+    await newSection(page, SECTION_BODY);
+    await expect.poll(() => created.length).toBe(1);
+    expect(Object.keys(created[0]!.bodyMarkdown).sort()).toEqual(["en-GB", "nb", "nn"]);
+    await expect(page.locator(".toast__message").last()).toContainText("Lagret som utkast.");
     await expect(page.getByText(/Ikke oversatt til/)).toHaveCount(0);
     await page.locator('[data-form-locale="nn"]').click();
     await expect(page.locator("#titleInput")).toHaveValue("T-nn");
   });
 
-  // En lagret seksjon åpnes «ulagret: nei». Kom minst ett språk gjennom, er det noe nytt å lagre; ble alle
-  // avvist, er ingenting endret, og skjemaet skal ikke påstå det.
-  for (const [name, rejected, dirty] of [
-    ["ett språk kom gjennom: skjemaet har ulagrede endringer", ["nn"], true],
-    ["alle språk ble avvist: ingenting er endret, og skjemaet sier det", ["nn", "en-GB"], false],
-  ] as const) {
-    test(`seksjonseditoren, lagret seksjon — ${name}`, async ({ page }) => {
-      await mockSectionApis(page);
-      const row = {
-        id: "sec-x", title: JSON.stringify({ nb: "Kilder", nn: "Kjelder", "en-GB": "Old sources" }),
-        bodyMarkdown: JSON.stringify({ nb: SECTION_BODY, nn: "Gammal tekst.", "en-GB": "Old text." }),
-        activeVersionId: "v1", versionNo: 1, updatedAt: "2026-10-01T00:00:00.000Z", archivedAt: null, courseCount: 0, courses: [], canManage: true,
-      };
-      await page.route("**/api/admin/content/sections/sec-x", (route: Route) =>
-        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: row }) }));
-      await page.route("**/api/admin/content-owners/SECTION/sec-x", (route: Route) =>
-        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ owners: [], canManageOwners: false }) }));
-      await page.route("**/api/admin/content/sections/sec-x/assets/localize", (route: Route) =>
-        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ localizedAssetCount: 0 }) }));
-      await page.route("**/api/admin/content/sections/localize", async (route: Route) => {
-        const body = route.request().postDataJSON() as { targetLocale: string };
-        if ((rejected as readonly string[]).includes(body.targetLocale)) return route.fulfill(structureRejection(body.targetLocale));
-        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "New sources", bodyMarkdown: SECTION_BODY.replace(":::sjekk", ":::check") }) });
-      });
-
-      await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
-      await page.goto("/admin-content/sections?id=sec-x");
-      await expect(page.locator("#titleInput")).toHaveValue("Kilder");
-      await expect(page.locator("#formPageDirty")).not.toHaveClass(/is-dirty/);
-
-      await page.locator("#translateBtn").click();
-      await expect(page.getByText(/Ikke oversatt til/)).toBeVisible();
-      if (dirty) await expect(page.locator("#formPageDirty")).toHaveClass(/is-dirty/);
-      else await expect(page.locator("#formPageDirty")).not.toHaveClass(/is-dirty/);
-
-      // Det avviste nynorske står som før.
-      await page.getByRole("button", { name: "Lukk varsel" }).click();
-      await page.locator('[data-form-locale="nn"]').click();
-      await expect(page.locator("#titleInput")).toHaveValue("Kjelder");
-      await expect(page.locator("#markdownInput")).toHaveValue("Gammal tekst.");
+  test("seksjonseditoren, lagret seksjon: bare teksten er endret, så bare den oversettes; det avviste språket står tomt i utkastet, ikke med den gamle oversettelsen", async ({ page }) => {
+    await mockSectionApis(page);
+    const row = {
+      id: "sec-x", title: JSON.stringify({ nb: "Kilder", nn: "Kjelder", "en-GB": "Old sources" }),
+      bodyMarkdown: JSON.stringify({ nb: "Gammel tekst.", nn: "Gammal tekst.", "en-GB": "Old text." }),
+      activeVersionId: "v1", versionNo: 1, updatedAt: "2026-10-01T00:00:00.000Z", archivedAt: null, courseCount: 0, courses: [], canManage: true,
+    };
+    const lagret: Array<Record<string, any>> = [];
+    await page.route("**/api/admin/content/sections/sec-x", (route: Route) => {
+      if (route.request().method() === "PUT") {
+        const body = route.request().postDataJSON() as Record<string, any>;
+        lagret.push(body);
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { ...row, versionNo: 2, hasUnpublishedChanges: true, bodyMarkdown: JSON.stringify(body.bodyMarkdown) }, altWarnings: [] }) });
+      }
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: row }) });
     });
-  }
+    await page.route("**/api/admin/content-owners/SECTION/sec-x", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ owners: [], canManageOwners: false }) }));
+    const forespurt: Array<Record<string, unknown>> = [];
+    await page.route("**/api/admin/content/sections/localize", async (route: Route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown> & { targetLocale: string };
+      forespurt.push(body);
+      if (body.targetLocale === "nn") return route.fulfill(structureRejection("nn"));
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bodyMarkdown: SECTION_BODY.replace(":::sjekk", ":::check") }) });
+    });
+
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+    await page.goto("/admin-content/sections?id=sec-x");
+    await expect(page.locator("#titleInput")).toHaveValue("Kilder");
+    await page.locator("#markdownInput").fill(SECTION_BODY);
+    await page.locator("#formSaveBtn").click();
+
+    await expect.poll(() => lagret.length).toBe(1);
+    // Tittelen er ikke rørt: den ble ikke sendt til oversettelse, og står som den var på alle språk.
+    expect(forespurt.every((body) => !("title" in body))).toBe(true);
+    expect(lagret[0]!.title).toEqual({ nb: "Kilder", nn: "Kjelder", "en-GB": "Old sources" });
+    // Nynorsk ble avvist: utkastet har ikke den gamle nynorske teksten (den hører til den gamle bokmålsteksten).
+    expect(lagret[0]!.bodyMarkdown.nn).toBeUndefined();
+    expect(lagret[0]!.bodyMarkdown["en-GB"]).toContain(":::check");
+    expect(lagret[0]!.sourceLocale).toBe("nb");
+    await expect(page.getByText(/Ikke oversatt til Norsk nynorsk/)).toBeVisible();
+    await expect(page.locator("#formPageDirty")).not.toHaveClass(/is-dirty/);
+    await page.locator('[data-form-locale="nn"]').click();
+    await expect(page.locator("#titleInput")).toHaveValue("Kjelder");
+    await expect(page.locator("#markdownInput")).toHaveValue("");
+  });
 
   test("modulen: språket som ble avvist, lagres ikke, og forfatteren får beskjed", async ({ page }) => {
     const state = await mockCommonApis(page, {

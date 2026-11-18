@@ -112,10 +112,13 @@ const titleSchema = z.object({
 });
 const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
 // #1163: redigererens ene lagring. Revisjonen er påkrevd: uten den kan tjeneren ikke vite om fanen er utdatert.
+// Skive 2: `sourceLocale` er språket forfatteren skrev på. Med det oversettes figurene utkastet har lagt til (prinsipp 3); uten
+// det (en fane fra 2.166.0, API-kallere) lagres teksten som før, uten figuroversetting.
 const saveSchema = z.object({
   title: localizedTextPatchSchema,
   bodyMarkdown: localizedTextPatchSchema,
   ...revisionFields,
+  sourceLocale: generationLocaleSchema.optional(),
 });
 const publishSchema = z.object({ expectedVersionNo: z.number().int().min(1).optional() }).optional();
 // `variant: "moduleText"` (modularbeidsflatens forhåndsvisning, #1051): modulens tekst tegnes uten øvelsene
@@ -551,15 +554,21 @@ adminSectionsRouter.put("/:sectionId", requireContentOwnership("SECTION", "secti
     return;
   }
   try {
-    const section = await saveSection(
+    const { section, figureTranslation } = await saveSection(
       request.params.sectionId,
       {
         title: localizedTextCodec.serialize(parsed.data.title),
         bodyMarkdown: localizedTextCodec.serialize(parsed.data.bodyMarkdown),
       },
       { expectedVersionNo: parsed.data.expectedVersionNo, expectedTitle: parsed.data.expectedTitle },
+      { sourceLocale: parsed.data.sourceLocale },
     );
-    response.json({ section: toDetail(section), altWarnings: altTextWarnings(parsed.data.bodyMarkdown) });
+    response.json({
+      section: toDetail(section),
+      altWarnings: altTextWarnings(parsed.data.bodyMarkdown),
+      // Skive 2: hvor mange figurer lagringen oversatte, og hvor mange som feilet (de står urørt og prøves ved neste lagring).
+      ...(figureTranslation ? { figureTranslation } : {}),
+    });
   } catch (error) {
     next(error);
   }
@@ -618,8 +627,9 @@ adminSectionsRouter.get("/:sectionId/assets", async (request, response, next) =>
   }
 });
 
-// #657: generate translated SVG variants for the section's SVG assets. Triggered explicitly by the
-// author's "Translate" action (never implicit on save), consistent with module/MCQ localisation.
+// #657: generate translated SVG variants for the section's SVG assets. #1163 skive 2: redigereren oversetter figurene ved lagring
+// (`PUT /:sectionId` med `sourceLocale`), og knappen «Oversett» er borte. Ruta står ett utrullingsvindu for faner fra før, som
+// `PUT …/content` og `PATCH …/title` uten revisjon.
 const localizeAssetsSchema = z.object({ sourceLocale: generationLocaleSchema });
 adminSectionsRouter.post("/:sectionId/assets/localize", requireContentOwnership("SECTION", "sectionId"), generateLimiter, async (request: Request<{ sectionId: string }>, response, next) => {
   const parsed = localizeAssetsSchema.safeParse(request.body);

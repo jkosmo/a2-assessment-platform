@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readServiceAuth, stageBaseUrl } from "./stageAuth.js";
-import { forventMinstVersjon } from "./versjon.js";
+import { forventMinstVersjon, sammenlignVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.158.1 mot UTRULLET stage, med ekte data (#1154 og #1155):
@@ -76,7 +76,7 @@ const stempel = Date.now();
 const A = { navn: `Stage-test 2.158.1 seksjon A ${stempel}`, tekst: { nb: "Dette er teksten i seksjon A.", nn: "Dette er teksten i seksjon A, på nynorsk.", "en-GB": "This is the text of section A." } };
 const B = { navn: `Stage-test 2.158.1 seksjon B ${stempel}`, tekst: { nb: "Seksjon B handler om noe helt annet.", nn: "Seksjon B handlar om noko heilt anna.", "en-GB": "Section B is about something else entirely." } };
 const KLASSE = `Stage-test 2.158.1 klasse ${stempel}`;
-const tilstand: { a?: string; b?: string; klasse?: string } = {};
+const tilstand: { a?: string; b?: string; klasse?: string; versjon?: string } = {};
 
 async function lagSeksjon(s: typeof A): Promise<string> {
   const svar = await api("POST", "/api/admin/content/sections", { title: { nb: s.navn, nn: s.navn, "en-GB": s.navn }, bodyMarkdown: s.tekst });
@@ -112,7 +112,8 @@ test.afterAll(async () => {
 });
 
 test("versjonen er minst 2.158.1", async () => {
-  noter("versjon", await forventMinstVersjon(BASE, "2.158.1"));
+  tilstand.versjon = await forventMinstVersjon(BASE, "2.158.1");
+  noter("versjon", tilstand.versjon);
 });
 
 test("testdata: to seksjoner og en klasse", async () => {
@@ -128,6 +129,9 @@ test("testdata: to seksjoner og en klasse", async () => {
 test("A: en ekte oversetting startet i seksjon A skriver ikke i seksjon B", async ({ page }) => {
   test.setTimeout(300_000);
   test.skip(!tilstand.a || !tilstand.b, "testdataene ble ikke laget");
+  // 2.167.0 (#1163): «Oversett»-knappen er fjernet; oversettingen skjer ved lagring, og siden er sperret mens den går. Dekket av
+  // e2e section-jobs-stay-in-their-section-1154 og section-save-translation-1163.
+  test.skip(Boolean(tilstand.versjon) && sammenlignVersjon(tilstand.versjon!, "2.167.0") >= 0, "«Oversett»-knappen finnes ikke fra 2.167.0");
   await forberedSide(page);
   const oversettinger: Array<{ status: number }> = [];
   page.on("response", (res) => {

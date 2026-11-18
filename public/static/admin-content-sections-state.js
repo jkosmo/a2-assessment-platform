@@ -92,6 +92,33 @@ export function showsSectionDraftLine({ published, hasUnpublishedChanges, publis
   return Boolean(published && hasUnpublishedChanges && publishedVersionNo != null);
 }
 
+/** Feltene publiseringsporten måler for en seksjon (`validateSectionTranslationCompleteness`). */
+export const SECTION_GATE_FIELDS = ["title", "bodyMarkdown"];
+
+/**
+ * #1163 skive 2: «Fyll inn det som mangler» etter at porten holdt igjen en publisering. Hva skal fylles, og fra hvilket språk?
+ *
+ * - Feltene er de porten klaget på (`issues[].field`), ikke et fast par: en seksjon som bare mangler tittelen på nynorsk, skal
+ *   ikke trenge tekst i kilden for innholdet.
+ * - Kilden er det første språket i `preferred` som har tekst i ALLE de feltene. Finnes ingen, svarer den `null`.
+ * - Målene er språkene porten sa mangler, unntatt kilden. Bare hullene fylles; et språk som har tekst, beholder den.
+ *
+ * @param {Array<{ field?: string, missingLocales?: string[] }>} issues
+ * @param {Record<string, Record<string, string>>} values  feltene som språkkart (det lagrede utkastet)
+ * @param {string[]} preferred  rekkefølgen kilden velges i
+ */
+export function sectionGapFill(issues, values, preferred, locales = SECTION_EDITOR_LOCALES) {
+  const gated = (issues ?? []).filter((issue) => SECTION_GATE_FIELDS.includes(issue?.field) && Array.isArray(issue?.missingLocales) && issue.missingLocales.length > 0);
+  const fields = SECTION_GATE_FIELDS.filter((field) => gated.some((issue) => issue.field === field));
+  if (fields.length === 0) return null;
+  const has = (field, locale) => String(values?.[field]?.[locale] ?? "").trim().length > 0;
+  const sourceLocale = [...preferred, ...locales].find((locale) => locales.includes(locale) && fields.every((field) => has(field, locale)));
+  if (!sourceLocale) return null;
+  const targetLocales = locales.filter((locale) => locale !== sourceLocale && gated.some((issue) => issue.missingLocales.includes(locale)));
+  if (targetLocales.length === 0) return null;
+  return { sourceLocale, fields, targetLocales };
+}
+
 export function detectSectionRoute(search) {
   const params = new URLSearchParams(search ?? "");
   const returnTo = safeReturnTo(params.get("returnTo"));

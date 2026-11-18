@@ -8,6 +8,10 @@ import { revealRowAction } from "./admin-content-helpers.js";
 //   - første lagring av en ny seksjon tegnet skjemaet over lista når svaret kom,
 //   - en jobb startet i lista («Avpubliser») tegnet lista over et skjema som var åpnet i mellomtiden.
 // Hver jobb husker nå hvilken visning den startet i, og lar skjermen være hvis forfatteren har gått videre.
+//
+// #1163 skive 2: «Oversett» er borte; lagringen oversetter, bak arbeidsvinduet (work-dialog.js), som gjør resten av sida
+// inaktiv til lagringen er ferdig. Forfatteren kan ikke lenger åpne en annen seksjon eller «Erstatt fra fil» midt i en
+// oversetting; bare nettleserens tilbake-knapp virker. Testene for «Oversett» er erstattet av lagringen gjennom den veien.
 
 async function mockBase(page: Page) {
   await page.route("**/participant/config", (route: Route) =>
@@ -88,74 +92,58 @@ async function forventUroertB(page: Page) {
 }
 
 test.describe("#1154 — en jobb skriver bare i visningen den startet i", () => {
-  test("«Oversett» startet i A skriver ikke i B når forfatteren har byttet seksjon før svaret kom", async ({ page }) => {
+  test("en lagring i A som oversetter, og som blir ferdig etter at forfatteren har gått tilbake til lista, tegner ikke A over lista; B er urørt", async ({ page }) => {
     await mockSeksjoner(page);
     const svar = tilbakeholdt();
     await page.route("**/api/admin/content/sections/localize", async (route: Route) => {
       svar.kall += 1;
       await svar.port;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "OVERSATT fra A", bodyMarkdown: "OVERSATT tekst fra A" }) });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bodyMarkdown: "OVERSATT tekst fra A" }) });
     });
-    let bilder = 0;
-    await page.route("**/api/admin/content/sections/*/assets/localize", (route: Route) => {
-      bilder += 1;
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ localizedAssetCount: 0 }) });
+    const lagret: Array<Record<string, any>> = [];
+    await page.route("**/api/admin/content/sections/sec-a", (route: Route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      lagret.push(route.request().postDataJSON() as Record<string, any>);
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-a", activeVersionId: "v1", archivedAt: null, versionNo: 2, hasUnpublishedChanges: true } }) });
     });
+    page.on("dialog", (dialog) => void dialog.accept());
 
     await page.goto("/admin-content/sections");
     await aapne(page, "sec-a");
-    await page.locator("#translateBtn").click();
+    await page.locator("#markdownInput").fill("Ny tekst i A");
+    await page.locator("#formSaveBtn").click();
     await expect.poll(() => svar.kall).toBe(1);
-    // «← Tilbake» er låst mens oversettingen går; nettleserens tilbake-knapp er det ikke.
+    // Arbeidsvinduet sperrer sida; nettleserens tilbake-knapp virker likevel.
     await page.goBack();
-    await aapne(page, "sec-b");
+    await expect(page.locator("#sectionsTableBody")).toContainText("Tittel A bokmål");
 
     svar.slipp();
-    // Gi svaret (og et eventuelt neste kall) tid til å lande før tilstanden leses.
-    await page.waitForTimeout(800);
-    await forventUroertB(page);
-    // Den stoppet der: ikke et kall til for neste språk, og ikke bildene (som lagres på tjeneren).
-    expect(svar.kall).toBe(1);
-    expect(bilder).toBe(0);
-  });
-
-  test("«Oversett» som holder på med BILDENE når forfatteren bytter seksjon, rører ikke feltene i B", async ({ page }) => {
-    await mockSeksjoner(page);
-    await page.route("**/api/admin/content/sections/localize", (route: Route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "OVERSATT fra A", bodyMarkdown: "OVERSATT tekst fra A" }) }),
-    );
-    const svar = tilbakeholdt();
-    await page.route("**/api/admin/content/sections/*/assets/localize", async (route: Route) => {
-      svar.kall += 1;
-      await svar.port;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ localizedAssetCount: 0 }) });
-    });
-    await page.goto("/admin-content/sections");
-    await aapne(page, "sec-a");
-    await page.locator("#translateBtn").click();
-    await expect.poll(() => svar.kall).toBe(1);
-    await page.goBack();
+    await expect.poll(() => lagret.length).toBe(1);
+    await expect(page.locator(".work-dialog")).toHaveCount(0);
+    // Lagringen gjaldt A, med oversettelsene. Lista står, og B er urørt når den åpnes.
+    expect(lagret[0]!.bodyMarkdown).toMatchObject({ nb: "Ny tekst i A", nn: "OVERSATT tekst fra A", "en-GB": "OVERSATT tekst fra A" });
+    await expect(page.locator("#titleInput")).toHaveCount(0);
     await aapne(page, "sec-b");
-
-    svar.slipp();
-    await page.waitForTimeout(800);
     await forventUroertB(page);
   });
 
-  test("kontroll: «Oversett» i seksjonen man står i, skriver som før og merker den ulagret", async ({ page }) => {
+  test("kontroll: en lagring i seksjonen man står i, legger oversettelsene i feltene og sier «Alt lagret»", async ({ page }) => {
     await mockSeksjoner(page);
     await page.route("**/api/admin/content/sections/localize", (route: Route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "OVERSATT fra A", bodyMarkdown: "OVERSATT tekst fra A" }) }),
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bodyMarkdown: "OVERSATT tekst fra A" }) }),
     );
-    await page.route("**/api/admin/content/sections/*/assets/localize", (route: Route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ localizedAssetCount: 0 }) }),
-    );
+    await page.route("**/api/admin/content/sections/sec-a", (route: Route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-a", activeVersionId: "v1", archivedAt: null, versionNo: 2, hasUnpublishedChanges: true } }) });
+    });
     await page.goto("/admin-content/sections");
     await aapne(page, "sec-a");
-    await page.locator("#translateBtn").click();
-    await expect(page.locator("#formPageDirty")).toHaveText("Ulagrede endringer");
+    await page.locator("#markdownInput").fill("Ny tekst i A");
+    await page.locator("#formSaveBtn").click();
+    await expect(page.locator("#formPageDirty")).toHaveText("Alt lagret");
     await page.locator('[data-form-locale="nn"]').click();
-    await expect(page.locator("#titleInput")).toHaveValue("OVERSATT fra A");
+    // Tittelen var ikke endret, og står som den var; teksten er oversatt.
+    await expect(page.locator("#titleInput")).toHaveValue(SEKSJONER["sec-a"].title.nn);
     await expect(page.locator("#markdownInput")).toHaveValue("OVERSATT tekst fra A");
   });
 
@@ -228,9 +216,15 @@ test.describe("#1154 — en jobb skriver bare i visningen den startet i", () => 
     page.on("dialog", (dialog) => void dialog.accept());
     await page.goto("/admin-content/sections");
     await aapne(page, "sec-a");
-    await page.locator("#markdownInput").fill("Ny tekst i A");
+    // #1163 skive 2: forfatteren skriver selv på alle tre språk, så lagringen har ingenting å oversette og går uten
+    // arbeidsvinduet (som ellers sperrer sida til den er ferdig).
+    for (const sprak of ["nn", "en-GB", "nb"]) {
+      await page.locator(`[data-form-locale="${sprak}"]`).click();
+      await page.locator("#markdownInput").fill(`Ny tekst i A ${sprak}`);
+    }
     await page.locator("#formSaveBtn").click();
     await expect.poll(() => svar.kall).toBe(1);
+    await expect(page.locator(".work-dialog")).toHaveCount(0);
     await page.goBack();
     await aapne(page, "sec-b");
     await page.locator("#titleInput").fill("Ulagret navn i B");
@@ -274,43 +268,6 @@ test.describe("#1154 — en jobb skriver bare i visningen den startet i", () => 
     await page.locator('[data-form-locale="nn"]').click();
     await expect(page.locator("#markdownInput")).toHaveValue(SEKSJONER["sec-b"].body.nn);
     expect(new URL(page.url()).search).toBe("?id=sec-b");
-  });
-
-  test("«Oversett» som blir ferdig etter at seksjonen er hentet på nytt av «Erstatt fra fil», merker den ikke ulagret", async ({ page }) => {
-    await mockSeksjoner(page);
-    const svar = tilbakeholdt();
-    await page.route("**/api/admin/content/sections/localize", async (route: Route) => {
-      svar.kall += 1;
-      await svar.port;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "OVERSATT fra A", bodyMarkdown: "OVERSATT tekst fra A" }) });
-    });
-    await page.route("**/api/admin/content/sections/*/assets/localize", (route: Route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ localizedAssetCount: 0 }) }),
-    );
-    let hentinger = 0;
-    await page.route("**/api/admin/content/sections/sec-a", (route: Route) => {
-      hentinger += 1;
-      return route.fallback();
-    });
-    await page.route("**/api/admin/content/sections/import", (route: Route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-a" } }) }),
-    );
-    page.on("dialog", (dialog) => void dialog.accept());
-    await page.goto("/admin-content/sections");
-    await aapne(page, "sec-a");
-    await page.locator("#translateBtn").click();
-    await expect.poll(() => svar.kall).toBe(1);
-    // «Erstatt fra fil» er ikke låst mens oversettingen går. Den henter seksjonen på nytt: en ny visning av samme seksjon.
-    await page.locator("#replaceFromFileInput").setInputFiles({ name: "seksjon.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify({ format: "a2-content-export/v1", scope: "section" })) });
-    await expect.poll(() => hentinger).toBe(2);
-    await expect(page.locator("#titleInput")).toHaveValue(SEKSJONER["sec-a"].title.nb);
-    await expect(page.locator("#formPageDirty")).toHaveText("Alt lagret");
-
-    svar.slipp();
-    await page.waitForTimeout(800);
-    await expect(page.locator("#formPageDirty")).toHaveText("Alt lagret");
-    await page.locator('[data-form-locale="nn"]').click();
-    await expect(page.locator("#titleInput")).toHaveValue(SEKSJONER["sec-a"].title.nn);
   });
 
   test("«Avpubliser» i A som blir ferdig etter at forfatteren har åpnet B, endrer ikke statusen i B", async ({ page }) => {

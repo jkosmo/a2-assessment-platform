@@ -293,13 +293,15 @@ test("section editor: top workspace nav renders in prod-shaped config (roles fro
   await expect(page.locator('#workspaceNav a', { hasText: "Vurdering" })).toBeVisible();
 });
 
-// #524 (U1): «Oversett» (#514) must LOCK the editor while the LLM translates the active language into
-// the others — the author must not edit/navigate mid-call — and then fill the other locales' fields.
-// Guards both the GUI-lock and the translated content landing in the right locale.
-test("section editor: «Oversett» locks the editor while translating, then fills the other locales", async ({ page }) => {
+// #524 (U1): the editor is LOCKED while the LLM translates the active language into the others — the author must not
+// edit/navigate mid-call — and the other locales' fields are filled. #1163 skive 2: the translation happens on «Lagre»
+// (no «Oversett» button), behind the work dialog (work-dialog.js makes the page inert), and what is saved carries it.
+test("section editor: «Lagre» locks the page while translating, then saves and fills the other locales", async ({ page }) => {
   await mockBaseApis(page);
+  const created: Array<Record<string, unknown>> = [];
   await page.route("**/api/admin/content/sections", (route: Route) => {
     if (route.request().method() === "POST") {
+      created.push(route.request().postDataJSON() as Record<string, unknown>);
       return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ section: { id: "sec1", versionNo: 1 } }) });
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [] }) });
@@ -327,21 +329,23 @@ test("section editor: «Oversett» locks the editor while translating, then fill
   await page.goto("/admin-content/sections");
   await page.getByRole("button", { name: /Ny seksjon/ }).click();
 
-  // Fill the source (nb) language, then start translating.
+  // Fill the source (nb) language, then save.
   await page.locator("#titleInput").fill("Tittel");
   await page.locator("#markdownInput").fill("# Innhold");
-  await page.locator("#translateBtn").click();
+  await expect(page.locator("#translateBtn")).toHaveCount(0);
+  await page.locator("#formSaveBtn").click();
 
-  // LOCKED: button shows the translating label and the edit controls are disabled.
-  await expect(page.locator("#translateBtn")).toHaveText(/Oversetter/);
+  // LOCKED: the work dialog says what is happening, and nothing is saved before the translation is back.
+  await expect(page.locator(".work-dialog")).toBeVisible();
+  await expect(page.locator(".work-dialog")).toContainText("Lagrer og oversetter");
   await expect(page.locator("#formSaveBtn")).toBeDisabled();
-  await expect(page.locator("#titleInput")).toBeDisabled();
-  await expect(page.locator("#markdownInput")).toBeDisabled();
+  expect(created).toEqual([]);
 
-  // Release the translation → unlocks and restores the button label.
+  // Release the translation → saved with the translations, and unlocked.
   releaseLocalize();
-  await expect(page.locator("#translateBtn")).toHaveText(/Oversett fra/);
-  await expect(page.locator("#formSaveBtn")).toBeEnabled();
+  await expect(page.locator(".work-dialog")).toHaveCount(0);
+  await expect.poll(() => created.length).toBe(1);
+  expect(created[0]).toMatchObject({ title: { nb: "Tittel", nn: "T-nn", "en-GB": "T-en-GB" }, bodyMarkdown: { nb: "# Innhold", nn: "B-nn", "en-GB": "B-en-GB" }, draft: true });
 
   // Both other locales were requested, and the nn tab now holds the translated title.
   await expect.poll(() => [...requestedTargets].sort()).toEqual(["en-GB", "nn"]);

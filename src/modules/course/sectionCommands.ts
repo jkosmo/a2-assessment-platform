@@ -17,9 +17,18 @@ import {
 import { firstDeleteBlock, type DeleteCheck } from "../content/deleteCheck.js";
 import { applyMinorVersionToCoursesContaining, sameLocalizedText } from "./courseVersioning.js";
 import { randomUUID } from "node:crypto";
-import { stageSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs, type IncomingSectionAsset } from "./assetCommands.js";
+import {
+  stageSectionAssets,
+  collectSectionAssetBlobPaths,
+  reclaimAssetBlobs,
+  prepareDraftFigureTranslations,
+  applyDraftFigureTranslations,
+  type IncomingSectionAsset,
+  type PreparedFigureTranslation,
+} from "./assetCommands.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
 import { addContentOwner, deleteContentOwnersOf } from "../content/contentOwnershipService.js";
-import { assertNotArchived, deleteRequiresArchivedError } from "../content/archivedGuard.js";
+import { assertNotArchived, assertNotArchivedBeforeLock, deleteRequiresArchivedError } from "../content/archivedGuard.js";
 import {
   validateSectionTranslationCompleteness,
   type ValidationIssue,
@@ -310,17 +319,51 @@ async function loadSectionForDraft(client: ContentWriteTx, sectionId: string) {
 /**
  * #1163: redigererens lagring. Tittel og tekst i ÉN transaksjon under innholdslåsen, med det fanen lastet (`revision`).
  * Lager en ny, upublisert versjon; ingenting skrives ved 409.
+ *
+ * Skive 2 (prinsipp 3): med `sourceLocale` (språket forfatteren skrev på) oversettes figurene utkastet har lagt til
+ * (`prepareDraftFigureTranslations`, assetCommands.ts). Språkmodellen og bildefilene FØR låsen; radene i samme transaksjon som
+ * utkastet, etter revisjonssjekken. Avvises lagringen, endres ingen figur, og de nye filene ryddes bort. Teksten oversettes i
+ * redigereren før den sendes (admin-content-localized-copy.js), så den er ferdig oversatt her.
  */
 export async function saveSection(
   sectionId: string,
   input: { title: string; bodyMarkdown: string },
   revision: SectionRevisionCheck,
+  options: { sourceLocale?: SupportedLocale } = {},
 ) {
-  return runContentWrite(async (tx) => {
-    const current = await loadSectionForDraft(tx, sectionId);
-    assertSectionRevision(sectionId, { title: current.title, latestVersionNo: current.latest?.versionNo ?? null }, revision);
-    return writeSectionDraft(tx, sectionId, current.latest?.versionNo ?? null, input);
-  });
+  let prepared: PreparedFigureTranslation[] = [];
+  let failedFigures: string[] = [];
+  if (options.sourceLocale) {
+    // Forhåndssjekk før de betalte kallene: en utdatert fane eller en arkivert seksjon får svaret sitt med en gang. Sjekkene som
+    // gjelder, står i transaksjonen under.
+    const before = await prisma.courseSection.findUnique({ where: { id: sectionId }, select: { title: true } });
+    if (!before) throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+    await assertNotArchivedBeforeLock({ type: "SECTION", id: sectionId });
+    const latest = await prisma.courseSectionVersion.findFirst({ where: { sectionId }, orderBy: { versionNo: "desc" }, select: { versionNo: true } });
+    assertSectionRevision(sectionId, { title: before.title, latestVersionNo: latest?.versionNo ?? null }, revision);
+    ({ prepared, failed: failedFigures } = await prepareDraftFigureTranslations(sectionId, input.bodyMarkdown, options.sourceLocale));
+  }
+  let notWritten: PreparedFigureTranslation[] = [];
+  let section: Awaited<ReturnType<typeof writeSectionDraft>>;
+  let translated: string[] = [];
+  try {
+    ({ section, translated, notWritten } = await runContentWrite(async (tx) => {
+      const current = await loadSectionForDraft(tx, sectionId);
+      assertSectionRevision(sectionId, { title: current.title, latestVersionNo: current.latest?.versionNo ?? null }, revision);
+      const saved = await writeSectionDraft(tx, sectionId, current.latest?.versionNo ?? null, input);
+      const figures = await applyDraftFigureTranslations(tx, sectionId, prepared);
+      return { section: saved, translated: figures.applied, notWritten: figures.skipped };
+    }));
+  } catch (error) {
+    // Ingen rad peker på de nye filene: lagringen ble ikke skrevet (409, arkivert, låsen …).
+    await reclaimAssetBlobs(prepared.flatMap((figure) => figure.newPaths));
+    throw error;
+  }
+  await reclaimAssetBlobs(notWritten.flatMap((figure) => figure.newPaths));
+  return {
+    section,
+    figureTranslation: options.sourceLocale ? { translated: translated.length, failed: failedFigures.length } : undefined,
+  };
 }
 
 /**

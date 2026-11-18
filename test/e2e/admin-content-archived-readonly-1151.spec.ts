@@ -337,7 +337,7 @@ async function mockSections(page: Page, sections: SectionFixture[]) {
 const headerAction = (page: Page, action: string) => page.locator(`.form-page-actions [data-editor-action="${action}"]`);
 
 test.describe("#1151 skive 3c — seksjonsredigereren", () => {
-  test("arkivert og eid: linja, sperrede felt, ingen Lagre/Oversett/Erstatt/Last opp bilde; Gjenopprett, Slett og Eksporter står", async ({ page }) => {
+  test("arkivert og eid: linja, sperrede felt, ingen Lagre/Erstatt/Last opp bilde; Gjenopprett, Slett og Eksporter står", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 1000 });
     await mockSections(page, [section("sec-1", { archivedAt: ARCHIVED_AT, activeVersionId: null, lifecycle: "archived" })]);
     const writes = recordWrites(page);
@@ -364,13 +364,14 @@ test.describe("#1151 skive 3c — seksjonsredigereren", () => {
     expect(writes).toEqual([]);
   });
 
-  test("KONTROLL: en aktiv seksjon har Lagre, Oversett, Erstatt fra fil og Last opp bilde, og feltene er åpne", async ({ page }) => {
+  test("KONTROLL: en aktiv seksjon har Lagre, Erstatt fra fil og Last opp bilde, og feltene er åpne", async ({ page }) => {
     await mockSections(page, [section("sec-1")]);
     await page.goto("/admin-content/sections?id=sec-1");
     await page.locator("#titleInput").waitFor();
     await expect(page.locator("[data-section-archived-notice]")).toHaveCount(0);
     await expect(page.locator("#formSaveBtn")).toHaveCount(1);
-    await expect(page.locator("#translateBtn")).toHaveCount(1);
+    // #1163 skive 2: ingen «Oversett» lenger — lagringen oversetter.
+    await expect(page.locator("#translateBtn")).toHaveCount(0);
     await expect(page.locator("#replaceFromFileBtn")).toHaveCount(1);
     await expect(page.locator("#uploadImageBtn")).toHaveCount(1);
     await expect(page.locator("#titleInput")).toBeEnabled();
@@ -395,7 +396,7 @@ test.describe("#1151 skive 3c — seksjonsredigereren", () => {
     await expect(page.locator("[data-section-archived-notice]")).toHaveCount(0);
     await expect(page.locator("#titleInput")).toBeEnabled();
     await expect(page.locator("#formSaveBtn")).toHaveCount(1);
-    await expect(page.locator("#translateBtn")).toHaveCount(1);
+    await expect(page.locator("#replaceFromFileBtn")).toHaveCount(1);
   });
 
   test("390 px: den arkiverte seksjonen passer, ingen vannrett rulling", async ({ page }) => {

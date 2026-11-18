@@ -2,6 +2,72 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.167.0 - 2026-11-18
+
+Seksjonen oversettes når den lagres, og «Fyll inn det som mangler» fyller inn, lagrer og publiserer (#1163, skive 2). Produkteier
+15.11.2026: «alt innhold kun oversettes ved lagring» (prinsippene i DECISIONS). Valgene som ikke sto i planen, står i DECISIONS
+(«Valgt under byggingen av #1163, skive 2»).
+
+**Hva produsentene merker:**
+- **«Oversett fra dette språket» er borte fra seksjonen.** Du skriver på ett språk og trykker **Lagre**; det du har endret siden
+  sist, oversettes til de andre språkene fra språket du endret det på, og lagres i samme utkast. Mens det pågår, står «Lagrer og
+  oversetter …», og siden er sperret. Et felt du ikke har rørt, oversettes ikke på nytt, og et språk du selv har skrevet i samme
+  runde, blir stående.
+- **Figurer (SVG med tekst) du har satt inn i utkastet, oversettes i samme lagring.** En figur som alt er oversatt, oversettes ikke
+  på nytt, heller ikke når du skriver på et annet språk. En figur deltakerne alt ser, endres ikke ved lagring. Kvitteringen sier
+  om figurer ble oversatt, og hvor mange som ikke kunne oversettes (de prøves igjen neste gang du lagrer).
+- **Feiler en oversetting, lagres det som finnes.** Meldingen sier hvilket språk som mangler, og det språket står tomt i utkastet
+  (ikke med den gamle oversettelsen av en tekst som ikke står der lenger).
+- **Publiseringen stopper som før når noe mangler, men meldingen har nå knappen «Fyll inn det som mangler»**, i seksjonen og i
+  seksjonslista. Den oversetter bare hullene, lagrer utkastet og publiserer. Den virker også for eldre utkast porten holdt igjen,
+  og for utkast agent-API-et har laget. Lykkes ikke alt, lagres det som lyktes, og ingenting publiseres.
+- **«Avbryt»** forkaster bare det som er endret i fanen; ingenting er sendt til tjeneren før du lagrer.
+- **Har noen andre lagret seksjonen etter at du åpnet den**, lagres ingenting — heller ikke figurene eller oversettelsene — og
+  teksten din står i skjemaet som du hadde den.
+
+**Utrulling:** én migrering, bare data: `20261118120000_section_version_title_fill` fyller tittelen i seksjonsversjoner som står
+uten. Den lukker vinduet fra utrullingen av 2.166.0 (en instans med eldre kode kunne lage en versjon uten tittel). **2.167.0 må nå
+prod ETTER 2.166.0, ikke sammen med den:** migreringen lukker vinduet bare når den kjører mens prod har 2.166.0, som alltid skriver
+tittelen. De gamle rutene (`PUT …/content`, `PATCH …/title` uten revisjon, og `POST …/assets/localize` for «Oversett» i faner fra
+før) står én utrulling til; reserven for en versjon uten tittel står til de er borte.
+
+**Tester:** ny `m2-section-save-translation-1163` (figurene gjennom ruta: den nye figuren oversettes, den publiserte og en
+ubrukt røres ikke; språkbytte; et språk som mangler, i bredt og smalt oppsett; avvist lagring (versjon og tittel) uten endrede
+figurer, uten nye filer og uten kall til språkmodellen; låsen leser publisert versjon og raden på nytt; en figur som feiler; en
+fane fra 2.166.0; «Fyll inn» for et eldre utkast porten holdt igjen og for et agent-utkast; migreringen), ny enhetstest
+`save-translation-1163` (regelen «bare endrede felt» og hvilke hull som fylles), ny e2e `section-save-translation-1163` (bare
+det endrede oversettes, fra språket som ble endret; ingen «Oversett»; «Avbryt» skriver ingenting; 409 lar fanen stå; en
+oversetting som feiler; figurkvitteringen; «Fyll inn» i redigereren og i lista, og når ikke alt lykkes). Omskrevet fordi de brukte
+«Oversett»: e2e `translation-structure-1109`, `section-jobs-stay-in-their-section-1154`, `section-editor`,
+`admin-content-archived-readonly-1151`; `section-draft-1163`, `section-alt-text-1128` og `section-publish-new-version-1095` har fått en oversetter i mocken (uten den feilet oversettingen ved lagring, og kvitteringen ble et varsel), og vakta
+`archived-is-readonly-guard` den nye skriveren. Lokalt 18.11.2026: enhet 3336/3336, DOM 109/109, integrasjon 1436/1436, e2e 1157/1157. Mutasjonssjekk
+av 26 regler (12 på tjeneren og migreringen, 11 i klienten, 3 rene hjelpere): hver gjorde riktig test rød, og fila ble lagt
+tilbake fra kopi med samme hash. Før kjøringen var det klart at to regler ikke ville gjort noen test rød (figurer den publiserte
+versjonen bruker, og forhåndssjekken før språkmodellen: begge har en sjekk til lenger inne som gir samme svar); testene teller
+derfor kallene til språkmodellen, og sjekken under låsen har en egen test.
+
+**Kjent (ikke rettet):**
+- Publiseringsporten ser ikke på figurene. En figur som ikke ble oversatt, går ut på kildespråket hvis teksten ellers er komplett;
+  lagringen sier fra, og neste lagring prøver igjen. (#1163)
+- En figur deltakerne alt ser (den publiserte versjonen viser til den), oversettes ikke ved lagring, og å bytte bildet i den går
+  ut med en gang, som før. (#1163)
+- Den gamle «Oversett» (`POST …/assets/localize`) står én utrulling for faner fra før, og skriver figurene med en gang. (#1163)
+- En rydding av filene etter en lagring som taper et kappløp under låsen (to faner lagrer samtidig, begge forbi forhåndssjekken),
+  er ikke dekket av en test; følgen er bare filer ingen viser til.
+- «Oversett det som mangler» for titler i seksjonslista (og modullista) er fortsatt en egen oversett-knapp. Den fyller bare hull og
+  lager et utkast med revisjon; meldt til produkteier.
+- Kurs og moduler oversetter fortsatt alle språk ved hver lagring (#1177, #1178). Regelen ligger klar i den felles hjelperen.
+- Migreringen fyller med seksjonens arbeidstittel slik den er når 2.167.0 rulles ut. En versjon fra vinduet i 2.166.0 kan da få
+  en senere utkasttittel, som reserven ville gitt den uansett.
+- Lagringen som oversetter figurer, har ingen fartsgrense, ulikt de andre rutene som lager figurer (10 i minuttet). Mange
+  samtidige lagringer kan gi unødvendige KI-kall; bare eieren kan lagre. (QA 2.167.0)
+- En ny figur som ikke ble oversatt første gang, har ikke lagret kildespråket. Lagres neste gang fra et annet språk, oversettes
+  den som om den var skrevet på det språket. Sjelden: krever en feilet oversetting og så et språkbytte. (QA 2.167.0)
+
+**QA 2.167.0** (Codex): GO. Rettet før commit: «Fyll inn det som mangler» publiserte selv om en figur ikke ble oversatt (porten
+ser ikke på figurene); den lagrer nå utkastet og publiserer ikke, med samme melding som når en tekst mangler. Ny e2e, rød før
+rettingen. Stage-testen `release-2-158-1` hopper over «Oversett»-delen fra 2.167.0; e2e for #1154 og #1163 dekker den.
+
 ## 2.166.0 - 2026-11-15
 
 «Lagre» på en seksjon lager et utkast, slik det gjør på kurs og moduler (#1163, skive 1). Produkteier 14.11.2026: «La oss gjøre

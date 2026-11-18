@@ -241,6 +241,39 @@ export function normalizeModuleTitlePatch(title) {
   return Object.keys(normalized).length > 0 ? normalized : null;
 }
 
+/**
+ * #1163 skive 2 (prinsipp 3, doc/DECISIONS.md «felles prinsipper»): hva en lagring skal oversette.
+ *
+ * «Alt innhold oversettes bare ved lagring», og bare det som er endret, fra språket som ble endret. For hvert felt sammenlignes
+ * det skjemaet har nå (`current`), med det som sist ble lagret (`saved`), språk for språk:
+ *   - Ingen språk endret → feltet oversettes ikke. Et felt forfatteren ikke har rørt, skal ikke få en ny maskinoversettelse av
+ *     seg selv (og et hull i det fylles av publiseringens «Fyll inn det som mangler», ikke av lagringen).
+ *   - Kilden er språket forfatteren står i (`editLocale`) hvis det er endret, ellers det første endrede i `locales`. Kilden må
+ *     ha tekst; et språk som er tømt, oversettes ikke fra.
+ *   - Målene er de andre språkene som IKKE er endret. Har forfatteren selv skrevet på to språk i samme lagring, står begge.
+ *
+ * Felles for kurs, moduler og seksjoner: seksjonene bruker den fra 2.167.0; kurs og moduler skal over i #1177/#1178.
+ * Ren funksjon, så regelen kan prøves uten nettverket.
+ *
+ * @param {Record<string, { current: Record<string,string>|null|undefined, saved: Record<string,string>|null|undefined }>} fields
+ * @param {{ editLocale?: string, locales: string[] }} options
+ * @returns {Record<string, { sourceLocale: string, targetLocales: string[] }>} bare feltene som skal oversettes
+ */
+export function changedFieldTranslations(fields, { editLocale, locales }) {
+  const text = (map, locale) => String(map?.[locale] ?? "").trim();
+  const plan = {};
+  for (const [field, { current, saved }] of Object.entries(fields ?? {})) {
+    const changed = locales.filter((locale) => text(current, locale) !== text(saved, locale));
+    const withText = changed.filter((locale) => text(current, locale).length > 0);
+    if (withText.length === 0) continue;
+    const sourceLocale = withText.includes(editLocale) ? editLocale : withText[0];
+    const targetLocales = locales.filter((locale) => locale !== sourceLocale && !changed.includes(locale));
+    if (targetLocales.length === 0) continue;
+    plan[field] = { sourceLocale, targetLocales };
+  }
+  return plan;
+}
+
 export function strictLocaleValue(value, locale) {
   if (!value) return "";
   let parsed = value;

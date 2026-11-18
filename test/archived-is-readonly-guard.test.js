@@ -124,6 +124,8 @@ const EXPECTED = new Map([
   // #1163: de tre lagringene (`saveSection`, `updateSectionTitle`, `updateSectionContent`) leser seksjonen gjennom
   // `loadSectionForDraft`, som holder vakta, og skriver utkastet i `writeSectionDraft`.
   ...each(by(`${SC}#loadSectionForDraft`), [`${SC}#updateSectionTitle courseSection.update`, 1], [`${SC}#writeSectionDraft courseSectionVersion.create`, 1], [`${SC}#writeSectionDraft courseSection.update`, 1]),
+  // #1163 skive 2: figurene lagringen oversatte, skrives i `saveSection`s transaksjon etter `loadSectionForDraft`.
+  ...each(by(`${SC}#loadSectionForDraft`), [`${AS}#applyDraftFigureTranslations sectionAsset.updateMany`, 1]),
   ...each(by(`${SC}#publishSectionLocked`), [`${SC}#publishSectionLocked courseSection.update`, 1], [`${SC}#publishSectionLocked courseSectionVersion.update`, 1]),
   ...each(by(`${SC}#unpublishSection`), [`${SC}#unpublishSection courseSection.update`, 1]),
   // #1152 skive 4b: reglene er `sectionDeleteRules` (se `moduleDeleteRules` over).

@@ -35,6 +35,7 @@ import {
   startOmdoping,
 } from "/static/list-rename.js";
 import { createFormPage, formPageTexts } from "/static/form-page.js";
+import { changedFieldTranslations, parseLocalizedMap } from "/static/admin-content-localized-copy.js";
 import {
   SECTION_EDITOR_LOCALES,
   nonEmptyLocales,
@@ -42,6 +43,7 @@ import {
   detectSectionRoute,
   sectionRevisionFields,
   showsSectionDraftLine,
+  sectionGapFill,
 } from "/static/admin-content-sections-state.js";
 
 // ---------------------------------------------------------------------------
@@ -474,10 +476,89 @@ function openSectionPublishDialog(courses) {
 }
 
 
-/** #1163: publiseringens feil — porten (422) med felt og språk, ellers den felles kodetabellen (også 409 `section_changed`). */
-function publishErrorToast(err) {
-  const gate = translationGateMessage("gateBlocked", gateIssuesFrom(err));
-  if (gate) showToast(gate, "error"); else apiErrorToast(err);
+/**
+ * #1163: publiseringens feil — porten (422) med felt og språk, ellers den felles kodetabellen (også 409 `section_changed`).
+ * Skive 2: når porten holdt igjen publiseringen, har meldingen knappen «Fyll inn det som mangler» (`fill`).
+ */
+function publishErrorToast(err, fill) {
+  const issues = gateIssuesFrom(err);
+  const gate = translationGateMessage("gateBlocked", issues);
+  if (!gate) { apiErrorToast(err); return; }
+  if (typeof fill === "function") showToast(gate, "error", "", { actionLabel: L("fillGaps"), onAction: () => fill(issues) });
+  else showToast(gate, "error");
+}
+
+/**
+ * #1163 skive 2 (prinsipp 4, «Andre gjennomlesing» punkt 5): «Fyll inn det som mangler» som en ekte flyt — fyll inn hullene →
+ * lagre utkastet → publiser på nytt. Gjelder versjonen forfatteren prøvde å publisere (`expectedVersionNo`, `expectedTitle`):
+ * er seksjonen lagret et annet sted siden, avviser tjeneren lagringen (409) og ingenting endres.
+ *
+ * Utkastet hentes fra tjeneren: det er det porten målte, i lista og i redigereren (som er lagret når «Publiser» trykkes).
+ * Bare hullene fylles; et språk som har tekst, beholder den. Lagringen sender kildespråket, så figurene utkastet har lagt til og
+ * som mangler språk, oversettes også. Kunne ikke alt fylles, lagres det som lyktes, og publiseringen prøves ikke.
+ *
+ * Svarer `{ outcome: "published" | "partial" | "noSource" | "nothing", section? }`; feil fra tjeneren kastes videre.
+ */
+async function fillMissingThenPublish({ sectionId, issues, expectedVersionNo, expectedTitle, preferredLocale }) {
+  return runWithWorkDialog(L("fillingGaps"), async () => {
+    const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}`, getHeaders);
+    // Tjenerens lesing: en ren streng (fra før språkkartene) er bokmål, som porten regner den.
+    const asMap = (raw) => {
+      const map = parseLocalizedMap(raw);
+      const out = { nb: "", nn: "", "en-GB": "" };
+      if (map) { for (const loc of EDITOR_LOCALES) if (typeof map[loc] === "string") out[loc] = map[loc]; }
+      else if (typeof raw === "string") out.nb = raw;
+      return out;
+    };
+    const values = { title: asMap(data.section.title), bodyMarkdown: asMap(data.section.bodyMarkdown) };
+    const plan = sectionGapFill(issues, values, [preferredLocale, "nb", "en-GB", "nn"]);
+    if (!plan) return { outcome: "noSource" };
+    let filled = 0;
+    for (const target of plan.targetLocales) {
+      const holes = plan.fields.filter((field) => !values[field][target].trim());
+      if (holes.length === 0) continue;
+      try {
+        const res = await apiFetch("/api/admin/content/sections/localize", getHeaders, {
+          method: "POST",
+          body: JSON.stringify({ ...Object.fromEntries(holes.map((field) => [field, values[field][plan.sourceLocale]])), sourceLocale: plan.sourceLocale, targetLocale: target }),
+        });
+        for (const field of holes) {
+          const translated = typeof res?.[field] === "string" ? res[field].trim() : "";
+          if (translated) { values[field][target] = translated; filled += 1; }
+        }
+      } catch {
+        // Avgjøres under, av hullene som står igjen.
+      }
+    }
+    const stillMissing = plan.fields.some((field) => plan.targetLocales.some((locale) => !values[field][locale].trim()));
+    if (filled === 0) return { outcome: "nothing" };
+    const saved = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}`, getHeaders, {
+      method: "PUT",
+      body: JSON.stringify({
+        title: nonEmptyLocales(values.title),
+        bodyMarkdown: nonEmptyLocales(values.bodyMarkdown),
+        expectedVersionNo,
+        expectedTitle,
+        sourceLocale: plan.sourceLocale,
+      }),
+    });
+    // QA 2.167.0: porten ser ikke på figurene, så en figur som ikke ble oversatt, ville gått ut på kildespråket.
+    if (stillMissing || saved.figureTranslation?.failed > 0) return { outcome: "partial", section: saved.section };
+    const published = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}/publish`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify({ expectedVersionNo: saved.section.versionNo }),
+    });
+    return { outcome: "published", section: published.section };
+  });
+}
+
+/** Meldingen etter «Fyll inn det som mangler». Svarer `true` når seksjonen ble publisert. */
+function reportFillOutcome(result) {
+  if (result.outcome === "published") { showToast(L("fillPublished")); return true; }
+  if (result.outcome === "partial") showToast(L("fillPartial"), "warning");
+  else if (result.outcome === "noSource") showToast(L("fillNoSource"), "error");
+  else showToast(L("fillFailed"), "error");
+  return false;
 }
 
 /** #1163: «Publiser» og «Publiser ny versjon» i lista: dialogen, så publiseringen av versjonen raden viste. */
@@ -492,7 +573,20 @@ async function publishFromList(item, toastKey) {
     showToast(L(toastKey));
     renderListView();
   } catch (err) {
-    publishErrorToast(err);
+    publishErrorToast(err, item.latestVersionNo == null ? null : async (issues) => {
+      try {
+        reportFillOutcome(await fillMissingThenPublish({
+          sectionId: item.id,
+          issues,
+          expectedVersionNo: item.latestVersionNo,
+          expectedTitle: typeof item.title === "string" ? item.title : "",
+          preferredLocale: currentLocale,
+        }));
+      } catch (fillErr) {
+        apiErrorToast(fillErr);
+      }
+      renderListView();
+    });
     // 409: noen har lagret en nyere versjon. Lista hentes på nytt, så neste klikk gjelder den.
     if (apiErrorCode(err) === "section_changed") renderListView();
   }
@@ -854,10 +948,10 @@ function getFormPage() {
 }
 
 // Handlingsraden i hodet (F1/F2): det lista kan, kan det åpnede elementet også — pluss det som bare
-// finnes her (Oversett, Erstatt fra fil, Last opp bilde er inne i skjemaet).
+// finnes her (Erstatt fra fil; Last opp bilde er inne i skjemaet). #1163 skive 2: «Oversett» er borte; lagringen oversetter.
 /**
  * #1151 skive 3c: to spørsmål, ikke ett. «Kan styres» (eier eller administrator) gir livssyklusen — Gjenopprett, Slett,
- * Arkiver, Publiser. «Kan redigeres» krever i tillegg at seksjonen ikke er arkivert — Lagre, Oversett, Erstatt fra fil,
+ * Arkiver, Publiser. «Kan redigeres» krever i tillegg at seksjonen ikke er arkivert — Lagre, Erstatt fra fil,
  * Last opp bilde, og feltene. Før sto begge på `canManage`, og en arkivert seksjon eieren har, må vise Gjenopprett og Slett
  * uten å vise det som skriver.
  */
@@ -905,9 +999,7 @@ function sectionActions() {
   const id = editing.id ? escapeHtml(editing.id) : "";
   // Rekkefølge som i lista (D2): det man gjør ofte først, det farlige sist — tre vises, resten under «Mer».
   return [
-    // «Oversett» lagrer oversatte figurer (krever eierskap) — ikke en lesehandling for en lagret seksjon.
-    // #1151 skive 3c: og ikke på en arkivert seksjon (betalte KI-kall, og figurene avvises med `section_archived`).
-    !id || edit ? `<button type="button" class="row-action-btn" id="translateBtn" data-editor-action="translate">${escapeHtml(L("translate"))}</button>` : "",
+    // #1163 skive 2 (prinsipp 3): ingen «Oversett»-knapp. Tittelen, teksten og figurene oversettes når seksjonen lagres.
     id ? `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>` : "",
     // #1095: den nye versjonen redigereren viser, er ikke den deltakerne ser — publiser den.
     // Livssyklus og «Erstatt fra fil» bare for den som kan styre seksjonen (eier eller administrator) —
@@ -982,7 +1074,6 @@ function bindHeaderActions() {
     const btn = e.target.closest(".form-page-actions [data-editor-action]");
     if (!btn || !editing) return;
     const action = btn.dataset.editorAction;
-    if (action === "translate") return translateFromCurrent();
     if (action === "replace") return document.getElementById("replaceFromFileInput")?.click();
     if (!getFormPage().confirmLeave()) return;
     if (action === "export") return exportSectionPackage(editing.id, btn);
@@ -1037,7 +1128,8 @@ async function renderEditorView(sectionId) {
   // #1154: også kalt direkte («Erstatt fra fil» henter seksjonen på nytt), så visningen telles her og ikke bare i ruta.
   viewToken += 1;
   const stillHere = sameView();
-  const session = { id: sectionId, title: { nb: "", nn: "", "en-GB": "" }, body: { nb: "", nn: "", "en-GB": "" }, editLocale: currentLocale, activeVersionId: null, archivedAt: null, courses: [] };
+  const empty = () => ({ nb: "", nn: "", "en-GB": "" });
+  const session = { id: sectionId, title: empty(), body: empty(), savedTitle: empty(), savedBody: empty(), editLocale: currentLocale, activeVersionId: null, archivedAt: null, courses: [] };
   editing = session;
 
   if (sectionId) {
@@ -1047,6 +1139,9 @@ async function renderEditorView(sectionId) {
       if (!stillHere()) return;
       session.title = parseLocalized(data.section.title);
       session.body = parseLocalized(data.section.bodyMarkdown);
+      // #1163 skive 2: det som er lagret. Lagringen oversetter bare feltene som er endret siden (`changedFieldTranslations`).
+      session.savedTitle = { ...session.title };
+      session.savedBody = { ...session.body };
       session.activeVersionId = data.section.activeVersionId ?? null;
       session.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
       // #1163: det fanen så — sendes med ved lagring og publisering — og det deltakerne ser (stripen, dialogen).
@@ -1103,7 +1198,23 @@ async function toggleSectionLifecycle(action, btn) {
     refreshSectionLifecycleUI();
   } catch (err) {
     // #916: same gate rendering as the list's Publiser — both are the same door.
-    publishErrorToast(err);
+    // #1163 skive 2: med «Fyll inn det som mangler» for versjonen forfatteren prøvde å publisere. Etterpå hentes seksjonen på nytt,
+    // så skjemaet viser det utfylte utkastet og den nye revisjonen.
+    const stillHere = sameView();
+    publishErrorToast(err, action !== "publish" || session.versionNo == null ? null : async (issues) => {
+      try {
+        reportFillOutcome(await fillMissingThenPublish({
+          sectionId: session.id,
+          issues,
+          expectedVersionNo: session.versionNo,
+          expectedTitle: session.loadedTitle ?? "",
+          preferredLocale: session.editLocale,
+        }));
+      } catch (fillErr) {
+        apiErrorToast(fillErr);
+      }
+      if (stillHere()) await renderEditorView(session.id);
+    });
   } finally {
     btn.disabled = false;
   }
@@ -1157,8 +1268,6 @@ async function persistSection({ silent } = {}) {
   const session = editing;
   const stillHere = sameView();
   const status = document.getElementById("editorStatus");
-  const title = nonEmptyLocales(session.title);
-  const bodyMarkdown = nonEmptyLocales(session.body);
   if (!hasSavableContent(session.title, session.body)) {
     // Tjeneren krever både navn og innhold for en seksjonsversjon (createSectionSchema). Si det, og
     // sett markøren i det som mangler.
@@ -1166,15 +1275,48 @@ async function persistSection({ silent } = {}) {
     (Object.keys(nonEmptyLocales(session.title)).length === 0 ? document.getElementById("titleInput") : document.getElementById("markdownInput"))?.focus();
     return false;
   }
-  try {
-    // #1128: bilder med en tittel som alt-tekst — lagret likevel, men kvitteringen sier det.
-    let altWarnings = [];
-    if (!session.id) {
+  // #1163 skive 2 (prinsipp 3): oversettingen skjer her, ved lagring — bare feltene som er endret siden sist lagret, fra språket
+  // som ble endret. Den regnes ut i KOPIER: avvises lagringen (409, nettverket …), står fanen nøyaktig som forfatteren hadde den.
+  const plan = changedFieldTranslations(
+    { title: { current: session.title, saved: session.savedTitle }, bodyMarkdown: { current: session.body, saved: session.savedBody } },
+    { editLocale: session.editLocale, locales: EDITOR_LOCALES },
+  );
+  // Figurene oversettes av tjeneren i samme lagring, fra språket teksten ble skrevet på.
+  const sourceLocale = plan.bodyMarkdown?.sourceLocale ?? plan.title?.sourceLocale ?? session.editLocale;
+  // Oversettingen og figurene tar tid hos språkmodellen: vis at det jobbes, og sperr sida imens (work-dialog.js), så ingen
+  // skriver i et felt lagringen er i ferd med å fylle.
+  const slow = Object.keys(plan).length > 0 || Object.values(session.body).some((text) => String(text ?? "").includes("asset:"));
+  const work = async () => {
+    const translation = Object.keys(plan).length > 0
+      ? await translateForSave(plan, { title: session.title, bodyMarkdown: session.body })
+      : { values: { title: { ...session.title }, bodyMarkdown: { ...session.body } }, failed: [], sourceNotDrawn: new Map(), structureChanged: new Set() };
+    const title = nonEmptyLocales(translation.values.title);
+    const bodyMarkdown = nonEmptyLocales(translation.values.bodyMarkdown);
+    const data = !session.id
       // #1163: en ny seksjon lagres som utkast, som en ny modul og et nytt kurs. Den publiseres med «Publiser».
-      const data = await apiFetch("/api/admin/content/sections", getHeaders, {
+      ? await apiFetch("/api/admin/content/sections", getHeaders, {
         method: "POST",
         body: JSON.stringify({ title, bodyMarkdown, draft: true }),
+      })
+      // #1163: ÉN lagring — tittel og tekst i én transaksjon, med versjonen og tittelen fanen lastet. Har noen lagret siden,
+      // svarer tjeneren 409 `section_changed` og skriver ingenting; teksten står i fanen.
+      : await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}`, getHeaders, {
+        method: "PUT",
+        body: JSON.stringify({ title, bodyMarkdown, expectedVersionNo: session.versionNo ?? 0, expectedTitle: session.loadedTitle ?? "", sourceLocale }),
       });
+    return { data, translation };
+  };
+  try {
+    const { data, translation } = slow ? await runWithWorkDialog(L("savingTranslating"), work) : await work();
+    // Lagret: det oversatte er nå det som er lagret, og grunnlaget for neste lagrings «hva er endret».
+    session.title = { ...translation.values.title };
+    session.body = { ...translation.values.bodyMarkdown };
+    session.savedTitle = { ...translation.values.title };
+    session.savedBody = { ...translation.values.bodyMarkdown };
+    // #1128: bilder med en tittel som alt-tekst — lagret likevel, men kvitteringen sier det.
+    let altWarnings = [];
+    const problems = translationProblems(translation, data.figureTranslation);
+    if (!session.id) {
       session.id = data.section.id;
       session.activeVersionId = data.section.activeVersionId ?? null;
       session.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
@@ -1189,18 +1331,14 @@ async function persistSection({ silent } = {}) {
       // Første lagring lager seksjonen: hodet får eierpanel, Eksporter osv. — tegn sida på nytt.
       getFormPage().render();
     } else {
-      // #1163: ÉN lagring — tittel og tekst i én transaksjon, med versjonen og tittelen fanen lastet. Har noen lagret siden,
-      // svarer tjeneren 409 `section_changed` og skriver ingenting; teksten står i fanen.
-      const res = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}`, getHeaders, {
-        method: "PUT",
-        body: JSON.stringify({ title, bodyMarkdown, expectedVersionNo: session.versionNo ?? 0, expectedTitle: session.loadedTitle ?? "" }),
-      });
-      session.activeVersionId = res.section?.activeVersionId ?? null;
-      session.hasUnpublishedChanges = Boolean(res.section?.hasUnpublishedChanges);
+      session.activeVersionId = data.section?.activeVersionId ?? null;
+      session.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
       // Revisjonen etter HVER lagring: neste lagring i samme fane sender den nye versjonen, ikke den fanen åpnet med.
-      applySectionRevision(session, res.section);
-      altWarnings = res.altWarnings ?? [];
+      applySectionRevision(session, data.section);
+      altWarnings = data.altWarnings ?? [];
       if (!stillHere()) return false;
+      // Språkene lagringen fylte inn, står i feltene når forfatteren bytter språk.
+      renderEditorFields();
     }
     // #705: hold status-merkelappen + Publiser/Avpubliser-knappen i editoren i synk etter lagring.
     refreshSectionLifecycleUI();
@@ -1209,7 +1347,11 @@ async function persistSection({ silent } = {}) {
       const saved = L("savedDraft");
       const alt = describeAltWarnings(altWarnings, t, tf);
       // Overskriften i selve meldingen: toast.js viser ikke samme tekst to ganger.
-      if (alt.length > 0) showToast(`${saved} ${t("altCheck.heading")}`, "warning", alt.join(" "));
+      // Skive 2: et språk eller en figur som ikke ble oversatt, sier lagringen fra om (publiseringen tilbyr å fylle det inn).
+      if (alt.length > 0) showToast(`${saved} ${t("altCheck.heading")}`, "warning", [...problems, ...alt].join(" "));
+      // Egen overskrift: toast.js viser ikke en melding som alt står (en lagring like før ville skjult denne).
+      else if (problems.length > 0) showToast(`${saved} ${L("notAllTranslated")}`, "warning", problems.join(" "));
+      else if (data.figureTranslation?.translated > 0) showToast(saved, "info", L("imagesTranslated"));
       else showToast(saved);
       if (status) status.textContent = saved;
     }
@@ -1224,102 +1366,68 @@ async function saveSection() {
   await persistSection();
 }
 
-// Explicit LLM translation (#514): translate the active language's content into
-// the other locales, which the author reviews/edits before saving.
-async function translateFromCurrent() {
-  captureInputs();
-  // #1154: oversettelsen hører til seksjonen den ble startet i. Byttet forfatteren seksjon mens den jobbet, la
-  // svaret nynorsk og engelsk fra denne inn i den nye, og merket den som ulagret.
-  const session = editing;
-  const stillHere = sameView();
-  const src = session.editLocale;
-  const title = (session.title[src] ?? "").trim();
-  const body = (session.body[src] ?? "").trim();
-  if (!title && !body) {
-    showToast(L("needContent"), "error");
-    return;
-  }
-  // Lock the editor while translating so the author can't edit/navigate mid-call.
-  const controls = ["translateBtn", "formSaveBtn", "titleInput", "markdownInput", "formBackLink"]
-    .map((id) => document.getElementById(id))
-    .filter(Boolean);
-  const tabs = Array.from(document.querySelectorAll("[data-form-locale]"));
-  const setLocked = (locked) => {
-    controls.forEach((el) => { el.disabled = locked; el.style.pointerEvents = locked ? "none" : ""; el.style.opacity = locked ? "0.6" : ""; });
-    tabs.forEach((el) => { el.disabled = locked; el.style.pointerEvents = locked ? "none" : ""; });
-  };
-  const btn = document.getElementById("translateBtn");
-  setLocked(true);
-  if (btn) btn.textContent = L("translating");
-  // #1109: språk der oversettelsen endret rammene (fasiten i en «sjekk deg selv», et steg, et kort …).
-  // Tjeneren forkaster dem (422 `translation_structure_changed`); teksten på det språket står urørt, og
-  // de andre språkene oversettes som før.
-  const structureChanged = [];
-  // #1112: språk der det er KILDEN som har en ramme som ikke tegnes (ingen blank linje over den).
-  // Å oversette på nytt hjelper ikke; forfatteren må rette kilden. Rammene samles for meldingen.
+/**
+ * #1163 skive 2: oversettingen ved lagring (prinsipp 3). `plan` er `changedFieldTranslations` (admin-content-localized-copy.js):
+ * for hvert endret felt, kilden og målene. Ett kall til /sections/localize per kilde- og målspråk, med feltene det paret har.
+ *
+ * Svarer med KOPIER av kartene med oversettelsene lagt inn. Et mål som ikke ble oversatt, står TOMT i kopien — ikke med den
+ * gamle teksten: den er en oversettelse av noe som ikke står der lenger, og et tomt språk er det publiseringsporten fanger og
+ * «Fyll inn det som mangler» fyller (prinsipp 4). Den gamle teksten finnes i den forrige versjonen.
+ * #1109/#1112: et svar som endret rammene (`translation_structure_changed`) brukes ikke; er det KILDEN som har en ramme som ikke
+ * tegnes, må forfatteren rette kilden. Begge samles for meldingen.
+ */
+async function translateForSave(plan, current) {
+  const values = { title: { ...current.title }, bodyMarkdown: { ...current.bodyMarkdown } };
+  const failed = [];
+  const structureChanged = new Set();
   const sourceNotDrawn = new Map();
-  try {
-    for (const target of EDITOR_LOCALES.filter((l) => l !== src)) {
-      let res;
-      try {
-        res = await apiFetch("/api/admin/content/sections/localize", getHeaders, {
-          method: "POST",
-          body: JSON.stringify({ title: title || undefined, bodyMarkdown: body || undefined, sourceLocale: src, targetLocale: target }),
-        });
-      } catch (err) {
-        if (apiErrorCode(err) !== "translation_structure_changed") throw err;
+  const pairs = new Map();
+  for (const [field, { sourceLocale, targetLocales }] of Object.entries(plan)) {
+    for (const target of targetLocales) {
+      const key = `${sourceLocale}>${target}`;
+      if (!pairs.has(key)) pairs.set(key, { sourceLocale, target, fields: [] });
+      pairs.get(key).fields.push(field);
+    }
+  }
+  for (const { sourceLocale, target, fields } of pairs.values()) {
+    let res = null;
+    try {
+      res = await apiFetch("/api/admin/content/sections/localize", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ ...Object.fromEntries(fields.map((field) => [field, values[field][sourceLocale]])), sourceLocale, targetLocale: target }),
+      });
+    } catch (err) {
+      if (apiErrorCode(err) === "translation_structure_changed") {
         const undrawn = (err?.body?.details?.fields ?? [])
           .flatMap((field) => field?.problems ?? [])
           .filter((problem) => problem?.problem === "sourceNotDrawn")
           .map((problem) => `:::${problem.kind}`);
         if (undrawn.length > 0) sourceNotDrawn.set(target, undrawn);
-        else structureChanged.push(target);
-        continue;
-      }
-      // Forfatteren har gått videre: ikke skriv, og ikke start flere kall (heller ikke bildene, som lagres på tjeneren).
-      if (!stillHere()) return;
-      if (res.title) session.title[target] = res.title;
-      if (res.bodyMarkdown) session.body[target] = res.bodyMarkdown;
-    }
-    // #657: also generate translated SVG-drawing variants for this section's SVG assets, so a
-    // drawing's baked-in labels follow the same language as the surrounding text. Only possible on
-    // a saved section (assets need a section id); non-fatal if it fails — text is already translated.
-    if (session.id) {
-      try {
-        if (btn) btn.textContent = L("translatingImages");
-        const assetRes = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(session.id)}/assets/localize`, getHeaders, {
-          method: "POST",
-          body: JSON.stringify({ sourceLocale: src }),
-        });
-        if (assetRes?.localizedAssetCount > 0) showToast(L("imagesTranslated"));
-      } catch (assetErr) {
-        apiErrorToast(assetErr);
+        else structureChanged.add(target);
       }
     }
-    // Teksten ligger i `session`. Feltene og «ulagret» røres bare hvis det fortsatt er denne seksjonen som vises.
-    if (!stillHere()) return;
-    const translatedSome = structureChanged.length + sourceNotDrawn.size < EDITOR_LOCALES.length - 1;
-    if (sourceNotDrawn.size > 0) {
-      const locales = [...sourceNotDrawn.keys()].map((code) => localeLabels[code] ?? code).join(", ");
-      const frames = [...new Set([...sourceNotDrawn.values()].flat())].join(", ");
-      showToast(tf("sections.translateSourceFrameNotDrawn", { locales, frames }), "error");
-    } else if (structureChanged.length > 0) {
-      // Ikke «Oversatt»: forfatteren skal vite at et språk står som før, og hvorfor.
-      const locales = structureChanged.map((code) => localeLabels[code] ?? code).join(", ");
-      showToast(tf("sections.translateStructureChanged", { locales }), "error");
-    } else {
-      showToast(L("translated"));
+    for (const field of fields) {
+      const translated = typeof res?.[field] === "string" ? res[field].trim() : "";
+      values[field][target] = translated;
+      if (!translated) failed.push({ field, locale: target });
     }
-    if (translatedSome) {
-      renderEditorFields();
-      getFormPage().markDirty();
-    }
-  } catch (err) {
-    if (stillHere()) apiErrorToast(err);
-  } finally {
-    setLocked(false);
-    if (btn) btn.textContent = L("translate");
   }
+  return { values, failed, structureChanged, sourceNotDrawn };
+}
+
+/** #1163 skive 2: det lagringen ikke fikk oversatt, som linjer i kvitteringen. Tom liste når alt gikk. */
+function translationProblems(translation, figureTranslation) {
+  const label = (codes) => [...new Set(codes)].map((code) => localeLabels[code] ?? code).join(", ");
+  const lines = [];
+  if (translation.sourceNotDrawn.size > 0) {
+    const frames = [...new Set([...translation.sourceNotDrawn.values()].flat())].join(", ");
+    lines.push(tf("sections.translateSourceFrameNotDrawn", { locales: label([...translation.sourceNotDrawn.keys()]), frames }));
+  }
+  if (translation.structureChanged.size > 0) lines.push(tf("sections.translateStructureChanged", { locales: label([...translation.structureChanged]) }));
+  const other = translation.failed.map((f) => f.locale).filter((locale) => !translation.sourceNotDrawn.has(locale) && !translation.structureChanged.has(locale));
+  if (other.length > 0) lines.push(tf("sections.translateFailedOnSave", { locales: label(other) }));
+  if (figureTranslation?.failed > 0) lines.push(tf("sections.figuresNotTranslated", { count: figureTranslation.failed }));
+  return lines;
 }
 
 // Image upload (#489/U2): upload to the section's blob storage, then insert a markdown

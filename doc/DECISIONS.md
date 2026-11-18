@@ -2300,3 +2300,70 @@ med en gang (figurene er felles for alle versjoner). Oppretting uten `draft: tru
 `publishFromList`, `listRevision` (admin-content-sections.js), `moduleDraftLineHtml` (admin-content-shell.js);
 `test/m2-section-draft-1163.test.ts`, `test/m2-course-versions-934.test.ts`, `test/e2e/section-draft-1163.spec.ts`.
 **Sak:** #1163 · **Dato:** 2026-11-15 · **Status:** valgt under byggingen; ikke avklart med produkteier
+
+## Valgt under byggingen av #1163, skive 2 (2026-11-18)
+
+Planen (`doc/design/PLAN_1163_SEKSJON_UTKAST.md`, «Andre gjennomlesing» punkt 2 og 5) og prinsippene over sa hva: tittel, tekst
+og figurer oversettes ved lagring, bare det som er endret, fra språket som ble endret; «Oversett» fjernes; feiler en oversetting,
+lagres det som finnes, og publiseringen tilbyr «Fyll inn det som mangler». Dette er valgene som ikke sto der.
+
+**Hvor oversettingen skjer:**
+- **Teksten oversettes i redigereren, figurene på tjeneren, i samme lagring.** Regelen «bare endrede felt, fra språket som ble
+  endret» er en ren funksjon i den felles hjelperen (`changedFieldTranslations`, admin-content-localized-copy.js), som kurs og
+  moduler kan ta i bruk i #1177/#1178 uten å endre noe her. Figurene må oversettes på tjeneren, fordi radene skal skrives i
+  lagringens transaksjon etter revisjonssjekken. Lagringen sender da språket forfatteren skrev på (`sourceLocale`).
+- **«Endret» betyr endret siden sist lagret i fanen**, språk for språk, uten mellomrom i endene. Kilden er språket forfatteren
+  står i hvis det er endret, ellers det første endrede (nb, nn, en-GB). Har forfatteren selv skrevet på to språk i samme lagring,
+  blir begge stående; bare det tredje oversettes. Et språk som er tømt, oversettes ikke fra.
+- **Et språk som ikke ble oversatt, står TOMT i utkastet**, ikke med den gamle teksten. Den gamle teksten er en oversettelse av noe
+  som ikke står der lenger; et tomt språk er det porten fanger og «Fyll inn det som mangler» fyller. Kurset gjør det motsatte i dag
+  (`preserveExisting`), og må velge i #1177. Den gamle teksten finnes i den forrige versjonen.
+- **Oversettelsene regnes ut i kopier og legges i fanen først når lagringen lyktes.** Avvises lagringen (409, nettverket), står
+  fanen nøyaktig som forfatteren hadde den, også de andre språkene.
+- **Lagringen med oversetting går bak arbeidsvinduet** (work-dialog.js, «Lagrer og oversetter …»), som importen: sida er sperret
+  til lagringen er ferdig, så ingen skriver i et felt lagringen fyller. Nettleserens tilbake-knapp virker fortsatt (#1154-vaktene
+  står). En lagring uten noe å oversette (forfatteren skrev alle tre språk, ingen figurer) går uten vinduet, som før.
+
+**Figurene:**
+- **«Mangler oversettelser»** betyr at figuren mangler et språk, i noe oppsett (#1079), regnet fra kildespråket den har lagret.
+  Bare de manglende språkene lages; det som finnes, beholdes. En figur med kildespråk oversettes fra det, ikke fra språket
+  forfatteren skriver på nå: et språkbytte oversetter ikke en ferdig figur på nytt. En ny opplasting (uten kildespråk) får
+  lagringens.
+- **Under låsen leses to ting på nytt:** hvilke figurer den publiserte versjonen viser til, og om raden er endret siden
+  oversettingen startet (en annen fane, den gamle knappen). Er noen av dem sant, skrives ikke raden, og de nye filene ryddes bort.
+- **Revisjonen og arkiveringen sjekkes også før språkmodellen spørres**, så en utdatert fane ikke koster noe. Sjekken som
+  gjelder, står fortsatt i transaksjonen.
+- **En figur som ikke kan oversettes**, står urørt og telles (`figureTranslation.failed`). Den prøves igjen ved neste lagring (den
+  mangler fortsatt språk og er fortsatt bare i utkastet). Lagringen går.
+- **Uten `sourceLocale`** (en fane fra 2.166.0, API-kallere) oversettes ingen figur.
+- **Porten ser ikke på figurene i denne skiva.** «Andre gjennomlesing» punkt 5 sier at porten skal vurdere figurene versjonen
+  bruker. Det krever å lese bildefilene under låsen, og ville stoppet kurskaskaden for eksisterende kurs med figurer som aldri er
+  oversatt. Står som kjent mangel; en figur som feilet ved lagring, sier lagringen fra om.
+
+**«Fyll inn det som mangler»:**
+- **Knappen står på meldingen som kommer når porten stopper publiseringen**, i redigereren og i lista. Den henter utkastet fra
+  tjeneren (det porten målte), fyller bare hullene porten nevnte, lagrer med versjonen og tittelen forfatteren prøvde å publisere,
+  og publiserer versjonen lagringen laget. Er seksjonen lagret et annet sted imens, svarer lagringen 409, og ingenting endres.
+- **Kilden** er det første språket som har tekst i alle feltene porten klaget på: språket forfatteren står i (lista: menyspråket),
+  så nb, en-GB, nn. En ren streng uten språkmerke leses som bokmål, slik porten leser den.
+- **Lykkes ikke alt, lagres det som lyktes, og ingenting publiseres.** Ble ingenting fylt, lagres ingenting. Lagringen sender
+  kildespråket, så figurer utkastet har lagt til og som mangler språk, også oversettes.
+- I redigereren hentes seksjonen på nytt etterpå, så skjemaet viser det utfylte og den nye revisjonen.
+
+**Utrullingen:**
+- **Den gamle `POST …/assets/localize` står én utrulling**, som `PUT …/content` og `PATCH …/title` uten revisjon: faner fra før
+  har «Oversett». Den skriver figurene med en gang, også dem den publiserte versjonen viser, som før.
+- **Reserven for en versjon uten tittel (`sectionVersionTitle`) blir stående** til de gamle skriverutene er fjernet. Migreringen
+  `20261118120000_section_version_title_fill` fyller titlene som mangler; den lukker vinduet fra utrullingen av 2.166.0 bare når
+  2.167.0 rulles ut over 2.166.0 (da skriver alle instanser tittelen). Rulles 2.167.0 ut rett over 2.165.0, har den samme vindu.
+
+**Uendret, og meldt:** «Døp om» og «Oversett det som mangler» for titler i seksjonslista er som i skive 1. Masseoversettingen er
+en egen «oversett»-knapp, som prinsipp 3 sier at det ikke skal være; den fyller bare hull og lager et utkast med revisjon, så den
+er latt stå og meldt til produkteier (gjelder også modullista).
+
+**Håndheves:** `changedFieldTranslations` (admin-content-localized-copy.js); `sectionGapFill` (admin-content-sections-state.js);
+`persistSection`, `translateForSave`, `translationProblems`, `fillMissingThenPublish`, `publishErrorToast`
+(admin-content-sections.js); `saveSection` (sectionCommands.ts); `prepareDraftFigureTranslations`, `applyDraftFigureTranslations`,
+`figureMissingLocales` (assetCommands.ts); `test/m2-section-save-translation-1163.test.ts`, `test/unit/save-translation-1163.test.js`,
+`test/e2e/section-save-translation-1163.spec.ts`.
+**Sak:** #1163 · **Dato:** 2026-11-18 · **Status:** valgt under byggingen; ikke avklart med produkteier

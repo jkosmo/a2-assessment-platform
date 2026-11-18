@@ -1943,3 +1943,23 @@ lista: `publishFromList`), og lista sender `latestVersionNo` (`listRevision`).
 `test/m2-course-versions-934.test.ts` (nøyaktig én versjon per vei), `test/archived-is-readonly-guard.test.js` (skriverne),
 `test/unit/admin-content-sections-state.test.js`, `test/e2e/section-draft-1163.spec.ts`,
 `test/e2e/admin-content-module-header-newer-draft.spec.ts` (modulens stripe).
+
+**Skive 2 (2.167.0): oversetting ved lagring, og «Fyll inn det som mangler».** Alle veiene som oversetter seksjonsinnhold:
+
+| Vei | Hvor | Når |
+| --- | --- | --- |
+| Tittel og tekst ved lagring | `persistSection` → `changedFieldTranslations` (admin-content-localized-copy.js, felles for kurs og moduler i #1177/#1178) → `translateForSave` → `POST /sections/localize` | Bare feltene som er endret siden sist lagret, fra språket som ble endret. Et språk som feiler, står tomt i utkastet |
+| Figurene ved lagring | `PUT /sections/:id` med `sourceLocale` → `saveSection` → `prepareDraftFigureTranslations` (før låsen) / `applyDraftFigureTranslations` (i transaksjonen) i assetCommands.ts | Figurer utkastet viser til og den publiserte versjonen ikke viser til, som mangler et språk. 409 endrer ingen figur |
+| «Fyll inn det som mangler» | `publishErrorToast` → `fillMissingThenPublish` (redigereren og lista) → `sectionGapFill` → `POST /sections/localize` → `PUT /sections/:id` → `POST …/publish` | Bare hullene porten nevnte; lagret med versjonen forfatteren prøvde å publisere |
+| Den gamle «Oversett» (faner fra før, én utrulling) | `POST /sections/:id/assets/localize` → `localizeSectionAssets` | Skriver figurene med en gang, også dem den publiserte versjonen viser |
+| Titlene i lista («Oversett det som mangler») | `POST /titles/localize` → `PATCH /sections/:id/title` | Uendret fra skive 1: et utkast per seksjon, med revisjon |
+
+«Avbryt» i redigereren laster siden på nytt (form-page.js, ingen `onDiscard`) og sender ingenting. Lagringen med oversetting går
+bak arbeidsvinduet (work-dialog.js), så skjemaet kan ikke endres mens den pågår.
+
+**Vakter (skive 2):** `test/m2-section-save-translation-1163.test.ts` (figurene gjennom ruta, språkbytte, avvist lagring uten
+endrede figurer og uten kall til språkmodellen, låsen, fyllingen for et eldre utkast og et agent-utkast, migreringen),
+`test/unit/save-translation-1163.test.js` (de to rene reglene), `test/e2e/section-save-translation-1163.spec.ts` (lagringen
+oversetter bare det endrede, ingen «Oversett», «Avbryt» skriver ingenting, 409 lar fanen stå, figurkvitteringen, fyllingen i
+redigereren og lista), og omskrevet: `translation-structure-1109`, `section-jobs-stay-in-their-section-1154`, `section-editor`,
+`admin-content-archived-readonly-1151`.

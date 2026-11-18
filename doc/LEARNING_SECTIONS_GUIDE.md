@@ -32,8 +32,10 @@ rekkefølgen forfatteren bestemmer.
 ### 2. Flere språk (nb / nn / en-GB)
 
 - Bruk **språk-fanene** øverst i editoren til å skrive hvert språk manuelt.
-- **«Oversett fra dette språket»** bruker KI til å oversette tittel + innhold til de andre
-  språkene (markdown bevares). **Se alltid over** resultatet før du lagrer — du eier teksten;
+- **Oversettingen skjer når du lagrer (fra 2.167.0, #1163).** Det du har endret siden sist lagring,
+  oversettes med KI fra språket du endret det på, til de andre språkene (markdown bevares). Et felt du
+  ikke har rørt, oversettes ikke på nytt, og et språk du selv har skrevet i samme runde, blir stående.
+  Det finnes ingen egen «Oversett»-knapp. **Se over** de andre språkene etter lagring — du eier teksten;
   oversettelse er et utgangspunkt, ikke en automatisk sannhet.
 - En deltaker ser seksjonen på sitt profilspråk; mangler et språk, faller visningen tilbake til
   et utfylt språk (aldri tomt).
@@ -42,13 +44,14 @@ rekkefølgen forfatteren bestemmer.
 > så et språkhull har samme konsekvens som i en modul — og samme regel gjelder: **tittel** og
 > **innhold** må finnes på `nb`, `nn` og `en-GB` før seksjonen kan bli synlig for deltakere.
 >
-> Du kan fortsatt **lagre** når som helst — arbeidet ditt går aldri tapt. Men når noe mangler,
-> lagres versjonen **uten å bli publisert**, og du får en melding som sier nøyaktig hvilket felt
-> som mangler hvilke språk («Lagret, men ikke publisert — seksjonen mangler innholdet (nynorsk)»).
-> Bruk **«Oversett fra dette språket»**, lagre på nytt, og seksjonen publiseres.
+> Du kan fortsatt **lagre** når som helst — arbeidet ditt går aldri tapt, og lagring publiserer
+> aldri (fra 2.166.0). Når noe mangler ved **Publiser**, stopper publiseringen med en melding som
+> sier nøyaktig hvilket felt som mangler hvilke språk, og knappen **«Fyll inn det som mangler»**:
+> den oversetter bare hullene, lagrer utkastet og publiserer (fra 2.167.0). Du kan også skrive det
+> som mangler selv, lagre og publisere på nytt.
 >
-> Det samme gjelder alle veier inn til publisering: **Publiser**-knappen, publisering av et kurs
-> som inneholder seksjonen, og lagring som ellers ville publisert. En seksjon som allerede er
+> Det samme gjelder alle veier inn til publisering: **Publiser**-knappen og publisering av et kurs
+> som inneholder seksjonen. En seksjon som allerede er
 > publisert fortsetter å vise den siste komplette versjonen — deltakerne mister aldri innhold
 > midt i et kurs.
 
@@ -58,11 +61,12 @@ rekkefølgen forfatteren bestemmer.
   **PNG, JPEG, GIF, WebP og SVG** (maks 5 MB). Alt-tekst er påkrevd (universell utforming).
 - **SVG saneres automatisk** ved opplasting: skript, hendelseshåndterere og utrygge elementer
   fjernes, så bare selve tegningen lagres. Du trenger ikke gjøre noe — det skjer i bakgrunnen.
-- **Tekst i SVG oversettes med «Oversett fra dette språket».** Når en SVG-tegning har tekst-etiketter,
-  genererer oversett-handlingen lokaliserte varianter (én per språk) der etikettene er oversatt.
-  Deltakeren ser tegningen på sitt eget språk. **Verifiser hvert språk visuelt** i forhåndsvisningen:
-  oversatt tekst kan bli lengre/kortere, og SVG-tekst flyter ikke om automatisk — kontroller at den
-  fortsatt får plass. (Tegningen må være lagret før den kan oversettes.)
+- **Tekst i SVG oversettes når du lagrer** (fra 2.167.0). Når en SVG-tegning du har satt inn i
+  utkastet har tekst-etiketter, lages lokaliserte varianter (én per språk) der etikettene er oversatt,
+  fra språket du skrev på. En tegning som alt er oversatt, oversettes ikke på nytt, og en tegning
+  deltakerne alt ser i den publiserte versjonen, endres ikke ved lagring. Deltakeren ser tegningen på
+  sitt eget språk. **Verifiser hvert språk visuelt** i forhåndsvisningen: oversatt tekst kan bli
+  lengre/kortere, og SVG-tekst flyter ikke om automatisk — kontroller at den fortsatt får plass.
 
 ### 3b. Blokker i teksten
 
@@ -155,12 +159,12 @@ begge steder.
 Felles regler: **en blank linje over hver ramme**, og **ingen ramme inni en annen** (første `:::`
 lukker). Er formen feil — for eksempel bare ett steg, eller ingen eksempelsvar — tegnes ingen blokk,
 og forhåndsvisningen viser teksten som den er. På de andre språkene står markørordene (`:::steg`,
-`:::skriv`, `:::repetisjon` …), `- [ ]`/`- [x]` og overskriftene urørt; «Oversett fra dette språket»
+`:::skriv`, `:::repetisjon` …), `- [ ]`/`- [x]` og overskriftene urørt; oversettingen ved lagring
 holder dem slik — og kontrollerer det etterpå (2.97.0). Har en oversettelse flyttet riktig svar i en
 «sjekk deg selv», mistet et steg, et kort eller et punkt i en sjekkliste, eller fått en blokk for mye
-eller for lite, brukes den ikke: teksten på det språket står som før, og du får beskjed om hvilket språk
-det gjelder. Trykk «Oversett fra dette språket» igjen, eller rett teksten selv. Det samme gjelder når en
-modul oversettes ved lagring: språket står da tomt, med beskjeden «Ikke oversatt til …».
+eller for lite, brukes den ikke: språket står tomt i utkastet, og du får beskjed («Ikke oversatt til …»).
+Publiseringen tilbyr da «Fyll inn det som mangler», eller du retter teksten selv. Det samme gjelder når
+en modul oversettes ved lagring.
 
 ### 4. Embedded video
 
