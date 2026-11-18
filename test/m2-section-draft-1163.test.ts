@@ -414,18 +414,16 @@ describe("#1163: publiseringen", () => {
 });
 
 describe("#1163: dørene som ikke er redigereren", () => {
-  it("den gamle `PUT …/content` (faner fra før) lager et utkast og publiserer ikke", async () => {
-    const gammel = tag("gammel fane");
-    const sectionId = await publishedSection(gammel, "Tekst.");
-    const courseId = await courseWith([sectionId]);
-    const res = await request(app).put(`/api/admin/content/sections/${sectionId}/content`).set(admin).send({ bodyMarkdown: tre("Fra en gammel fane.") });
-    expect(res.status).toBe(200);
-    expect(res.body.section).toMatchObject({ versionNo: 2, hasUnpublishedChanges: true });
-    expect(res.body).not.toHaveProperty("translationGate");
-    const v2 = await prisma.courseSectionVersion.findUniqueOrThrow({ where: { sectionId_versionNo: { sectionId, versionNo: 2 } } });
-    expect(v2.publishedAt).toBeNull();
-    expect(JSON.parse(v2.title!).nb).toBe(gammel);
-    expect((await seen(courseId, sectionId)).html).not.toContain("gammel fane");
+  it("2.168.0: de gamle rutene for faner fra før #1163 (`PUT …/content`, `POST …/assets/localize`) finnes ikke, og skriver ingenting", async () => {
+    const sectionId = await publishedSection(tag("gammel fane"), "Tekst.");
+    const innhold = await request(app).put(`/api/admin/content/sections/${sectionId}/content`).set(admin).send({ bodyMarkdown: tre("Fra en gammel fane.") });
+    expect(innhold.status).toBe(404);
+    const figurer = await request(app).post(`/api/admin/content/sections/${sectionId}/assets/localize`).set(admin).send({ sourceLocale: "nb" });
+    expect(figurer.status).toBe(404);
+    expect(await prisma.courseSectionVersion.count({ where: { sectionId } })).toBe(1);
+    // Kontroll: redigererens lagring på samme seksjon går, så 404 over er rutene og ikke seksjonen.
+    const fane = await detail(sectionId);
+    expect((await save(sectionId, { title: tre(tag("ny fane")), bodyMarkdown: tre("Ny tekst."), expectedVersionNo: fane.versionNo, expectedTitle: fane.title })).status).toBe(200);
   });
 
   it("ny seksjon fra redigereren (`draft: true`) er et utkast; standarden i API-et publiserer fortsatt (kontroll)", async () => {

@@ -2,6 +2,41 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.168.0 - 2026-11-18
+
+Opprydding etter #1163. De gamle seksjonsrutene fikk stå én utrulling, så faner som var åpne under utrullingen ikke mistet
+lagringen sin. Både 2.166.0 og 2.167.0 er i prod (18.11), så de kan nå gå. Ingen endring brukerne merker; ingen migrering.
+
+**Fjernet:**
+- `PUT /api/admin/content/sections/:id/content` (lagret teksten uten konfliktsjekk) og `updateSectionContent`.
+- `POST /api/admin/content/sections/:id/assets/localize` (den gamle «Oversett» for figurer) og `localizeSectionAssets`. Figurene
+  oversettes bare ved lagring (`PUT …/:id` med `sourceLocale`), og bare de språkene en figur mangler.
+- «Døp om» uten versjon: `PATCH …/:id/title` krever nå `expectedVersionNo` (`400` uten). Lista sender den alltid.
+
+**Ikke gjort, og hvorfor:** Kolonnen for tittelen i en seksjonsversjon står valgfri, og reserven til seksjonens tittel blir
+stående. Å gjøre den påkrevd ble prøvd: det krever at 63 testfiksturer gir versjonen samme tittel som seksjonen, og gir ingenting
+noen merker, siden hver vei som lager en versjon, alt skriver tittelen. Begrunnelsen står i DECISIONS.
+
+**Tester:** Testene som brukte de gamle rutene til å sette opp data, går gjennom redigererens lagring. Testene for #1090 (de gamle
+filene slettes når en figur oversettes på nytt fra et annet språk) beskrev det den gamle «Oversett» gjorde; de er erstattet av én
+som vokter at en lagring der figuren alt er oversatt, ikke endrer eller sletter noe, heller ikke fra et annet språk. Nye: de gamle
+rutene gir 404 og skriver ingenting (med kontroll), og «Døp om» uten versjon gir 400. Fire stage-tester (2-78, 2-81, 2-133 og den
+manuelle 934) lagrer og publiserer gjennom en felles hjelper (`test/stage/seksjonLagring.ts`).
+
+**Kjent (ikke rettet, fra 2.167.0):** lagringen som oversetter figurer, har ingen fartsgrense; en ny figur som ikke ble oversatt
+første gang, har ikke lagret kildespråket.
+
+**QA 2.168.0** (Codex): GO med fire funn, alle rettet før commit:
+- integrasjonstesten for arkiverte seksjoner (`m2-archived-readonly-1151`) og stage-testen `2-160` brukte fortsatt de gamle rutene;
+- to e2e-fiksturer for lista manglet `latestVersionNo` og sendte derfor versjon 0;
+- route-map var ikke oppdatert.
+
+Et bredere søk etterpå fant tre linjer til i FEATURE_SURFACE_MAP.
+
+**Rotårsak:** søket etter kallere lette etter hele stien (`sections/${…}/content`). Testene som bygger stien med en hjelper
+(`S(id, "/content")`), slapp gjennom. Sjekken som fanger dette, er å søke på det rutene ender med (`"/content"`, `assets/localize`)
+uten noe foran.
+
 ## 2.167.0 - 2026-11-18
 
 Seksjonen oversettes når den lagres, og «Fyll inn det som mangler» fyller inn, lagrer og publiserer (#1163, skive 2). Produkteier

@@ -85,12 +85,20 @@ describe("#1151 vaktene etter låsen (forhåndssjekkene slått av)", () => {
   it("seksjon: oversatte figurer skrives ikke til en arkivert seksjon", async () => {
     const id = await apiSection("figur");
     const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="40" viewBox="0 0 200 40"><text x="5" y="25">Hei verden</text></svg>', "utf8");
-    await ok(request(app).post(`${C}/sections/${id}/assets`).set(ADMIN).attach("file", svg, { filename: "f.svg", contentType: "image/svg+xml" }), "figur");
+    const lastet = await ok(request(app).post(`${C}/sections/${id}/assets`).set(ADMIN).attach("file", svg, { filename: "f.svg", contentType: "image/svg+xml" }), "figur");
     await ok(post(`${C}/sections/${id}/archive`), "arkiver");
     const before = await prisma.sectionAsset.findMany({ where: { sectionId: id }, select: { sourceLocale: true, localizedBlobPaths: true } });
-    const r = await post(`${C}/sections/${id}/assets/localize`, { sourceLocale: "nb" });
+    const versjoner = await prisma.courseSectionVersion.count({ where: { sectionId: id } });
+    // 2.168.0: figurene oversettes ved lagring (`PUT …/:id` med `sourceLocale`); den gamle «Oversett» er borte. Teksten viser til
+    // figuren, så lagringen ville oversatt den, men låsen ser arkiveringen før noe skrives.
+    const fane = await ok(get(`${C}/sections/${id}`), "detalj");
+    const r = await request(app).put(`${C}/sections/${id}`).set(ADMIN).send({
+      title: JSON.parse(fane.section.title), bodyMarkdown: L(`![f](asset:${lastet.asset.id})`),
+      expectedVersionNo: fane.section.versionNo, expectedTitle: fane.section.title, sourceLocale: "nb",
+    });
     expectCode(r, "section_archived");
     expect(await prisma.sectionAsset.findMany({ where: { sectionId: id }, select: { sourceLocale: true, localizedBlobPaths: true } })).toEqual(before);
+    expect(await prisma.courseSectionVersion.count({ where: { sectionId: id } })).toBe(versjoner);
   });
 
   it("seksjon: import replaceExisting gir ingen ny versjon på en arkivert seksjon", async () => {

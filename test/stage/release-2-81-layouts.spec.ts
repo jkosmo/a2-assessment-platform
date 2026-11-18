@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { lagreSeksjon } from "./seksjonLagring.js";
 import { arkiverKurs } from "./arkiver.js";
 import { drawFlowFigure } from "../../skills/a2-authoring-api/scripts/draw-flow-figure.mjs";
 
@@ -224,9 +225,11 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
 
   test("oversettelsen oversetter begge oppsettene, med de samme etikettene", async () => {
     test.setTimeout(180000);
-    const oversatt = await api("POST", `/api/admin/content/sections/${sectionId}/assets/localize`, { sourceLocale: "nb" });
+    // 2.168.0: figurene oversettes når teksten lagres (den gamle «Oversett» er borte). Seksjonen er et importert utkast, så figuren
+    // teksten viser, regnes som ny.
+    const { lagret: oversatt } = await lagreSeksjon(api, sectionId, { sourceLocale: "nb" });
     expect(oversatt.status, oversatt.tekst.slice(0, 300)).toBe(200);
-    expect(oversatt.json.localizedAssetCount).toBe(1);
+    expect(oversatt.json.figureTranslation).toEqual({ translated: 1, failed: 0 });
 
     const norsk = await hentFigur(assetId, "?locale=nb");
     for (const språk of ["en-GB", "nn"]) {

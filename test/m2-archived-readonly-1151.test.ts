@@ -151,6 +151,15 @@ const S = (id: string, action = "") => `${C}/sections/${id}${action}`;
 const M = (id: string, action = "") => `${C}/modules/${id}${action}`;
 const K = (id: string, action = "") => `${C}/courses/${id}${action}`;
 
+// 2.168.0: seksjonen lagres og døpes om med det fanen så (den gamle `PUT …/content` og «Døp om» uten versjon er borte).
+async function sectionTab(id: string) {
+  return (await ok(get(S(id)), "seksjonsdetalj")).section as { title: string; versionNo: number };
+}
+async function saveSectionAsTab(id: string, extra: Record<string, unknown> = {}) {
+  const tab = await sectionTab(id);
+  return put(S(id), { title: JSON.parse(tab.title), bodyMarkdown: L("Ny tekst."), expectedVersionNo: tab.versionNo, expectedTitle: tab.title, ...extra });
+}
+
 // Kursene: et arkivert kurs og et aktivt utkast, med den SAMME delte seksjonen. Den følger ikke kurset inn i arkivet (den brukes
 // i det andre), så elementlista kan sendes uendret til begge.
 const sharedSection = new Map<string, string>();
@@ -158,13 +167,15 @@ const sectionItems = (courseId: string) => [{ type: "SECTION", sectionId: shared
 
 const rows: Row[] = [
   // Seksjon
-  { name: "seksjon: nytt navn", kind: "SECTION", code: "section_archived", call: (id) => patch(S(id, "/title"), { title: L("Nytt navn") }) },
-  { name: "seksjon: lagre innhold", kind: "SECTION", code: "section_archived", call: (id) => put(S(id, "/content"), { bodyMarkdown: L("Ny tekst.") }) },
+  { name: "seksjon: nytt navn", kind: "SECTION", code: "section_archived", call: async (id) => patch(S(id, "/title"), { title: L("Nytt navn"), expectedVersionNo: (await sectionTab(id)).versionNo }) },
+  { name: "seksjon: lagre innhold", kind: "SECTION", code: "section_archived", call: (id) => saveSectionAsTab(id) },
   {
     name: "seksjon: last opp bilde", kind: "SECTION", code: "section_archived",
     call: (id) => request(app).post(S(id, "/assets")).set(ADMIN).attach("file", PNG_1PX, { filename: "pixel.png", contentType: "image/png" }),
   },
-  { name: "seksjon: oversett figurer", kind: "SECTION", code: "section_archived", call: (id) => post(S(id, "/assets/localize"), { sourceLocale: "nb" }) },
+  // Figurene oversettes ved lagring (`sourceLocale`). At figurene ikke skrives når arkiveringen kommer under oversettingen, står i
+  // m2-archived-readonly-lock-1151.
+  { name: "seksjon: lagre med figuroversetting", kind: "SECTION", code: "section_archived", call: (id) => saveSectionAsTab(id, { sourceLocale: "nb" }) },
   { name: "seksjon: publiser", kind: "SECTION", code: "section_archived", call: (id) => post(S(id, "/publish")) },
   { name: "seksjon: avpubliser", kind: "SECTION", code: "section_archived", call: (id) => post(S(id, "/unpublish")) },
   {
@@ -315,7 +326,8 @@ describe("#1151 arkivert er urørlig: hvert kall mot et arkivert element avvises
   it("de tre antatte tilfellene fra saken er borte: ingen «arkivert og aktiv»", async () => {
     const section = await apiSection("antatt seksjon");
     await ok(post(S(section, "/archive")), "arkiver");
-    await put(S(section, "/content"), { bodyMarkdown: L("Ny tekst.") });
+    const lagring = await saveSectionAsTab(section);
+    expect(lagring.body.error, show(lagring)).toBe("section_archived");
     expect((await prisma.courseSection.findUniqueOrThrow({ where: { id: section }, select: { activeVersionId: true } })).activeVersionId).toBeNull();
 
     const module = await apiModule("antatt modul");

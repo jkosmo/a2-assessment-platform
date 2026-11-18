@@ -382,10 +382,12 @@ async function omdopSeksjonIRad(sectionId, btn, item) {
   });
 }
 
-/** #1163: det en rad i lista så — nyeste versjon og arbeidstittelen — som `expectedVersionNo`/`expectedTitle`. */
+/**
+ * #1163: det en rad i lista så — nyeste versjon og arbeidstittelen — som `expectedVersionNo`/`expectedTitle`. Påkrevd fra 2.168.0.
+ * En seksjon uten versjon (finnes ikke: `createSection` lager versjon 1) sender 0, som tjeneren leser som «ingen versjon».
+ */
 function listRevision(row) {
-  if (row?.latestVersionNo == null) return {};
-  return { expectedVersionNo: row.latestVersionNo, ...(typeof row.title === "string" ? { expectedTitle: row.title } : {}) };
+  return { expectedVersionNo: row?.latestVersionNo ?? 0, ...(typeof row?.title === "string" ? { expectedTitle: row.title } : {}) };
 }
 
 /** #894: oversett seksjonstitlene som mangler språk — de synlige, i én runde. */

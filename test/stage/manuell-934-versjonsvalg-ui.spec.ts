@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { lagreSeksjon } from "./seksjonLagring.js";
 import { arkiverKurs } from "./arkiver.js";
 
 // #934 mot UTRULLET stage, gjennom de EKTE sidene — slik produkteier selv ville prøvd det (2026-11-02:
@@ -279,9 +280,11 @@ test("4. bevis for 1 uten versjonslinje; ny seksjon lest → bevis for 2 med «V
 test("5. en seksjon lagres med ny tekst fra sin egen side → 2.1, kursbevisene urørt og lesingene står", async () => {
   test.setTimeout(150_000);
   const før = await bevisForKurset();
-  const lagret = await api("PUT", `/api/admin/content/sections/${tilstand.seksjoner[0]}/content`, { bodyMarkdown: L("Innhold A, rettet skrivefeil.") });
+  // 2.168.0: lagret og publisert som redigereren gjør (den gamle `PUT …/content` er borte; fra 2.166.0 er en lagring et utkast,
+  // og det er publiseringen som gir kurset en mindre versjon).
+  const { lagret, publisert } = await lagreSeksjon(api, tilstand.seksjoner[0], { bodyMarkdown: L("Innhold A, rettet skrivefeil."), publiser: true });
   expect(lagret.status, lagret.tekst.slice(0, 300)).toBe(200);
-  noter("seksjon lagret, holdt tilbake av språkporten", lagret.json.heldBackByTranslationGate ?? null);
+  expect(publisert?.status, publisert?.tekst.slice(0, 300)).toBe(200);
   await expect.poll(async () => (await versjon()).versionMinor, { timeout: 30_000 }).toBe(1);
   const v = await versjon();
   noter("versjon etter seksjonslagring", v);

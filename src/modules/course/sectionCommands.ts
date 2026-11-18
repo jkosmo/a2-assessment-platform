@@ -72,7 +72,7 @@ export function remapAssetRefs(serializedMarkdown: string, idMap: Map<string, st
 // | `createSection` with auto-publish (`draft` not set) | held back to DRAFT; the write succeeds |
 // | standalone section import (#916) | always lands unpublished by decision, so it never reaches the gate |
 //
-// #1163: «Lagre» publiserer ikke lenger (`saveSection`, `updateSectionTitle`, `updateSectionContent` lager et utkast), så
+// #1163: «Lagre» publiserer ikke lenger (`saveSection` og `updateSectionTitle` lager et utkast), så
 // porten gjelder bare publiseringen — og den måler versjonen som publiseres, med dens tittel. Den gamle døra
 // «lagring holdes tilbake» finnes ikke lenger. Oppretting uten `draft: true` publiserer fortsatt og har fortsatt porten (holdt
 // tilbake i stedet for å kaste, så teksten aldri går tapt).
@@ -244,8 +244,8 @@ export async function createSectionWithAssets(input: {
 // =========================================================================
 // #1163 skive 1: «Lagre» lager et utkast (doc/design/PLAN_1163_SEKSJON_UTKAST.md)
 // =========================================================================
-// Alle tre veiene som lagrer en seksjon — redigererens ene lagring (`saveSection`), «Døp om» og masseoversettingen i lista
-// (`updateSectionTitle`), og den gamle `PUT …/content` for faner fra før utrullingen (`updateSectionContent`) — går hit:
+// Begge veiene som lagrer en seksjon — redigererens ene lagring (`saveSection`), og «Døp om» og masseoversettingen i lista
+// (`updateSectionTitle`) — går hit:
 // en NY, upublisert versjon med tittel og tekst, og arbeidstittelen (`CourseSection.title`) settes til tittelen i den. Ingenting
 // når deltakerne før noen publiserer, og kursene får ingen ny versjon her (den hører til publiseringen, `publishSection`).
 
@@ -370,10 +370,9 @@ export async function saveSection(
  * «Døp om» og masseoversettingen av titler i lista (#894). #1163: et nytt navn er et utkast som alt annet — en ny versjon med
  * den nye tittelen og teksten i det siste utkastet. Samme navn som før gir ingen ny versjon.
  *
- * `revision` er det lista så. Uten den (en fane fra før utrullingen) lagres utkastet uten konfliktsjekk, i ett
- * utrullingsvindu, som `updateSectionContent` under.
+ * `revision` er det lista så (påkrevd fra 2.168.0).
  */
-export async function updateSectionTitle(sectionId: string, title: string, _actorId?: string, revision?: SectionRevisionCheck) {
+export async function updateSectionTitle(sectionId: string, title: string, revision: SectionRevisionCheck) {
   // #934 skive 4a: innholdslåsen først.
   return runContentWrite(async (tx) => {
     const current = await loadSectionForDraft(tx, sectionId);
@@ -385,19 +384,6 @@ export async function updateSectionTitle(sectionId: string, title: string, _acto
     }
     return writeSectionDraft(tx, sectionId, current.latest.versionNo, { title, bodyMarkdown: current.latest.bodyMarkdown });
   });
-}
-
-/**
- * Den gamle lagringen av teksten (`PUT …/content`), for faner fra før #1163. Står ett utrullingsvindu og publiserer ikke lenger:
- * en ny, upublisert versjon med seksjonens arbeidstittel. Uten konfliktsjekk, som før. `tx` brukes av tester.
- */
-export async function updateSectionContent(sectionId: string, bodyMarkdown: string, _actorId?: string, tx?: ContentWriteTx) {
-  // #934 skive 4a: alt etter innholdslåsen.
-  const run = async (client: ContentWriteTx) => {
-    const current = await loadSectionForDraft(client, sectionId);
-    return writeSectionDraft(client, sectionId, current.latest?.versionNo ?? null, { title: current.title, bodyMarkdown });
-  };
-  return tx ? run(tx) : runContentWrite(run);
 }
 
 export function getSection(sectionId: string) {

@@ -192,7 +192,7 @@ describe("#1128 varsel om alt-tekst som bare er en tittel", () => {
     const ny = await request(app).post("/api/admin/content/sections").set(admin).send({ title: tre(`Alt-tekst ${stempel}`), bodyMarkdown: svak });
     expect(ny.status, JSON.stringify(ny.body).slice(0, 300)).toBe(201);
     expect(ny.body.altWarnings).toEqual([{ code: "alt_is_title", alt: "Enhetstest" }]);
-    // #1163: redigererens ene lagring (`PUT …/:id`) med det fanen lastet. Den gamle `PUT …/content` står bare for faner fra før.
+    // #1163: redigererens ene lagring (`PUT …/:id`) med det fanen lastet. (Den gamle `PUT …/content` ble fjernet i 2.168.0.)
     const id = ny.body.section.id as string;
     const lagre = async (bodyMarkdown: Record<string, string>) => {
       const fane = (await request(app).get(`/api/admin/content/sections/${id}`).set(admin)).body.section;

@@ -417,141 +417,6 @@ async function wideLayoutWidth(blobPath: string, loaded?: Buffer): Promise<numbe
   return wideWidthByBlob.get(blobPath) ?? undefined;
 }
 
-export interface LocalizeSectionAssetsResult {
-  localizedAssetCount: number;
-  skippedAssetCount: number;
-  targetLocales: SupportedLocale[];
-}
-
-/**
- * #657: generates translated SVG variants for every SVG asset in a section that carries text.
- * The text runs are extracted from the original, translated into each OTHER supported locale, and
- * written back into a positional copy (geometry preserved). Each variant is sanitised again and
- * stored as a sibling blob; the asset row records the source locale and the per-locale blob map.
- *
- * Idempotent (#663): an asset's base SVG is immutable (a re-upload makes a new asset), so an asset
- * that already has variants for every target locale FROM THE SAME source locale is left untouched —
- * re-translating unchanged drawings wastes LLM calls and risks introducing drift. Only newly
- * uploaded SVGs, or assets being translated from a different source locale, are (re)generated.
- */
-export async function localizeSectionAssets(
-  sectionId: string,
-  sourceLocale: SupportedLocale,
-): Promise<LocalizeSectionAssetsResult> {
-  const section = await prisma.courseSection.findUnique({ where: { id: sectionId }, select: { id: true } });
-  if (!section) {
-    throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
-  }
-  // #1151: forhåndssjekk før de betalte kallene til språkmodellen. Sjekken som gjelder, står i transaksjonen under.
-  await assertNotArchivedBeforeLock({ type: "SECTION", id: sectionId });
-
-  const assets = await prisma.sectionAsset.findMany({
-    where: { sectionId, mimeType: SVG_MIME_TYPE },
-    select: { id: true, blobPath: true, filename: true, sourceLocale: true, localizedBlobPaths: true, layoutVariants: true },
-  });
-
-  const targetLocales = SUPPORTED_LOCALES.filter((l) => l !== sourceLocale);
-  let localizedAssetCount = 0;
-  let skippedAssetCount = 0;
-
-  for (const asset of assets) {
-    // Already up to date for this source locale → skip (immutable base, nothing to re-translate).
-    // #1079: «up to date» includes every other layout — a figure whose wide layout is translated
-    // and whose narrow one is not, would be in two languages depending on the width of the screen.
-    const existingVariants = readLocalizedBlobPaths(asset.localizedBlobPaths);
-    const otherLayouts = Object.entries(readLayoutVariants(asset.layoutVariants)) as Array<[AssetLayout, StoredLayoutVariant]>;
-    if (
-      asset.sourceLocale === sourceLocale &&
-      targetLocales.every((t) => existingVariants[t]) &&
-      otherLayouts.every(([, variant]) => targetLocales.every((t) => variant.localizedBlobPaths[t]))
-    ) {
-      skippedAssetCount += 1;
-      continue;
-    }
-
-    const baseSvg = (await getAsset(asset.blobPath)).toString("utf8");
-    if (!svgHasText(baseSvg)) continue;
-
-    const originals = extractSvgTexts(baseSvg);
-    if (originals.length === 0) continue;
-
-    // The other layouts are translated with the SAME translations as the wide one — one call to the
-    // language model per language, not one per layout. That is why a layout must carry the same
-    // texts as the wide figure (checked where the figure is stored): a label found only in the
-    // narrow layout would have no translation and be left in the source language.
-    const otherSvgs = new Map<AssetLayout, string>();
-    for (const [layout, variant] of otherLayouts) otherSvgs.set(layout, (await getAsset(variant.blobPath)).toString("utf8"));
-    const otherLocalized = new Map<AssetLayout, Record<string, string>>(otherLayouts.map(([layout]) => [layout, {}]));
-
-    const localizedBlobPaths: Record<string, string> = {};
-    for (const target of targetLocales) {
-      const translated = await localizeSvgTexts({
-        texts: originals,
-        sourceLocale: sourceLocale as GenerationLocale,
-        targetLocale: target as GenerationLocale,
-      });
-      const translationMap: Record<string, string> = {};
-      originals.forEach((original, index) => {
-        const value = translated[index];
-        if (typeof value === "string" && value.length > 0) translationMap[original] = value;
-      });
-
-      const localizedSvg = applySvgTextTranslations(baseSvg, translationMap);
-      if (!localizedSvg) continue;
-      const variantPath = `sections/${sectionId}/${randomUUID()}-${target}-${asset.filename}`;
-      await putAsset(variantPath, Buffer.from(localizedSvg, "utf8"), SVG_MIME_TYPE);
-      localizedBlobPaths[target] = variantPath;
-
-      for (const [layout, svg] of otherSvgs) {
-        const localizedLayoutSvg = applySvgTextTranslations(svg, translationMap);
-        if (!localizedLayoutSvg) continue;
-        const layoutVariantPath = `sections/${sectionId}/${randomUUID()}-${layout}-${target}-${asset.filename}`;
-        await putAsset(layoutVariantPath, Buffer.from(localizedLayoutSvg, "utf8"), SVG_MIME_TYPE);
-        otherLocalized.get(layout)![target] = layoutVariantPath;
-      }
-    }
-
-    const layoutVariants = Object.fromEntries(
-      otherLayouts.map(([layout, variant]) => [layout, { blobPath: variant.blobPath, localizedBlobPaths: otherLocalized.get(layout) ?? {} }]),
-    );
-    // #934 skive 4a: raden skrives under innholdslåsen (SectionAsset er innhold). Oversettelsen tar tid hos
-    // språkmodellen, så den skjer FØR låsen; bare skrivingen står i kø. Er figuren slettet i mellomtiden, er
-    // det ingenting å skrive til, og de nye filene ryddes bort.
-    const newPaths = [...Object.values(localizedBlobPaths), ...[...otherLocalized.values()].flatMap((paths) => Object.values(paths))];
-    let written: { count: number };
-    try {
-      written = await runContentWrite(async (tx) => {
-        // #1151: arkivert mens språkmodellen arbeidet: ingenting skrives, og de nye filene ryddes bort i `catch` under.
-        await assertNotArchived(tx, { type: "SECTION", id: sectionId });
-        return tx.sectionAsset.updateMany({
-          where: { id: asset.id },
-          data: { sourceLocale, localizedBlobPaths, ...(otherLayouts.length > 0 ? { layoutVariants } : {}) },
-        });
-      });
-    } catch (error) {
-      // Raden ble ikke skrevet (f.eks. 503 content_busy, QA-porten 2.131.0 runde 2): ingenting peker på de nye
-      // filene. De ryddes bort, og feilen går videre.
-      await reclaimAssetBlobs(newPaths);
-      throw error;
-    }
-    if (written.count === 0) {
-      await reclaimAssetBlobs(newPaths);
-      continue;
-    }
-    // #1090: nothing points at the translated files the row pointed at BEFORE. They used to stay in
-    // storage for good — two per figure for every new translation, four when the figure has a narrow
-    // layout. Every file written above has a new name, so none of the old ones is still in use.
-    // Removed after the row is written, never before: an update that failed would otherwise be
-    // left with paths to files that were gone.
-    const replaced = [...Object.values(existingVariants), ...otherLayouts.flatMap(([, variant]) => Object.values(variant.localizedBlobPaths))]
-      .filter((path) => typeof path === "string" && path.length > 0);
-    await reclaimAssetBlobs(replaced);
-    localizedAssetCount += 1;
-  }
-
-  return { localizedAssetCount, skippedAssetCount, targetLocales };
-}
-
 // =========================================================================
 // #1163 skive 2 — figurene oversettes ved lagring (prinsipp 3; PLAN_1163 «Andre gjennomlesing» punkt 2)
 // =========================================================================
@@ -564,7 +429,7 @@ export async function localizeSectionAssets(
 //   - `prepareDraftFigureTranslations`: språkmodellen og de nye bildefilene, FØR låsen. Ingen rad skrives.
 //   - `applyDraftFigureTranslations`: radene, INNE I lagringstransaksjonen, etter revisjonssjekken. Avvises lagringen (409), skrives
 //     ingen rad, og kalleren rydder de nye filene.
-// Den gamle knappen («Oversett», `localizeSectionAssets` over) står ett utrullingsvindu for faner fra før skive 2.
+// Den gamle knappen («Oversett», `localizeSectionAssets`) ble fjernet i 2.168.0; dette er eneste vei figurene oversettes.
 
 const ASSET_REF_PATTERN = /asset:([a-zA-Z0-9_-]+)/g;
 
@@ -648,7 +513,8 @@ export async function prepareDraftFigureTranslations(
       const layoutPaths = new Map<AssetLayout, Record<string, string>>(layouts.map(([layout, variant]) => [layout, { ...variant.localizedBlobPaths }]));
 
       for (const target of missing) {
-        // Samme oversettelse i hvert oppsett (se `localizeSectionAssets`): ett kall per språk.
+        // Samme oversettelse i hvert oppsett, ett kall per språk: et oppsett bærer de samme tekstene som det brede (sjekket der
+        // figuren lagres), så en tekst bare det smale har, ville stått igjen på kildespråket.
         const translated = await localizeSvgTexts({ texts: originals, sourceLocale: from as GenerationLocale, targetLocale: target as GenerationLocale });
         const translationMap: Record<string, string> = {};
         originals.forEach((original, index) => {

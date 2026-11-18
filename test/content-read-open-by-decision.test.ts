@@ -90,7 +90,8 @@ describe("kursinnhold kan leses av enhver forfatter", () => {
     const svar = await request(app)
       .patch(`/api/admin/content/sections/${sectionId}/title`)
       .set(fremmedSmo)
-      .send({ title: L("Kapret") });
+      // Med versjon (påkrevd fra 2.168.0), så avvisningen er vakta og ikke valideringen.
+      .send({ title: L("Kapret"), expectedVersionNo: 1 });
     expect(svar.status, "en fremmed SMO skal ikke kunne endre andres seksjon").toBe(403);
   });
 

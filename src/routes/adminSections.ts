@@ -8,7 +8,6 @@ import {
   createSection,
   createSectionWithAssets,
   updateSectionTitle,
-  updateSectionContent,
   saveSection,
   getSection,
   listSections,
@@ -19,7 +18,6 @@ import {
   deleteSection,
   createSectionAsset,
   listSectionAssets,
-  localizeSectionAssets,
   MAX_ASSET_BYTES,
 } from "../modules/course/index.js";
 import { findActiveCoursesForSections } from "../modules/course/contentLifecycle.js";
@@ -104,13 +102,12 @@ const revisionFields = {
   expectedVersionNo: z.number().int().min(0),
   expectedTitle: z.string(),
 };
-// «Døp om» og masseoversettingen sender det lista så. En fane fra før #1163 sender det ikke (se `updateSectionTitle`).
+// «Døp om» og masseoversettingen sender det lista så. 2.168.0: versjonen er påkrevd (faner fra før #1163 er ute av bruk).
 const titleSchema = z.object({
   title: localizedTextPatchSchema,
-  expectedVersionNo: revisionFields.expectedVersionNo.optional(),
+  expectedVersionNo: revisionFields.expectedVersionNo,
   expectedTitle: revisionFields.expectedTitle.optional(),
 });
-const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
 // #1163: redigererens ene lagring. Revisjonen er påkrevd: uten den kan tjeneren ikke vite om fanen er utdatert.
 // Skive 2: `sourceLocale` er språket forfatteren skrev på. Med det oversettes figurene utkastet har lagt til (prinsipp 3); uten
 // det (en fane fra 2.166.0, API-kallere) lagres teksten som før, uten figuroversetting.
@@ -528,15 +525,11 @@ adminSectionsRouter.patch("/:sectionId/title", requireContentOwnership("SECTION"
     return;
   }
   try {
-    // #1163: et nytt navn er et utkast. Det lista så, sendes med; uten det (en fane fra før) lagres utkastet uten sjekk.
-    const revision = parsed.data.expectedVersionNo !== undefined
-      ? { expectedVersionNo: parsed.data.expectedVersionNo, expectedTitle: parsed.data.expectedTitle }
-      : undefined;
+    // #1163: et nytt navn er et utkast, med det lista så. 409 `section_changed` hvis noen har lagret siden.
     const section = await updateSectionTitle(
       request.params.sectionId,
       localizedTextCodec.serialize(parsed.data.title),
-      request.context?.userId,
-      revision,
+      { expectedVersionNo: parsed.data.expectedVersionNo, expectedTitle: parsed.data.expectedTitle },
     );
     response.json({ section: toDetail(section) });
   } catch (error) {
@@ -574,26 +567,6 @@ adminSectionsRouter.put("/:sectionId", requireContentOwnership("SECTION", "secti
   }
 });
 
-// Den gamle lagringen av teksten. #1163: står ett utrullingsvindu for faner fra før, og publiserer ikke lenger — den lager et
-// utkast (den trygge retningen). Fjernes i en senere utrulling.
-adminSectionsRouter.put("/:sectionId/content", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
-  const parsed = contentSchema.safeParse(request.body);
-  if (!parsed.success) {
-    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
-    return;
-  }
-  try {
-    const section = await updateSectionContent(
-      request.params.sectionId,
-      localizedTextCodec.serialize(parsed.data.bodyMarkdown),
-      request.context?.userId,
-    );
-    response.json({ section: toDetail(section), altWarnings: altTextWarnings(parsed.data.bodyMarkdown) });
-  } catch (error) {
-    next(error);
-  }
-});
-
 // Asset upload (#483/F4) — multipart image upload to a section's blob storage.
 adminSectionsRouter.post("/:sectionId/assets", requireContentOwnership("SECTION", "sectionId"), uploadAsset, async (request: Request<{ sectionId: string }>, response, next) => {
   const parsed = assetUploadSchema.safeParse({ file: request.file });
@@ -616,30 +589,12 @@ adminSectionsRouter.post("/:sectionId/assets", requireContentOwnership("SECTION"
   }
 });
 
-// Samme hull, samme rettelse: figurlista hører til seksjonen, og POST/localize på samme sti er
-// allerede vaktet. En uvoktet GET ved siden av tre voktede skriveruter er en glipp, ikke en policy.
+// Samme hull, samme rettelse: figurlista hører til seksjonen, og opplastingen på samme sti er
+// allerede vaktet. En uvoktet GET ved siden av voktede skriveruter er en glipp, ikke en policy.
 // Vedleggene ER seksjonens innhold — bildene som vises i lesestoffet. Samme beslutning som over.
 adminSectionsRouter.get("/:sectionId/assets", async (request, response, next) => {
   try {
     response.json({ assets: await listSectionAssets(request.params.sectionId) });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// #657: generate translated SVG variants for the section's SVG assets. #1163 skive 2: redigereren oversetter figurene ved lagring
-// (`PUT /:sectionId` med `sourceLocale`), og knappen «Oversett» er borte. Ruta står ett utrullingsvindu for faner fra før, som
-// `PUT …/content` og `PATCH …/title` uten revisjon.
-const localizeAssetsSchema = z.object({ sourceLocale: generationLocaleSchema });
-adminSectionsRouter.post("/:sectionId/assets/localize", requireContentOwnership("SECTION", "sectionId"), generateLimiter, async (request: Request<{ sectionId: string }>, response, next) => {
-  const parsed = localizeAssetsSchema.safeParse(request.body);
-  if (!parsed.success) {
-    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
-    return;
-  }
-  try {
-    const result = await localizeSectionAssets(request.params.sectionId, parsed.data.sourceLocale);
-    response.json(result);
   } catch (error) {
     next(error);
   }

@@ -291,6 +291,8 @@ function section(id: string, overrides: Partial<SectionFixture> = {}): SectionFi
     bodyMarkdown: JSON.stringify({ nb: "# Innhold", nn: "# Innhald", "en-GB": "# Content" }),
     activeVersionId: "sv-1",
     versionNo: 2,
+    // #1163: den nyeste versjonen (her den publiserte). Lista sender den som `expectedVersionNo` (påkrevd fra 2.168.0).
+    latestVersionNo: 2,
     hasUnpublishedChanges: false,
     updatedAt: "2026-11-01T08:00:00.000Z",
     archivedAt: null,
@@ -427,8 +429,10 @@ test.describe("#1151 skive 3c — seksjonslista", () => {
       translated.push(JSON.parse(route.request().postData() ?? "{}").title);
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: { nn: "nn", "en-GB": "en" }, failedLocales: [] }) });
     });
+    const revisions: unknown[] = [];
     await page.route("**/api/admin/content/sections/*/title", (route: Route) => {
       patched.push(new URL(route.request().url()).pathname);
+      revisions.push(JSON.parse(route.request().postData() ?? "{}").expectedVersionNo);
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: {} }) });
     });
     await page.goto("/admin-content/sections");
@@ -453,6 +457,7 @@ test.describe("#1151 skive 3c — seksjonslista", () => {
     await button.click();
     await expect.poll(() => patched.length).toBe(1);
     expect(patched[0]).toContain("/sections/sec-aktiv/title");
+    expect(revisions).toEqual([2]);
     expect(translated).toEqual(["Aktiv seksjon"]);
   });
 });

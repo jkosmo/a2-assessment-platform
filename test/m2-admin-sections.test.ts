@@ -60,10 +60,16 @@ describe("Admin course-section management", () => {
     const versionCount = await prisma.courseSectionVersion.count({ where: { sectionId } });
     expect(versionCount).toBe(2);
 
+    // 2.168.0: «Døp om» uten versjonen lista så, avvises og skriver ingenting (faner fra før #1163 er ute av bruk).
+    const nyttNavn = { "en-GB": "Renamed section", nb: "Omdøpt", nn: "Omdøpt" };
+    const utenVersjon = await request(app).patch(`/api/admin/content/sections/${sectionId}/title`).set(adminHeaders).send({ title: nyttNavn });
+    expect(utenVersjon.status).toBe(400);
+    expect(await prisma.courseSectionVersion.count({ where: { sectionId } })).toBe(2);
+
     const titleResponse = await request(app)
       .patch(`/api/admin/content/sections/${sectionId}/title`)
       .set(adminHeaders)
-      .send({ title: { "en-GB": "Renamed section", nb: "Omdøpt", nn: "Omdøpt" } });
+      .send({ title: nyttNavn, expectedVersionNo: 2 });
     expect(titleResponse.status).toBe(200);
     expect(titleResponse.body.section.title).toContain("Renamed section");
 

@@ -166,7 +166,7 @@ fails if anything else writes `Course.versionMajor/versionMinor` or `CourseVersi
 | Import `updateExisting` | `contentImportService.ts` | Minor — an update never adds required content to a published course (new modules become drafts outside it, new versions are laid ready and asked about when published). Title/description changed counts too; one bump per import |
 | Import `replaceExisting` | `importCourseFromEnvelope` (`version`) → `setCourseItems`/`setCourseModules` | With certificate holders: `version` required, else `400 course_version_required` before anything is written (product owner 2026-11-02). Without: minor, as before |
 | «Publiser kurs» with new (draft) items | `#cascadePublishDialog` (`#cascadePublishVersion`) → `POST …/publish` `{ publishItems, courseVersion }` → `publishCourseCascade` | The author's answer when the course has been out and has certificate holders; one transaction. First publish: 1.0, no question |
-| Section saved / published / renamed on its own page | `updateSectionContent`, `publishSection`, `updateSectionTitle` → `applyMinorVersionToCoursesContaining` | Minor for every course it is in (design: «Ingen — mindre for kursene») |
+| Section published on its own page | `publishSection` → `applyMinorVersionToCoursesContaining` | Minor for every course it is in (design: «Ingen — mindre for kursene»). Saving and renaming are drafts since #1163 and give no version |
 | Module published on its own page, module import, calibration thresholds | `publishModuleVersion`, `publishModuleVersionWithThresholds` → `applyMinorVersionToCoursesContaining` | Minor for every course it is in — interim; the per-course major/minor choice is slice 5 |
 | Unpublish, archive, restore, plain republish with nothing new | — | No content goes live: no version |
 
@@ -494,11 +494,11 @@ that never reaches the viewer because the locale isn't threaded).
 | Sanitiser (source of truth) | `src/modules/course/svgSanitizer.ts` → `sanitizeSvg` + text helpers | strips script/handlers/`foreignObject`/`<a>`; **writes XML** and rejects a result an XML parser cannot read (#1083) — the file is served as `image/svg+xml` |
 | Every writer goes through the sanitiser | upload (`createSectionAsset`), import (`stageSectionAssets`), locale variants (`applySvgTextTranslations`), agent validation (`agentAuthoringValidationService`) | four writers, one serialiser — a figure that is unreadable from one of them is unreadable from all |
 | Repair of already-stored figures | `assetCommands.ts` → `repairUnreadableSvgAssets`; `npm run maint:repair-unreadable-svg-assets` | dry run by default; rewrites in place |
-| Localise command | `assetCommands.ts` → `localizeSectionAssets`; LLM `localizeSvgTexts` | per-locale variants → `localizedBlobPaths` |
-| Localise route (explicit) | `src/routes/adminSections.ts` `POST /:sectionId/assets/localize` | author "Translate" action only |
+| Localise on save (#1163, the only path since 2.168.0) | `assetCommands.ts` → `prepareDraftFigureTranslations` / `applyDraftFigureTranslations`, called by `saveSection`; LLM `localizeSvgTexts` | per-locale variants → `localizedBlobPaths`; only the locales a figure lacks |
+| Localise trigger | `src/routes/adminSections.ts` `PUT /:sectionId` with `sourceLocale` (the editor's save). The explicit `POST /:sectionId/assets/localize` was removed in 2.168.0 | figures the draft shows and the published version does not |
 | Serve (headers + variant) | `src/routes/contentAssets.ts`; `getSectionAssetContent(assetId, locale)` | CSP `sandbox` + nosniff for SVG; `?locale=` picks variant |
 | Locale threading (render) | `src/modules/course/sectionContent.ts` → `renderSectionMarkdown(md, locale)` → `resolveAssetUrls` appends `?locale=` | participant: `src/routes/courses.ts`; preview: `adminSections.ts /preview` |
-| Client upload + translate trigger | `public/static/admin-content-sections.js` (`accept` incl. svg; translate loop calls `/assets/localize`; preview sends `locale`) | `hydrateContentAssetImages` preserves the `?locale=` query |
+| Client upload + translate trigger | `public/static/admin-content-sections.js` (`accept` incl. svg; the save sends `sourceLocale`; preview sends `locale`) | `hydrateContentAssetImages` preserves the `?locale=` query |
 
 **Guards:** `test/unit/svg-sanitizer.test.ts` (XSS vectors + text round-trip + «what is stored can be read as an image»), `test/unit/svg-text-localization.test.ts` (stub + order/count), `test/m2-section-assets.test.ts` (upload sanitised + serve headers + localise→variant + #1083 upload→serve and the repair), `test/e2e/svg-sanitizer-renders-1083.spec.ts` (Chromium shows the sanitised figure as an `<img>`).
 
@@ -519,7 +519,7 @@ untranslated or orphaned in the other — and none of those gives an error.
 | Schemas | `sectionAssetExportSchema` (export/import), `authoringSectionAssetSchema` (agent, strict) | the layout NAME is checked in staging, not in the schema, so every way in refuses it with the same code |
 | Dry-run validation of an authoring package | `agentAuthoringValidationService` → `findLayoutVariantProblem` | RUNS the staging rule instead of restating it |
 | Serving | `chooseAssetFile` (pure) + `getSectionAssetContent(…, layout)`; `src/routes/contentAssets.ts` `?layout=narrow` | headers `X-Asset-Layout`, `X-Asset-Layouts`; **language before layout** (`doc/DECISIONS.md`) |
-| Translation | `localizeSectionAssets` | one LLM call per language, written into every layout; «up to date» includes every layout |
+| Translation | `prepareDraftFigureTranslations` (on save, since 2.168.0 the only path) | one LLM call per language, written into every layout; a figure lacks a locale until every layout has it (`figureMissingLocales`) |
 | Export | `loadSectionAssetsForExport` | carries the layout and its variants; their bytes count towards the 25 MB cap |
 | Deletion | `collectSectionAssetBlobPaths` (section delete, course cascade delete) | via `assetFiles` |
 | Repair (#1083) | `repairUnreadableSvgAssets` | via `assetFiles`; the report says which layout |
@@ -993,7 +993,7 @@ for". User docs: `doc/DISCUSSIONS_GUIDE.md`. Design: `doc/DISCUSSIONS_DESIGN.md`
 ## 24. Publishing a learning section — four doors (#916)
 
 > **#1163 (2.166.0): saving no longer publishes.** The «Content save» row below is gone: `saveSection`,
-> `updateSectionTitle` and the legacy `updateSectionContent` all write an unpublished version (§ 38), so the gate applies only
+> `updateSectionTitle` and the legacy `updateSectionContent` (removed in 2.168.0) all write an unpublished version (§ 38), so the gate applies only
 > to `publishSection` and the course cascade — and it measures **the version being published** (its `title` and
 > `bodyMarkdown`), not the working title. «Create with auto-publish» is unchanged (the API default; the editor now sends
 > `draft: true`). The text below is the #916 history.
@@ -1008,7 +1008,6 @@ store their work at all, trading a language bug for lost text.
 | Author's publish action | `POST /sections/:id/publish` → `publishSection` in `src/modules/course/sectionCommands.ts` | 422 `publish_blocked_by_validation` with `translation_incomplete` issues carrying `field` + `missingLocales` |
 | Course cascade | `evaluateSection` in `src/modules/course/coursePublishService.ts` (preview) + `publishSection` (the publish step) | Section reported `publishable: false` in `publish-preview`; cascade returns 422 and publishes **nothing** |
 | Create with auto-publish | `createSection` (no `draft: true`) | The section is created as a DRAFT. Response carries `translationGate: { heldBack: true, issues[] }`; the audit event records `heldBackByTranslationGate` |
-| Content save | `updateSectionContent` | The new version is stored but NOT activated. A live section keeps serving its last complete version; the response carries the same `translationGate` block |
 
 The last two mirror § 18's **import door**, which resolves the identical conflict the same way: the
 write succeeds, the activation does not. Standalone section import (#916) never reaches the gate at
@@ -1688,7 +1687,7 @@ Regelen (`doc/design/CONTENT_LIFECYCLE.md`, G5 og G4) bor i ÉN vakt, `assertNot
 |---|---|---|
 | Kurs | `PUT …/courses/:id`, `…/content`, `…/items` (også agent-tokenet), `…/modules`, `…/draft`, `POST …/draft/publish`, `…/publish` (vanlig og kaskade), `…/publish-pending`, `…/publish-pending-versioned`, `…/unpublish`, kursimport `replaceExisting`/`updateExisting` | `claimCourseRevision` og `claimRevisionForItemWrite` (felt og liste), `publishCourse` (stopper også kaskaden), `publishCoursePendingVersions`, `publishCoursePendingVersioned`, `unpublishCourse`, `saveCourseDraft`, `publishCourseDraft`, `importCourseFromEnvelope` (rett etter låsen) |
 | Modul | tittel, `/versions`, `/module-versions`, kriterier (`/rubric-versions`, `/ensure`, `/sync-blueprint`), ledetekst, flervalgssett, eksempelsvar, hent fram eldre versjon, `/mcq-questions` (agent), publisering (begge), `/unpublish`, kalibreringens terskler, modulimport `replaceExisting` | kommandoene i `adminContentCommands.ts`: tittel, `prepareComponentWrite` (komponentene), `createModuleVersionLocked` (hver ny modulversjon), `syncActiveRubricBlueprintHash`, eksempelsvar, publisering, avpublisering, hent fram, `/mcq-questions`, tersklene; og `publishModuleVersioned`. (Vakta sto først også i `composeModuleVersion`, `importModulePayload` og `publishCourseCascade`; den ble fjernet der etter mutasjonstesting, fordi stedene over stopper dem.) **Ikke** i skriveren (`adminContentRepository.ts`): den er felles for alle som skriver modulen, også gjenopprettingen, så vakta står i kommandoene. Gjenopprettingen med kurset nullstiller `archivedAt` før den publiserer |
-| Seksjon | tittel, innhold, bilder, figuroversetting, publiser, avpubliser, seksjonsimport `replaceExisting`, kursets «Oppdater» på seksjonen | `updateSectionTitle`, `updateSectionContent`, `publishSectionLocked`, `unpublishSection`, `createSectionAsset`, `localizeSectionAssets`, `appendInactiveSectionVersion` |
+| Seksjon | tittel, innhold, bilder, figuroversetting, publiser, avpubliser, seksjonsimport `replaceExisting`, kursets «Oppdater» på seksjonen | `loadSectionForDraft` (lagringen og «Døp om», også figurene lagringen oversatte), `publishSectionLocked`, `unpublishSection`, `createSectionAsset`, `appendInactiveSectionVersion` |
 
 **Forhåndssjekker** (`assertNotArchivedBeforeLock`, et forslag før låsen): «Publiser kurs», «Publiser nye versjoner», figuroversetting
 og `ensure` (før språkmodellen). Ikke foran en opplasting av bilder eller seksjonsimporten: der ryddes filene bort uansett når vakta avviser.
@@ -1911,8 +1910,7 @@ tittelen deltakerne ser (fra den publiserte versjonen); `CourseSection.title` er
 | Vei | Hvor | Konfliktsjekk |
 | --- | --- | --- |
 | Redigererens lagring | `PUT /sections/:id` → `saveSection` → `writeSectionDraft` | `expectedVersionNo` + `expectedTitle`, påkrevd |
-| «Døp om» og «Oversett det som mangler» i lista | `PATCH /sections/:id/title` → `updateSectionTitle` → `writeSectionDraft` | valgfri (faner fra før: uten) |
-| Gammel lagring (faner fra før, én utrulling) | `PUT /sections/:id/content` → `updateSectionContent` → `writeSectionDraft` | ingen |
+| «Døp om» og «Oversett det som mangler» i lista | `PATCH /sections/:id/title` → `updateSectionTitle` → `writeSectionDraft` | `expectedVersionNo` påkrevd (2.168.0), `expectedTitle` valgfri |
 | Ny seksjon | `POST /sections` → `createSection` (v1; **publisert** uten `draft: true` — API-ets standard, fikstur og import) | — |
 | Import: ny versjon på en seksjon som finnes | `appendInactiveSectionVersion` (frittstående «Erstatt fra fil», «Oppdater dette kurset», kopiens v2) | kursimportens plan (`courseUpdateBasis`) |
 | Import som nytt kurs med `publishedVersion` | `persistStagedSection`: v1 = det publiserte, v2 = utkastet | — |
@@ -1951,7 +1949,6 @@ lista: `publishFromList`), og lista sender `latestVersionNo` (`listRevision`).
 | Tittel og tekst ved lagring | `persistSection` → `changedFieldTranslations` (admin-content-localized-copy.js, felles for kurs og moduler i #1177/#1178) → `translateForSave` → `POST /sections/localize` | Bare feltene som er endret siden sist lagret, fra språket som ble endret. Et språk som feiler, står tomt i utkastet |
 | Figurene ved lagring | `PUT /sections/:id` med `sourceLocale` → `saveSection` → `prepareDraftFigureTranslations` (før låsen) / `applyDraftFigureTranslations` (i transaksjonen) i assetCommands.ts | Figurer utkastet viser til og den publiserte versjonen ikke viser til, som mangler et språk. 409 endrer ingen figur |
 | «Fyll inn det som mangler» | `publishErrorToast` → `fillMissingThenPublish` (redigereren og lista) → `sectionGapFill` → `POST /sections/localize` → `PUT /sections/:id` → `POST …/publish` | Bare hullene porten nevnte; lagret med versjonen forfatteren prøvde å publisere |
-| Den gamle «Oversett» (faner fra før, én utrulling) | `POST /sections/:id/assets/localize` → `localizeSectionAssets` | Skriver figurene med en gang, også dem den publiserte versjonen viser |
 | Titlene i lista («Oversett det som mangler») | `POST /titles/localize` → `PATCH /sections/:id/title` | Uendret fra skive 1: et utkast per seksjon, med revisjon |
 
 «Avbryt» i redigereren laster siden på nytt (form-page.js, ingen `onDiscard`) og sender ingenting. Lagringen med oversetting går

@@ -642,7 +642,7 @@ describe("#934 skive 3 — alle veier inn går gjennom den delte funksjonen", ()
     expect(await version(nytt.id)).toEqual({ versionMajor: 1, versionMinor: 0 });
   });
 
-  // #1163: bumpen eies av publiseringen. Lagring, «Døp om» og den gamle `PUT …/content` lager et utkast og gir INGEN ny
+  // #1163: bumpen eies av publiseringen. Lagring og «Døp om» lager et utkast og gir INGEN ny
   // versjon; publiseringen gir nøyaktig én, og en ny publisering av samme versjon ingen. Før #1163 sa denne testen at lagring og
   // omdøping også ga en mindre versjon hver (de gikk live med en gang).
   it("#1163: en seksjon lagret eller omdøpt fra sin EGEN side gir ingen ny versjon; publiseringen gir nøyaktig én", async () => {
@@ -656,10 +656,6 @@ describe("#934 skive 3 — alle veier inn går gjennom den delte funksjonen", ()
     const lagret = await request(app).put(`/api/admin/content/sections/${seksjon.id}`).set(admin())
       .send({ title: L("Seksjon"), bodyMarkdown: L("Ny tekst."), expectedVersionNo: fane.versionNo, expectedTitle: fane.title });
     expect(lagret.status, JSON.stringify(lagret.body).slice(0, 300)).toBe(200);
-    expect(await version(course.id)).toEqual({ versionMajor: 1, versionMinor: 0 });
-
-    // Den gamle lagringen (faner fra før): heller ingen versjon.
-    expect((await request(app).put(`/api/admin/content/sections/${seksjon.id}/content`).set(admin()).send({ bodyMarkdown: L("Gammel fane.") })).status).toBe(200);
     expect(await version(course.id)).toEqual({ versionMajor: 1, versionMinor: 0 });
 
     // Publisert fra egen side: én mindre versjon.

@@ -194,6 +194,8 @@ test("B: et arkivert kurs, modul og seksjon avviser hvert endringskall med rikti
   const før = await øyeblikk();
   noter("B, før", før);
   const revisjon = (await api("GET", kurssti())).json.course?.contentRevision;
+  // 2.168.0: seksjonen lagres og døpes om med det fanen så (den gamle `PUT …/content` og «Døp om» uten versjon er borte).
+  const seksjonsfane = (await api("GET", seksjonssti())).json.section as { title: string; versionNo: number };
 
   const kall: Array<[string, string, string, unknown?]> = [
     ["course_archived", "PUT", kurssti(), { title: L(`${KURS} endret`), expectedRevision: revisjon }],
@@ -204,8 +206,8 @@ test("B: et arkivert kurs, modul og seksjon avviser hvert endringskall med rikti
     ["module_archived", "POST", `${modulsti()}/module-versions`, { assessmentMode: "MCQ_ONLY", mcqSetVersionId: tilstand.mcqSett, assessmentPolicy: { passRules: { mcqMinPercent: 60 } } }],
     // Publiseringsporten (før #1151) sjekker arkivert før vakta: 422 med `item_archived` blant punktene. Se `forventet` under.
     ["item_archived", "POST", `${modulsti()}/module-versions/${tilstand.modulversjon}/publish`, {}],
-    ["section_archived", "PATCH", `${seksjonssti()}/title`, { title: L(`${SEKSJON} endret`) }],
-    ["section_archived", "PUT", `${seksjonssti()}/content`, { bodyMarkdown: L("Endret tekst.") }],
+    ["section_archived", "PATCH", `${seksjonssti()}/title`, { title: L(`${SEKSJON} endret`), expectedVersionNo: seksjonsfane.versionNo }],
+    ["section_archived", "PUT", seksjonssti(), { title: L(`${SEKSJON} endret`), bodyMarkdown: L("Endret tekst."), expectedVersionNo: seksjonsfane.versionNo, expectedTitle: seksjonsfane.title }],
     ["section_archived", "POST", `${seksjonssti()}/publish`],
   ];
   const svar: Array<{ kall: string; status: number; error: unknown; message: unknown }> = [];
@@ -264,7 +266,8 @@ test("D: gjenopprettet kurs — modulen og seksjonen kan endres igjen (kontroll)
   const gjenopprettet = await api("POST", `${kurssti()}/restore`);
   expect(gjenopprettet.status, gjenopprettet.tekst.slice(0, 300)).toBe(200);
   const modul = await api("PATCH", `${modulsti()}/title`, { title: L(`${MODUL} gjenopprettet`) });
-  const seksjon = await api("PATCH", `${seksjonssti()}/title`, { title: L(`${SEKSJON} gjenopprettet`) });
+  const seksjonsversjon = (await api("GET", seksjonssti())).json.section?.versionNo as number;
+  const seksjon = await api("PATCH", `${seksjonssti()}/title`, { title: L(`${SEKSJON} gjenopprettet`), expectedVersionNo: seksjonsversjon });
   noter("D", { gjenopprett: gjenopprettet.status, modulTittel: modul.status, seksjonTittel: seksjon.status });
   expect(modul.status, modul.tekst.slice(0, 300)).toBe(200);
   expect(seksjon.status, seksjon.tekst.slice(0, 300)).toBe(200);

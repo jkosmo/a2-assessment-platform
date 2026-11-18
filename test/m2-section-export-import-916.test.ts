@@ -322,11 +322,12 @@ describe("#916 standalone section import", () => {
       mimeType: "image/png",
       buffer: PNG_1PX,
     });
+    const fane = (await request(app).get(`/api/admin/content/sections/${sourceId}`).set(smoOwner)).body.section;
     const withRef = await request(app)
-      .put(`/api/admin/content/sections/${sourceId}/content`)
+      .put(`/api/admin/content/sections/${sourceId}`)
       .set(smoOwner)
-      .send({ bodyMarkdown: L(`# Figur\n\n![Diagram](asset:${asset.id})`) });
-    expect(withRef.status).toBe(200);
+      .send({ title: JSON.parse(fane.title), bodyMarkdown: L(`# Figur\n\n![Diagram](asset:${asset.id})`), expectedVersionNo: fane.versionNo, expectedTitle: fane.title });
+    expect(withRef.status, JSON.stringify(withRef.body).slice(0, 300)).toBe(200);
 
     const envelope = (await request(app).get(`/api/admin/content/sections/${sourceId}/export-package`).set(smoOwner)).body.envelope;
     expect(envelope.section.assets).toHaveLength(1);
@@ -389,7 +390,7 @@ describe("#916 section publish gate (#896 S4 applied to sections)", () => {
 
     const stamp = Date.now();
     expect(
-      (await request(app).patch(`/api/admin/content/sections/${id}/title`).set(smoOwner).send({ title: L(`Ferdig ${stamp}`) })).status,
+      (await request(app).patch(`/api/admin/content/sections/${id}/title`).set(smoOwner).send({ title: L(`Ferdig ${stamp}`), expectedVersionNo: 1 })).status,
     ).toBe(200);
 
     const published = await request(app).post(`/api/admin/content/sections/${id}/publish`).set(smoOwner);

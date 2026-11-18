@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { lagreSeksjon } from "./seksjonLagring.js";
 import { arkiverKurs } from "./arkiver.js";
 
 // 2.133.0 mot UTRULLET stage: #934 skive 5a-1 — deltakerlåsen, låst utstedelse, versjonen deltakeren så
@@ -119,8 +120,10 @@ test("lesing: uten versjon og med en eldre versjon → 409 og ikke lest; med ver
   expect(utenVersjon.json.error).toBe("client_outdated");
 
   // En ny versjon av seksjonen: det den gamle siden viste, er ikke lenger aktivt.
-  const ny = await api("PUT", `/api/admin/content/sections/${a}/content`, { bodyMarkdown: L("Innhold A, rettet skrivefeil.") });
-  expect(ny.status, ny.tekst.slice(0, 300)).toBe(200);
+  // 2.168.0: lagret og publisert som redigereren gjør (den gamle `PUT …/content` er borte; fra 2.166.0 er en lagring et utkast).
+  const ny = await lagreSeksjon(api, a, { bodyMarkdown: L("Innhold A, rettet skrivefeil."), publiser: true });
+  expect(ny.lagret.status, ny.lagret.tekst.slice(0, 300)).toBe(200);
+  expect(ny.publisert?.status, ny.publisert?.tekst.slice(0, 300)).toBe(200);
   const etter = await api("GET", sti(a));
   const nyVersjon = etter.json.sectionVersionId as string;
   noter("ny versjon av seksjonen", nyVersjon !== versjonNå);

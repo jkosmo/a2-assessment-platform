@@ -2266,7 +2266,7 @@ Planen (`doc/design/PLAN_1163_SEKSJON_UTKAST.md`) og prinsippene over sa hva. De
 - **Den gamle `PUT …/content` og `PATCH …/title` uten revisjon lagrer et utkast uten sjekk, én utrulling.** «Klienten er
   utdatert» (`409 client_outdated`) ble vurdert og valgt bort: en gammel fane ville mistet lagringen sin, og et utkast er den
   trygge retningen (ingenting når deltakerne). Fanen viser «Nyere utkast» og «Publiser ny versjon» etter lagringen, fordi svaret
-  sier det. Rutene fjernes i en senere utrulling.
+  sier det. Rutene fjernes i en senere utrulling. **Fjernet i 2.168.0** (`PUT …/content` gir 404; «Døp om» uten versjon gir 400).
 - **`expectedVersionNo` er valgfri på «Publiser».** Kurskaskaden og «Publiser nye versjoner» har sin egen sjekk av hva som er
   nytt, og en fane fra før sender den ikke. Redigereren og lista sender den alltid. Samme kode, `section_changed`, for lagring og
   publisering; meldingen sier «Ingenting ble endret».
@@ -2352,10 +2352,14 @@ lagres det som finnes, og publiseringen tilbyr «Fyll inn det som mangler». Det
 
 **Utrullingen:**
 - **Den gamle `POST …/assets/localize` står én utrulling**, som `PUT …/content` og `PATCH …/title` uten revisjon: faner fra før
-  har «Oversett». Den skriver figurene med en gang, også dem den publiserte versjonen viser, som før.
+  har «Oversett». Den skriver figurene med en gang, også dem den publiserte versjonen viser, som før. **Fjernet i 2.168.0.**
 - **Reserven for en versjon uten tittel (`sectionVersionTitle`) blir stående** til de gamle skriverutene er fjernet. Migreringen
   `20261118120000_section_version_title_fill` fyller titlene som mangler; den lukker vinduet fra utrullingen av 2.166.0 bare når
   2.167.0 rulles ut over 2.166.0 (da skriver alle instanser tittelen). Rulles 2.167.0 ut rett over 2.165.0, har den samme vindu.
+  **2.168.0: kolonnen står valgfri, og reserven blir.** 2.167.0 kom til prod over 2.166.0 samme kveld, og hver vei som lager en
+  versjon, skriver tittelen. Å gjøre kolonnen påkrevd ble prøvd og lagt bort: det krever at 63 testfiksturer i 35 filer gir
+  versjonen en tittel lik seksjonens (ellers ser deltakeren en annen tittel i testen), og vinner ingenting mennesker merker.
+  Reserven trengs uansett der det ikke finnes noen publisert versjon (`publishedSectionTitle`).
 
 **Uendret, og meldt:** «Døp om» og «Oversett det som mangler» for titler i seksjonslista er som i skive 1. Masseoversettingen er
 en egen «oversett»-knapp, som prinsipp 3 sier at det ikke skal være; den fyller bare hull og lager et utkast med revisjon, så den

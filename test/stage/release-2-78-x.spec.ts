@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { lagreSeksjon } from "./seksjonLagring.js";
 
 // Utgivelsene 2.78.1–2.78.3 mot UTRULLET stage, med EKTE innhold: #1080, #1081, #1083 og #1073.
 //
@@ -194,9 +195,11 @@ test.describe("#1083 — en figur med hardt mellomrom vises", () => {
 
   test("oversatt til engelsk og nynorsk: begge variantene lar seg lese, og etikettene er oversatt", async ({ page }) => {
     test.setTimeout(180000);
-    const oversatt = await api("POST", `/api/admin/content/sections/${seksjon.sectionId}/assets/localize`, { sourceLocale: "nb" });
+    // 2.168.0: figurene oversettes når teksten lagres (den gamle «Oversett» er borte). Seksjonen er et importert utkast, så figuren
+    // teksten viser, regnes som ny.
+    const { lagret: oversatt } = await lagreSeksjon(api, seksjon.sectionId, { sourceLocale: "nb" });
     expect(oversatt.status, oversatt.tekst.slice(0, 300)).toBe(200);
-    expect(oversatt.json.localizedAssetCount).toBe(1);
+    expect(oversatt.json.figureTranslation).toEqual({ translated: 1, failed: 0 });
 
     const norsk = await hentFigur(seksjon.assetId, "?locale=nb");
     for (const språk of ["en-GB", "nn"]) {

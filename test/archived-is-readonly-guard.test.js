@@ -119,9 +119,8 @@ const EXPECTED = new Map([
 
   // ── Seksjon ──
   ...each(by(`${AS}#createSectionAsset`), [`${AS}#createSectionAsset sectionAsset.create`, 1]),
-  ...each(by(`${AS}#localizeSectionAssets`), [`${AS}#localizeSectionAssets sectionAsset.updateMany`, 1]),
   ...each(unntak(VEDLIKEHOLD), [`${AS}#repairUnreadableSvgAssets sectionAsset.update`, 1]),
-  // #1163: de tre lagringene (`saveSection`, `updateSectionTitle`, `updateSectionContent`) leser seksjonen gjennom
+  // #1163: lagringene (`saveSection`, `updateSectionTitle`) leser seksjonen gjennom
   // `loadSectionForDraft`, som holder vakta, og skriver utkastet i `writeSectionDraft`.
   ...each(by(`${SC}#loadSectionForDraft`), [`${SC}#updateSectionTitle courseSection.update`, 1], [`${SC}#writeSectionDraft courseSectionVersion.create`, 1], [`${SC}#writeSectionDraft courseSection.update`, 1]),
   // #1163 skive 2: figurene lagringen oversatte, skrives i `saveSection`s transaksjon etter `loadSectionForDraft`.
