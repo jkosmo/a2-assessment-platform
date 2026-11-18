@@ -68,6 +68,15 @@ derfor kallene til språkmodellen, og sjekken under låsen har en egen test.
 ser ikke på figurene); den lagrer nå utkastet og publiserer ikke, med samme melding som når en tekst mangler. Ny e2e, rød før
 rettingen. Stage-testen `release-2-158-1` hopper over «Oversett»-delen fra 2.167.0; e2e for #1154 og #1163 dekker den.
 
+**På stage 18.11.2026 kl. 09:37** (dev fde1aff6). Utrullingen ble rød: worker-ens helsesjekk svarte 503 i 8 minutter fordi
+vurderingsjobbens første runde sto fast. Rett før hadde den gamle worker-en mistet kontakten med stage-databasen (08:32), og runden
+hang i et databaseoppslag uten tidsgrense, før femminuttersgrensen (#856). Den løste seg selv etter ca. 16 minutter (samme
+prosess, ingen omstart), som passer med nettverkets tidsgrense for en død forbindelse. Vurderingskoden er uendret siden 2.165.0.
+Migreringen som fyller tomme versjonstitler, gikk gjennom. `release-2-167-oversett-ved-lagring` (3/3), i nettleseren med ekte
+oversetting: bare den endrede teksten ble oversatt, fra bokmål til nynorsk og engelsk; tittelen ble ikke rørt; lagringen ble et
+utkast; «Avbryt» skrev ingenting. `2-166` (4/4), `2-158-1` (4/4, «Oversett»-delen hoppet over), `2-165` (2/2), `2-163` (3/3),
+`2-160` (7/7) og `2-88` (2/2) kjørt på nytt.
+
 ## 2.166.0 - 2026-11-15
 
 «Lagre» på en seksjon lager et utkast, slik det gjør på kurs og moduler (#1163, skive 1). Produkteier 14.11.2026: «La oss gjøre
