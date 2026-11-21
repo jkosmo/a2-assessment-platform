@@ -9,10 +9,10 @@ const json = (body: unknown, status = 200) => ({ status, contentType: "applicati
 type Locale = "nb" | "nn" | "en-GB";
 const LOCALES: Locale[] = ["nb", "nn", "en-GB"];
 
-const TEXT: Record<Locale, { view: string; earlier: string }> = {
-  nb: { view: "Vis kursbevis", earlier: "Vis kursbevis for versjon 2" },
-  nn: { view: "Vis kursbevis", earlier: "Vis kursbevis for versjon 2" },
-  "en-GB": { view: "View course certificate", earlier: "View course certificate for version 2" },
+const TEXT: Record<Locale, { view: string; earlier: string; toCourse: string; toList: string; toPosts: string }> = {
+  nb: { view: "Vis kursbevis", earlier: "Vis kursbevis for versjon 2", toCourse: "← Tilbake til kurset", toList: "← Tilbake til Mine kurs", toPosts: "← Tilbake til innleggene" },
+  nn: { view: "Vis kursbevis", earlier: "Vis kursbevis for versjon 2", toCourse: "← Tilbake til kurset", toList: "← Tilbake til Mine kurs", toPosts: "← Tilbake til innlegga" },
+  "en-GB": { view: "View course certificate", earlier: "View course certificate for version 2", toCourse: "← Back to the course", toList: "← Back to My courses", toPosts: "← Back to the posts" },
 };
 
 // Ordet som er borte. «Sertifikat» står fortsatt i «Sertifiseringsnivå» på beviset, men ikke som navn på beviset.
@@ -153,6 +153,210 @@ test.describe("#1162 skive 1: kursbeviset heter «Kursbevis», lenken «Vis kurs
         await page.locator("#profileTab-courses").click();
         await expect(page.locator("#coursesBody a").first()).toHaveText(TEXT[locale].view);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      });
+    }
+  }
+});
+
+// ── Skive 2: «tilbake» ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+const SECTION_TITLE = "Grunnleggende prinsipper for informasjonssikkerhet i hverdagen";
+const MODULE_TITLE = "Test: informasjonssikkerhet i praksis for rådgivere og prosjektledere";
+
+type Calls = { reads: string[] };
+
+// Ett kurs med seksjon → seksjon → modul, diskusjon på, og en delingslenke (så deleikonet står ved siden av tilbake).
+async function mockCourse(page: Page, opts: { read?: string[] } = {}): Promise<Calls> {
+  const calls: Calls = { reads: [] };
+  const isRead = (id: string) => (opts.read ?? []).includes(id) || calls.reads.includes(id);
+  await page.route("**/api/courses", (route: Route) =>
+    route.fulfill(json({
+      courses: [{ id: "c1", title: "Informasjonssikkerhet", slug: "infosik", description: null, moduleCount: 1, progress: { completed: 0, total: 3, moduleCompleted: 0, moduleTotal: 1, sectionCompleted: 0, sectionTotal: 2, courseStatus: "IN_PROGRESS" } }],
+    })),
+  );
+  await page.route("**/api/courses/completions", (route: Route) => route.fulfill(json({ completions: [] })));
+  await page.route("**/api/courses/enrollments", (route: Route) => route.fulfill(json({ enrollments: [] })));
+  await page.route("**/api/courses/c1", (route: Route) =>
+    route.fulfill(json({
+      course: {
+        id: "c1",
+        title: "Informasjonssikkerhet",
+        discussionsEnabled: true,
+        modules: [],
+        items: [
+          { type: "SECTION", sectionId: "s1", courseItemId: "ci1", title: SECTION_TITLE, read: isRead("s1"), available: true, required: true },
+          { type: "SECTION", sectionId: "s2", courseItemId: "ci2", title: "Andre seksjon", read: isRead("s2"), available: true, required: true },
+          { type: "MODULE", moduleId: "m1", courseItemId: "ci3", title: MODULE_TITLE, moduleStatus: "NOT_STARTED", available: true, required: true },
+        ],
+      },
+    })),
+  );
+  await page.route(/\/api\/courses\/c1\/sections\/(s1|s2)$/, (route: Route) => {
+    const id = route.request().url().endsWith("s1") ? "s1" : "s2";
+    return route.fulfill(json({ title: id === "s1" ? SECTION_TITLE : "Andre seksjon", html: `<p>Tekst i ${id}</p>`, sectionVersionId: `sv-${id}` }));
+  });
+  await page.route(/\/api\/courses\/c1\/sections\/(s1|s2)\/read$/, (route: Route) => {
+    calls.reads.push(route.request().url().includes("/s1/") ? "s1" : "s2");
+    return route.fulfill({ status: 204, body: "" });
+  });
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill(json({
+      modules: [{ id: "m1", title: MODULE_TITLE, description: null, assessmentMode: "FREETEXT_PLUS_MCQ", submissionSchema: null, assessmentPolicy: null, taskText: "Skriv et svar", activeVersion: { id: "mv-1", versionNo: 1 }, participantStatus: null }],
+    })),
+  );
+  const thread = {
+    id: "t1", courseId: "c1", courseItemId: null, kind: "DISCUSSION", status: "OPEN", title: "Et spørsmål", bodyHtml: "<p>Hei</p>",
+    deleted: false, pinned: false, acceptedReplyId: null, author: { id: "u1", name: "P", anonymized: false },
+    createdAt: "2026-11-01T00:00:00.000Z", updatedAt: "2026-11-01T00:00:00.000Z", isSubscribed: false, canEdit: false, canDelete: false,
+    canAccept: false, canModerate: false, replies: [],
+  };
+  await page.route("**/api/courses/c1/discussions", (route: Route) =>
+    route.fulfill(json({ threads: [{ ...thread, replyCount: 0 }], canPost: true })),
+  );
+  await page.route("**/api/courses/c1/discussions/t1", (route: Route) => route.fulfill(json({ thread })));
+  return calls;
+}
+
+async function openCourse(page: Page) {
+  await page.goto("/participant");
+  await item(page, "c1").locator(".course-accordion-header").click();
+  await expect(page).toHaveURL(/courseId=c1$/);
+  await expect(page.locator('.course-item[data-key="ci1"] .course-module-row')).toBeVisible();
+}
+
+// Antall tekstlinjer i et element (knappene har en minstehøyde, så høyden alene sier ikke om teksten har brukket).
+async function lineCount(page: Page, selector: string): Promise<number> {
+  return page.locator(selector).first().evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const tops = new Set(Array.from(range.getClientRects()).filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+    return tops.size;
+  });
+}
+
+const sectionRow = (page: Page, key = "ci1") => page.locator(`.course-item[data-key="${key}"] .course-module-row`);
+const moduleRow = (page: Page) => page.locator('.course-item[data-key="ci3"] .course-module-row');
+const openPanel = (page: Page) => page.locator(".course-item.open .course-inline-panel");
+
+test.describe("#1162 skive 2: «← Tilbake til <stedet>»", () => {
+  for (const locale of LOCALES) {
+    test(`kurset, seksjonen, modulen, diskusjonen og kursbeviset (${locale})`, async ({ page }) => {
+      await mockBase(page, locale);
+      await mockCourse(page);
+      await openCourse(page);
+      await expect(page.locator("#courseBackBtn")).toHaveText(TEXT[locale].toList);
+
+      // Seksjonen: tilbake står i kurset.
+      await sectionRow(page).click();
+      await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s1");
+      const sectionBack = openPanel(page).locator('[data-role="close"]');
+      await expect(sectionBack).toHaveText(TEXT[locale].toCourse);
+      await sectionBack.click();
+      await expect(page.locator("#sectionReaderBody")).toHaveCount(0);
+      await expect(page).toHaveURL(/courseId=c1$/);
+
+      // Modulen: samme tekst.
+      await moduleRow(page).click();
+      await expect(page.locator(".course-inline-panel #moduleWorkspace")).toBeVisible();
+      const moduleBack = openPanel(page).locator('[data-role="close"]');
+      await expect(moduleBack).toHaveText(TEXT[locale].toCourse);
+      await moduleBack.click();
+      await expect(page.locator(".course-item.open")).toHaveCount(0);
+
+      // Diskusjonstråden: tilbake til lista over innleggene.
+      await page.locator(".course-discussion-toggle").click();
+      const panel = page.locator("[data-course-discussion='c1']");
+      await panel.locator("[data-disc-thread]").first().click();
+      await expect(panel.locator("[data-disc-back]")).toHaveText(TEXT[locale].toPosts);
+      await panel.locator("[data-disc-back]").click();
+      await expect(panel.locator("[data-disc-thread]")).toHaveCount(1);
+
+      // Kursbeviset.
+      await page.route("**/api/courses/completions/cert-1", (route: Route) =>
+        route.fulfill(json({ certificateId: "cert-1", courseId: "c1", courseTitle: "Informasjonssikkerhet", certificationLevel: "basic", completedAt: "2026-06-20T10:00:00.000Z", participantName: "Kari", moduleCount: 1 })),
+      );
+      await page.goto("/certificate?id=cert-1");
+      await expect(page.locator("#certificate")).toBeVisible();
+      const certBack = page.locator(".cert-toolbar a.workspace-nav-link");
+      await expect(certBack).toHaveText(TEXT[locale].toList);
+      await expect(certBack).toHaveAttribute("href", "/participant");
+    });
+  }
+
+  // Bredden: de lengste tekstene på de smaleste telefonene. Én linje, innenfor skjermen, ingen vannrett rulling.
+  for (const width of [390, 360]) {
+    for (const locale of LOCALES) {
+      test(`bredden på ${width} px (${locale})`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 800 });
+        await mockBase(page, locale);
+        await mockCourse(page);
+        await openCourse(page);
+        const noHorizontalScroll = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+        const measured: Record<string, number> = {};
+
+        // Kurset: tilbake og deleikonet på samme linje.
+        const back = (await page.locator("#courseBackBtn").boundingBox())!;
+        const copy = (await page.locator("#courseCopyLinkBtn").boundingBox())!;
+        measured.courseBackWidth = Math.round(back.width);
+        measured.courseBackHeight = Math.round(back.height);
+        expect(await lineCount(page, "#courseBackBtn")).toBe(1);
+        expect(Math.abs((back.y + back.height / 2) - (copy.y + copy.height / 2))).toBeLessThan(6);
+        expect(copy.x + copy.width).toBeLessThanOrEqual(width);
+        expect(await noHorizontalScroll()).toBe(true);
+
+        // Seksjonen (lesemodus): knappen på én linje, hodet lavt.
+        await sectionRow(page).click();
+        await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s1");
+        const sBtn = (await openPanel(page).locator('[data-role="close"]').boundingBox())!;
+        const sHead = (await openPanel(page).locator(".course-inline-panel-sticky").boundingBox())!;
+        measured.sectionBackWidth = Math.round(sBtn.width);
+        measured.sectionBackHeight = Math.round(sBtn.height);
+        measured.sectionHeaderHeight = Math.round(sHead.height);
+        expect(await lineCount(page, '.course-item.open [data-role="close"]')).toBe(1);
+        expect(sBtn.x + sBtn.width).toBeLessThanOrEqual(width);
+        const sPanel = (await openPanel(page).boundingBox())!;
+        expect(sBtn.x + sBtn.width).toBeLessThanOrEqual(sPanel.x + sPanel.width - 1);
+        expect(sHead.height).toBeLessThan(56);
+        expect(await noHorizontalScroll()).toBe(true);
+        if (process.env.SKJERMBILDE_DIR) await page.screenshot({ path: `${process.env.SKJERMBILDE_DIR}/1162-seksjon-${width}-${locale}.png` });
+        await openPanel(page).locator('[data-role="close"]').click();
+        await expect(page.locator(".course-item.open")).toHaveCount(0);
+
+        // Modulen: lang tittel i hodet, knappen fortsatt hel og på én linje.
+        await moduleRow(page).click();
+        await expect(page.locator(".course-inline-panel #moduleWorkspace")).toBeVisible();
+        const mBtn = (await openPanel(page).locator('[data-role="close"]').boundingBox())!;
+        const mHead = (await openPanel(page).locator(".course-inline-panel-sticky").boundingBox())!;
+        measured.moduleBackWidth = Math.round(mBtn.width);
+        measured.moduleBackHeight = Math.round(mBtn.height);
+        measured.moduleHeaderHeight = Math.round(mHead.height);
+        expect(await lineCount(page, '.course-item.open [data-role="close"]')).toBe(1);
+        expect(mBtn.x + mBtn.width).toBeLessThanOrEqual(width);
+        // Panelet klipper (overflow: hidden): knappen må stå innenfor det, ikke bare innenfor skjermen. På 360 px ble den kuttet
+        // før merket vek på telefon.
+        const mPanel = (await openPanel(page).boundingBox())!;
+        measured.modulePanelWidth = Math.round(mPanel.width);
+        measured.moduleTitleWidth = Math.round((await openPanel(page).locator(".course-inline-panel-title").boundingBox())?.width ?? 0);
+        expect(mBtn.x + mBtn.width).toBeLessThanOrEqual(mPanel.x + mPanel.width - 1);
+        expect(mHead.height).toBeLessThan(56);
+        expect(await noHorizontalScroll()).toBe(true);
+        if (process.env.SKJERMBILDE_DIR) await page.screenshot({ path: `${process.env.SKJERMBILDE_DIR}/1162-modul-${width}-${locale}.png` });
+
+        // Kursbeviset: verktøylinja.
+        await page.route("**/api/courses/completions/cert-1", (route: Route) =>
+          route.fulfill(json({ certificateId: "cert-1", courseId: "c1", courseTitle: "Informasjonssikkerhet", certificationLevel: "basic", completedAt: "2026-06-20T10:00:00.000Z", participantName: "Kari", moduleCount: 1 })),
+        );
+        await page.goto("/certificate?id=cert-1");
+        await expect(page.locator("#certificate")).toBeVisible();
+        const cBack = (await page.locator(".cert-toolbar a.workspace-nav-link").boundingBox())!;
+        measured.certificateBackWidth = Math.round(cBack.width);
+        measured.certificateBackHeight = Math.round(cBack.height);
+        expect(await lineCount(page, ".cert-toolbar a.workspace-nav-link")).toBe(1);
+        expect(cBack.x + cBack.width).toBeLessThanOrEqual(width);
+        expect(await noHorizontalScroll()).toBe(true);
+
+        console.log(`MÅLT ${width}px ${locale}: ${JSON.stringify(measured)}`);
+        if (process.env.SKJERMBILDE_DIR) await page.screenshot({ path: `${process.env.SKJERMBILDE_DIR}/1162-bevis-${width}-${locale}.png` });
       });
     }
   }

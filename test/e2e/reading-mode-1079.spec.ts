@@ -112,7 +112,7 @@ test.describe("lesemodus — kurset viker når en seksjon leses (#1079)", () => 
     expect(m.andreSteg, "de andre stegene er borte").toBe(0);
     expect(m.egetStegkort, "stegkortet med «Les» er borte").toBe(0);
     expect(m.diskusjon, "diskusjonslinja er borte").toBe(0);
-    expect(m.tilbakeknapp, "«Alle kurs» er borte").toBe(0);
+    expect(m.tilbakeknapp, "«← Tilbake til Mine kurs» er borte").toBe(0);
     expect(m.hode, "hodet står").toBe(1);
     expect(m.posisjon).toBe("Steg 1 av 3");
     expect(m.velger, "spaltevelgeren vises på PC").toBe(1);

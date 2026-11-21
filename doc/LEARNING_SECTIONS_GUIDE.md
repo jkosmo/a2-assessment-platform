@@ -206,7 +206,7 @@ fortsatt.)
 - **Mine kurs** viser kurslista ferdig utfoldet: kurs, fremdrift og eventuelt kursbevis, uten at du
   trenger å klikke deg fram til det (#921).
 - Klikk et kurs → kurset får skjermen alene, og de andre kursene forsvinner. Det er lesevisningen,
-  og den skal ha så lite som mulig som konkurrerer om oppmerksomheten. **«← Alle kurs»** øverst til
+  og den skal ha så lite som mulig som konkurrerer om oppmerksomheten. **«← Tilbake til Mine kurs»** øverst til
   venstre (eller nettleserens tilbakeknapp) fører deg tilbake til lista (#922).
 - I kurset vises seksjoner i forløpet med **«Les»** og et **«Ikke lest»/«Lest»**-merke.
 - Klikk en seksjon → innholdet åpnes i en lesevisning (mobilvennlig).

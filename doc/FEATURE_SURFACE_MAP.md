@@ -1843,17 +1843,25 @@ for interne lukkinger der adressen allerede er tatt hånd om (kursbytte, popstat
 | «Marker seksjon lest, og gå videre» | `renderSectionReaderInto` | neste element erstatter; uten neste: `recordClosedItem` |
 | «Gå til …» (det som gjenstår), «Neste: …» i modulen | `renderSectionReaderInto`, `buildInlineNextButton` | replace |
 | «Avslutt kurset» | `renderSectionReaderInto` | `closeInlineItem` |
-| «Lukk seksjonen», «Lukk modulen», Escape | panelene, `keydown` | `closeInlineItem` |
+| «← Tilbake til kurset» (seksjonen og modulen; het «Lukk seksjonen»/«Lukk modulen» før #1162), Escape | panelene, `keydown` | `closeInlineItem` |
 | Nettleserens tilbake/fram | `popstate` | URL-en er fasiten: samme kurs → bare elementet åpnes/lukkes (kurset tegnes ikke på nytt); annet kurs → `focusCourse` + `pendingItemOpen` |
 | Oppfriskning, bokmerke, delt lenke | `resolveCourseLink` | `pendingItemOpen`; uten merket i `history.state` legges kurset under først (replace til kurs, så push av elementet) |
 | E-postlenka `?moduleId=` | `resolveModuleLink` | kursets adresse, så åpningen legger modulen over. Står modulen i kurset, men kan ikke åpnes: samme melding som over (QA-porten 2.164.0) |
 | Elementet finnes ikke / er ikke tilgjengelig | `openPendingItem` | meldingen i `#courseLinkNotice`, `dropItemFromUrl` |
 | Åpningen av en modul feiler | `openInlineItemByEntry` (catch) | `recordClosedItem` |
 | Elementet forsvinner ved en ny tegning | `reopenInlineAfterRender` | `dropItemFromUrl` |
-| Kursbytte, «← Alle kurs» | `focusCourse`, `unfocusCourse` (`courseFocusUrl` tar bort elementet) | kursnivået som før (#922) |
+| Kursbytte, «← Tilbake til Mine kurs» (het «← Alle kurs» før #1162) | `focusCourse`, `unfocusCourse` (`courseFocusUrl` tar bort elementet) | kursnivået som før (#922) |
 | Modulkortet utenfor kurs (dev/test) | `renderModules` | `closeInlineItem` |
 
 Kursbeviset (`/certificate`) er utenfor (#1162).
+
+**Tekstene for tilbake hos deltakeren (#1162, produkteier 2026-11-21):** «← Tilbake til <stedet du kommer til>», med stedets
+eget navn, ett navn per sted. Fra seksjonen og modulen «← Tilbake til kurset» (`courses.item.backToCourse`, én nøkkel for
+begge), fra kurset og kursbeviset «← Tilbake til Mine kurs» (`courses.backToList`, `certificate.back`), og i en
+diskusjonstråd «← Tilbake til innleggene» (`discussion.action.back`; pila står i `discussion-panel.js`). «Mine data» i profilen
+(«← Tilbake til profil», `dataview.back`) er ikke endret. Produsentsidenes tre tilbake-tekster tas i #1170. På telefon viker
+merket «Arbeidsflate» i modulens hode (≤ 600 px), ellers ble «← Tilbake til kurset» kuttet i panelets høyre kant på 360 px.
+Vakt: `test/e2e/participant-flow-1162.spec.ts` (tre språk; bredden på 390 og 360 px).
 
 **Vakter:** `test/e2e/participant-item-url-1158.spec.ts` (tilbake, fram, oppfriskning, bokmerke, «Lukk» mot nettleserens
 tilbake med lik historikk, bytte uten nytt steg, utilgjengelig seksjon og modul, e-postlenka, kursnivået), `test/unit/participant-location-1158.test.js`

@@ -62,7 +62,9 @@ kursbeviset for det andre kurset like etter, eller senest når du åpner «Mine 
 betyr:
 
 - **Tilbake lukker det du har åpent og lar deg stå i kurset.** Det gjelder nettleserens tilbake-knapp, tilbake-sveipen på
-  telefonen, «Lukk seksjonen»/«Lukk modulen» og Escape. Alle gjør det samme. Nettleserens fram-knapp åpner det igjen.
+  telefonen, «← Tilbake til kurset» og Escape. Alle gjør det samme. Nettleserens fram-knapp åpner det igjen.
+- **Tilbake heter det samme overalt:** «← Tilbake til kurset» i en seksjon eller modul, «← Tilbake til Mine kurs» i et kurs og
+  på kursbeviset, og «← Tilbake til innleggene» i en diskusjonstråd.
 - **Går du rett fra én seksjon til neste** («Marker seksjon lest, og gå videre», «Neste: …»), er det fortsatt bare ett steg
   tilbake til kurset, ikke ett per seksjon du har lest.
 - **Oppdaterer du siden, eller åpner et bokmerke**, står seksjonen eller modulen åpen igjen.

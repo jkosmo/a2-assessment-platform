@@ -131,7 +131,7 @@ test("«Kopier lenke» på et åpent kurs kopierer /kurs/<navn>; kurs uten lenke
   await expect(copy).toBeHidden();
 });
 
-test("på smal skjerm står deleikonet på linja med «Alle kurs», uten å brytes", async ({ page }) => {
+test("på smal skjerm står deleikonet på linja med «← Tilbake til Mine kurs», uten å brytes", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await mockBase(page, COURSES);
   await page.goto("/participant?kurs=kurs-en");

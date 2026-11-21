@@ -441,6 +441,10 @@
       @media (max-width: 600px) {
         .course-inline-panel-body { padding: 8px; }
         .course-inline-panel-body .section-reader-body { padding: 12px; }
+        /* #1162: «← Tilbake til kurset» er lengre enn «Lukk modulen». Modulens hode står inne i kursets tidslinje (ikke i
+           lesemodus), og på 360 px ble knappen kuttet i høyre kant av panelet (merke 80 + knapp 132–146 px i et panel på
+           232). Merket viker på telefon, så tittelen får plassen. */
+        .course-item[data-type="MODULE"] .course-inline-panel-tag { display: none; }
       }
       .course-inline-actions { display: flex; gap: var(--space-1); align-items: center; flex-wrap: wrap; margin-top: 12px; }
 
@@ -577,7 +581,7 @@
            har tilgang til. Én melding for begge: den røper ikke om et lukket kurs finnes. -->
       <p id="courseLinkNotice" class="course-link-notice" role="alert" style="display:none" data-i18n="courses.link.unavailable">This course does not exist, or you do not have access to it.</p>
       <div id="courseBackBar" class="course-back-bar" style="display:none">
-        <button type="button" id="courseBackBtn" class="course-back-btn" data-i18n="courses.backToList">All courses</button>
+        <button type="button" id="courseBackBtn" class="course-back-btn" data-i18n="courses.backToList">← Back to My courses</button>
         <!-- Deleikonet (Lucide «share-2», som plattformens ikonbibliotek). Navnet settes fra skriptet
              (aria-label og title), siden oversettelsene her bare fyller tekstinnhold. -->
         <button type="button" id="courseCopyLinkBtn" class="course-copy-link-btn" style="display:none" aria-label="Copy link" title="Copy link"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg></button>

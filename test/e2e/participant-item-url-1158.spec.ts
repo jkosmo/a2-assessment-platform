@@ -153,7 +153,7 @@ test.describe("#1158 seksjonen i adressen", () => {
     await expectCourseView(bookmark);
   });
 
-  test("«Lukk seksjonen» og nettleserens tilbake gjør det samme", async ({ page }) => {
+  test("«← Tilbake til kurset» i seksjonen og nettleserens tilbake gjør det samme", async ({ page }) => {
     await mock(page);
     await openCourse(page);
     const before = await page.evaluate(() => history.length);
@@ -232,7 +232,7 @@ test.describe("#1158 modulen i adressen", () => {
     expect(calls.submissions).toBe(0);
   });
 
-  test("«Lukk modulen» og nettleserens tilbake gjør det samme", async ({ page }) => {
+  test("«← Tilbake til kurset» i modulen og nettleserens tilbake gjør det samme", async ({ page }) => {
     await mock(page);
     await openCourse(page);
     await moduleRow(page).click();
@@ -318,7 +318,7 @@ test.describe("#1158 kursnivået er som før", () => {
     await expect(readerBody(page)).toContainText("Tekst i s1");
   });
 
-  test("«← Alle kurs» mens modulen er åpen: lista; tilbake åpner modulen igjen i kurset", async ({ page }) => {
+  test("«← Tilbake til Mine kurs» mens modulen er åpen: lista; tilbake åpner modulen igjen i kurset", async ({ page }) => {
     await mock(page);
     await openCourse(page);
     await moduleRow(page).click();

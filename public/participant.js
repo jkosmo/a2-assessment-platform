@@ -5401,7 +5401,7 @@ function buildModuleInlinePanel(panel, courseId, ctx) {
     <div class="course-inline-panel-sticky">
       <span class="course-inline-panel-tag">${escapeHtmlP(t("courses.module.workspaceTag"))}</span>
       <span class="course-inline-panel-title">${escapeHtmlP(localizePreviewText(ctx.title) || "")}</span>
-      <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.module.close"))}</button>
+      <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.item.backToCourse"))}</button>
     </div>
     <div class="course-inline-panel-body"></div>`;
   panel.querySelector('[data-role="close"]').addEventListener("click", () => closeInlineItem());
@@ -5478,7 +5478,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
         <button type="button" data-reader-width="narrow" aria-pressed="${readerWidth === "narrow"}">${escapeHtmlP(t("courses.section.widthNarrow"))}</button>
         <button type="button" data-reader-width="wide" aria-pressed="${readerWidth === "wide"}">${escapeHtmlP(t("courses.section.widthWide"))}</button>
       </span>
-      <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.section.close"))}</button>
+      <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.item.backToCourse"))}</button>
     </div>
     <div class="course-inline-panel-body">
       <h2 class="course-reading-title">${escapeHtmlP(localizePreviewText(entry.title) || "")}</h2>
