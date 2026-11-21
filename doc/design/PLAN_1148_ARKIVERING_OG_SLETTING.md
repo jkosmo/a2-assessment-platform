@@ -550,7 +550,7 @@ historikk.
 **Skiver:**
 
 - **2.174.0, #1185 alene.** Vakta, teksten på tre språk, testene gjennom rutene. Kan prøves med «Slett» på stage.
-- **2.175.0, jobben (4c).** `archivedRetentionJob.ts`, `ArchivedContentRetentionMonitor.ts`, forhåndsvisningsskriptet,
+- **2.175.0, jobben (4c). Bygget 21.11.2026; se DECISIONS, «Slettejobben», og driftsboka.** `archivedRetentionJob.ts`, `ArchivedContentRetentionMonitor.ts`, forhåndsvisningsskriptet,
   revisjonshendelsene og nødstoppen, etter byggenotatet og Codex' punkt 3–8.
 
 **Tester for #1185, gjennom rutene (`DELETE` kurs og lista med `includeRetention=1`):**

@@ -361,6 +361,8 @@ describe("admin content service", () => {
       metadata: {
         moduleId: "module-1",
         title: "Module One",
+        // #1152 4c: når den ble arkivert.
+        archivedAt: "2026-11-01T00:00:00.000Z",
       },
     }, expect.anything());
     expect(result).toEqual({

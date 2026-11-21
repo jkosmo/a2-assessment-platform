@@ -100,7 +100,8 @@ describe("#961 deleteSection leaves an audit trail", () => {
       action: auditActions.section.deleted,
       actorId: "actor-9",
       // Tittelen finnes ingen andre steder etter slettingen.
-      metadata: { sectionId: "section-1", title: "Arbeidsmiljøloven" },
+      // #1152 4c: og når den ble arkivert (hvilken frist som slettet den, når jobben sletter).
+      metadata: { sectionId: "section-1", title: "Arbeidsmiljøloven", archivedAt: "2026-11-01T00:00:00.000Z" },
     });
   });
 

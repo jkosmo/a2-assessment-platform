@@ -345,8 +345,11 @@ export async function unpublishCourse(courseId: string, actorId?: string) {
  */
 export type DeleteInTxResult = { deleted: true } | { deleted: false; reason: "not_found" };
 
-/** Arbeidstid for en sletting av et kurs: deltakerlåsene (opptil 3 sekunder hver i kø bak et vedtak) og målingen av kravet. */
-const COURSE_DELETE_TX_TIMEOUT_MS = 20_000;
+/**
+ * Arbeidstid for en sletting av et kurs: deltakerlåsene (opptil 3 sekunder hver i kø bak et vedtak) og målingen av kravet.
+ * Slettejobben (archivedRetentionJob.ts) bruker den samme for alle tre typene.
+ */
+export const COURSE_DELETE_TX_TIMEOUT_MS = 20_000;
 
 /**
  * «Slett» for et kurs, i kallerens transaksjon (som holder innholdslåsen): les på nytt, vurder, slett. Kaster når kurset ikke er
@@ -359,15 +362,18 @@ const COURSE_DELETE_TX_TIMEOUT_MS = 20_000;
 export async function deleteCourseInTx(
   tx: ContentWriteTx,
   courseId: string,
-  options: { actorId?: string; recordAudit?: boolean } = {},
+  // `source`: hvem som slettet, i revisjonshendelsen (slettejobben: `retention`). `now`: klokka vakta regner mot (#1185), jobben gir sin.
+  options: { actorId?: string; recordAudit?: boolean; source?: string; now?: Date } = {},
 ): Promise<DeleteInTxResult> {
   // #1151 (G4): bare et arkivert kurs kan slettes. #660: kursbevis (`CourseCompletion` er `onDelete: Restrict`). #1152: fullført
   // uten kursbevis, og besvarelser som venter. Et vedtak tar bare deltakerlåsen, så den tas for alle som har levert på kursets
   // moduler før målingen. #1152 skive 4b: utregningen er den samme som lista over arkiverte viser (`checkCourseDelete`).
-  const check = await checkCourseDelete(courseId, tx, { beforeMeasure: () => lockCourseDeleteLearners(tx, courseId) });
+  const check = await checkCourseDelete(courseId, tx, { beforeMeasure: () => lockCourseDeleteLearners(tx, courseId), now: options.now });
   if (check.status === "not_found") return { deleted: false, reason: "not_found" };
   if (check.status === "blocked") throw check.error;
 
+  // #1152 4c: navnet står i revisjonshendelsen, for etter slettingen finnes det ingen andre steder.
+  const titled = await tx.course.findUnique({ where: { id: courseId }, select: { title: true } });
   // #1150 skive 2a-2: elementer som fulgte kurset inn i arkivet, peker på det. Merket er et merke, ikke et eierskap: det
   // nullstilles, og elementene blir stående arkivert.
   await clearArchiveMarksForCourse(tx, courseId);
@@ -382,7 +388,12 @@ export async function deleteCourseInTx(
         // #705: a delete is a delete — was previously mislogged as `archived`.
         action: auditActions.course.deleted,
         actorId: options.actorId,
-        metadata: { courseId },
+        metadata: {
+          courseId,
+          title: titled?.title ?? null,
+          archivedAt: check.archivedAt.toISOString(),
+          ...(options.source ? { source: options.source } : {}),
+        },
       },
       tx,
     );

@@ -369,7 +369,7 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
     expect(sections.get("deleteSectionInTx")).toContain("checkSectionDelete(sectionId, tx)");
     // Kurset: samme sjekk for «Slett» (med deltakerlåsene mellom «arkivert» og målingen) og lista.
     const courseCommands = topLevelFunctions(textOf("modules/course/courseCommands.ts"));
-    expect(courseCommands.get("deleteCourseInTx")).toContain("checkCourseDelete(courseId, tx, { beforeMeasure: () => lockCourseDeleteLearners(tx, courseId) })");
+    expect(courseCommands.get("deleteCourseInTx")).toContain("checkCourseDelete(courseId, tx, { beforeMeasure: () => lockCourseDeleteLearners(tx, courseId), now: options.now })");
     expect(topLevelFunctions(textOf("modules/course/courseDeleteGuard.ts")).get("checkCourseDelete")).toContain("measureCourseDeleteBlocks(courseId, reader, { stopAtFirst: true, now: options.now })");
     // Lista over arkiverte spør de samme tre sjekkene, og ingen egne vakter.
     const retention = textOf("modules/content/archivedRetention.ts");

@@ -2027,6 +2027,34 @@ parameteren: ingen `retention`, overgangsraden ikke lest), `test/e2e/admin-conte
 ikke før; feilet henting; husket filter).
 **Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** avgjort av produkteier (bare under «Arkiverte»); utformingen valgt under byggingen
 
+## Slettejobben (#1152 skive 4c, 2026-11-21)
+
+Jobben i workeren sletter arkivert innhold når fristen er nådd. Produkteier ba om at den bygges 21.11.2026. Utformingen står i
+byggenotatet (`PLAN_1148`, «Byggenotat for 4c») og ble lest to ganger, av Codex 18.11 og en Claude-agent 21.11. Valgt under byggingen:
+
+- **Jobben vet bare NÅR, aldri OM.** Den kaller de samme tre indre slettefunksjonene som «Slett» (`deleteCourseInTx`,
+  `deleteModuleInTx`, `deleteSectionInTx`), med `source: "retention"`. Den har ingen egen sletting (dekningsvakta).
+- **Natt, norsk tid, 02:00–05:00.** Ett element per transaksjon, kurs før moduler og seksjoner. Et element som bare holdes av et kurs
+  som slettes samme natt, går samme natt.
+- **Først en sjekk uten lås** (den samme som lista bruker). Bare det som kan slettes, får en låst transaksjon, og der måles alt på nytt.
+  Kurs som beholdes for alltid (kursbevis), måles aldri under deltakerlåsene.
+- **«Beholdes» skrives én gang per element etter siste arkivering** (`retention_kept`), og er aldri grunnlag for en avgjørelse. Bare
+  vaktenes svar (en domenefeil under 500) er «beholdes». `content_busy` og driftsfeil prøves igjen i neste runde. Et element som holdes
+  av et kurs, huskes ikke for natten, fordi kurset kan bli slettet senere samme natt.
+- **Nødstoppen er en rad i `PlatformConfig`, ikke en appinnstilling.** Workerens appinnstillinger erstattes i sin helhet ved hver
+  infrastrukturutrulling, så en stopp satt for hånd ville forsvunnet stille. Raden leses før hvert element, settes av en administrator
+  gjennom `PUT /api/admin/platform/archived-content-purge` og står i revisjonsloggen. Ingen side i grensesnittet: den er for en
+  nødssituasjon.
+- **Overvåkeren gjør aldri workeren usunn fordi en runde feilet.** `lastCycleAt` settes også når runden feilet. Bare en runde som
+  henger, er «wedged». «Usunn» starter workeren på nytt, og da stopper vurderingene.
+- **Prøvekjøringen er et skript, ikke en bryter** (`maint:archived-retention-preview -- --as-of <dato>`). En bryter i jobben ville
+  ikke vist noe før mai 2027, fordi overgangsdatoen stopper alt. Skriptet bruker samme vurdering som lista, med kursene som slettes
+  først, og testen krever at det gir samme sluttresultat som jobben.
+
+**Håndheves:** `archivedRetentionJob.ts`, `ArchivedContentRetentionMonitor.ts`; `test/m2-archived-retention-job-1152.test.ts`,
+`test/unit/archived-retention-job-guard.test.js`.
+**Sak:** #1152 · **Dato:** 2026-11-21 · **Status:** bygget etter byggenotatet; detaljene valgt under byggingen
+
 ## Lest seksjon teller i alle kurs deltakeren ser (#1156, 2026-11-14)
 
 - **En lest seksjon teller i alle kurs som inneholder den** (produkteier 13.11.2026), som en bestått modul. Hvert kurs avgjør

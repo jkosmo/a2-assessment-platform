@@ -553,6 +553,45 @@ ute i løpet av mandagen. En rad som ikke er sendt før tirsdag 17:00 Oslo, hopp
 **Prod → stage-kopi:** `npm run stage-copy:neutralize-email` gjør også ventende ukentlige e-poster `skipped` og lager
 `skipped`-rader for uka for alle nåbare (`weeklyDigestsPendingSkipped`, `weeklyDigestsWeekSkipped` i utskriften).
 
+### Slettejobben for arkivert innhold (#1152 4c)
+
+Planen: `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, «Byggenotat for 4c». Workeren sletter arkiverte kurs, moduler og seksjoner
+når fristen er nådd: seks kalendermåneder etter det seneste av `archivedAt` og overgangstidspunktet (`PlatformConfig`-raden
+`archived_content_retention_floor`, skrevet 14.11.2026 i begge miljøer). **Ingenting kan slettes før 14.05.2027.** Den sletter bare
+mellom 02:00 og 05:00 norsk tid, ett element per transaksjon, kurs først, og bare det vaktene i «Slett» slipper gjennom. Datoen
+lista viser under «Arkiverte», er datoen jobben bruker.
+
+**Før 14.05.2027, mot stage og så prod: prøvekjøringen.** Bare lesing (tilkoblingen nekter skriving):
+
+```
+dotenv -e .env.<env> -- tsx scripts/maintenance/archived-retention-preview.ts --as-of 2027-05-20
+```
+
+Den lister hva jobben ville slettet natten `--as-of`, hva den beholder og hvorfor. Den vurderer dagens historikk. `--json` gir radene.
+
+**Kontroll:** `archivedContentRetentionMonitor` i workerens helsesvar, med `lastSummary`:
+- `skipped`: `startup_grace`, `outside_window`, `stopped` eller `floor_unavailable`;
+- ellers `candidates`, `deleted` per type, `kept`, `notDue`, `gone`, `failed` og `stoppedBy`.
+
+Revisjonsloggen har `course_deleted`, `module_deleted` og `section_deleted` med `source: "retention"`. «Beholdes» står som
+`retention_kept` én gang per element etter siste arkivering.
+
+Overvåkeren gjør aldri workeren usunn fordi en runde feilet. En runde som er ferdig, også med feil, teller som fremdrift. Feilen står i
+`lastError`.
+
+**Nødstopp, uten utrulling og uten omstart:** `PUT /api/admin/platform/archived-content-purge` med `{ "enabled": false }`
+(administrator). Raden leses før hvert element. En runde som pågår, stopper før neste sletting
+(`stoppedBy: "purge_disabled"`), og nye runder gjør ingenting (`skipped: "stopped"`). `{ "enabled": true }` slår jobben på igjen, og `GET` viser
+tilstanden. Begge skrives i revisjonsloggen (`archived_content_purge_toggled`). Stoppen er en rad i databasen, ikke en
+appinnstilling, så en infrastrukturutrulling skriver den ikke over. En prod → stage-kopi tar med prods rad.
+
+**«Beholdes» i revisjonsloggen** viser grunnen første gang. Endrer grunnen seg senere, for eksempel når kurset en modul lå i
+blir slettet og modulen så holdes av egne besvarelser, står den første grunnen der. Hendelsen er bare historikk. Dagens grunn står i
+lista under «Arkiverte».
+
+**Kjent:** bildefilene til en slettet seksjon ryddes mot workerens disk. Workeren har ikke blob-endepunktet, så filene i Azure blir
+liggende. Det er som før, og logges.
+
 ## Seed Behavior
 
 ### Bootstrap seed

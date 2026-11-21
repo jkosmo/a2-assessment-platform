@@ -728,7 +728,7 @@ export async function deleteSectionInTx(
       entityId: sectionId,
       action: auditActions.section.deleted,
       actorId: options.actorId,
-      metadata: { sectionId, title: check.title, ...(options.source ? { source: options.source } : {}) },
+      metadata: { sectionId, title: check.title, archivedAt: check.archivedAt.toISOString(), ...(options.source ? { source: options.source } : {}) },
     },
     tx,
   );

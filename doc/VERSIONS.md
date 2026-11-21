@@ -2,6 +2,91 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.175.0 - 2026-11-21
+
+Slettejobben for arkivert innhold (#1152 skive 4c). Workeren sletter arkiverte kurs, moduler og seksjoner når fristen er nådd: seks
+kalendermåneder etter det seneste av arkiveringen og overgangsdatoen. **Ingenting kan slettes før 14.05.2027**, fordi overgangsdatoen
+ble skrevet 14.11.2026 i begge miljøer. Ingen migrering.
+
+**Hva det betyr:** datoen forfatteren har sett under «Arkiverte» siden 2.162, er nå datoen innholdet faktisk forsvinner. Det som
+holdes igjen (kursbevis, besvarelser, «ligger i et kurs som beholdes» og de andre grunnene), blir stående.
+
+**Slik virker det** (`content/archivedRetentionJob.ts`, `ArchivedContentRetentionMonitor.ts`):
+- Hvert tiende minutt, men sletting bare 02:00–05:00 norsk tid. Ett element per transaksjon, kurs før moduler og seksjoner, og et
+  rundebudsjett på 4 minutter.
+- Jobben vet bare NÅR. Hvert element sjekkes først uten lås med samme sjekk som lista. Det som kan slettes, går gjennom den samme
+  indre slettefunksjonen som «Slett», under innholdslåsen, med `archivedAt`, overgangsraden og vaktene lest på nytt.
+- Revisjonsloggen har slettingene med `source: "retention"`, og «beholdes» (`retention_kept`) én gang per element etter siste
+  arkivering.
+- `course_deleted` har nå også kursets navn og `archivedAt`; `module_deleted` og `section_deleted` har `archivedAt`. Det gjelder
+  også «Slett».
+- **Nødstoppen er en rad i databasen**: `PUT /api/admin/platform/archived-content-purge` (administrator). Den virker fra neste runde
+  uten omstart, og en infrastrukturutrulling skriver den ikke over.
+- **Workeren blir aldri usunn fordi en runde feilet.** En runde som er ferdig, også med feil, er fremdrift (`lastCycleAt` i `finally`).
+- **Prøvekjøringen:** `npm run maint:archived-retention-preview -- --as-of 2027-05-20`, bare lesing. Den viser hva jobben ville
+  slettet den natten, og hvorfor resten beholdes. Den skal kjøres mot stage og prod før 14.05.2027 (driftsboka). Prøvd lokalt mot
+  testdatabasen: med 1. juli 2027 slettes 120 av 181 arkiverte kurs, 110 av 220 moduler og 113 av 174 seksjoner. Resten beholdes,
+  med grunn.
+
+Funnene fra gjennomlesingen av byggenotatet som hørte til jobben, er med:
+- F: workeren startes ikke på nytt;
+- G: nødstoppen overlever en utrulling;
+- C: kurs med kursbevis måles aldri under deltakerlåsene;
+- E: klokka går gjennom `deleteCourseInTx`.
+
+**Tester:** `m2-archived-retention-job-1152` (14):
+- slettingen i samme runde (kurset først, så modulen og seksjonen), med hendelsene;
+- før fristen, utenfor vinduet, budsjettet og stopp;
+- arkivert på nytt etter at kandidatene ble valgt (under låsen: ikke ennå), og «borte» uten feil;
+- kursbevis beholdes, med én `retention_kept` etter to runder;
+- natt-hukommelsen, og at et element som holdes av et kurs, ikke huskes;
+- modul med besvarelse beholdes, og besvarelsen står;
+- nødstoppen gjennom ruta, med revisjonsloggen, og bare for administrator;
+- uten overgangsrad slettes ingenting;
+- en runde som kaster, holder workeren frisk;
+- forhåndsvisningen gir samme sluttresultat som jobben.
+
+`unit/archived-retention-job-guard`: jobbfila har ingen egen skriving mot en tabell, og går gjennom de tre slettefunksjonene.
+`unit/archived-retention-window-1152`: nattvinduet med grensene og nettene klokka stilles om.
+
+Hele rekka:
+- enhet 3393/3393, DOM 109/109;
+- integrasjon 1473/1473, pluss 15/15 i jobbtesten etter QA-rettingen;
+- admin-content-e2e 1217/1218. Den ene, `participant-seen-version-934-5a1`, var 15/15 alene, og versjonen endrer ingen klientfiler.
+
+**Mutasjonsverifisert:** disse mutasjonene ga alle rød test:
+- vinduet ignorert;
+- nødstoppen ignorert;
+- fristen ikke regnet på nytt under låsen;
+- et element som holdes av et kurs, huskes likevel;
+- budsjettet ignorert;
+- stopp ignorert;
+- begge oppslagene før «beholdes» fjernet;
+- `lastCycleAt` bare uten feil;
+- nødstoppen bare lest ved start;
+- vinduet fra kl. 1.
+
+Én overlevde: oppslaget uten lås før «beholdes» skrives. Det er der for å slippe en låst transaksjon hver natt, og oppslaget under
+låsen dekker riktigheten.
+
+**QA 2.175.0 (Claude-agent; Codex har nådd bruksgrensen): GO.** Ingen vei der jobben sletter noe «Slett» ville nektet. Rettet før
+stage:
+- nødstoppen leses før hvert element, ikke bare når runden starter (en stopp midt i en runde virket først etter opptil fire minutter);
+- enhetstest av nattvinduet med grensene og begge nettene klokka stilles om (`unit/archived-retention-window-1152`), og en
+  integrasjonstest av stopp midt i runden.
+
+**Kjent (ikke rettet), før mai 2027:**
+- Moduler og seksjoner i et kurs som beholdes for alltid, vurderes på nytt i hver runde hver natt (de huskes ikke, fordi kurset
+  kunne blitt slettet). Det koster sekunder per runde, og mengden vokser.
+- Et element som feiler hver gang (tidsgrensen), kommer først i hver runde og kan bruke opp budsjettet, så det som står etter, aldri
+  nås. Ingenting går tapt; det står i `lastSummary.failed`.
+- «Beholdes» betyr enhver `AppError` under 500, ikke bare vaktenes. En uventet 404 blir «beholdes» for natten. Det holder igjen,
+  aldri motsatt.
+- Testene dekker ikke at forhåndssjekken uten lås finnes (den gjelder bare ytelsen), workerens 15 minutter ventetid ved oppstart,
+  eller at sertifiseringsstatuser er uendret etter en runde (kursbevis og besvarelser er telt).
+- `lastSummary.failed` på workerens `/healthz` viser id-er og databasens feiltekst.
+- Det finnes ingen sak som sørger for at prøvekjøringen gjøres før 14.05.2027.
+
 ## 2.174.0 - 2026-11-21
 
 Påbegynt fritekst holder et arkivert kurs igjen i sju dager (#1185, produkteier 21.11.2026: «Deltager får 7 dager så sletting»,

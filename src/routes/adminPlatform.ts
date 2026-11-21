@@ -25,6 +25,8 @@ import { normalizeLocale } from "../i18n/locale.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { registerExternalCompletions } from "../modules/course/externalCompletionService.js";
 import { sendWeeklyDigestToSelf } from "../modules/weeklyDigest/weeklyDigestJob.js";
+import { ARCHIVED_CONTENT_PURGE_ENABLED_KEY } from "../config/retention.js";
+import { isPurgeEnabled } from "../modules/content/archivedRetentionJob.js";
 
 const adminPlatformRouter = Router();
 
@@ -67,6 +69,48 @@ adminPlatformRouter.get("/", async (_request, response, next) => {
         nn: config["consent.body.nn"] ?? DEFAULT_CONSENT_BODY["nn"] ?? "",
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── GET/PUT /api/admin/platform/archived-content-purge (#1152 4c) ─────────────
+// Nødstoppen for slettejobben (content/archivedRetentionJob.ts): en rad i PlatformConfig, lest i hver runde. Virker fra neste runde
+// (innen ti minutter), uten utrulling og uten omstart, og overlever en infra-utrulling (gjennomlesingen, punkt G).
+adminPlatformRouter.get("/archived-content-purge", async (_request, response, next) => {
+  try {
+    response.json({ enabled: await isPurgeEnabled() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminPlatformRouter.put("/archived-content-purge", async (request, response, next) => {
+  const parsed = z.object({ enabled: z.boolean() }).safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "invalid_request", details: parsed.error.flatten() });
+    return;
+  }
+  const userId = request.context?.userId;
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.platformConfig.upsert({
+        where: { key: ARCHIVED_CONTENT_PURGE_ENABLED_KEY },
+        create: { key: ARCHIVED_CONTENT_PURGE_ENABLED_KEY, value: String(parsed.data.enabled), updatedBy: userId },
+        update: { value: String(parsed.data.enabled), updatedBy: userId },
+      });
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.platformConfig,
+          entityId: ARCHIVED_CONTENT_PURGE_ENABLED_KEY,
+          action: auditActions.retention.purgeToggled,
+          actorId: userId,
+          metadata: { enabled: parsed.data.enabled },
+        },
+        tx,
+      );
+    });
+    response.json({ enabled: parsed.data.enabled });
   } catch (error) {
     next(error);
   }

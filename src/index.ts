@@ -11,6 +11,7 @@ import { CourseReminderMonitor } from "./modules/course/CourseReminderMonitor.js
 import { CourseMajorEmailMonitor } from "./modules/course/CourseMajorEmailMonitor.js";
 import { CourseAssignmentEmailMonitor } from "./modules/course/CourseAssignmentEmailMonitor.js";
 import { WeeklyDigestMonitor } from "./modules/weeklyDigest/WeeklyDigestMonitor.js";
+import { ArchivedContentRetentionMonitor } from "./modules/content/ArchivedContentRetentionMonitor.js";
 import { OutboxDeliveryWorker } from "./modules/outbox/OutboxDeliveryWorker.js";
 import { evaluateWorkerHealth, drainInFlightTicks, type MonitorHealthSnapshot } from "./observability/workerHealth.js";
 import { prisma } from "./db/prisma.js";
@@ -41,6 +42,8 @@ const courseMajorEmailMonitor = startWorkers ? new CourseMajorEmailMonitor() : n
 const courseAssignmentEmailMonitor = startWorkers ? new CourseAssignmentEmailMonitor() : null;
 // #1139: den ukentlige e-posten. Av med mindre WEEKLY_EMAIL_ENABLED=true.
 const weeklyDigestMonitor = startWorkers ? new WeeklyDigestMonitor() : null;
+// #1152 4c: sletter arkivert innhold om natten (02–05) når seks måneder er gått. Nødstopp: PlatformConfig-raden, ingen omstart.
+const archivedContentRetentionMonitor = startWorkers ? new ArchivedContentRetentionMonitor() : null;
 const outboxDeliveryWorker = startWorkers ? new OutboxDeliveryWorker() : null;
 
 const backgroundMonitors = [
@@ -53,6 +56,7 @@ const backgroundMonitors = [
   courseMajorEmailMonitor,
   courseAssignmentEmailMonitor,
   weeklyDigestMonitor,
+  archivedContentRetentionMonitor,
   outboxDeliveryWorker,
 ];
 
@@ -172,6 +176,7 @@ async function startServer() {
       courseMajorEmailMonitor,
       courseAssignmentEmailMonitor,
       weeklyDigestMonitor,
+      archivedContentRetentionMonitor,
       outboxDeliveryWorker,
     ];
     staggeredWorkers.forEach((worker, index) => {

@@ -443,6 +443,8 @@ export async function deleteModuleInTx(
       metadata: {
         moduleId,
         title: deleted.title,
+        // #1152 4c: når den ble arkivert, så hendelsen sier hvilken frist som slettet den.
+        archivedAt: check.archivedAt.toISOString(),
         ...(options.source ? { source: options.source } : {}),
       },
     },

@@ -46,6 +46,17 @@ export const ARCHIVED_CONTENT_RETENTION_MONTHS = 6;
 export const UNFINISHED_SUBMISSION_GRACE_DAYS = 7;
 
 /**
+ * #1152 4c: the emergency stop for the nightly deletion job. A `PlatformConfig` row, read at the start of every round: value "false"
+ * stops the job, anything else (or no row) lets it run. A row, not an app setting: the worker's app settings are replaced wholesale
+ * by every infra deploy, so a hand-set stop would silently disappear (review of the build note, 21.11.2026, point G). Set through
+ * `PUT /api/admin/platform/archived-content-purge` (administrator); takes effect on the next round, no restart.
+ */
+export const ARCHIVED_CONTENT_PURGE_ENABLED_KEY = "archived_content_purge_enabled";
+
+/** #1152 4c: the job deletes only between these Oslo hours (02:00 inclusive to 05:00 exclusive). */
+export const ARCHIVED_CONTENT_PURGE_WINDOW_HOURS = { from: 2, to: 5 } as const;
+
+/**
  * #1152: the `PlatformConfig` row that holds the transition floor — the moment the retention rule arrived in
  * this environment (written once by the migration `20261114120000_archived_content_retention`, ISO 8601 UTC).
  * The deadline counts from the LATER of `archivedAt` and this floor, so content archived before the rule
