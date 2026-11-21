@@ -33,6 +33,10 @@ tok den: GO, ingen regresjon, språket riktig på nynorsk og engelsk.
 **Også i denne versjonen:** `doc/design/PLAN_1162_DELTAKERFLYT.md`, kartleggingen av deltakerflyten (#1162) med produkteiers
 avgjørelser. Ikke bygget.
 
+**På stage 21.11.2026 kl. 10:34** (dev 57107d82). **I prod 21.11.2026 kl. 11:09**, sammen med 2.169.0 og 2.170.0 (57107d82, uten
+stage-leddet). App og worker viser 2.171.0, og begge svarer friskt på `/healthz`. Loggene etter utrullingen har ingen feillinjer;
+det eneste 5xx-svaret er ett 503 på `/healthz` under omstarten.
+
 ## 2.170.0 - 2026-11-21
 
 Et arkivert kurs kan ikke ankes (produkteier 21.11.2026: «Det skal ikke være mulig å anke et arkivert kurs, da må student heller
@@ -60,7 +64,7 @@ skrivingen), og e2e for meldingen.
 
 **På stage 21.11.2026 kl. 10:01** (dev fa53acd3). Utrullingen gikk rent. `2-160` (7/7) og `2-161` (4/4) er kjørt på nytt mot den. Selve
 anken er ikke prøvd på stage: den krever en deltaker med et vurdert stryk, og stage-kontoen er fagansvarlig. Integrasjonstesten
-gjennom ruta og e2e-testen for meldingen dekker den.
+gjennom ruta og e2e-testen for meldingen dekker den. **I prod 21.11.2026 kl. 11:09** med 2.171.0.
 
 **Kjent (ikke rettet):** en anke som alt var åpen da kurset ble arkivert, kan fortsatt kreves og avgjøres. Det gir et vedtak og et
 varsel, men ikke kursbevis mens kurset er arkivert. Eksisterende, utenfor denne endringen.
@@ -121,7 +125,7 @@ kurs stoppes med en melding om at kurset er arkivert, bygges i 2.170.0.
 **På stage 21.11.2026 kl. 08:48** (dev 3c820d78). Utrullingen gikk rent. `2-161` (4/4, «Slett» på arkivert innhold), `2-162` (5/5,
 datoene i lista over arkiverte) og `2-160` (7/7, arkivert er urørlig) er kjørt på nytt mot den. Det uklare kravet er ikke prøvd på
 stage: det krever delte elementer arkivert i en bestemt rekkefølge og en deltaker som har lest eller bestått. Integrasjonstestene
-dekker det gjennom rutene.
+dekker det gjennom rutene. **I prod 21.11.2026 kl. 11:09** med 2.171.0.
 
 **Kjent (ikke rettet):**
 - To andre veier gjør en innlevering til en som venter, uten deltakerlåsen: flervalget setter `PROCESSING`
