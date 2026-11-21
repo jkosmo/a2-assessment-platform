@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.173.0 - 2026-11-21
+
+Deltakeren: kursbevis og tilbake (#1162, skive 1–4), etter produkteiers avgjørelser 21.11.2026 (DECISIONS, «Deltakerflyten»). Bygget
+av en parallell agent i en egen arbeidskopi. Bare klientkode; ingen endring på tjeneren eller i databasen. Skive 5 (modulen åpnes
+som seksjonen) er ikke bygget; den vises som prototype først.
+
+**Hva deltakeren merker:**
+- **Kursbevis heter «Kursbevis» overalt.** Lenken heter «Vis kursbevis», også på telefon (før «Sertifikat · Vis bevis»), i profilen og
+  på det eldre beviset («Vis kursbevis for versjon {n}»).
+- **Kursbeviset åpnes i samme fane**, så nettleserens tilbake-knapp fører tilbake til kurset (med det som var åpent), lista eller
+  profilen. Lenken på beviset sier «← Tilbake til Mine kurs», eller «← Tilbake til profilen» når beviset ble åpnet fra profilen; den
+  fører da til fanen «Beståtte kurs».
+- **Tilbake heter det samme overalt:** «← Tilbake til kurset» i seksjon og modul (før «Lukk seksjonen»/«Lukk modulen»), «← Tilbake til
+  Mine kurs» i kurset (før «← Alle kurs»), og «← Tilbake til innleggene» i en diskusjonstråd.
+- **En seksjon som alt er lest,** har knappen «Gå videre» eller «Gå til testen», og lesingen registreres ikke på nytt. «Avslutt kurset»
+  på siste steg sender den fortsatt (porten for kursbeviset).
+- På telefon (600 px og smalere) er merket «Arbeidsflate» skjult i modulens hode, så knappen og tittelen får plass.
+
+**Tester:** `test/e2e/participant-flow-1162.spec.ts` (alle fire skivene på bokmål, nynorsk og engelsk, med målinger på 390 og 360 px),
+mutasjonsverifisert per skive. Ti eksisterende e2e-filer fikk de nye tekstene. Hele e2e-rekka var 1214/1214 i agentens arbeidskopi.
+
+**QA 2.173.0 (Claude-agent): GO.** Rettet før commit:
+- lenken «← Tilbake til profilen» åpnet profilen på «Statistikk», mens nettleserens tilbake landet på «Beståtte kurs». Nå går den til
+  `/profile#courses`, og profilen åpner fanen fra adressen;
+- testen for en åpen modul skriver nå tekst i svarfeltet før beviset åpnes, og krever at teksten står etter tilbake;
+- planen og flatekartet sa feil om «Avslutt kurset».
+
+**Kjent (ikke rettet):**
+- «Mine data» i profilen sier fortsatt «← Tilbake til profil» (ubestemt form). Planen holdt den utenfor.
+- En kursrad for et fullført kurs kan bli to linjer på 360 px, fordi «Vis kursbevis» er lengre enn «Vis bevis». Ingen vannrett rulling.
+- Modultittelen i hodet får 55–69 px på 360 px og kuttes med «…» til skive 5 bygger hodet på nytt.
+- Bare Chromium er testet. Nettleserens tilbake fra kursbeviset på en ekte telefon (særlig iOS Safari) bør prøves på stage.
+
 ## 2.172.0 - 2026-11-21
 
 En arkivert modul som deltakere bare har åpnet, aldri levert, kan slettes (#1176). Ingen migrering.
@@ -47,6 +80,11 @@ bare på tabellene under innleveringen, og hullet lå i raden selv. Begge er ret
   siden åpen fra før og sender inn akkurat da.
 - Masseryddingen av upubliserte moduler teller fortsatt alle innleveringer, også de som bare er åpnet. Den er strengere, og det er
   trygt.
+
+**På stage 21.11.2026** (dev 50e505cc). Utrullingen gikk rent. Målt mot ekte data på stage, lista over arkiverte moduler
+(`includeRetention=1`): de fire modulene stage-testen for 2.164.0 åpnet uten å svare (der #1176 ble funnet), viser nå «slettes
+2027-05-15», ikke «Beholdes: har besvarelser». Av 110 arkiverte moduler holdes 37 fortsatt igjen med `module_has_submissions`
+(leverte besvarelser) og én med `content_in_archived_course`; 72 har dato.
 
 **Integrasjonsrekka:** 1448 av 1450 grønne. De to røde er tidsgrenser i `m2-learner-lock-934-5a1` (5903 ms mot 5500, og 2928 mot
 2500). De feilet på samme måte uten endringene i denne versjonen (kontroll med `git stash`), så de er ustabile på maskinen, ikke en

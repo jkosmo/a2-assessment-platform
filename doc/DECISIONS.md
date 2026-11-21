@@ -1871,6 +1871,10 @@ begrunnet unntak), `test/content-lock-write-guard.test.js`, `test/m2-archived-re
   uten kursbevis har bestått minst én av modulene eller lest minst én av seksjonene som falt ut (`course_requirement_unclear`).
   Valgt bort: å måle kravet så godt det går (B), der sjeldne historier med gjenoppretting og ny arkivering kunne gitt feil svar i
   den retningen som sletter. Kostnaden ved A: noen få kurs kan bli stående arkivert lenger enn nødvendig, med grunnen i lista.
+- **Påbegynt fritekst holder kurset igjen i 7 dager** (produkteier 21.11.2026: «Deltager får 7 dager så sletting»; #1185, ikke
+  bygget). En innlevering der teksten er levert, men flervalget ikke er sendt inn (status `SUBMITTED` uten vurderingsjobb i en
+  modul med fritekst), regnes som ventende i 7 dager fra deltakeren leverte teksten (`submittedAt`), bekreftet samme dag. Deretter
+  kan kurset slettes. En ren flervalgsinnlevering som bare er åpnet, holder fortsatt ikke kurset igjen.
 - **En ny anke opprettes under deltakerlåsen** (2.169.0), som vedtakene. Kursslettingen måler «ingenting venter på anke» under
   deltakerlåsene, og en anke uten låsen kunne kommet mellom målingen og slettingen.
 - **Et arkivert kurs kan ikke ankes, og stryk og anke har ingen virkning for det** (produkteier 21.11.2026: «Det skal ikke være

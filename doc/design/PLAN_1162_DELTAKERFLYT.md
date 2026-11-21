@@ -121,7 +121,8 @@ Modulens innhold (oppgave, flervalg, innlevering, resultat) endres ikke. Det er 
 
 ### «Marker seksjon lest» på en lest seksjon
 
-En seksjon som allerede er lest, får **«Gå videre»** / **«Gå til testen»** / «Avslutt kurset». Det sendes ingen ny lesing.
+En seksjon som allerede er lest, får **«Gå videre»** / **«Gå til testen»**, og det sendes ingen ny lesing. På siste steg står
+«Avslutt kurset», som fortsatt sender lesingen: den er porten for kursbeviset, og tjeneren tåler at den sendes på nytt.
 Uleste seksjoner er som i dag.
 
 ## 3. Skiver

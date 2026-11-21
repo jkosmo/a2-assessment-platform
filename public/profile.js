@@ -397,10 +397,13 @@ profileTabs?.addEventListener("keydown", (event) => {
   selectTab(next.dataset.profileTab, { focus: true });
 });
 
-// #1162: tilbake fra kursbeviset (eller en oppfriskning) åpner fanen som sto i historikkoppføringen.
+// #1162: tilbake fra kursbeviset (eller en oppfriskning) åpner fanen som sto i historikkoppføringen. Uten den åpner en fane i adressen
+// (`/profile#courses`, lenken «← Tilbake til profilen» på kursbeviset) den fanen. Ukjente navn ignoreres av `selectTab`.
 {
   const remembered = history.state?.profileTab;
-  if (typeof remembered === "string" && remembered !== selectedTab) selectTab(remembered);
+  const fromAddress = window.location.hash.slice(1);
+  const wanted = typeof remembered === "string" ? remembered : fromAddress;
+  if (wanted && wanted !== selectedTab) selectTab(wanted);
 }
 
 function renderCourses(body) {

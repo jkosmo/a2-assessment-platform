@@ -181,7 +181,8 @@ localeSelect.addEventListener("change", () => {
 // fordi den går gjennom data-i18n som resten av siden.
 const backLink = document.getElementById("certBackLink");
 if (backLink && new URLSearchParams(window.location.search).get("fra") === "profil") {
-  backLink.href = "/profile";
+  // QA 2.173.0: til fanen «Beståtte kurs», som nettleserens tilbake gjør. Uten fanen i adressen åpnet profilen på «Statistikk».
+  backLink.href = "/profile#courses";
   backLink.setAttribute("data-i18n", "certificate.backToProfile");
 }
 

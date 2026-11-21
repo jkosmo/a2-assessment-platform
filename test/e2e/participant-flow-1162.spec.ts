@@ -417,6 +417,10 @@ test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
     await page.locator('.course-item[data-key="ny-2"] .course-module-row').click();
     await expect(page.locator(".course-inline-panel #moduleWorkspace")).toBeVisible();
     await expect(page).toHaveURL(/\/participant\?courseId=ny&moduleId=m1$/);
+    // QA 2.173.0: ulagret tekst i modulen skal overleve turen til beviset i samme fane (kladden lagres i nettleseren).
+    const answer = page.locator("#submissionFields textarea").first();
+    await answer.fill("Et halvferdig svar jeg ikke vil miste.");
+    await page.waitForTimeout(400); // kladden lagres 250 ms etter siste tastetrykk
 
     const earlier = item(page, "ny").locator("a.course-certificate-link--earlier");
     await expect(earlier).not.toHaveAttribute("target", /.+/);
@@ -435,6 +439,7 @@ test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
     await expect(page).toHaveURL(/\/participant\?courseId=ny&moduleId=m1$/);
     await expect(item(page, "ny")).toHaveClass(/is-focused/);
     await expect(page.locator('.course-item[data-key="ny-2"] .course-inline-panel #moduleWorkspace')).toBeVisible();
+    await expect(page.locator("#submissionFields textarea").first()).toHaveValue("Et halvferdig svar jeg ikke vil miste.");
   });
 
   test("fra kursraden i lista: tilbake gir lista, og lenken på beviset fører til «Mine kurs»", async ({ page }) => {
@@ -475,7 +480,7 @@ test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
       expect(page.context().pages().length).toBe(pagesBefore);
       await expect(page.locator("#certificate")).toBeVisible();
       await expect(certBack(page)).toHaveText(PROFILE_BACK[locale]);
-      await expect(certBack(page)).toHaveAttribute("href", "/profile");
+      await expect(certBack(page)).toHaveAttribute("href", "/profile#courses");
 
       // Nettleserens tilbake: profilen, med fanen «Beståtte kurs» der deltakeren var.
       await page.goBack();
@@ -483,12 +488,14 @@ test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
       await expect(page.locator("#profilePanel-courses")).toBeVisible();
       await expect(page.locator("#coursesBody a").first()).toBeVisible();
 
-      // Lenken på beviset fører også til profilen.
+      // Lenken på beviset fører også til profilen, og til den samme fanen (QA 2.173.0: før åpnet den «Statistikk»).
       await page.goForward();
       await expect(certBack(page)).toHaveText(PROFILE_BACK[locale]);
       await certBack(page).click();
-      await expect(page).toHaveURL(/\/profile$/);
+      await expect(page).toHaveURL(/\/profile#courses$/);
       await expect(page.locator("#profileName")).toBeVisible();
+      await expect(page.locator("#profilePanel-courses")).toBeVisible();
+      await expect(page.locator("#profileTab-courses")).toHaveAttribute("aria-selected", "true");
     });
   }
 
@@ -499,7 +506,7 @@ test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
     await expect(certBack(page)).toHaveText(PROFILE_BACK.nb);
     await page.selectOption("#localeSelect", "en-GB");
     await expect(certBack(page)).toHaveText(PROFILE_BACK["en-GB"]);
-    await expect(certBack(page)).toHaveAttribute("href", "/profile");
+    await expect(certBack(page)).toHaveAttribute("href", "/profile#courses");
   });
 });
 

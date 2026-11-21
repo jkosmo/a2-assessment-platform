@@ -348,9 +348,9 @@ list of equal buttons. Three mutually exclusive row states, driven by `findNextI
   element is a module (`courses.section.markReadAndTest`). **#1162:** a section that is already read (`read` from the
   server, i.e. a read that counts for the course's current major version) gets **«Gå videre»** / **«Gå til testen»**
   (`#sectionReaderNext`, `courses.section.next` / `.goToTest`) and sends no new `POST …/read`; «Avslutt kurset» still sends it
-  (it is the certificate gate). Guard: `participant-flow-1162.spec.ts` («skive 4», with the unread control). **The final element gets no button at
-  all**; `markFinalSectionReadSilently` then registers the read, because the certificate gate needs
-  every section read (entry 6) and a reading-course's last section would otherwise be unreachable.
+  (it is the certificate gate). Guard: `participant-flow-1162.spec.ts` («skive 4», with the unread control). **The final element
+  shows «Avslutt kurset»** (since #929; it replaced `markFinalSectionReadSilently`), which registers the read, because the
+  certificate gate needs every section read (entry 6) and a reading-course's last section would otherwise be unreachable.
 
 ## 6c. Section HTML sinks + client/server sanitizer parity (#814)
 
