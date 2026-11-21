@@ -42,7 +42,8 @@ Et kurs er serielt, og oversikten viser det: du ser **ett steg av gangen** som d
 
 - **Det aktuelle steget** står som et kort med tittel og én knapp — «Les» eller «Gjennomfør».
 - **Fullførte steg** krymper til én linje med status. Trykk «Se igjen» for å åpne dem på nytt;
-  innholdet forblir tilgjengelig så lenge du har kurset.
+  innholdet forblir tilgjengelig så lenge du har kurset. En seksjon du alt har lest, har knappen «Gå videre» (eller «Gå til
+  testen») i stedet for «Marker seksjon lest, og gå videre».
 - **Kommende steg** vises som dempede titler, så du ser hva som gjenstår. De kan fortsatt åpnes hvis
   du vil hoppe fram, men rekkefølgen er den anbefalte veien gjennom kurset.
 

@@ -345,7 +345,10 @@ list of equal buttons. Three mutually exclusive row states, driven by `findNextI
   read AND opens the next element in the same click. "Next" is read from `courseSequences`
   (the course's mixed item order) via `nextEntryAfter` — **never from a section-only list**, or a
   module deliberately placed between two sections would be skipped. The label changes when the next
-  element is a module (`courses.section.markReadAndTest`). **The final element gets no button at
+  element is a module (`courses.section.markReadAndTest`). **#1162:** a section that is already read (`read` from the
+  server, i.e. a read that counts for the course's current major version) gets **«Gå videre»** / **«Gå til testen»**
+  (`#sectionReaderNext`, `courses.section.next` / `.goToTest`) and sends no new `POST …/read`; «Avslutt kurset» still sends it
+  (it is the certificate gate). Guard: `participant-flow-1162.spec.ts` («skive 4», with the unread control). **The final element gets no button at
   all**; `markFinalSectionReadSilently` then registers the read, because the certificate gate needs
   every section read (entry 6) and a reading-course's last section would otherwise be unreachable.
 
@@ -1847,6 +1850,7 @@ for interne lukkinger der adressen allerede er tatt hånd om (kursbytte, popstat
 | «Les», «Gjennomfør», «Se igjen» (raden) | `renderCourseDetailModules` → `openCourseItemEntry` → `openInlineItemByEntry` | push, eller replace når et element alt står i adressen |
 | Klikk på raden som er åpen (lukker) | `openInlineItemByEntry` | `closeInlineItem` |
 | «Marker seksjon lest, og gå videre» | `renderSectionReaderInto` | neste element erstatter; uten neste: `recordClosedItem` |
+| «Gå videre», «Gå til testen» (seksjonen er lest fra før, #1162) | `renderSectionReaderInto` (`#sectionReaderNext`) | replace |
 | «Gå til …» (det som gjenstår), «Neste: …» i modulen | `renderSectionReaderInto`, `buildInlineNextButton` | replace |
 | «Avslutt kurset» | `renderSectionReaderInto` | `closeInlineItem` |
 | «← Tilbake til kurset» (seksjonen og modulen; het «Lukk seksjonen»/«Lukk modulen» før #1162), Escape | panelene, `keydown` | `closeInlineItem` |

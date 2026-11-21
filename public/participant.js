@@ -5427,9 +5427,16 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   // modul, skal deltakeren dit, ikke forbi vurderingen som var lagt der med vilje. Teksten sier
   // hvilken av delene det er, for en knapp skal si det den gjør.
   const nextEntry = nextEntryAfter(courseId, courseItemKey(entry));
-  const advanceLabel = nextEntry
-    ? (nextEntry.type === "MODULE" ? t("courses.section.markReadAndTest") : t("courses.section.markReadAndNext"))
-    : "";
+  // #1162 skive 4: en seksjon som alt er lest, sier «Gå videre» / «Gå til testen» og sender ikke lesingen på nytt. `read` fra
+  // serveren er lesingen som teller for kursets nåværende hovedversjon (sectionReadCredit), så en seksjon som må leses på nytt
+  // etter en ny versjon, er ulest her og får lesingen. «Avslutt kurset» på siste steg sender den fortsatt: det er porten for
+  // kursbeviset, og serveren tåler den (idempotent).
+  const alreadyRead = entry.read === true;
+  const advanceLabel = !nextEntry
+    ? ""
+    : nextEntry.type === "MODULE"
+      ? t(alreadyRead ? "courses.section.goToTest" : "courses.section.markReadAndTest")
+      : t(alreadyRead ? "courses.section.next" : "courses.section.markReadAndNext");
   // #929: siste element får «Avslutt kurset» — men BARE når alt annet er ferdig.
   //
   // Det sto ingen knapp her før, og lesningen ble registrert stille av systemet. Produkteier
@@ -5441,7 +5448,10 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   const outstanding = nextEntry ? [] : outstandingBeforeFinish(courseId, entry);
   const canFinish = !nextEntry && outstanding.length === 0;
   let actionsMarkup = "";
-  if (nextEntry) {
+  if (nextEntry && alreadyRead) {
+    // Ingen lesing å vente på, så knappen er på fra start.
+    actionsMarkup = `<button type="button" id="sectionReaderNext" class="btn-primary" data-role="next">${escapeHtmlP(advanceLabel)}</button>`;
+  } else if (nextEntry) {
     actionsMarkup = `<button type="button" id="sectionReaderMarkRead" class="btn-primary" data-role="markReadNext" disabled>${escapeHtmlP(advanceLabel)}</button>`;
   } else if (canFinish) {
     actionsMarkup = `<button type="button" id="sectionReaderFinish" class="btn-primary" data-role="finishCourse" disabled>${escapeHtmlP(t("courses.section.finishCourse"))}</button>`;
@@ -5525,6 +5535,12 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       markReadBtn.disabled = false;
       participantErrorToast(error, "courses.loadError");
     }
+  });
+
+  // #1162 skive 4: lest fra før — bare videre. Neste element erstatter seksjonen i adressen, som «Gå til …» under.
+  panel.querySelector("#sectionReaderNext")?.addEventListener("click", () => {
+    const target = nextEntryAfter(courseId, courseItemKey(entry));
+    if (target) openCourseItemEntry(courseId, target);
   });
 
   panel.querySelector("#sectionReaderGoOutstanding")?.addEventListener("click", () => {

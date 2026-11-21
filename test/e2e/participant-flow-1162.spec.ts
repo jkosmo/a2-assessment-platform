@@ -502,3 +502,66 @@ test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
     await expect(certBack(page)).toHaveAttribute("href", "/profile");
   });
 });
+
+// ── Skive 4: en lest seksjon sier «Gå videre» ──────────────────────────────────────────────────────────────────────────────
+
+const ADVANCE: Record<Locale, { next: string; test: string; markNext: string }> = {
+  nb: { next: "Gå videre", test: "Gå til testen", markNext: "Marker seksjon lest, og gå videre" },
+  nn: { next: "Gå vidare", test: "Gå til testen", markNext: "Marker seksjon lesen, og gå vidare" },
+  "en-GB": { next: "Continue", test: "Go to the test", markNext: "Mark section as read, and continue" },
+};
+
+test.describe("#1162 skive 4: en seksjon som alt er lest", () => {
+  for (const locale of LOCALES) {
+    test(`«${ADVANCE[locale].next}» og «${ADVANCE[locale].test}» sender ikke lesingen på nytt (${locale})`, async ({ page }) => {
+      await mockBase(page, locale);
+      const calls = await mockCourse(page, { read: ["s1", "s2"] });
+      await openCourse(page);
+      const historyBefore = await page.evaluate(() => history.length);
+
+      // Første seksjon er lest; neste er en seksjon.
+      await sectionRow(page, "ci1").click();
+      await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s1");
+      await expect(openPanel(page).locator(".course-inline-actions button")).toHaveCount(1);
+      await expect(page.locator("#sectionReaderMarkRead")).toHaveCount(0);
+      await expect(page.locator("#sectionReaderNext")).toHaveText(ADVANCE[locale].next);
+      await expect(page.locator("#sectionReaderNext")).toBeEnabled();
+      await page.locator("#sectionReaderNext").click();
+      await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s2");
+      await expect(page).toHaveURL(/courseId=c1&sectionId=s2$/);
+
+      // Andre seksjon er lest; neste er testen.
+      await expect(page.locator("#sectionReaderNext")).toHaveText(ADVANCE[locale].test);
+      await page.locator("#sectionReaderNext").click();
+      await expect(page.locator('.course-item[data-key="ci3"] .course-inline-panel #moduleWorkspace')).toBeVisible();
+      await expect(page).toHaveURL(/courseId=c1&moduleId=m1$/);
+
+      // Ingen lesing er sendt, og «videre» erstattet elementet i adressen: ett steg over kurset, som før.
+      expect(calls.reads).toEqual([]);
+      expect(await page.evaluate(() => history.length)).toBe(historyBefore + 1);
+    });
+  }
+
+  test("KONTROLL: en ulest seksjon har fortsatt «Marker seksjon lest, og gå videre», og lesingen sendes", async ({ page }) => {
+    await mockBase(page, "nb");
+    const calls = await mockCourse(page);
+    await openCourse(page);
+    await sectionRow(page, "ci1").click();
+    await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s1");
+    await expect(page.locator("#sectionReaderNext")).toHaveCount(0);
+    await expect(page.locator("#sectionReaderMarkRead")).toHaveText(ADVANCE.nb.markNext);
+    await page.locator("#sectionReaderMarkRead").click();
+    await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s2");
+    expect(calls.reads).toEqual(["s1"]);
+
+    // Tilbake til kurset og «Se igjen» på den som nettopp ble lest: nå «Gå videre», uten ny lesing.
+    await openPanel(page).locator('[data-role="close"]').click();
+    await expect(page.locator(".course-item.open")).toHaveCount(0);
+    await sectionRow(page, "ci1").click();
+    await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s1");
+    await expect(page.locator("#sectionReaderNext")).toHaveText(ADVANCE.nb.next);
+    await page.locator("#sectionReaderNext").click();
+    await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s2");
+    expect(calls.reads).toEqual(["s1"]);
+  });
+});

@@ -213,6 +213,8 @@ fortsatt.)
 - Nederst står **én** knapp: **«Marker seksjon lest, og gå videre»**. Den registrerer lesningen og
   åpner neste element i kurset i samme klikk. Er neste element en test, sier knappen det —
   **«Marker seksjon lest, og gå til testen»** — for da er det dit du skal, ikke forbi (#924).
+- Åpner du en seksjon du alt har lest («Se igjen»), heter knappen **«Gå videre»** eller **«Gå til testen»**. Den tar deg
+  videre uten å registrere lesingen på nytt (#1162).
 - I teksten kan det stå små øvelser som ikke teller: «tenk først», «sjekk deg selv», **steg for
   steg** (bla med Neste/Forrige eller piltastene), **skriv selv** (skriv, se eksempelsvaret og kryss av;
   teksten blir bare i nettleserfanen din til du lukker den), **repetisjonskort** (snu kortet med klikk, mellomrom eller
