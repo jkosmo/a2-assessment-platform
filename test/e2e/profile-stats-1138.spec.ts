@@ -279,12 +279,12 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
     await expect(row.locator("td")).toHaveCount(4);
     await expect(row).toContainText("Prosjektledelse grunnkurs");
     await expect(row).not.toContainText("cert-abc-123");
-    const link = row.locator('a[href="/certificate?id=cert-abc-123"]');
+    const link = row.locator('a[href="/certificate?id=cert-abc-123&fra=profil"]');
     await expect(link).toBeVisible();
     await expect(link).toHaveText("Vis kursbevis");
-    // Fra profile-certificate-link.spec.ts (testgjennomgangen 2026-11, avsnitt 4.1): kursbeviset åpnes i en ny fane. Den
-    // engelske teksten, «View certificate», sjekkes i profile-locale-switch.spec.ts.
-    await expect(link).toHaveAttribute("target", "_blank");
+    // #1162: kursbeviset åpnes i samme fane (før: ny fane), og `fra=profil` gir beviset «← Tilbake til profilen». Den
+    // engelske teksten, «View course certificate», sjekkes i profile-locale-switch.spec.ts; tilbake i participant-flow-1162.
+    await expect(link).not.toHaveAttribute("target", /.+/);
   });
 
   test("Beståtte moduler: bare de beståtte fra statistikken, med dato og poeng", async ({ page }) => {

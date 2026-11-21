@@ -64,7 +64,8 @@ betyr:
 - **Tilbake lukker det du har åpent og lar deg stå i kurset.** Det gjelder nettleserens tilbake-knapp, tilbake-sveipen på
   telefonen, «← Tilbake til kurset» og Escape. Alle gjør det samme. Nettleserens fram-knapp åpner det igjen.
 - **Tilbake heter det samme overalt:** «← Tilbake til kurset» i en seksjon eller modul, «← Tilbake til Mine kurs» i et kurs og
-  på kursbeviset, og «← Tilbake til innleggene» i en diskusjonstråd.
+  på kursbeviset (eller «← Tilbake til profilen» når du åpnet beviset fra profilen), og «← Tilbake til innleggene» i en
+  diskusjonstråd.
 - **Går du rett fra én seksjon til neste** («Marker seksjon lest, og gå videre», «Neste: …»), er det fortsatt bare ett steg
   tilbake til kurset, ikke ett per seksjon du har lest.
 - **Oppdaterer du siden, eller åpner et bokmerke**, står seksjonen eller modulen åpen igjen.
@@ -136,6 +137,8 @@ Kurs grupperer flere moduler. Kursbevis utstedes automatisk når alle moduler i 
 1. Gå til `/participant` — «Mine kurs»-seksjonen viser kursfremdrift
 2. Klikk på et kurs for å se hvilke moduler som inngår og hvilke du har bestått
 3. Et fullført kurs står nederst i sitt tema, med lenken «Vis kursbevis». Beviset finnes også i Profil, med samme lenke.
+4. Beviset åpnes i samme fane. Nettleserens tilbake-knapp fører tilbake til kurset, lista eller profilen du kom fra. Lenken på
+   beviset heter «← Tilbake til Mine kurs», eller «← Tilbake til profilen» når du kom fra profilen.
 
 ## Vanlige spørsmål
 

@@ -96,7 +96,8 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 | `/participant?courseId=<id>&moduleId=<id>` | #1158: the course with that module's workspace open. Same rules as the section form (unavailable → «Vi fant ikke denne modulen …»). Back (browser or the app's «← Tilbake til kurset») returns to `?courseId=<id>`: the history holds at most one item entry above the course entry, opening another item replaces it, and «Lukk» steps back. A direct link or bookmark places the course entry under the item |
 | `/participant?moduleId=<id>` | Finds the course the module is in, preferring one that requires a retake, opens the module and rewrites the address to `?courseId=<course>&moduleId=<id>` (link in result and appeal e-mails, 2.138.0; the module part kept since #1158, so a reload keeps it open) |
 | `/participant/completed` | 301 → `/participant` (2.126.0: «Fullførte» fjernet; kursbevis står på kurskortet, anke i modulen) |
-| `/certificate?id=<certificateId>` | Printable course certificate view (#550) |
+| `/certificate?id=<certificateId>` | Printable course certificate view (#550). Opened in the same tab (#1162); the page's link back says «← Tilbake til Mine kurs» (`/participant`) |
+| `/certificate?id=<certificateId>&fra=profil` | Same, opened from the profile: the link back says «← Tilbake til profilen» (`/profile`) (#1162) |
 | `/deltakere/klasser` | Classes (cohorts) admin — list, create, members, course assignment (#645/CL-3; moved here in #765) |
 | `/deltakere/status` | Teacher/SMO cohort-status dashboard — enrollment status counts per course (#498) |
 | `/deltakere/aktivitet` | Administrator only (from 2.128.0): activity across all courses over time, and who is active (#1099) |

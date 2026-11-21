@@ -38,6 +38,10 @@ Lenken åpner en ren bevis-side (`/certificate?id=<bevis-ID>`) med kursnavn, del
 fullføringsdato, sertifiseringsnivå og bevis-ID. Klikk **«Skriv ut / lagre som PDF»** for å skrive
 ut eller lagre beviset som PDF via nettleseren.
 
+Beviset åpnes i samme fane (#1162). Nettleserens tilbake-knapp fører dit du kom fra: kurset (med det du hadde åpent),
+«Mine kurs» eller profilen. Lenken øverst på beviset heter **«← Tilbake til Mine kurs»**, eller **«← Tilbake til profilen»**
+når du åpnet beviset fra profilen.
+
 > Et bevis er **personlig**: du kan bare åpne dine egne bevis. Forsøk på å åpne et annet bevis gir
 > «fant ikke beviset».
 

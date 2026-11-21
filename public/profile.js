@@ -375,6 +375,9 @@ function selectTab(id, { focus = false } = {}) {
     if (on && focus) button.focus();
   }
   for (const panel of tabPanels) setHidden(panel, panel.dataset.profilePanel !== id);
+  // #1162: fanen står i historikkoppføringen, så nettleserens tilbake fra kursbeviset (som nå åpnes i samme fane) lander på
+  // fanen deltakeren var på, og ikke på «Statistikk». Adressen endres ikke.
+  try { history.replaceState({ ...(history.state ?? {}), profileTab: id }, ""); } catch { /* historikken er stengt: standardfanen */ }
 }
 
 profileTabs?.addEventListener("click", (event) => {
@@ -393,6 +396,12 @@ profileTabs?.addEventListener("keydown", (event) => {
   event.preventDefault();
   selectTab(next.dataset.profileTab, { focus: true });
 });
+
+// #1162: tilbake fra kursbeviset (eller en oppfriskning) åpner fanen som sto i historikkoppføringen.
+{
+  const remembered = history.state?.profileTab;
+  if (typeof remembered === "string" && remembered !== selectedTab) selectTab(remembered);
+}
 
 function renderCourses(body) {
   const courses = Array.isArray(body?.completions) ? body.completions : [];
@@ -430,9 +439,8 @@ function renderCourses(body) {
     const certTd = cell("profile.courses.table.certificate", undefined, "profile-nowrap");
     if (course.certificateId) {
       const link = document.createElement("a");
-      link.href = `/certificate?id=${encodeURIComponent(course.certificateId)}`;
-      link.target = "_blank";
-      link.rel = "noopener";
+      // #1162: samme fane, så nettleserens tilbake fører hit igjen. `fra=profil` gir beviset «← Tilbake til profilen».
+      link.href = `/certificate?id=${encodeURIComponent(course.certificateId)}&fra=profil`;
       link.textContent = t("profile.courses.view");
       certTd.appendChild(link);
     } else {

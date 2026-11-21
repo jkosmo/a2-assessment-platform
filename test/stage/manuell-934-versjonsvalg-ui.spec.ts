@@ -259,10 +259,11 @@ test("4. bevis for 1 uten versjonslinje; ny seksjon lest → bevis for 2 med «V
   await bilde(page, "4b-kursbevis-v2", false);
 
   await page.goto(`${BASE}/profile`, { waitUntil: "domcontentloaded" });
-  const v2rad = page.locator("#coursesBody tr", { has: page.locator(`a[href="/certificate?id=${tilstand.bevisV2}"]`) });
+  // #1162: lenken i profilen bærer `&fra=profil`.
+  const v2rad = page.locator("#coursesBody tr", { has: page.locator(`a[href="/certificate?id=${tilstand.bevisV2}&fra=profil"]`) });
   await expect(v2rad).toBeVisible({ timeout: 45_000 });
   await expect(v2rad.locator("td").first()).toHaveText(`${KURSNAVN} (versjon 2)`);
-  const v1rad = page.locator("#coursesBody tr", { has: page.locator(`a[href="/certificate?id=${tilstand.bevisV1}"]`) });
+  const v1rad = page.locator("#coursesBody tr", { has: page.locator(`a[href="/certificate?id=${tilstand.bevisV1}&fra=profil"]`) });
   await expect(v1rad.locator("td").first()).toHaveText(KURSNAVN);
   await v2rad.scrollIntoViewIfNeeded();
   await bilde(page, "4c-profil-versjon-2", false);

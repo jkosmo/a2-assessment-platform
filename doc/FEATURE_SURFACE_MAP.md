@@ -114,6 +114,12 @@ change to issuance, fetch-wiring, or rendering must be verified on all three:
 note (`courses.certificate.earlier`, «Vis kursbevis for versjon {n}») and the profile (`profile.courses.view`). «Sertifikat» is
 not used for it. Guard: `test/e2e/participant-flow-1162.spec.ts` (three languages, 390 and 360 px).
 
+**Same tab (#1162):** none of the three links has `target="_blank"`, so the browser's Back returns to where the participant was:
+the course with the open item (#1158 keeps both in the address), the list, or the profile on the tab «Beståtte kurs» (the profile
+keeps its tab in `history.state.profileTab`). The profile link carries `&fra=profil`; `certificate.js` then points the page's own
+link to `/profile` with «← Tilbake til profilen» (`certificate.backToProfile`). Without it the link is «← Tilbake til Mine kurs» to
+`/participant`. A new way into the certificate that is not «Mine kurs» needs its own `fra` value. Guard: the same spec («skive 3»).
+
 **Issuance gates (server):** a completion is issued when **all modules passed AND all sections
 read**, for any course with ≥1 element — including **module-less reading courses** (#476/#580).
 `reconcileCourseCompletionsForUser` (run on `GET /api/courses/completions`) backfills any missed
@@ -1853,7 +1859,8 @@ for interne lukkinger der adressen allerede er tatt hånd om (kursbytte, popstat
 | Kursbytte, «← Tilbake til Mine kurs» (het «← Alle kurs» før #1162) | `focusCourse`, `unfocusCourse` (`courseFocusUrl` tar bort elementet) | kursnivået som før (#922) |
 | Modulkortet utenfor kurs (dev/test) | `renderModules` | `closeInlineItem` |
 
-Kursbeviset (`/certificate`) er utenfor (#1162).
+Kursbeviset (`/certificate`) er en egen side, men åpnes i samme fane (#1162): nettleserens tilbake fra beviset laster
+`/participant?courseId=…&moduleId=…` på nytt, og kurset står med elementet åpent (se § 6).
 
 **Tekstene for tilbake hos deltakeren (#1162, produkteier 2026-11-21):** «← Tilbake til <stedet du kommer til>», med stedets
 eget navn, ett navn per sted. Fra seksjonen og modulen «← Tilbake til kurset» (`courses.item.backToCourse`, én nøkkel for

@@ -361,3 +361,144 @@ test.describe("#1162 skive 2: «← Tilbake til <stedet>»", () => {
     }
   }
 });
+
+// ── Skive 3: kursbeviset i samme fane ──────────────────────────────────────────────────────────────────────────────────────
+
+const PROFILE_BACK: Record<Locale, string> = { nb: "← Tilbake til profilen", nn: "← Tilbake til profilen", "en-GB": "← Back to your profile" };
+
+// «ny» har bare et bevis for en eldre hovedversjon og en modul som kan åpnes; «done» er fullført.
+async function mockSameTab(page: Page) {
+  await page.route("**/api/courses", (route: Route) =>
+    route.fulfill(json({ courses: [course("ny", "Arbeidsrett", "IN_PROGRESS"), course("done", "Personvern", "COMPLETED")] })),
+  );
+  await page.route("**/api/courses/completions", (route: Route) =>
+    route.fulfill(json({
+      completions: [
+        { courseId: "done", certificateId: "cert-done", completedAt: "2026-10-01T10:00:00.000Z", courseTitle: "Personvern", certificationLevel: "basic", versionMajor: 1, versionMinor: 0, current: true },
+        { courseId: "ny", certificateId: "cert-v2", completedAt: "2026-03-01T10:00:00.000Z", courseTitle: "Arbeidsrett", certificationLevel: "basic", versionMajor: 2, versionMinor: 0, current: false },
+      ],
+    })),
+  );
+  await page.route("**/api/courses/enrollments", (route: Route) => route.fulfill(json({ enrollments: [] })));
+  await page.route("**/api/courses/ny", (route: Route) =>
+    route.fulfill(json({
+      course: {
+        id: "ny",
+        title: "Arbeidsrett",
+        discussionsEnabled: false,
+        modules: [],
+        items: [
+          { type: "SECTION", sectionId: "s1", courseItemId: "ny-1", title: "Lesestoff", read: true, available: true, required: true },
+          { type: "MODULE", moduleId: "m1", courseItemId: "ny-2", title: "Testen", moduleStatus: "NOT_STARTED", available: true, required: true },
+        ],
+      },
+    })),
+  );
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill(json({
+      modules: [{ id: "m1", title: "Testen", description: null, assessmentMode: "FREETEXT_PLUS_MCQ", submissionSchema: null, assessmentPolicy: null, taskText: "Skriv et svar", activeVersion: { id: "mv-1", versionNo: 1 }, participantStatus: null }],
+    })),
+  );
+  for (const [id, courseTitle, versionMajor] of [["cert-v2", "Arbeidsrett", 2], ["cert-done", "Personvern", 1]] as const) {
+    await page.route(`**/api/courses/completions/${id}`, (route: Route) =>
+      route.fulfill(json({ certificateId: id, courseId: "c", courseTitle, certificationLevel: "basic", completedAt: "2026-06-20T10:00:00.000Z", participantName: "Kari", moduleCount: 1, versionMajor, versionMinor: 0, current: true })),
+    );
+  }
+}
+
+const certBack = (page: Page) => page.locator("#certBackLink");
+
+test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
+  test("fra kurset med en åpen modul: beviset i samme fane, og nettleserens tilbake står i kurset med modulen åpen", async ({ page }) => {
+    await mockBase(page, "nb");
+    await mockSameTab(page);
+    await page.goto("/participant");
+    await item(page, "ny").locator(".course-accordion-header").click();
+    await page.locator('.course-item[data-key="ny-2"] .course-module-row').click();
+    await expect(page.locator(".course-inline-panel #moduleWorkspace")).toBeVisible();
+    await expect(page).toHaveURL(/\/participant\?courseId=ny&moduleId=m1$/);
+
+    const earlier = item(page, "ny").locator("a.course-certificate-link--earlier");
+    await expect(earlier).not.toHaveAttribute("target", /.+/);
+    const pagesBefore = page.context().pages().length;
+    await earlier.click();
+
+    // Samme fane: ingen ny side, og adressen er beviset.
+    await expect(page).toHaveURL(/\/certificate\?id=cert-v2$/);
+    expect(page.context().pages().length).toBe(pagesBefore);
+    await expect(page.locator("#certificate")).toBeVisible();
+    await expect(certBack(page)).toHaveText("← Tilbake til Mine kurs");
+    await expect(certBack(page)).toHaveAttribute("href", "/participant");
+
+    // Nettleserens tilbake: kurset står, med modulen åpen.
+    await page.goBack();
+    await expect(page).toHaveURL(/\/participant\?courseId=ny&moduleId=m1$/);
+    await expect(item(page, "ny")).toHaveClass(/is-focused/);
+    await expect(page.locator('.course-item[data-key="ny-2"] .course-inline-panel #moduleWorkspace')).toBeVisible();
+  });
+
+  test("fra kursraden i lista: tilbake gir lista, og lenken på beviset fører til «Mine kurs»", async ({ page }) => {
+    await mockBase(page, "nb");
+    await mockSameTab(page);
+    await page.goto("/participant");
+    const link = item(page, "done").locator(".course-certificate-link");
+    await expect(link).not.toHaveAttribute("target", /.+/);
+    await link.click();
+    await expect(page).toHaveURL(/\/certificate\?id=cert-done$/);
+    await expect(page.locator("#certificate")).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/participant$/);
+    await expect(item(page, "ny")).toBeVisible();
+    await expect(item(page, "done")).toBeVisible();
+
+    // Lenken på beviset gjør det samme som tilbake her: «Mine kurs».
+    await page.goForward();
+    await expect(page.locator("#certificate")).toBeVisible();
+    await certBack(page).click();
+    await expect(page).toHaveURL(/\/participant$/);
+    await expect(item(page, "done")).toBeVisible();
+  });
+
+  for (const locale of LOCALES) {
+    test(`fra profilen: «${PROFILE_BACK[locale]}», og nettleserens tilbake står i profilen (${locale})`, async ({ page }) => {
+      await mockBase(page, locale);
+      await mockSameTab(page);
+      await page.goto("/profile");
+      await page.locator("#profileTab-courses").click();
+      const link = page.locator("#coursesBody a").first();
+      await expect(link).not.toHaveAttribute("target", /.+/);
+      const pagesBefore = page.context().pages().length;
+      await link.click();
+
+      await expect(page).toHaveURL(/\/certificate\?id=cert-[a-z0-9-]+&fra=profil$/);
+      expect(page.context().pages().length).toBe(pagesBefore);
+      await expect(page.locator("#certificate")).toBeVisible();
+      await expect(certBack(page)).toHaveText(PROFILE_BACK[locale]);
+      await expect(certBack(page)).toHaveAttribute("href", "/profile");
+
+      // Nettleserens tilbake: profilen, med fanen «Beståtte kurs» der deltakeren var.
+      await page.goBack();
+      await expect(page).toHaveURL(/\/profile$/);
+      await expect(page.locator("#profilePanel-courses")).toBeVisible();
+      await expect(page.locator("#coursesBody a").first()).toBeVisible();
+
+      // Lenken på beviset fører også til profilen.
+      await page.goForward();
+      await expect(certBack(page)).toHaveText(PROFILE_BACK[locale]);
+      await certBack(page).click();
+      await expect(page).toHaveURL(/\/profile$/);
+      await expect(page.locator("#profileName")).toBeVisible();
+    });
+  }
+
+  test("språkbytte på beviset fra profilen: lenken beholder stedet og følger språket", async ({ page }) => {
+    await mockBase(page, "nb");
+    await mockSameTab(page);
+    await page.goto("/certificate?id=cert-done&fra=profil");
+    await expect(certBack(page)).toHaveText(PROFILE_BACK.nb);
+    await page.selectOption("#localeSelect", "en-GB");
+    await expect(certBack(page)).toHaveText(PROFILE_BACK["en-GB"]);
+    await expect(certBack(page)).toHaveAttribute("href", "/profile");
+  });
+});

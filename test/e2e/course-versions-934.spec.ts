@@ -124,10 +124,10 @@ test.describe("#934 — kursbevis per hovedversjon", () => {
     await page.goto("/profile");
     const rader = page.locator("#coursesBody tr");
     await expect(rader).toHaveCount(2);
-    await expect(page.locator("#coursesBody tr", { has: page.locator('a[href="/certificate?id=cert-v2"]') }).locator("td").first())
+    await expect(page.locator("#coursesBody tr", { has: page.locator('a[href="/certificate?id=cert-v2&fra=profil"]') }).locator("td").first())
       .toHaveText("Arbeidsrett (versjon 2)");
     // Versjon 1 er alle bevis fra før kurs fikk versjoner — de får ingen tilføyelse.
-    await expect(page.locator("#coursesBody tr", { has: page.locator('a[href="/certificate?id=cert-v1"]') }).locator("td").first())
+    await expect(page.locator("#coursesBody tr", { has: page.locator('a[href="/certificate?id=cert-v1&fra=profil"]') }).locator("td").first())
       .toHaveText("Arbeidsrett");
   });
 

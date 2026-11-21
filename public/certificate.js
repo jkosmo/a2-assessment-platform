@@ -176,6 +176,15 @@ localeSelect.addEventListener("change", () => {
   bevis.oppdaterVedSpråkbytte();
 });
 
+// #1162: kursbeviset åpnes i samme fane, og lenken tilbake fører dit deltakeren kom fra. Lenken i profilen bærer `fra=profil`;
+// alle andre (kursraden, det eldre beviset i kurset, en lenke uten opphav) fører til «Mine kurs». Teksten følger språkbyttet,
+// fordi den går gjennom data-i18n som resten av siden.
+const backLink = document.getElementById("certBackLink");
+if (backLink && new URLSearchParams(window.location.search).get("fra") === "profil") {
+  backLink.href = "/profile";
+  backLink.setAttribute("data-i18n", "certificate.backToProfile");
+}
+
 populateLocaleSelect();
 applyTranslations();
 loadVersion();
