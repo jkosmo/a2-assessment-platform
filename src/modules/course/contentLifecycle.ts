@@ -75,7 +75,10 @@ export function findActiveCoursesContainingSection(sectionId: string, reader: Li
   return coursesContaining({ sectionId }, "active", reader);
 }
 
-/** ALLE kurs som inneholder modulen, også arkiverte (`archived` sier hvilke). Bare for sletting. */
+/**
+ * ALLE kurs som inneholder modulen, også arkiverte (`archived` sier hvilke). For sletting, og (2.170.0) for anke: en modul som bare
+ * står i arkiverte kurs, kan ikke ankes (`assertAppealAllowed`, appealService.ts).
+ */
 export function findAllCoursesContainingModule(moduleId: string, reader: LifecycleReader = prisma) {
   return coursesContaining({ moduleId }, "all", reader);
 }

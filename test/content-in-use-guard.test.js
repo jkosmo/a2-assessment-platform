@@ -566,15 +566,21 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
     expect(counting).toEqual([OWNER, "modules/course/courseArchivePreview.ts", "routes/adminCourses.ts"].sort());
   });
 
-  it("svaret «alle kurs» brukes bare av slettingene", () => {
-    // Sletting av en seksjon, sletting av en modul (kommandoen og ruta), og kaskadeslettingens «delt med andre kurs».
+  it("svaret «alle kurs» brukes bare av slettingene (og anken, 2.170.0)", () => {
+    // Sletting av en seksjon, sletting av en modul (kommandoen og ruta), kaskadeslettingens «delt med andre kurs», og anken.
     const ALLOWED = {
       // #1152 skive 4b: «Slett» (én) og lista over arkiverte (mange) leser kursene og kjører regelen `courseDeleteHold`; ruta har
       // sin forhåndssjekk.
       courseDeleteHold: ["modules/adminContent/adminContentCommands.ts", "modules/course/sectionCommands.ts"],
       findAllCoursesContainingItems: ["modules/adminContent/adminContentCommands.ts", "modules/course/sectionCommands.ts"],
       describeModuleDeleteBlock: ["routes/adminContent.ts"],
-      findAllCoursesContainingModule: ["modules/adminContent/adminContentCommands.ts", "modules/course/courseCascadeDeleteService.ts"],
+      // 2.170.0 (produkteier 21.11.2026): anken. En modul som bare står i arkiverte kurs, kan ikke ankes; svaret «alle kurs», med
+      // `archived`, skiller «bare arkiverte» fra «minst ett aktivt» (`findModuleAppealScope`).
+      findAllCoursesContainingModule: [
+        "modules/adminContent/adminContentCommands.ts",
+        "modules/course/courseCascadeDeleteService.ts",
+        "modules/appeal/appealRepository.ts",
+      ],
       findAllCoursesContainingSection: ["modules/course/courseCascadeDeleteService.ts", "modules/course/sectionCommands.ts"],
     };
     for (const [name, allowed] of Object.entries(ALLOWED)) {

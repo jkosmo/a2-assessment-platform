@@ -2,6 +2,34 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.170.0 - 2026-11-21
+
+Et arkivert kurs kan ikke ankes (produkteier 21.11.2026: «Det skal ikke være mulig å anke et arkivert kurs, da må student heller
+få en informativ feilmelding som forteller at kurset er arkivert»). Ingen migrering.
+
+**Hva deltakeren merker:** prøver hen å anke et stryk på en modul som bare står i arkiverte kurs, eller som selv er arkivert, kommer
+meldingen «Du kan ikke anke: kurset er arkivert. Når et kurs er arkivert, har stryk og anke ingen betydning for det lenger.» (bokmål,
+nynorsk og engelsk). Ingen anke lages, og innleveringen er urørt. Står modulen også i et aktivt kurs, kan den ankes som før; anken
+gjelder da det aktive kurset.
+
+**Slik virker det:** en innlevering kjenner bare modulen, så regelen går gjennom den (tolkningen er godkjent av produkteier, og står i
+DECISIONS). `assertAppealAllowed` (appealService.ts) sjekker modulen og kursene den står i (`findAllCoursesContainingModule`), før
+noe skrives. Anken opprettes under innholdslåsen (delt) og deltakerlåsen (`runContentReadForLearner`), så en arkivering ikke kan komme
+mellom sjekken og skrivingen. Ny feilkode `appeal_course_archived` (400).
+
+**Tester:**
+- `m2-appeal-archived-course-2170`, gjennom ruta: bare arkivert kurs gir 400 og ingen anke; arkivert modul gir 400; kontroll:
+  modulen også i et aktivt kurs gir 201. Begge stoppene ble røde da sjekken ble tatt bort.
+- e2e i `participant-earlier-result-2126`: meldingen på bokmål, nynorsk og engelsk, uten tjenerens tekst og uten rå nøkkel. Rød da
+  bokmålsteksten ble tatt bort.
+- Enhetstest av regelen i `appeal-service.test.ts`. Vakta `content-in-use-guard` har anken som godkjent bruker av «alle kurs».
+
+**QA 2.170.0 (Codex): GO.** Rettet før commit: anken holder nå innholdslåsen delt (en arkivering kunne kommet mellom sjekken og
+skrivingen), og e2e for meldingen.
+
+**Kjent (ikke rettet):** en anke som alt var åpen da kurset ble arkivert, kan fortsatt kreves og avgjøres. Det gir et vedtak og et
+varsel, men ikke kursbevis mens kurset er arkivert. Eksisterende, utenfor denne endringen.
+
 ## 2.169.0 - 2026-11-18
 
 To hull i vaktene som holder et arkivert kurs igjen fra sletting (#1152). Begge gjelder «Slett»-knappen i prod i dag, og ville
@@ -54,6 +82,11 @@ kan holde flere kurs igjen, aldri slette mer. Dokumentasjonsfunnene er rettet (A
 kurset er slettet, og får bestått; det slettede kurset får da aldri kursbevis. **Avgjort av produkteier 21.11.2026: slik skal
 det være.** Et arkivert kurs kan ikke ankes, og stryk og anke har ingen virkning for det (DECISIONS). At en anke på et arkivert
 kurs stoppes med en melding om at kurset er arkivert, bygges i 2.170.0.
+
+**På stage 21.11.2026 kl. 08:48** (dev 3c820d78). Utrullingen gikk rent. `2-161` (4/4, «Slett» på arkivert innhold), `2-162` (5/5,
+datoene i lista over arkiverte) og `2-160` (7/7, arkivert er urørlig) er kjørt på nytt mot den. Det uklare kravet er ikke prøvd på
+stage: det krever delte elementer arkivert i en bestemt rekkefølge og en deltaker som har lest eller bestått. Integrasjonstestene
+dekker det gjennom rutene.
 
 **Kjent (ikke rettet):**
 - To andre veier gjør en innlevering til en som venter, uten deltakerlåsen: flervalget setter `PROCESSING`

@@ -1878,7 +1878,8 @@ begrunnet unntak), `test/content-lock-write-guard.test.js`, `test/m2-archived-re
   kurset er arkivert har heller ikke stryk og anke noen konsekvens»). En anke via et annet, aktivt kurs etter at kurset er
   slettet, gjelder bare det aktive kurset; at det slettede kurset ikke får kursbevis, er slik det skal være (QA-porten 2.169.0,
   tredje runde). **Tolkning, siden en innlevering bare kjenner modulen:** anke stoppes når modulen er arkivert, eller når alle
-  kursene den står i, er arkivert. Står modulen i minst ett aktivt kurs, eller i ingen kurs, kan den ankes. Bygges i 2.170.0.
+  kursene den står i, er arkivert. Står modulen i minst ett aktivt kurs, eller i ingen kurs, kan den ankes (godkjent av
+  produkteier 21.11.2026). Fra 2.170.0: `appeal_course_archived` (`assertAppealAllowed`, appealService.ts, under deltakerlåsen).
 
 **Plan:** `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, «Etappe 4» og «Etter gjennomlesingen».
 **Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** avgjort av produkteier; bygges i 4a
@@ -2404,3 +2405,21 @@ store ombyggingene med plan og planlesing først (#1177, #1179, #1170); resten l
   modulens låste skriver og kursets navngitte kommandoer som mønster; ikke som en egen ombygging.
 
 **Sak:** #1157, #1175, #1180 · **Dato:** 2026-11-21 · **Status:** avgjort av produkteier
+
+## Deltakerflyten: tilbake, kursbevis og hvordan modul og seksjon åpnes (#1162, 2026-11-21)
+
+Kartlagt i `doc/design/PLAN_1162_DELTAKERFLYT.md`. Produkteier avgjorde:
+
+- **Tilbake heter «← Tilbake til <stedet>», i lang form:** «← Tilbake til kurset» fra seksjon og modul, «← Tilbake til Mine kurs» fra
+  kurset og fra kursbeviset, og «← Tilbake til profilen» når beviset er åpnet fra profilen.
+- **Ordet er «Kursbevis»**, og lenken heter «Vis kursbevis» overalt, også på telefon.
+- **Kursbeviset åpnes i samme fane**, så nettleserens tilbake-knapp virker.
+- **«Gå videre» i en modul vises bare når modulen er bestått.**
+- **Knappen for en modul i kurslista heter «Ta testen»**, ikke «Gjennomfør».
+- **Merket i hodet heter «Lesestoff» og «Test»**, ikke «Leser» og «Arbeidsflate».
+- **De tre tilbake-tekstene på produsentsidene** (`courses.back`, `sections.backToCourse`, `shell.header.back`) tas i #1170, som gjør
+  om de samme lenkene, ikke i #1162.
+
+Skive 5 (modulen åpnes som seksjonen) vises som prototype før den bygges.
+
+**Sak:** #1162, #1170 · **Dato:** 2026-11-21 · **Status:** avgjort av produkteier

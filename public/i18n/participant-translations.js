@@ -153,6 +153,7 @@ export const translations = {
     // #1152 skive 4a-2: det som holder et arkivert kurs igjen fra sletting, i tillegg til kursbevisene. {count} fra `details`.
     "errors.api.course_has_completed_without_certificate": "The course cannot be deleted because {count} participant(s) have completed the requirement without a certificate. Restore and publish the course so they get the certificate.",
     "errors.api.course_requirement_unclear": "The course cannot be deleted: it is unclear what it required when it was archived, and {count} participant(s) have passed or read part of it. The course stays archived.",
+    "errors.api.appeal_course_archived": "You cannot appeal: the course has been archived. When a course is archived, a fail or an appeal no longer has any effect on it.",
     "errors.api.course_has_pending_reviews": "The course cannot be deleted yet because {count} submission(s) in its modules are waiting for assessment, manual review or appeal. The course can be deleted when they are resolved.",
     "errors.api.purge_confirmation_outdated": "This page is from an older version and did not send the list of modules it showed. Reload the page and try again. Nothing was deleted.",
     "errors.api.system_class_immutable": "This is a system class and is managed automatically. It cannot be changed by hand.",
@@ -739,6 +740,7 @@ export const translations = {
     "errors.api.course_has_completions": "Kurset har utstedte kursbevis og kan ikke slettes. Det blir stående arkivert, og registreringene beholdes.",
     "errors.api.course_has_completed_without_certificate": "Kurset kan ikke slettes fordi {count} deltaker(e) har fullført kravet uten kursbevis. Kurset må gjenopprettes og publiseres for at de skal få kursbeviset.",
     "errors.api.course_requirement_unclear": "Kurset kan ikke slettes: det er uklart hva kurset krevde da det ble arkivert, og {count} deltaker(e) har bestått eller lest noe av det. Kurset blir stående arkivert.",
+    "errors.api.appeal_course_archived": "Du kan ikke anke: kurset er arkivert. Når et kurs er arkivert, har stryk og anke ingen betydning for det lenger.",
     "errors.api.course_has_pending_reviews": "Kurset kan ikke slettes ennå fordi {count} besvarelse(r) i kursets moduler venter på vurdering, manuell behandling eller anke. Kurset kan slettes når de er avgjort.",
     "errors.api.purge_confirmation_outdated": "Siden er fra en eldre versjon og sendte ikke med lista over modulene den viste. Last siden på nytt og prøv igjen. Ingenting ble slettet.",
     "errors.api.system_class_immutable": "Dette er en systemklasse som styres automatisk. Den kan ikke endres manuelt.",
@@ -1316,6 +1318,7 @@ export const translations = {
 "errors.api.course_has_completions": "Kurset har utferda kursbevis og kan ikkje slettast. Det blir ståande arkivert, og registreringane blir tekne vare på.",
 "errors.api.course_has_completed_without_certificate": "Kurset kan ikkje slettast fordi {count} deltakar(ar) har fullført kravet utan kursbevis. Kurset må gjenopprettast og publiserast for at dei skal få kursbeviset.",
 "errors.api.course_requirement_unclear": "Kurset kan ikkje slettast: det er uklart kva kurset kravde då det vart arkivert, og {count} deltakar(ar) har bestått eller lese noko av det. Kurset blir ståande arkivert.",
+"errors.api.appeal_course_archived": "Du kan ikkje anke: kurset er arkivert. Når eit kurs er arkivert, har stryk og anke inga tyding for det lenger.",
 "errors.api.course_has_pending_reviews": "Kurset kan ikkje slettast enno fordi {count} svar i modulane til kurset ventar på vurdering, manuell behandling eller anke. Kurset kan slettast når dei er avgjorde.",
 "errors.api.purge_confirmation_outdated": "Sida er frå ein eldre versjon og sende ikkje med lista over modulane ho viste. Last sida på nytt og prøv igjen. Ingenting vart sletta.",
 "errors.api.system_class_immutable": "Dette er ein systemklasse som blir styrt automatisk. Han kan ikkje endrast manuelt.",

@@ -4,8 +4,19 @@ import type {
 } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import type { LearnerTx } from "../../db/contentLock.js";
+import { findAllCoursesContainingModule, type LifecycleReader } from "../course/contentLifecycle.js";
 
 type AppealRepositoryClient = Pick<typeof prisma, "appeal" | "submission" | "user" | "assessmentDecision">;
+
+/**
+ * 2.170.0: om modulen er arkivert, og om kursene den står i, er arkivert (se `assertAppealAllowed`, appealService.ts). «Hvilke kurs»
+ * besvares av contentLifecycle.ts (`findAllCoursesContainingModule`), som overalt ellers (test/content-in-use-guard.test.js).
+ */
+export async function findModuleAppealScope(client: LifecycleReader, moduleId: string) {
+  const module = await client.module.findUnique({ where: { id: moduleId }, select: { archivedAt: true } });
+  if (!module) return null;
+  return { archivedAt: module.archivedAt, courses: await findAllCoursesContainingModule(moduleId, client) };
+}
 
 /**
  * #1152 (Codex leste byggenotatet for 4c, 18.11.2026): en ny anke opprettes under deltakerlåsen. Kursslettingen

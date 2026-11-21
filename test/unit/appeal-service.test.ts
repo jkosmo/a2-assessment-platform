@@ -47,6 +47,8 @@ vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
   },
   // #1152: anken opprettes under deltakerlåsen, med en egen skriver, og sjekken av en åpen anke står i samme transaksjon.
   createAppealWriter: () => ({ createAppeal }),
+  // 2.170.0: modulen og kursene den står i. `null` = ingen modul å sjekke (anken går).
+  findModuleAppealScope: async () => null,
   createAppealRepository: () => ({
     findActiveAppealForSubmission,
     updateSubmissionStatus,
@@ -208,6 +210,20 @@ describe("appeal service", () => {
     expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
     expect(createAppeal).toHaveBeenCalledTimes(1);
     expect(updateSubmissionStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("2.170.0: anke stoppes når modulen er arkivert eller bare står i arkiverte kurs; kontroll: ett aktivt kurs eller ingen kurs slipper gjennom", async () => {
+    const { assertAppealAllowed } = await import("../../src/modules/appeal/appealService.js");
+    const archived = { archived: true };
+    const active = { archived: false };
+    const stopped = (module: Parameters<typeof assertAppealAllowed>[0]) => {
+      try { assertAppealAllowed(module); return null; } catch (error) { return (error as { code?: string }).code ?? "ukjent"; }
+    };
+    expect(stopped({ archivedAt: new Date(), courses: [active] })).toBe("appeal_course_archived");
+    expect(stopped({ archivedAt: null, courses: [archived, archived] })).toBe("appeal_course_archived");
+    expect(stopped({ archivedAt: null, courses: [archived, active] })).toBeNull();
+    expect(stopped({ archivedAt: null, courses: [] })).toBeNull();
+    expect(stopped(null)).toBeNull();
   });
 
   it("rejects claim when the appeal is already assigned to another handler", async () => {

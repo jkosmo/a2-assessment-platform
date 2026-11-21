@@ -239,6 +239,32 @@ test("stryk på en flervalgsmodul: resultatet vises, det startes ikke et nytt fo
   await expect.poll(() => calls.appeals).toEqual(["s-old"]);
 });
 
+// 2.170.0 (produkteier 21.11.2026): et arkivert kurs kan ikke ankes, og deltakeren får en melding som sier det, på sitt språk.
+const ARKIVERT_ANKE = {
+  nb: "Du kan ikke anke: kurset er arkivert. Når et kurs er arkivert, har stryk og anke ingen betydning for det lenger.",
+  nn: "Du kan ikkje anke: kurset er arkivert. Når eit kurs er arkivert, har stryk og anke inga tyding for det lenger.",
+  "en-GB": "You cannot appeal: the course has been archived. When a course is archived, a fail or an appeal no longer has any effect on it.",
+} as const;
+for (const locale of ["nb", "nn", "en-GB"] as const) {
+  test(`2.170.0, ${locale}: anke på et arkivert kurs gir meldingen om at kurset er arkivert, ikke tjenerens tekst eller en rå nøkkel`, async ({ page }) => {
+    const calls = await mockBase(page, { mcqStatus: FAILED });
+    await page.addInitScript((loc) => { try { localStorage.setItem("participant.locale", loc); } catch { /* ignore */ } }, locale);
+    // Registrert etter mockBase: går foran ankeruta der.
+    await page.route("**/api/submissions/*/appeals", (route: Route) => {
+      calls.appeals.push("avvist");
+      return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "appeal_course_archived", message: "SERVERTEKST The course is archived." }) });
+    });
+    await page.goto("/participant");
+    await openModule(page, "MCQ Modul");
+    await expect(page.locator("#createAppeal")).toBeEnabled();
+    await page.locator("#createAppeal").click();
+    await expect.poll(() => calls.appeals).toEqual(["avvist"]);
+    await expect(page.locator(".toast").first()).toContainText(ARKIVERT_ANKE[locale]);
+    await expect(page.locator(".toast").first()).not.toContainText("SERVERTEKST");
+    await expect(page.locator(".toast").first()).not.toContainText("errors.api");
+  });
+}
+
 test("bestått: resultatet vises, men anke er ikke mulig", async ({ page }) => {
   const calls = await mockBase(page, { mcqStatus: PASSED, passed: true });
   await page.goto("/participant");
