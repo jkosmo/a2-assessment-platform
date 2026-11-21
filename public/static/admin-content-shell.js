@@ -5096,6 +5096,10 @@ function populateUiLocaleSelect() {
     settingsTab.renderSettingsPanel();
     // Handlingsraden og merkene i hodet bygges også i JS (#1046): tegn dem om med samme valg.
     renderWorkspaceActions(workspaceActionChoices);
+    // #1173 (rest): eierpanelet tegnes bare når modulen byttes (vakta på `dataset.moduleId`), så det sto på det forrige
+    // språket til noen klikket i det. Glem hvilken modul det ble tegnet for, så updateStateRail tegner det på nytt.
+    const ownerHost = document.getElementById("moduleOwnerPanelHost");
+    if (ownerHost) ownerHost.dataset.moduleId = "";
     updateStateRail();
     if (wasEditing) {
       enterPreviewEditMode({ force: true });

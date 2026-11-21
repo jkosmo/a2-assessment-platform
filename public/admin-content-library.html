@@ -131,7 +131,7 @@
         </div>
       </div>
 
-      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon">
+      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon" data-i18n-aria-label="area.contentNavAria">
         <a href="/admin-content/themes" class="content-area-nav-link" id="navTema" data-i18n="area.themes">Tema</a>
         <a href="/admin-content/courses" class="content-area-nav-link" id="navKurs" data-i18n="area.courses">Kurs</a>
         <a href="/admin-content" class="content-area-nav-link active" id="navModuler" data-i18n="area.modules">Moduler</a>
@@ -160,28 +160,30 @@
     <!-- v1.2.11: Rydd upubliserte-dialog. Viser kandidater + utelatte med årsak, krever
          skrevet "SLETT"-bekreftelse. Kun ADMINISTRATOR. -->
     <dialog id="purgeUnpublishedDialog" aria-labelledby="purgeDialogTitle">
-      <h2 class="dialog-title" id="purgeDialogTitle">Rydd upubliserte moduler</h2>
-      <p style="margin:0 0 12px;font-size:14px;color:#555">
+      <!-- #1173: tekstene settes fra `data-i18n` når dialogen åpnes (biblioteket har ingen oversetter for statisk HTML).
+           Bekreftelsesordet SLETT er det tjeneren krever, og står likt på alle språk. -->
+      <h2 class="dialog-title" id="purgeDialogTitle" data-i18n="library.purge.title">Rydd upubliserte moduler</h2>
+      <p style="margin:0 0 12px;font-size:14px;color:#555" data-i18n="library.purge.intro">
         Permanent sletting av alle moduler som aldri har vært publisert, ikke er arkivert,
-        ikke er i kurs, og ikke har submissions. Handlingen kan ikke angres.
+        ikke er i kurs, og ikke har innleveringer. Handlingen kan ikke angres.
       </p>
-      <div id="purgePreviewLoading" style="font-size:13px;color:#666">Henter kandidater…</div>
+      <div id="purgePreviewLoading" style="font-size:13px;color:#666" data-i18n="library.purge.loading">Henter kandidater…</div>
       <div id="purgePreviewBody" hidden>
-        <p style="margin:8px 0 4px;font-weight:600">Vil bli slettet (<span id="purgeDeleteCount">0</span>):</p>
+        <p style="margin:8px 0 4px;font-weight:600"><span data-i18n="library.purge.willDelete">Vil bli slettet</span> (<span id="purgeDeleteCount">0</span>):</p>
         <ul id="purgeDeleteList" style="max-height:180px;overflow:auto;font-size:13px;margin:0 0 12px;padding-left:18px"></ul>
         <details id="purgeSkipDetails" style="margin:0 0 12px">
-          <summary style="cursor:pointer;font-size:13px;color:#666">Utelatt: <span id="purgeSkipCount">0</span></summary>
+          <summary style="cursor:pointer;font-size:13px;color:#666"><span data-i18n="library.purge.skipped">Utelatt:</span> <span id="purgeSkipCount">0</span></summary>
           <ul id="purgeSkipList" style="max-height:140px;overflow:auto;font-size:12px;margin:6px 0 0;padding-left:18px;color:#666"></ul>
         </details>
         <div class="dialog-field">
-          <label for="purgeConfirmInput">Skriv <strong>SLETT</strong> for å bekrefte</label>
+          <label for="purgeConfirmInput"><span data-i18n="library.purge.typeBefore">Skriv</span> <strong>SLETT</strong> <span data-i18n="library.purge.typeAfter">for å bekrefte</span></label>
           <input id="purgeConfirmInput" type="text" autocomplete="off" />
         </div>
       </div>
       <div id="purgeError" class="error-text" hidden></div>
       <div class="dialog-actions">
-        <button type="button" id="purgeConfirmBtn" class="btn btn-primary" disabled style="background:#a32424;border-color:#a32424">Slett alle</button>
-        <button type="button" id="purgeCancelBtn" class="btn btn-secondary">Avbryt</button>
+        <button type="button" id="purgeConfirmBtn" class="btn btn-primary" disabled style="background:#a32424;border-color:#a32424" data-i18n="library.purge.confirm">Slett alle</button>
+        <button type="button" id="purgeCancelBtn" class="btn btn-secondary" data-i18n="ui.action.cancel">Avbryt</button>
       </div>
     </dialog>
 

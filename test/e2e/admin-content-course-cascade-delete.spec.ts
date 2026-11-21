@@ -98,7 +98,8 @@ test.describe("course cascade delete (#762)", () => {
     // #934 skive 4a: det forhåndsvisningen sa ville bli slettet, sendes med. Har det endret seg når serveren har
     // tatt innholdslåsen, svarer den 409 og sletter ingenting.
     expect(deleteBody).toEqual({ expectedDeletedModuleIds: ["module-1"], expectedDeletedSectionIds: ["section-1"] });
-    await expect(page.locator(".toast--success")).toContainText("slettet");
+    // #1173: meldingen sto på bokmål også på en engelsk side (testen kjører på en-GB).
+    await expect(page.locator(".toast--success")).toContainText("The course was deleted (1 module(s), 1 section(s)).");
   });
 
   test("the confirm button is hidden when the preview reports blockers", async ({ page }) => {

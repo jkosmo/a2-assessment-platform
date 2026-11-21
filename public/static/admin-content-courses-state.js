@@ -11,8 +11,9 @@ export function detectCoursesRoute(pathname) {
   return { view: "list" };
 }
 
-export function buildCourseDeleteDialogText(courseTitle) {
-  return `Er du sikker på at du vil slette kurset «${courseTitle}»? Modulene forblir i biblioteket uendret.`;
+// #1173: teksten sto på bokmål på alle språk. `tf` er sidens oversetter.
+export function buildCourseDeleteDialogText(courseTitle, tf) {
+  return tf("courses.deleteDialog.text", { title: courseTitle });
 }
 
 // #524 (U3): pure reorder for the course-builder mixed module/section list. Returns a NEW array with

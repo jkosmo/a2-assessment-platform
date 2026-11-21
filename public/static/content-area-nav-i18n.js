@@ -26,6 +26,12 @@ function translateAreaNav() {
     const text = key ? t(key) : key;
     if (key && text !== key) el.textContent = text;
   }
+  // #1173 (rest): navnet skjermleseren leser for selve menyen («Innholdsadministrasjon», «Deltakere») sto på bokmål.
+  for (const el of document.querySelectorAll("#contentAreaNav[data-i18n-aria-label], #deltakereSubnav[data-i18n-aria-label]")) {
+    const key = el.getAttribute("data-i18n-aria-label");
+    const text = key ? t(key) : key;
+    if (key && text !== key) el.setAttribute("aria-label", text);
+  }
 }
 
 translateAreaNav();

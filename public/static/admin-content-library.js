@@ -403,7 +403,7 @@ function handleTableClick(btn) {
 // melding hvis modulen brukes i et kurs eller et lagret kursutkast, eller har innleveringer eller
 // sertifiseringer (#1152: hver grunn har sin kode, og teksten slås opp i `errors.api.*`).
 async function deleteModuleFromRow(moduleId, moduleTitle, btn) {
-  if (!window.confirm(`Slette modulen «${moduleTitle}» permanent? Dette kan ikke angres.`)) return;
+  if (!window.confirm(tf("library.deleteConfirm", { title: moduleTitle }))) return;
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}`, getHeaders, { method: "DELETE" });
@@ -477,12 +477,7 @@ async function restoreModule(moduleId, btn) {
 // #459: Avpubliser fra bibliotek-rad. Krever bekreftelse via window.confirm. POSTer til
 // /unpublish-endepunktet.
 async function unpublishModuleFromRow(moduleId, moduleTitle, btn) {
-  const confirmed = window.confirm(
-    `Avpubliser «${moduleTitle}»?\n\n` +
-    `Modulen blir utilgjengelig for nye innleveringer. Eksisterende innleveringer ` +
-    `går videre uforandret. Du kan publisere en versjon på nytt fra modulens Innstillinger.`
-  );
-  if (!confirmed) return;
+  if (!window.confirm(tf("library.unpublishConfirm", { title: moduleTitle }))) return;
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/unpublish`, getHeaders, { method: "POST" });
@@ -592,6 +587,11 @@ let purgeShownModuleIds = null;
 // Åpne purge-dialogen, hent kandidat-forhåndsvisning fra backend og tegn listene.
 async function openPurgeDialog() {
   if (!purgeUnpublishedDialog) return;
+  // #1173: dialogens faste tekst står i HTML-en; den oversettes her, på språket som gjelder når den åpnes.
+  for (const node of purgeUnpublishedDialog.querySelectorAll("[data-i18n]")) {
+    const key = node.getAttribute("data-i18n");
+    if (key) node.textContent = t(key);
+  }
   purgeShownModuleIds = null;
   purgePreviewLoading.hidden = false;
   purgePreviewBody.hidden = true;
@@ -631,7 +631,7 @@ async function openPurgeDialog() {
   } catch (error) {
     purgePreviewLoading.hidden = true;
     purgeError.hidden = false;
-    purgeError.textContent = `Klarte ikke hente forhåndsvisning: ${apiErrorText(error)}`;
+    purgeError.textContent = tf("library.purge.previewFailed", { reason: apiErrorText(error) });
   }
 }
 
@@ -649,14 +649,14 @@ async function runPurge() {
     const failed = Array.isArray(result?.failed) ? result.failed.length : 0;
     purgeUnpublishedDialog.close();
     if (failed > 0) {
-      showToast(`Slettet ${deleted}, ${failed} feilet. Sjekk audit-loggen.`, "error");
+      showToast(tf("library.purge.doneWithFailures", { deleted, failed }), "error");
     } else {
-      showToast(`Slettet ${deleted} upubliserte moduler.`);
+      showToast(tf("library.purge.done", { deleted }));
     }
     await loadModules();
   } catch (error) {
     purgeError.hidden = false;
-    purgeError.textContent = `Sletting feilet: ${apiErrorText(error)}`;
+    purgeError.textContent = tf("library.purge.failed", { reason: apiErrorText(error) });
     purgeConfirmBtn.disabled = false;
   } finally {
     purgeConfirmBtn.textContent = originalLabel;
@@ -713,8 +713,14 @@ function buildLocaleSelector() {
     if (_headerValues && typeof _headerValues === "object") {
       _headerValues["x-locale"] = currentLocale;
     }
+    translatePurgeButton();
     loadModules();
   });
+}
+
+// #1173 (QA 2.176.0): knappen som åpner «Rydd upubliserte», sto på bokmål på alle språk. Dialogen selv oversettes når den åpnes.
+function translatePurgeButton() {
+  if (purgeUnpublishedBtn) purgeUnpublishedBtn.textContent = t("library.purge.open");
 }
 
 // ---------------------------------------------------------------------------
@@ -765,6 +771,7 @@ async function init() {
   if (purgeUnpublishedBtn) {
     const isAdmin = resolveActiveWorkspaceRoles().includes("ADMINISTRATOR");
     purgeUnpublishedBtn.hidden = !isAdmin;
+    translatePurgeButton();
     purgeUnpublishedBtn.addEventListener("click", openPurgeDialog);
   }
   purgeCancelBtn?.addEventListener("click", () => purgeUnpublishedDialog?.close());

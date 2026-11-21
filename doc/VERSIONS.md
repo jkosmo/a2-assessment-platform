@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.176.0 - 2026-11-21
+
+Resten av #1173 (språk og tilgjengelighet i innholdsforvaltningen), det 2.171.0 førte som kjent. Bare klientkode; ingen migrering.
+
+**Hva brukerne merker:**
+- Bekreftelsene og meldingene står på valgt språk. Før sto de på bokmål på alle språk:
+  - arkiver, slett og gjenopprett klasse;
+  - avpubliser og slett modul i biblioteket;
+  - «Rydd upubliserte» (knappen, dialogen, meldingene og feilteksten);
+  - avpubliser kurs, «Slett kurs» og «Slett kurs og ubrukt innhold» (tittel, oppsummering, knapper og meldingen etterpå);
+  - meldingen når en oversettelse ikke kom fram etter lagring av et kurs.
+- Menyene har navn for skjermleseren på valgt språk («Content administration», «Participants») på elleve sider.
+- Vurderingskvalitet: eierfilteret og de to tabellene har navn på valgt språk.
+- Feltparene i modulens innstillinger har hvert sitt navn. Det gjelder ordlengde, gyldighet og grensesone. Skjermleseren sier
+  «Gyldig, fra» og «Gyldig, til», ikke «Gyldig» to ganger.
+- Eierpanelet i modulens arbeidsflate bytter språk sammen med siden. Før skjedde det først når noen klikket i panelet.
+
+**Tester:**
+- `language-chrome-1173` har fått to nye vakter. Hver side med meny må ha nøkkelen og laste skriptet som oversetter den. Ingen
+  `window.confirm` eller `showToast` i `admin-content*.js` kan ha fast tekst utenom `${…}`. Den siste vakta fant en melding jeg
+  hadde oversett (oversettelsen som ikke kom fram).
+- `language-accessibility-1173.spec.ts` har ti nye e2e-tester, og menyens navn sjekkes i de tre eksisterende testene for rammen.
+  `vurderingskvalitet.spec.ts` har to.
+- Tolv mutasjoner, alle røde.
+- `admin-content-course-cascade-delete` forventet den norske meldingen etter sletting, selv om testen kjører på engelsk. Den er
+  rettet.
+
+**QA 2.176.0** (Claude-agent, Codex er på bruksgrensen): GO. Rettet etterpå: knappen som åpner «Rydd upubliserte» sto på bokmål;
+menyvakta kunne bestå uten å finne menyen; «har submissions» i bokmålsteksten for tom kandidatliste.
+
+**Kjent:**
+- Grunnene i «Rydd upubliserte» («2 submissions», «in 1 course(s)») kommer ferdig skrevet fra tjeneren, på engelsk. Bare
+  administratorer ser dem.
+- Feilmeldinger ved import av en ødelagt fil («Filen er ikke gyldig JSON», «Fila må inneholde et "users"-array») står fortsatt på
+  bokmål. Vakta ser bare tekst som står rett i `window.confirm`/`showToast`, ikke i `throw new Error(…)`.
+- Bytter man språk mens eierpanelet i modulen er åpent for redigering, lukkes det, og søketeksten forsvinner.
+- #1173 kan lukkes når dette er i prod.
+
 ## 2.175.0 - 2026-11-21
 
 Slettejobben for arkivert innhold (#1152 skive 4c). Workeren sletter arkiverte kurs, moduler og seksjoner når fristen er nådd: seks

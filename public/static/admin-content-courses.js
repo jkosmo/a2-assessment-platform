@@ -337,8 +337,7 @@ async function localizeCourseCopyAcrossLocales({ titleValues, descriptionValues,
 function meldFeiledeLokaler(failedLocales) {
   if (!failedLocales?.length) return;
   showToast(
-    `Lagret, men oversettelsen kom ikke for: ${failedLocales.join(", ")}. ` +
-      t("courses.notTranslatedHint"),
+    `${tf("courses.translationMissing", { locales: failedLocales.join(", ") })} ${t("courses.notTranslatedHint")}`,
     "error",
   );
 }
@@ -1652,7 +1651,7 @@ function initCourseArchiveDialog() {
 // #705: avpubliser et kurs (motstykke til Publiser). G3-vakta (påbegynt deltaker) i backend gir
 // en forklarende feilmelding hvis det ikke er lov.
 async function unpublishCourseInAdmin(courseId, courseTitle, triggerButton = null) {
-  if (!window.confirm(`Avpublisere kurset «${courseTitle}»? Det blir skjult for deltakere til du publiserer igjen.`)) {
+  if (!window.confirm(tf("courses.unpublishConfirm", { title: courseTitle }))) {
     return;
   }
   if (triggerButton) triggerButton.disabled = true;
@@ -1825,7 +1824,7 @@ let pendingDeleteId = null;
 
 function openDeleteDialog(courseId, courseTitle) {
   pendingDeleteId = courseId;
-  deleteDialogText.textContent = buildCourseDeleteDialogText(courseTitle);
+  deleteDialogText.textContent = buildCourseDeleteDialogText(courseTitle, tf);
   deleteDialog.showModal();
 }
 
@@ -1890,7 +1889,7 @@ function renderCascadeDeletePreview(preview) {
   if (textEl) {
     textEl.textContent = blocked
       ? t("courses.delete.blocked")
-      : `Dette sletter kurset, ${delModules.length} modul(er) og ${delSections.length} seksjon(er) som kun brukes i dette kurset. Delt innhold beholdes.`;
+      : tf("courses.delete.summary", { modules: delModules.length, sections: delSections.length });
   }
 
   let html = "";
@@ -1931,7 +1930,7 @@ async function openCascadeDeleteDialog(courseId, courseTitle) {
   const textEl = document.getElementById("cascadeDeleteText");
   const bodyEl = document.getElementById("cascadeDeleteBody");
   const confirmBtn = document.getElementById("cascadeDeleteConfirmBtn");
-  if (titleEl) titleEl.textContent = `Slett «${courseTitle}» og ubrukt innhold`;
+  if (titleEl) titleEl.textContent = tf("courses.delete.cascadeTitle", { title: courseTitle });
   if (textEl) textEl.textContent = t("courses.delete.loading");
   if (bodyEl) bodyEl.innerHTML = "";
   if (confirmBtn) {
@@ -1976,7 +1975,7 @@ function initCascadeDeleteDialog() {
       pendingCascadeDelete = null;
       const modCount = summary?.deletedModuleIds?.length ?? 0;
       const secCount = summary?.deletedSectionIds?.length ?? 0;
-      showToast(`Kurset ble slettet (${modCount} modul(er), ${secCount} seksjon(er)).`, "success");
+      showToast(tf("courses.delete.cascadeDone", { modules: modCount, sections: secCount }), "success");
       await renderListView();
     } catch (err) {
       apiErrorToast(err);

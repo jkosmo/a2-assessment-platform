@@ -43,6 +43,10 @@ export function createSettingsTab(ctx) {
   // (avkrysningsboksene står i sin egen <label>) peker dit med aria-labelledby. Én regel for begge
   // tegningene, så en ny rad får navnet uten at noen må huske det.
   const rowLabelId = (labelKey) => `settingsRow-${labelKey.replace(/\./g, "-")}`;
+  // #1173 (rest): en rad med to felt (ordlengde, gyldighet, grensesone) ga begge feltene radens navn, så skjermleseren
+  // leste «Gyldig» to ganger. Hvert felt i paret får sitt eget: «Gyldig, fra» og «Gyldig, til».
+  const rangeAria = (labelKey, end) =>
+    escapeHtml(tf(end === "from" ? "shell.settings.rangeFrom" : "shell.settings.rangeTo", { label: t(labelKey) }));
   function linkRowLabels(host) {
     for (const dt of host.querySelectorAll("dl.settings-list > dt[id]")) {
       const dd = dt.nextElementSibling;
@@ -267,10 +271,12 @@ export function createSettingsTab(ctx) {
     row(
       "shell.settings.scopeWords",
       `<input id="settingsScopeMin" class="settings-input" type="number" min="20" max="5000"
-         value="${mod.scopeMinWords ?? ""}" placeholder="${standardOmfang.minWords}" />
+         value="${mod.scopeMinWords ?? ""}" placeholder="${standardOmfang.minWords}"
+         aria-label="${rangeAria("shell.settings.scopeWords", "from")}" />
        <span aria-hidden="true">–</span>
        <input id="settingsScopeMax" class="settings-input" type="number" min="20" max="5000"
-         value="${mod.scopeMaxWords ?? ""}" placeholder="${standardOmfang.maxWords}" />
+         value="${mod.scopeMaxWords ?? ""}" placeholder="${standardOmfang.maxWords}"
+         aria-label="${rangeAria("shell.settings.scopeWords", "to")}" />
        <span class="settings-hint">${escapeHtml(t("shell.settings.scopeWordsHint"))}</span>`,
     );
 
@@ -278,9 +284,11 @@ export function createSettingsTab(ctx) {
     const asDateValue = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
     row(
       "shell.settings.validity",
-      `<input id="settingsValidFrom" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validFrom))}" />
+      `<input id="settingsValidFrom" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validFrom))}"
+         aria-label="${rangeAria("shell.settings.validity", "from")}" />
        <span aria-hidden="true">→</span>
-       <input id="settingsValidTo" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validTo))}" />`,
+       <input id="settingsValidTo" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validTo))}"
+         aria-label="${rangeAria("shell.settings.validity", "to")}" />`,
     );
 
     group("shell.settings.groupAssessment");
@@ -412,11 +420,11 @@ export function createSettingsTab(ctx) {
         "shell.settings.borderlineWindow",
         `<input id="settingsBorderlineMin" class="settings-input settings-input--wide" type="number" min="0" max="100"
           value="${Number.isFinite(Number(borderline?.min)) ? escapeHtml(String(borderline.min)) : ""}"
-          placeholder="${escapeHtml(placeholderLow)}" />
+          placeholder="${escapeHtml(placeholderLow)}" aria-label="${rangeAria("shell.settings.borderlineWindow", "from")}" />
          <span aria-hidden="true">→</span>
          <input id="settingsBorderlineMax" class="settings-input settings-input--wide" type="number" min="0" max="100"
           value="${Number.isFinite(Number(borderline?.max)) ? escapeHtml(String(borderline.max)) : ""}"
-          placeholder="${escapeHtml(placeholderHigh)}" /> %`,
+          placeholder="${escapeHtml(placeholderHigh)}" aria-label="${rangeAria("shell.settings.borderlineWindow", "to")}" /> %`,
         false,
         "borderlineWindow",
       );

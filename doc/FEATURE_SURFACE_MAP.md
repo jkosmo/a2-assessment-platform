@@ -1996,9 +1996,19 @@ innholdsforvaltningen sa `lang="en-GB"` (skjermleseren leste norsk med engelsk u
 | Hopp-lenken (`.skip-nav`, `nav.skipToContent`) og etiketten på språkvelgeren (`label[for=localeSelect]`, `locale.label`) | `public/static/content-area-nav-i18n.js` på sidene som laster den (Kurs, Moduler, Seksjoner, Tema, Vurderingskvalitet, Klasser, Status, Aktivitet, Manuell behandling, Resultater); modulens arbeidsflate (`admin-content.html`) gjennom `translatePageStaticText` i admin-content-shell.js; deltakersidene, profilen, kursbeviset og plattformsiden gjennom sin egen `applyTranslations` | Bare rammen: resten av `data-i18n` på en side eies av sidens egen bunt |
 | `lang` på `<html>` | Samme to steder for innholdsforvaltningen; de andre sidene setter den i sin `setLocale` | Følger menyspråket, også ved bytte uten ny lasting |
 | Eierpanelet (`public/static/owner-panel.js`) | Sidens `t` (`owners.*` i admin-buntens tabell) — kurs, seksjon, modul og klasse sender den | Panelet har ingen egen bunt og ingen norsk tekst i koden |
-| Felt i modulens Innstillinger (`<dt>`/`<dd>`-rader) | `linkRowLabels` i admin-content-settings-tab.js: `<dt>` får en id, feltene i `<dd>` uten eget navn peker dit med `aria-labelledby` | Gjelder både «Ny modul» og en lagret modul; en ny rad får navnet uten at noen må huske det |
+| Felt i modulens Innstillinger (`<dt>`/`<dd>`-rader) | `linkRowLabels` i admin-content-settings-tab.js: `<dt>` får en id, feltene i `<dd>` uten eget navn peker dit med `aria-labelledby` | Gjelder både «Ny modul» og en lagret modul; en ny rad får navnet uten at noen må huske det. En rad med to felt (ordlengde, gyldighet, grensesone) gir hvert felt sitt eget navn med `rangeAria` («Gyldig, fra» / «Gyldig, til») |
+| Menyens navn for skjermleseren (`#contentAreaNav`, `#deltakereSubnav`, `data-i18n-aria-label="area.contentNavAria"`/`area.participantsNavAria`) | `content-area-nav-i18n.js`; på modulens arbeidsflate `translatePageStaticText` (2.176.0) | Elleve sider |
+| Bekreftelser (`window.confirm`) og meldinger (`showToast`) i innholdsforvaltningen | Sidens `t`/`tf` | 2.176.0: klasse (arkiver, slett, gjenopprett), biblioteket (avpubliser, slett, «Rydd upubliserte»), kurs (avpubliser, slett, «Slett kurs og ubrukt innhold») |
+| Faste tekster i dialoger som står i HTML-en | Kurssiden: `translateStaticText` (`data-i18n`); biblioteket: når «Rydd upubliserte» åpnes; Vurderingskvalitet: når malen klones (også `data-i18n-aria-label`) | Biblioteket har ingen oversetter for hele siden |
+| Eierpanelet i modulens arbeidsflate etter språkbytte | Skallets språkbytte nullstiller `dataset.moduleId` på verten, så `updateStateRail` tegner panelet på nytt | Før sto det på forrige språk til noen klikket i det |
 
 **Vakter:** `test/unit/language-chrome-1173.test.ts` (hver HTML-side har nøklene på hopp-lenken og etiketten; de nye nøklene er
-ikke engelske på bokmål/nynorsk; eierpanelet har ingen hardkodet norsk), `test/e2e/language-accessibility-1173.spec.ts` (seks
-sider × tre språk, bytte uten ny lasting, klassen, kursets plassholder, biblioteket, forhåndsvisningen, etikettene med
-`getByLabel`, og klikkflaten på avkrysningsboksene målt til minst 24 × 24 px).
+ikke engelske på bokmål/nynorsk; eierpanelet har ingen hardkodet norsk; hver side med meny har nøkkelen på menyen og laster
+skriptet som oversetter den; ingen `window.confirm`/`showToast` i `admin-content*.js` har fast tekst utenom `${…}`),
+`test/e2e/language-accessibility-1173.spec.ts` (seks sider × tre språk med menyens navn, bytte uten ny lasting, klassen, kursets
+plassholder, biblioteket, forhåndsvisningen, etikettene med `getByLabel`, bekreftelsene, «Rydd upubliserte», «Slett kurs og ubrukt
+innhold», feltparene, eierpanelet etter språkbytte, og klikkflaten på avkrysningsboksene målt til minst 24 × 24 px),
+`test/e2e/vurderingskvalitet.spec.ts` (skjermlesernavnene).
+
+**Kjent:** grunnene i «Rydd upubliserte» («2 submissions», «in 1 course(s)») kommer ferdig skrevet fra tjeneren, på engelsk.
+Verktøyet er bare for administratorer.

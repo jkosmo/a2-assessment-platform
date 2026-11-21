@@ -274,7 +274,7 @@
         </div>
       </div>
 
-      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon">
+      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon" data-i18n-aria-label="area.contentNavAria">
         <a href="/admin-content/themes" class="content-area-nav-link" id="navTema" data-i18n="area.themes">Tema</a>
         <a href="/admin-content/courses" class="content-area-nav-link active" id="navKurs" data-i18n="area.courses">Kurs</a>
         <a href="/admin-content" class="content-area-nav-link" id="navModuler" data-i18n="area.modules">Moduler</a>
@@ -290,11 +290,11 @@
 
     <!-- Delete course confirmation dialog -->
     <dialog id="deleteDialog" aria-labelledby="deleteDialogTitle">
-      <h2 class="dialog-title" id="deleteDialogTitle">Slett kurs</h2>
+      <h2 class="dialog-title" id="deleteDialogTitle" data-i18n="courses.deleteDialog.title">Slett kurs</h2>
       <p class="dialog-text" id="deleteDialogText">Er du sikker på at du vil slette dette kurset? Modulene forblir i biblioteket uendret.</p>
       <div class="dialog-actions">
-        <button type="button" id="deleteConfirmBtn" class="btn btn-danger">Slett kurs</button>
-        <button type="button" class="dialog-cancel" id="deleteCancelBtn">Avbryt</button>
+        <button type="button" id="deleteConfirmBtn" class="btn btn-danger" data-i18n="courses.deleteDialog.confirm">Slett kurs</button>
+        <button type="button" class="dialog-cancel" id="deleteCancelBtn" data-i18n="ui.action.cancel">Avbryt</button>
       </div>
     </dialog>
 
@@ -369,8 +369,8 @@
       <p class="dialog-text" id="cascadeDeleteText">Henter oversikt…</p>
       <div id="cascadeDeleteBody" class="cascade-delete-body"></div>
       <div class="dialog-actions">
-        <button type="button" id="cascadeDeleteConfirmBtn" class="btn btn-danger" style="display:none">Slett kurs og ubrukt innhold</button>
-        <button type="button" class="dialog-cancel" id="cascadeDeleteCancelBtn">Avbryt</button>
+        <button type="button" id="cascadeDeleteConfirmBtn" class="btn btn-danger" style="display:none" data-i18n="courses.deleteWithContent">Slett kurs og ubrukt innhold</button>
+        <button type="button" class="dialog-cancel" id="cascadeDeleteCancelBtn" data-i18n="ui.action.cancel">Avbryt</button>
       </div>
     </dialog>
 

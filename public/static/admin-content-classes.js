@@ -226,7 +226,7 @@ function createClassFlow() {
 }
 
 async function archiveClass(id, name, { stay = false } = {}) {
-  if (!window.confirm(`Arkivere klassen «${name}»?`)) return;
+  if (!window.confirm(tf("classes.archiveConfirm", { name }))) return;
   try {
     // #1046 D3: POST /archive, som kurs og seksjoner. DELETE sletter nå for godt.
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/archive`, getHeaders, { method: "POST" });
@@ -240,7 +240,7 @@ async function archiveClass(id, name, { stay = false } = {}) {
 
 // #1046 D3: sletting for godt, bare fra en arkivert rad. Produkteier ba om «er du helt sikker».
 async function deleteClassInAdmin(id, name) {
-  if (!window.confirm(`Er du helt sikker på at du vil slette klassen «${name}» for godt?\n\nMedlemslista og kurstildelingene forsvinner. Deltakernes egen fremdrift beholdes.`)) return;
+  if (!window.confirm(tf("classes.deleteConfirm", { name }))) return;
   try {
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}`, getHeaders, { method: "DELETE" });
     showToast(tNav("classes.deleted"), "success");
@@ -254,7 +254,7 @@ async function deleteClassInAdmin(id, name) {
 
 // #705-family: reverse of archiveClass — restore an archived class so it is active again.
 async function restoreClassInAdmin(id, name, { stay = false } = {}) {
-  if (!window.confirm(`Gjenopprette klassen «${name}»?`)) return;
+  if (!window.confirm(tf("classes.restoreConfirm", { name }))) return;
   try {
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/restore`, getHeaders, { method: "POST" });
     showToast(tNav("classes.restored"), "success");
