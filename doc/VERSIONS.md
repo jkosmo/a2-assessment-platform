@@ -87,6 +87,11 @@ stage:
 - `lastSummary.failed` på workerens `/healthz` viser id-er og databasens feiltekst.
 - Det finnes ingen sak som sørger for at prøvekjøringen gjøres før 14.05.2027.
 
+**På stage 21.11.2026 kl. 17:28** (dev e4173fd5). Web og worker viser 2.175.0, og workerens `/healthz` er frisk.
+`archivedContentRetentionMonitor` står der, frisk, med `startup_grace`. Nødstoppen svarte 403 på `GET` og `PUT` for stage-kontoen
+(innholdsprodusent). `PUT` som administrator er ikke prøvd på stage, men er dekket gjennom ruta i integrasjonstesten. Ingenting kan
+slettes før 14.05.2027.
+
 ## 2.174.0 - 2026-11-21
 
 Påbegynt fritekst holder et arkivert kurs igjen i sju dager (#1185, produkteier 21.11.2026: «Deltager får 7 dager så sletting»,
