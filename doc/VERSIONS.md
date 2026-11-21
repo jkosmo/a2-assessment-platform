@@ -40,6 +40,9 @@ menyvakta kunne bestå uten å finne menyen; «har submissions» i bokmålstekst
 - Bytter man språk mens eierpanelet i modulen er åpent for redigering, lukkes det, og søketeksten forsvinner.
 - #1173 kan lukkes når dette er i prod.
 
+**På stage 21.11.2026 kl. 22:42** (git_ref 9b237019). App og worker viser 2.176.0, og workeren svarer 200 på `/healthz`. Sjekken av
+artefaktet var 8/8: de nye nøklene ligger i oversettelsesfila, menyskriptet setter `aria-label`, og klassesiden bruker nøkkelen.
+
 ## 2.175.0 - 2026-11-21
 
 Slettejobben for arkivert innhold (#1152 skive 4c). Workeren sletter arkiverte kurs, moduler og seksjoner når fristen er nådd: seks
