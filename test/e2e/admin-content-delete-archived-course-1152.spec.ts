@@ -29,7 +29,15 @@ const EXPECTED = {
     nn: "Kurset kan ikkje slettast enno fordi 2 svar i modulane til kurset ventar på vurdering, manuell behandling eller anke. Kurset kan slettast når dei er avgjorde.",
     "en-GB": "The course cannot be deleted yet because 2 submission(s) in its modules are waiting for assessment, manual review or appeal. The course can be deleted when they are resolved.",
   },
+  // #1185: levert tekst uten å fullføre. Datoen kommer som YYYY-MM-DD og skrives på sidens språk.
+  course_has_unfinished_submissions: {
+    nb: "Kurset kan ikke slettes ennå fordi 2 deltaker(e) har levert tekst i en av kursets moduler uten å fullføre. De får 7 dager fra leveringen; kurset kan slettes fra 28.11.2026.",
+    nn: "Kurset kan ikkje slettast enno fordi 2 deltakar(ar) har levert tekst i ein av modulane til kurset utan å fullføre. Dei får 7 dagar frå leveringa; kurset kan slettast frå 28.11.2026.",
+    "en-GB": "The course cannot be deleted yet because 2 participant(s) have delivered text in one of its modules without finishing. They get 7 days from delivery; the course can be deleted from 28 November 2026.",
+  },
 } as const;
+
+const DETAILS: Record<string, Record<string, unknown>> = { course_has_unfinished_submissions: { count: 2, untilDate: "2026-11-28" } };
 
 const ARCHIVED_COURSE = {
   id: "course-1152",
@@ -53,7 +61,7 @@ async function mockDelete(page: Page, code: string) {
   await page.route("**/api/admin/content/courses/course-1152", async (route: Route) => {
     if (route.request().method() !== "DELETE") return route.fallback();
     calls += 1;
-    await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: code, message: SERVER_MESSAGE, details: { count: 2 } }) });
+    await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: code, message: SERVER_MESSAGE, details: DETAILS[code] ?? { count: 2 } }) });
   });
   return () => calls;
 }
@@ -66,7 +74,7 @@ async function openList(page: Page) {
 const row = (page: Page) => page.locator("#coursesTableBody tr").filter({ hasText: "Arbeidsmiljø 1152" });
 
 test.describe("#1152 — «Slett» på et arkivert kurs sier hva som holder det igjen", () => {
-  for (const code of ["course_has_completed_without_certificate", "course_requirement_unclear", "course_has_pending_reviews"] as const) {
+  for (const code of ["course_has_completed_without_certificate", "course_requirement_unclear", "course_has_pending_reviews", "course_has_unfinished_submissions"] as const) {
     for (const locale of ["nb", "nn", "en-GB"] as const) {
       test(`lista, ${code}, ${locale}: setningen med tallet, uten plassholder og uten tjenerens tekst`, async ({ page }) => {
         await mockCommonApis(page, { courses: [{ ...ARCHIVED_COURSE }], meRoles: ["SUBJECT_MATTER_OWNER"] });
@@ -114,6 +122,8 @@ test.describe("#1152 — kaskaden: grunnene på forfatterens språk, og det som 
     blockers: [
       { id: "course-1152", title: "Arbeidsmiljø 1152", reason: "NORSK RESERVE 1", code: "course_has_completed_without_certificate", details: { count: 2 } },
       { id: "course-1152", title: "Arbeidsmiljø 1152", reason: "NORSK RESERVE 2", code: "course_has_pending_reviews", details: { count: 2 } },
+      // #1185: med datoen, slik kaskaden sender den.
+      { id: "course-1152", title: "Arbeidsmiljø 1152", reason: "NORSK RESERVE 3", code: "course_has_unfinished_submissions", details: { count: 2, untilDate: "2026-11-28" } },
     ],
     deletable: false,
   };
@@ -130,6 +140,7 @@ test.describe("#1152 — kaskaden: grunnene på forfatterens språk, og det som 
       const dialog = page.locator("#cascadeDeleteDialog");
       await expect(dialog).toContainText(EXPECTED.course_has_completed_without_certificate[locale]);
       await expect(dialog).toContainText(EXPECTED.course_has_pending_reviews[locale]);
+      await expect(dialog).toContainText(EXPECTED.course_has_unfinished_submissions[locale]);
       await expect(dialog).not.toContainText("NORSK RESERVE");
       await expect(page.locator("#cascadeDeleteConfirmBtn")).toBeHidden();
 

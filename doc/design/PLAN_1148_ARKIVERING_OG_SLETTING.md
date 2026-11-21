@@ -510,6 +510,93 @@ Til jobben (inn i byggingen av 4c):
    lykkes uten å slette noe. Kjent mangel, som før: filene blir liggende. Rettes med en infra-endring for seg, eller ved at
    jobben overlater ryddingen til web-appen.
 
+### Tillegg 21.11.2026: påbegynt fritekst (#1185), og det som er endret siden 18.11
+
+**Endret siden byggenotatet:** punkt 1 og 2 fra Codex er rettet i 2.169.0 (kravet som ble tomt måles mot det som falt ut, med
+`course_requirement_unclear`; anken opprettes under deltakerlåsen). 2.170.0 stenger anke på arkivert kurs. 2.172.0 lar
+`deleteModuleInTx` slette innleveringer som bare er åpnet (`openedOnlySubmission.ts`); jobben arver det gjennom den samme
+slettefunksjonen og trenger ingen egen regel. Funksjonene notatet bygger på, finnes fortsatt med de navnene det bruker.
+
+**#1185, avgjort av produkteier 21.11.2026:** «Deltager får 7 dager så sletting», regnet «fra deltageren leverte».
+
+- **Hva:** i en modul med fritekst og flervalg lages innleveringen når teksten leveres, og vurderingsjobben først når flervalget
+  er sendt inn. Imens står innleveringen som `SUBMITTED` uten jobb, og `countPendingReviewsOnModules` regner den som «bare
+  åpnet». Kurset kan da slettes med en gang, og deltakeren som fullfører etterpå, får aldri kursbevis. Deltakeren KAN fullføre
+  etter arkiveringen: verken start eller innsending av flervalg (`mcqService.ts`) sjekker arkivering.
+- **Regelen:** en innlevering med status `SUBMITTED`, uten vurderingsjobb, i en modulversjon som ikke er `MCQ_ONLY`, levert
+  (`submittedAt`) for mindre enn 7 dager siden, holder kurset igjen. Konstanten `UNFINISHED_SUBMISSION_GRACE_DAYS = 7` i
+  `src/config/retention.ts`. En ren flervalgsinnlevering som bare er åpnet, holder fortsatt ingenting igjen.
+- **Egen grunn, ikke «venter på vurdering»:** teksten venter ikke på noen vurdering, den venter på deltakeren. Ny kode
+  `course_has_unfinished_submissions` i `measureCourseDeleteBlocks`, etter «venter på vurdering», med `count` (deltakere) og
+  `untilDate` (Oslo-datoen for den seneste `submittedAt` + 7 kalenderdager) i `details`. Tekst på tre språk: «Beholdes til {dato}: {n} deltaker(e) har
+  levert tekst, men ikke fullført modulen». Gjelder «Slett», lista over arkiverte, kaskaden og jobben, fordi alle går gjennom
+  `measureCourseDeleteBlocks`.
+- **Arkiveringsdialogen er uendret.** `countCoursePendingReviews` teller det som venter på vurdering; disse deltakerne er alt
+  med i «midt i kurset».
+- **Klokka er en parameter.** `measureCourseDeleteBlocks` og `RetentionContext` får `now` (standard: nå), så jobben,
+  forhåndsvisningsskriptet (`--as-of`) og testene regner de 7 dagene mot samme tidspunkt som fristen.
+- **Hva det betyr for jobben (rettet etter gjennomlesingen):** for kursets egne moduler ingenting: de ble arkivert med kurset og tar
+  ikke imot nye innleveringer, og 7 dager er ute før fristen på seks måneder. Men regelen ser på ALLE kursets moduler, også delte
+  som er aktive fordi et annet kurs bruker dem. Der leverer deltakere i det andre kurset fortsatt, og et arkivert kurs kan holdes
+  igjen lenge, med en dato som flytter seg. Det er samme valg som «venter på vurdering» (grunn 3) gjorde i 4a: tvil gir «beholdes».
+  Det beholder for mye, aldri for lite.
+- **Etter de 7 dagene:** kurset kan slettes. Modulen og teksten står, fordi en levert innlevering holder modulen igjen (2.172.0).
+  Fullfører deltakeren senere, blir modulen bestått, men det kommer ikke noe kursbevis. Det er avgjørelsen.
+
+**Kjent mangel:** et kurs som ble arkivert for seg før 2.159.0, har sine moduler aktive; der kan deltakeren også levere ny tekst
+etter arkiveringen, og da kan de 7 dagene starte etter `archivedAt`. Det gir et kortere vindu for «Slett», aldri sletting av
+historikk.
+
+**Skiver:**
+
+- **2.174.0, #1185 alene.** Vakta, teksten på tre språk, testene gjennom rutene. Kan prøves med «Slett» på stage.
+- **2.175.0, jobben (4c).** `archivedRetentionJob.ts`, `ArchivedContentRetentionMonitor.ts`, forhåndsvisningsskriptet,
+  revisjonshendelsene og nødstoppen, etter byggenotatet og Codex' punkt 3–8.
+
+**Tester for #1185, gjennom rutene (`DELETE` kurs og lista med `includeRetention=1`):**
+
+- Fritekst levert for 1 dag siden, flervalget ikke sendt: beholdes, med koden og datoen.
+- Samme, levert for 8 dager siden: kan slettes (kontroll).
+- Ren flervalgsmodul som bare er åpnet: holder ikke igjen (kontroll).
+- Med vurderingsjobb: «venter på vurdering» som før.
+- Klokka: samme innlevering, `now` flyttet 8 dager fram, kan slettes.
+- Fiksturen setter `assessmentMode`, `submittedAt`, `submissionStatus` og jobbene eksplisitt (pre-flight punkt 4).
+
+### Gjennomlesing av byggenotatet mot koden (Claude-agent, 21.11.2026): KLAR, ingen stoppere
+
+Ingen vei der jobben kan slette kursbevis, levert innlevering, bestått eller sertifiseringsstatus: databasen nekter selv
+(`Restrict`), og vaktene leses på nytt i jobbens transaksjon under innholdslåsen. Seks veier sletter kurs, moduler og seksjoner;
+13 skriver radene som holder igjen. Alle unntatt tre går gjennom innholds- eller deltakerlåsen: start og innsending av flervalg
+(`mcqService.ts`) og «kjør vurderingen» (`routes/assessments.ts`, `adminPlatform.ts`).
+
+**Rettet i 2.174.0:**
+- **A. To lesinger kunne gå glipp av samme innlevering.** Innsendingen av flervalget tar ingen lås, og innleveringen kan gå fra
+  `SUBMITTED` uten jobb til `PROCESSING` mellom «venter på vurdering» og sjudagersregelen. Nå leses sjudagersregelen først, så den
+  ene av de to alltid ser den.
+- **D.** Påstanden «ingenting i praksis for jobben» er rettet over (delte, aktive moduler).
+
+**Inn i byggingen av jobben (2.175.0):**
+- **F. Workeren skal ikke kunne startes på nytt av jobben.** `WeeklyDigestMonitor` setter `lastCycleAt` bare ved suksess. En runde
+  som kaster i sin helhet (utvalget feiler, et brudd mot databasen), ville gjort workeren «stalled» etter 30 minutter, og den startes
+  på nytt; da stopper vurderingene. `lastCycleAt` settes i `finally`. Bare en runde som henger, er «wedged». `stop()` sjekkes mellom
+  elementene.
+- **G. Nødstoppen skal overleve en utrulling.** Workerens appinnstillinger er én ressurs i Bicep som erstatter hele settet ved hver
+  `deploy-azure.yml`; en innstilling satt for hånd forsvinner, og jobben slår seg stille på igjen. Nødstoppen blir i stedet en rad
+  i `PlatformConfig`, lest i hver runde: den overlever utrullinger og trenger ingen omstart. Erstatter miljøvariabelen i notatet.
+- **C. Kurs som beholdes for alltid, skal ikke måles under lås hver natt.** Målingen tar deltakerlåsene for alle som noen gang har
+  levert på kursets moduler. Jobben sjekker først uten lås; en varig grunn (`course_has_completions`) skrives som «beholdes» uten
+  den låste transaksjonen.
+- **E.** `COURSE_DELETE_TX_TIMEOUT_MS` eksporteres; `deleteCourseInTx` får `now` gjennom `checkCourseDelete`, så testene med flyttet
+  klokke går gjennom samme vei.
+
+**Kjente mangler (ikke rettet):**
+- **B.** En vurdering som skal skrive vedtaket mens slettingen holder deltakerlåsene (opptil 20 s), får `content_busy` etter 3 s og
+  prøves på nytt; KI-kallet gjøres da en gang til. Sjeldent om natten.
+- **H.** Overgangsraden ble skrevet samme dag i begge miljøer, så stage og prod kan slette fra samme natt i mai 2027. Det eneste
+  som kommer før, er forhåndsvisningsskriptet, og ingenting sørger for at det kjøres. Bør bli en sak med dato før 14.05.2027.
+- Å la innsending av flervalg og «kjør vurderingen» ta låsene (`runContentReadForLearner`) ville lukket A helt og kappløpet mellom
+  sletting av modul og innsending (500). Det er en egen endring.
+
 ---
 
 ## Rekkefølge

@@ -37,6 +37,15 @@ export const INACTIVITY_RETENTION_DAYS = INACTIVITY_RETENTION_YEARS * 365;
 export const ARCHIVED_CONTENT_RETENTION_MONTHS = 6;
 
 /**
+ * #1185 (produkteier 21.11.2026: «Deltager får 7 dager så sletting», regnet «fra deltageren leverte»): in a module with free text
+ * and multiple choice, the submission is created when the text is delivered, and the assessment job only when the multiple choice is
+ * sent. A participant who has delivered the text but not finished holds an ARCHIVED course back from deletion for this many CALENDAR
+ * days (Oslo dates) after `submittedAt`, so they can still finish and earn the course certificate if the course is restored. Then the
+ * course can be deleted; the module and the text stay (a delivered submission holds the module back). See courseDeleteGuard.ts.
+ */
+export const UNFINISHED_SUBMISSION_GRACE_DAYS = 7;
+
+/**
  * #1152: the `PlatformConfig` row that holds the transition floor — the moment the retention rule arrived in
  * this environment (written once by the migration `20261114120000_archived_content_retention`, ISO 8601 UTC).
  * The deadline counts from the LATER of `archivedAt` and this floor, so content archived before the rule

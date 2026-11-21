@@ -2,6 +2,67 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.174.0 - 2026-11-21
+
+Påbegynt fritekst holder et arkivert kurs igjen i sju dager (#1185, produkteier 21.11.2026: «Deltager får 7 dager så sletting»,
+regnet «fra deltageren leverte»). Del av #1148. Ingen migrering.
+
+**Hva forfatteren merker:** et arkivert kurs der en deltaker har levert teksten i en modul, men ikke sendt inn flervalget, kan ikke
+slettes de første sju dagene etter leveringen. «Slett» sier hvor mange deltakere det gjelder og hvilken dato kurset kan slettes fra.
+Lista over arkiverte sier «Beholdes: 2 deltakere har levert tekst uten å fullføre, til 28.11.2026», og kaskadeslettingen viser det
+samme. Etter de sju dagene kan kurset slettes. Modulen og teksten står, fordi en levert innlevering holder modulen igjen (2.172.0).
+
+**Hvorfor:** i en modul med fritekst og flervalg lages innleveringen når teksten leveres, og vurderingsjobben først når flervalget er
+sendt inn. Imens står den som `SUBMITTED` uten jobb, og regelen for «venter på vurdering» regnet den som «bare åpnet». Deltakeren kan
+fullføre etter arkiveringen, og uten denne grunnen kunne kurset slettes før hen rakk det, så kursbeviset aldri kunne utstedes.
+
+**Slik virker det:** ny grunn `course_has_unfinished_submissions` i kursvakta (`courseDeleteGuard.ts`, `findUnfinishedSubmissions`),
+etter «venter på vurdering»: status `SUBMITTED`, ingen vurderingsjobb, modulversjonen er ikke `MCQ_ONLY`, levert for under
+`UNFINISHED_SUBMISSION_GRACE_DAYS` (7) norske kalenderdager siden. `details: { count, untilDate }`: deltakere, og den første datoen
+kurset kan slettes, regnet fra den siste slike leveringen. Gjelder «Slett», lista, kaskaden og jobben som kommer (4c), fordi alle går
+gjennom `measureCourseDeleteBlocks`. Klokka er en parameter (`now`), så jobben og testene regner mot samme tidspunkt. Arkiverings-
+dialogen er uendret: disse deltakerne er alt med i «midt i kurset».
+
+**Også rettet:**
+- Kaskadens forhåndsvisning sendte bare tallet (`details: { count }`), ikke resten av feilens `details`. Med datoen manglende ville
+  klienten falt tilbake på tjenerens norske tekst. Nå sendes de samme `details` som «Slett» svarer med.
+- Datoen i lista over arkiverte ble skrevet amerikansk på nynorsk i Chromium («11/28/2026», også «Slettast …» fra 2.162.0): nettleseren
+  kjenner ikke «nn» i `Intl`. Norsk dato er lik på bokmål og nynorsk, så begge bruker bokmålsformatet.
+- Felt i en feils `details` som slutter på «Date» (`untilDate`), skrives som dato på sidens språk (`fillErrorPlaceholders`).
+
+**Tester:** `m2-course-delete-unfinished-1185` gjennom rutene (9): levert for 1 dag siden beholdes, med antall og dato i «Slett» og
+lista; kontroller: 8 dager, ren flervalgsmodul som bare er åpnet, med vurderingsjobb; bare fritekst uten jobb; to deltakere og én med
+to innleveringer; flyttet klokke; grensen på 6 og 7 dager; kaskaden med begge grunnene. Kontrolltesten «bare åpnet» i
+`m2-course-delete-1152` var stum om modultypen og fikk fritekst som standard; den bruker nå en ren flervalgsmodul (CLAUDE.md, pre-flight
+punkt 4). Enhet: grunnen og datoen på tre språk, kalenderdager i Norge, datoen i feilteksten. E2e: «Slett» og kaskadedialogen på tre
+språk, linja i lista, og nynorsk dato. Hele rekka: enhet 3386/3386, DOM 109/109, integrasjon 1459/1459, admin-content-e2e 1218/1218.
+
+**Mutasjonsverifisert:** grunnen fjernet, `MCQ_ONLY`-filteret fjernet, grensen flyttet en dag, deltakere telt som innleveringer,
+klokka ignorert, jobben ignorert, `SUBMITTED`-filteret fjernet, kaskaden med bare tallet, nynorsk dato tilbake, grunnen uten dato i
+lista, datoen uformatert i feilteksten: alle røde. To overlevde først (jobben ignorert, `SUBMITTED`-filteret): «venter på vurdering»
+sies først i «Slett» og skjulte forskjellen. Testen ser nå på kaskadens forhåndsvisning, som viser alle grunnene, og fant der feilen
+over. Leserekkefølgen (punktet under) er ikke mutasjonstestet; det krever en test som styrer samtidighet.
+
+**Gjennomlesing av byggenotatet for jobben (Claude-agent; Codex har nådd bruksgrensen): KLAR, ingen stoppere.** Ett funn gjaldt
+denne versjonen: innsendingen av flervalget tar ingen lås, og innleveringen kunne gått fra `SUBMITTED` uten jobb til `PROCESSING`
+mellom de to lesingene, så begge gikk glipp av den. Nå leses sjudagersregelen først. Resten står i planen (`PLAN_1148`, «Gjennomlesing
+av byggenotatet mot koden») og tas med i jobben (2.175.0).
+
+**QA 2.174.0 (Claude-agent): GO.** Gikk gjennom alle kallere og de tre flatene i klienten (toasten fra «Slett», kaskadedialogen,
+linja i lista), og fant ingen nøkkel i `details` som slutter på «Date» fra før. Rettet etterpå: en utdatert kommentar i
+`contentLifecycle.ts` (sa at innleveringen alltid lages når modulen åpnes), og testen «med vurderingsjobb … også etter sju dager»
+leverte for én dag siden; nå åtte.
+
+**Kjent (ikke rettet):**
+- En forfatter som prøver en modul selv, leverer teksten og stopper, holder også testkurset igjen i sju dager (innholdsrollene slipper
+  forbi kursporten). Det er regelen slik den er avgjort; på stage er det verdt å vite.
+- I de sju dagene står en modul eller seksjon i kurset som «Beholdes: ligger i et kurs som beholdes», mens kursraden har en dato.
+  Det høres varig ut, men går bort av seg selv.
+- Grensetestene regner dagene som 24 timer; i uka etter overgangen til sommertid kan en kjøring mellom 00 og 01 bomme på 6-dagerstilfellet.
+- Regelen ser på alle kursets moduler, også delte som er aktive fordi et annet kurs bruker dem. Der kan et arkivert kurs holdes igjen
+  lenge, med en dato som flytter seg. Det beholder for mye, aldri for lite (som «venter på vurdering»).
+- Et kurs arkivert for seg før 2.159.0 har modulene sine aktive; der kan de sju dagene starte etter arkiveringen.
+
 ## 2.173.0 - 2026-11-21
 
 Deltakeren: kursbevis og tilbake (#1162, skive 1–4), etter produkteiers avgjørelser 21.11.2026 (DECISIONS, «Deltakerflyten»). Bygget

@@ -174,6 +174,10 @@ registre — da blir elementet stående arkivert.
   - **Venter på vurdering** (`course_has_pending_reviews`, `{ count }`): en besvarelse i en av kursets moduler venter på vurdering,
     manuell behandling (`UNDER_REVIEW`) eller anke. ALLE modulene i elementlista teller, også en delt modul som ble arkivert for seg
     etter kurset og derfor er ute av kravet under (QA-porten 4a). Går bort av seg selv når sakene er avgjort.
+  - **Levert tekst uten å fullføre** (`course_has_unfinished_submissions`, `{ count, untilDate }`, #1185, 2.174.0): i en modul som
+    ikke er `MCQ_ONLY` står innleveringen som `SUBMITTED` uten vurderingsjobb fra teksten leveres til flervalget sendes inn. En slik
+    innlevering holder kurset igjen i 7 norske kalenderdager fra `submittedAt`; `untilDate` er datoen kurset kan slettes fra. Leses
+    før «venter på vurdering», fordi innsendingen av flervalget ikke tar deltakerlåsen. Går bort av seg selv.
 
   **Kravet måles slik det var da kurset ble arkivert**, med reglene fra utstedelsen (kreditt per kurs med kravet til
   hovedversjon, lesingsregelen for nåværende hovedversjon, et tomt krav gjør ingen fullført), men det som ble arkivert

@@ -403,7 +403,11 @@ describe("#1152: en besvarelse som venter, holder kurset igjen til den er avgjor
   }
 
   it("KONTROLL (stage-testen 2.164.0): en modul som bare er åpnet, aldri levert (SUBMITTED uten vurderingsjobb), holder ikke kurset igjen", async () => {
+    // #1185: «bare åpnet» finnes bare i en ren flervalgsmodul; der lages innleveringen når modulen åpnes. I en modul med fritekst
+    // betyr SUBMITTED uten jobb at teksten ER levert, og da holder den kurset igjen i sju dager (m2-course-delete-unfinished-1185).
+    // Fiksturen var stum om modultypen og fikk fritekst som standard.
     const x = await archivedCourseWithModuleAndSection("bare åpnet");
+    await prisma.moduleVersion.updateMany({ where: { moduleId: x.module }, data: { assessmentMode: "MCQ_ONLY" } });
     await submission(await user("åpnet"), x.module, "SUBMITTED", true);
     const deleted = await del(K(x.course));
     expect(deleted.status, show(deleted)).toBe(204);

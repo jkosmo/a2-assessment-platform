@@ -56,6 +56,8 @@ export type RetentionContext = {
   floor: Date | null;
   reader: LifecycleReader;
   courses: Map<string, Promise<ArchivedRetention>>;
+  /** Klokka kursvakta regner mot (#1185: de sju dagene etter levert tekst). Standard: nå. Jobben og skriptet gir sin egen. */
+  now?: Date;
 };
 
 type ItemKind = "MODULE" | "SECTION";
@@ -67,7 +69,7 @@ const BATCH = 4;
 let floorProblemLogged = false;
 
 /** Leser overgangstidspunktet. Mangler raden, eller kan den ikke leses, er svaret for alt «ukjent», og det logges én gang. */
-export async function createRetentionContext(reader: LifecycleReader = prisma): Promise<RetentionContext> {
+export async function createRetentionContext(reader: LifecycleReader = prisma, now?: Date): Promise<RetentionContext> {
   const row = await reader.platformConfig.findUnique({ where: { key: ARCHIVED_CONTENT_RETENTION_FLOOR_KEY }, select: { value: true } });
   const floor = parseRetentionFloor(row?.value);
   if (!floor && !floorProblemLogged) {
@@ -78,7 +80,7 @@ export async function createRetentionContext(reader: LifecycleReader = prisma): 
       "warn",
     );
   }
-  return { floor, reader, courses: new Map() };
+  return { floor, reader, courses: new Map(), now };
 }
 
 function keptFrom(error: AppError): ArchivedRetention {
@@ -97,7 +99,7 @@ export function evaluateArchivedCourse(ctx: RetentionContext, courseId: string):
   const cached = ctx.courses.get(courseId);
   if (cached) return cached;
   const floor = ctx.floor;
-  const result = floor ? checkCourseDelete(courseId, ctx.reader).then((check) => fromCheck(check, floor)) : Promise.resolve(UNKNOWN);
+  const result = floor ? checkCourseDelete(courseId, ctx.reader, { now: ctx.now }).then((check) => fromCheck(check, floor)) : Promise.resolve(UNKNOWN);
   ctx.courses.set(courseId, result);
   return result;
 }

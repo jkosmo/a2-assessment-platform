@@ -370,10 +370,11 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
     // Kurset: samme sjekk for «Slett» (med deltakerlåsene mellom «arkivert» og målingen) og lista.
     const courseCommands = topLevelFunctions(textOf("modules/course/courseCommands.ts"));
     expect(courseCommands.get("deleteCourseInTx")).toContain("checkCourseDelete(courseId, tx, { beforeMeasure: () => lockCourseDeleteLearners(tx, courseId) })");
-    expect(topLevelFunctions(textOf("modules/course/courseDeleteGuard.ts")).get("checkCourseDelete")).toContain("measureCourseDeleteBlocks(courseId, reader, { stopAtFirst: true })");
+    expect(topLevelFunctions(textOf("modules/course/courseDeleteGuard.ts")).get("checkCourseDelete")).toContain("measureCourseDeleteBlocks(courseId, reader, { stopAtFirst: true, now: options.now })");
     // Lista over arkiverte spør de samme tre sjekkene, og ingen egne vakter.
     const retention = textOf("modules/content/archivedRetention.ts");
-    for (const name of ["checkCourseDelete(courseId, ctx.reader)", "checkModuleDeletes(ids, ctx.reader, { coursesDeletedFirst })", "checkSectionDeletes(ids, ctx.reader, { coursesDeletedFirst })"]) {
+    // #1185: klokka følger med (jobben og skriptet regner de sju dagene mot sitt eget tidspunkt).
+    for (const name of ["checkCourseDelete(courseId, ctx.reader, { now: ctx.now })","checkModuleDeletes(ids, ctx.reader, { coursesDeletedFirst })", "checkSectionDeletes(ids, ctx.reader, { coursesDeletedFirst })"]) {
       expect(retention, `archivedRetention.ts skal kalle ${name}`).toContain(name);
     }
     expect(/\b(assert\w+|describe\w+Block|measureCourseDeleteBlocks)\(/.test(retention), "archivedRetention.ts har sin egen vakt").toBe(false);

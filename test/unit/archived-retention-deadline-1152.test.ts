@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ARCHIVED_CONTENT_RETENTION_FLOOR_KEY, ARCHIVED_CONTENT_RETENTION_MONTHS } from "../../src/config/retention.js";
-import { addCalendarMonths, archivedContentDeletesOn, latestDate, osloCalendarDate, parseRetentionFloor } from "../../src/modules/content/retentionDeadline.js";
+import { ARCHIVED_CONTENT_RETENTION_FLOOR_KEY, ARCHIVED_CONTENT_RETENTION_MONTHS, UNFINISHED_SUBMISSION_GRACE_DAYS } from "../../src/config/retention.js";
+import { addCalendarDays, addCalendarMonths, archivedContentDeletesOn, latestDate, osloCalendarDate, parseRetentionFloor } from "../../src/modules/content/retentionDeadline.js";
 import { courseDeleteHold } from "../../src/modules/course/contentLifecycle.js";
 // @ts-expect-error — klientmodul uten typer
 import { formatRetentionDate, retentionLineHtml, retentionReasonText } from "../../public/static/content-status-badge.js";
@@ -148,13 +148,14 @@ describe("#1152 4b: linja i lista", () => {
   it("hver kode «Slett» kan svare med, har en grunn på hvert språk; en ukjent kode får den generelle", () => {
     const codes = [
       "course_has_completions", "course_has_completed_without_certificate", "course_requirement_unclear", "course_has_pending_reviews",
+      "course_has_unfinished_submissions",
       "module_has_submissions", "module_has_certification", "content_in_issued_certificate", "content_in_legacy_certificate",
       "content_in_archived_course", "content_in_use", "module_in_use", "delete_blocked_by_course_draft",
     ];
     for (const locale of ["nb", "nn", "en-GB"] as const) {
       const t = tFor(locale);
       for (const code of codes) {
-        const text = retentionReasonText({ code, details: { count: 1 } }, t);
+        const text = retentionReasonText({ code, details: { count: 1, untilDate: "2026-11-28" } }, t, locale);
         expect(text, `${locale} ${code}`).not.toMatch(/adminContent\.|\{/);
         expect(text, `${locale} ${code}`).not.toBe(t("adminContent.retention.reason.other"));
       }
@@ -166,6 +167,23 @@ describe("#1152 4b: linja i lista", () => {
     // 2.169.0: kravet kunne ikke gjenskapes. Tallet bøyes som over.
     expect(retentionReasonText({ code: "course_requirement_unclear", details: { count: 1 } }, tFor("nb"))).toBe("uklart hva kurset krevde, og en deltaker har bestått eller lest noe av det");
     expect(retentionReasonText({ code: "course_requirement_unclear", details: { count: 2 } }, tFor("nn"))).toBe("uklart kva kurset kravde, og 2 deltakarar har bestått eller lese noko av det");
+    // #1185: levert tekst uten å fullføre, med datoen på forfatterens språk.
+    const unfinished = (count: number, untilDate?: string) => ({ code: "course_has_unfinished_submissions", details: { count, untilDate } });
+    expect(retentionReasonText(unfinished(1, "2026-11-28"), tFor("nb"), "nb")).toBe("en deltaker har levert tekst uten å fullføre, til 28.11.2026");
+    expect(retentionReasonText(unfinished(2, "2026-11-28"), tFor("nn"), "nn")).toBe("2 deltakarar har levert tekst utan å fullføre, til 28.11.2026");
+    expect(retentionReasonText(unfinished(2, "2026-11-28"), tFor("en-GB"), "en-GB")).toBe("2 participants have delivered text without finishing, until 28 November 2026");
+    // Uten lesbar dato: den generelle grunnen, ikke en setning som stopper på «til ».
+    expect(retentionReasonText(unfinished(1), tFor("nb"), "nb")).toBe(tFor("nb")("adminContent.retention.reason.other"));
+    expect(retentionLineHtml({ lifecycle: "archived", retention: { kept: unfinished(1, "2026-11-28") } }, "course", tFor("nb"), "nb"))
+      .toContain(">Beholdes: en deltaker har levert tekst uten å fullføre, til 28.11.2026<");
+  });
+
+  it("#1185: kalenderdager i Norge — levert sent på kvelden norsk tid teller den norske datoen", () => {
+    // 23:30 UTC 20. november er 00:30 21. november i Norge: sju dager fra 21. november.
+    expect(addCalendarDays(osloCalendarDate(new Date("2026-11-20T23:30:00.000Z")), 7)).toBe("2026-11-28");
+    expect(addCalendarDays({ year: 2026, month: 12, day: 28 }, 7)).toBe("2027-01-04");
+    expect(addCalendarDays({ year: 2028, month: 2, day: 25 }, 7)).toBe("2028-03-03");
+    expect(UNFINISHED_SUBMISSION_GRACE_DAYS).toBe(7);
   });
 
   it("ingenting for «ukjent», uten felt, eller på en rad som ikke er arkivert", () => {

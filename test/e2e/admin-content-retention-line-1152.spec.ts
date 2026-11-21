@@ -62,6 +62,8 @@ function course(id: string, title: string, overrides: Record<string, unknown> = 
 const COURSES = [
   course("course-slettes", "Kurs som slettes", { retention: { deletesAt: "2027-05-13" } }),
   course("course-bevis", LONG_TITLE, { retention: { kept: { code: "course_has_completed_without_certificate", details: { count: 3 } } } }),
+  // #1185: levert tekst uten å fullføre, med datoen kurset kan slettes fra.
+  course("course-uferdig", "Kurs med påbegynt tekst", { retention: { kept: { code: "course_has_unfinished_submissions", details: { count: 2, untilDate: "2026-11-28" } } } }),
   course("course-ukjent", "Kurs uten dato", { retention: { unknown: true } }),
   // KONTROLL: et aktivt kurs har ingen linje.
   course("course-aktiv", "Aktivt kurs", { archivedAt: null, publishedAt: "2026-11-01T12:00:00.000Z", lifecycle: "published" }),
@@ -130,6 +132,7 @@ const EXPECTED: Record<Locale, Record<string, string>> = {
   nb: {
     "course-slettes": "Slettes 13.05.2027",
     "course-bevis": "Beholdes: 3 deltakere har fullført kravet uten kursbevis",
+    "course-uferdig": "Beholdes: 2 deltakere har levert tekst uten å fullføre, til 28.11.2026",
     "mod-slettes": "Slettes 28.02.2027",
     "mod-besvarelser": "Beholdes: har besvarelser",
     "sec-slettes": "Slettes 01.01.2027",
@@ -138,6 +141,7 @@ const EXPECTED: Record<Locale, Record<string, string>> = {
   "en-GB": {
     "course-slettes": "To be deleted 13 May 2027",
     "course-bevis": "Kept: 3 participants have completed the requirement without a certificate",
+    "course-uferdig": "Kept: 2 participants have delivered text without finishing, until 28 November 2026",
     "mod-slettes": "To be deleted 28 February 2027",
     "mod-besvarelser": "Kept: has submissions",
     "sec-slettes": "To be deleted 1 January 2027",
@@ -146,7 +150,7 @@ const EXPECTED: Record<Locale, Record<string, string>> = {
 };
 
 const PAGES = [
-  { name: "kurslista", url: "/admin-content/courses", ids: ["course-slettes", "course-bevis"], unknown: "course-ukjent", active: "course-aktiv" },
+  { name: "kurslista", url: "/admin-content/courses", ids: ["course-slettes", "course-bevis", "course-uferdig"], unknown: "course-ukjent", active: "course-aktiv" },
   { name: "modulbiblioteket", url: "/admin-content", ids: ["mod-slettes", "mod-besvarelser"], unknown: "mod-ukjent", active: "mod-aktiv" },
   { name: "seksjonslista", url: "/admin-content/sections", ids: ["sec-slettes", "sec-kurs"], unknown: "sec-ukjent", active: "sec-aktiv" },
 ] as const;
@@ -241,4 +245,15 @@ test("#1152 4b — et svar uten `retention` (gammel tjener) gir ingen linje unde
   await expect(line(page, "course-slettes")).toHaveText("Slettes 13.05.2027");
   await expect(page.locator('tr[data-row-id="course-gammel"]')).toBeVisible();
   await expect(line(page, "course-gammel")).toHaveCount(0);
+});
+
+test("#1185 — nynorsk: datoen er norsk (28.11.2026), ikke amerikansk; Chromium kjenner ikke «nn» i Intl", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nn"); } catch { /* ignore */ } });
+  await mockCommonApis(page, { courses: COURSES as never, libraryModules: MODULES as never });
+  await mockLists(page);
+  await page.goto("/admin-content/courses");
+  await page.locator('.list-filters [data-filter="archived"]').click();
+  await expect(line(page, "course-slettes")).toHaveText("Slettast 13.05.2027");
+  await expect(line(page, "course-uferdig")).toHaveText("Blir behalde: 2 deltakarar har levert tekst utan å fullføre, til 28.11.2026");
 });

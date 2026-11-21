@@ -91,6 +91,8 @@ const RETENTION_REASON_KEYS = {
   // 2.169.0: kravet kunne ikke gjenskapes, og noen har bestått eller lest noe av det som falt ut (courseDeleteGuard.ts).
   course_requirement_unclear: "course_requirement_unclear",
   course_has_pending_reviews: "course_has_pending_reviews",
+  // #1185: levert tekst uten å fullføre, under sju dager siden. `details.untilDate` er datoen kurset kan slettes fra.
+  course_has_unfinished_submissions: "course_has_unfinished_submissions",
   module_has_submissions: "module_has_submissions",
   module_has_certification: "module_has_certification",
   content_in_issued_certificate: "content_in_issued_certificate",
@@ -114,7 +116,9 @@ export function formatRetentionDate(date, locale) {
     ? { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }
     : { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" };
   try {
-    return new Intl.DateTimeFormat(locale || "nb", options).format(at);
+    // Norsk dato er lik på bokmål og nynorsk (28.11.2026). Chromium kjenner ikke «nn» og faller tilbake til amerikansk, 11/28/2026
+    // (e2e for #1185); Node gjør det ikke, så enhetstesten så det ikke.
+    return new Intl.DateTimeFormat(english ? locale : "nb", options).format(at);
   } catch {
     return date;
   }
@@ -126,10 +130,17 @@ function fill(text, vars) {
   return out;
 }
 
-/** Grunnen til å beholde, på brukerens språk. */
-export function retentionReasonText(kept, t) {
+/** Grunnen til å beholde, på brukerens språk. `locale` skriver datoen der grunnen har en (#1185). */
+export function retentionReasonText(kept, t, locale) {
   const key = RETENTION_REASON_KEYS[kept?.code];
   if (!key) return t("adminContent.retention.reason.other");
+  if (key === "course_has_unfinished_submissions") {
+    const count = Number(kept.details?.count) || 1;
+    const date = formatRetentionDate(kept.details?.untilDate, locale);
+    // Uten dato ville setningen sagt «til » og stoppet; da er den generelle grunnen ærligere.
+    if (!date) return t("adminContent.retention.reason.other");
+    return fill(t(`adminContent.retention.reason.${key}.${count === 1 ? "one" : "other"}`), { count, date });
+  }
   if (key === "course_has_completed_without_certificate" || key === "course_requirement_unclear") {
     const count = Number(kept.details?.count) || 1;
     return fill(t(`adminContent.retention.reason.${key}.${count === 1 ? "one" : "other"}`), { count });
@@ -152,7 +163,7 @@ export function retentionLineHtml(item, kind, t, locale) {
     return `<span class="retention-line" data-retention="deletes">${escapeHtml(text)}</span>`;
   }
   if (retention.kept && typeof retention.kept === "object") {
-    const text = fill(t(`adminContent.retention.kept.${kind}`), { reason: retentionReasonText(retention.kept, t) });
+    const text = fill(t(`adminContent.retention.kept.${kind}`), { reason: retentionReasonText(retention.kept, t, locale) });
     return `<span class="retention-line" data-retention="kept" data-retention-code="${escapeHtml(retention.kept.code ?? "")}">${escapeHtml(text)}</span>`;
   }
   return "";

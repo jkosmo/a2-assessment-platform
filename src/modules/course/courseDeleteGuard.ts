@@ -11,6 +11,8 @@
 //      bort av seg selv når sakene er avgjort. ALLE modulene i kursets elementliste teller her, uansett `archivedAt` og merker
 //      (QA-porten 4a): en delt modul som ble arkivert for seg ETTER kurset, faller ut av kravet over, men en sak på den kan likevel
 //      være det som gjør en deltaker ferdig. Tvil gir «beholdes».
+//   4. En deltaker har levert tekst, men ikke fullført modulen, for under sju dager siden (`course_has_unfinished_submissions`,
+//      #1185). Går bort av seg selv når dagene er gått; se `findUnfinishedSubmissions`.
 //
 // KRAVET MÅLES SLIK DET VAR DA KURSET BLE ARKIVERT, med reglene fra utstedelsen (`findCompletionToIssue`,
 // courseCompletionService.ts): beståtte per kurs med kravet til hovedversjon (`findModuleProgress`), lesinger etter regelen for
@@ -29,8 +31,11 @@
 import { prisma } from "../../db/prisma.js";
 import { lockLearnersInContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { DomainRuleError, type AppError } from "../../errors/AppError.js";
+import { UNFINISHED_SUBMISSION_GRACE_DAYS } from "../../config/retention.js";
+import { SubmissionStatus } from "@prisma/client";
 import { deleteRequiresArchivedError } from "../content/archivedGuard.js";
 import type { DeleteCheck } from "../content/deleteCheck.js";
+import { addCalendarDays, osloCalendarDate, osloDateString } from "../content/retentionDeadline.js";
 import { countPendingReviewsOnModules, type LifecycleReader } from "./contentLifecycle.js";
 import { createCourseRepository } from "./courseRepository.js";
 import { findSectionReadCredit } from "./sectionReadCredit.js";
@@ -45,10 +50,14 @@ export type CourseDeleteBlockCode =
   | "course_has_completions"
   | "course_has_completed_without_certificate"
   | "course_requirement_unclear"
-  | "course_has_pending_reviews";
+  | "course_has_pending_reviews"
+  | "course_has_unfinished_submissions";
 
 /** Én grunn til å beholde kurset: koden, tallet (`details.count`), feilen «Slett» kaster og teksten kaskadens forhåndsvisning viser. */
 export type CourseDeleteBlock = { code: CourseDeleteBlockCode; count: number; error: AppError; reason: string };
+
+/** Klokka målingen regnes mot. Standard: nå. Jobben (4c), forhåndsvisningsskriptet og testene gir sin egen (#1185). */
+export type CourseDeleteClock = { now?: Date };
 
 /**
  * Kravet slik det var da kurset ble arkivert, lest gjennom kursets to dører (`findCourseItemsForParticipant` og
@@ -206,6 +215,50 @@ export async function findCompletedWithoutCertificate(
 }
 
 /**
+ * #1185 (produkteier 21.11.2026: «Deltager får 7 dager så sletting», regnet «fra deltageren leverte»): deltakerne som har levert tekst
+ * i en av modulene, men ikke fullført, for under `UNFINISHED_SUBMISSION_GRACE_DAYS` kalenderdager siden (norsk dato).
+ *
+ * I en modul med fritekst og flervalg lages innleveringen når teksten leveres, og vurderingsjobben først når flervalget er sendt inn
+ * (mcqService.ts). Imens står den som `SUBMITTED` uten jobb, og grunn 3 regner den som «bare åpnet» (contentLifecycle.ts). Deltakeren
+ * kan fortsatt fullføre etter arkiveringen: verken start eller innsending av flervalg sjekker arkivering. Uten denne grunnen kunne
+ * kurset slettes før hen rakk det, og kursbeviset kunne aldri utstedes.
+ *
+ * Ikke `MCQ_ONLY`: der lages innleveringen når modulen ÅPNES, og ingenting er levert (2.164.1, 2.172.0). `FREETEXT_ONLY` får jobben
+ * ved levering; en uten jobb er et unntak, og teller her (tvil gir «beholdes», og bare i sju dager).
+ * `untilDate`: den første norske datoen kurset kan slettes, regnet fra den SISTE slike leveringen.
+ */
+export async function findUnfinishedSubmissions(
+  moduleIds: readonly string[],
+  reader: LifecycleReader = prisma,
+  clock: CourseDeleteClock = {},
+): Promise<{ userCount: number; untilDate: string | null }> {
+  if (moduleIds.length === 0) return { userCount: 0, untilDate: null };
+  const now = clock.now ?? new Date();
+  const today = osloDateString(now);
+  // Grovt utvalg i databasen (to dager ekstra for tidssonen), nøyaktig regel under: kalenderdatoer i Norge.
+  const since = new Date(now.getTime() - (UNFINISHED_SUBMISSION_GRACE_DAYS + 2) * 24 * 60 * 60 * 1000);
+  const rows = await reader.submission.findMany({
+    where: {
+      moduleId: { in: [...moduleIds] },
+      submissionStatus: SubmissionStatus.SUBMITTED,
+      assessmentJobs: { none: {} },
+      moduleVersion: { assessmentMode: { not: "MCQ_ONLY" } },
+      submittedAt: { gte: since },
+    },
+    select: { userId: true, submittedAt: true },
+  });
+  const users = new Set<string>();
+  let untilDate: string | null = null;
+  for (const row of rows) {
+    const until = addCalendarDays(osloCalendarDate(row.submittedAt), UNFINISHED_SUBMISSION_GRACE_DAYS);
+    if (until <= today) continue;
+    users.add(row.userId);
+    if (untilDate === null || until > untilDate) untilDate = until;
+  }
+  return { userCount: users.size, untilDate };
+}
+
+/**
  * Under innholdslåsen: deltakerlåsene for alle som har levert på en av kursets moduler (alle, ikke bare kravets: samme sett som
  * «venter på vurdering»), sortert, før noe skrives i revisjonssporet (`lockLearnersInContentWrite` stopper ellers). Kaskaden kaller
  * den først, så analysen og slettingen måler det samme.
@@ -260,6 +313,23 @@ function requirementUnclearBlock(count: number): CourseDeleteBlock {
   };
 }
 
+function unfinishedSubmissionsBlock(count: number, untilDate: string): CourseDeleteBlock {
+  return {
+    code: "course_has_unfinished_submissions",
+    count,
+    // `untilDate` (YYYY-MM-DD): klienten skriver datoen på forfatterens språk (api-error.js, plassholdere som slutter på «Date»).
+    error: new DomainRuleError(
+      "course_has_unfinished_submissions",
+      `Cannot delete the course yet: ${count} participant${count === 1 ? " has" : "s have"} delivered text in one of its modules without finishing it. ` +
+        `They get ${UNFINISHED_SUBMISSION_GRACE_DAYS} days from delivery; the course can be deleted from ${untilDate}.`,
+      { count, untilDate },
+    ),
+    reason:
+      `${count === 1 ? "1 deltaker" : `${count} deltakere`} har levert tekst i en av kursets moduler uten å fullføre. ` +
+      `De får ${UNFINISHED_SUBMISSION_GRACE_DAYS} dager fra leveringen; kurset kan slettes fra ${untilDate}.`,
+  };
+}
+
 function pendingReviewsBlock(count: number): CourseDeleteBlock {
   return {
     code: "course_has_pending_reviews",
@@ -285,14 +355,14 @@ function pendingReviewsBlock(count: number): CourseDeleteBlock {
 export async function checkCourseDelete(
   courseId: string,
   reader: LifecycleReader = prisma,
-  options: { beforeMeasure?: () => Promise<void> } = {},
+  options: { beforeMeasure?: () => Promise<void> } & CourseDeleteClock = {},
 ): Promise<DeleteCheck> {
   const course = await reader.course.findUnique({ where: { id: courseId }, select: { id: true, archivedAt: true } });
   if (!course) return { status: "not_found" };
   // #1151 (G4): bare et arkivert kurs kan slettes.
   if (!course.archivedAt) return { status: "blocked", error: deleteRequiresArchivedError({ type: "COURSE", id: courseId }) };
   await options.beforeMeasure?.();
-  const [blocked] = await measureCourseDeleteBlocks(courseId, reader, { stopAtFirst: true });
+  const [blocked] = await measureCourseDeleteBlocks(courseId, reader, { stopAtFirst: true, now: options.now });
   return blocked ? { status: "blocked", error: blocked.error } : { status: "deletable", archivedAt: course.archivedAt };
 }
 
@@ -305,7 +375,7 @@ export async function measureCourseDeleteBlocks(
   courseId: string,
   reader: LifecycleReader = prisma,
   // #1152 skive 4b: «Slett» og lista over arkiverte bruker bare den første grunnen, og slipper å måle resten (planens punkt 9).
-  options: { stopAtFirst?: boolean } = {},
+  options: { stopAtFirst?: boolean } & CourseDeleteClock = {},
 ): Promise<CourseDeleteBlock[]> {
   const blocks: CourseDeleteBlock[] = [];
   // #1152 skive 4b: det som ikke avhenger av hverandre, leses samtidig (lista over arkiverte måler mange kurs). Grunnene og
@@ -320,6 +390,11 @@ export async function measureCourseDeleteBlocks(
   if (options.stopAtFirst && blocks.length > 0) return blocks;
   // Kravet kunne ikke gjenskapes (`uncertain`): da er kravet selv tomt, og «fullført» er ingen. I stedet teller fremgangen på det som
   // falt ut (A, 21.11.2026). Begge går ikke bort av seg selv, og sies før det som venter.
+  // ⚠️ REKKEFØLGEN (gjennomlesingen av 4c, 21.11.2026): levert tekst uten jobb leses FØR «venter på vurdering». Innsendingen av
+  // flervalget tar ingen deltakerlås, så innleveringen kan gå fra SUBMITTED uten jobb til PROCESSING mens vi måler. Leses de to
+  // samtidig eller i motsatt rekkefølge, kan begge gå glipp av den. I denne rekkefølgen fanger den første den før overgangen og den
+  // andre etter.
+  const unfinished = await findUnfinishedSubmissions(allModuleIds, reader, { now: options.now });
   const [completed, unclear, pending] = await Promise.all([
     findCompletedWithoutCertificate(courseId, requirement, reader),
     requirement.uncertain ? findProgressOnUncertainRequirement(courseId, requirement.uncertain, reader) : Promise.resolve([]),
@@ -329,5 +404,7 @@ export async function measureCourseDeleteBlocks(
   if (unclear.length > 0) blocks.push(requirementUnclearBlock(unclear.length));
   if (options.stopAtFirst && blocks.length > 0) return blocks;
   if (pending > 0) blocks.push(pendingReviewsBlock(pending));
+  if (options.stopAtFirst && blocks.length > 0) return blocks;
+  if (unfinished.userCount > 0 && unfinished.untilDate) blocks.push(unfinishedSubmissionsBlock(unfinished.userCount, unfinished.untilDate));
   return blocks;
 }

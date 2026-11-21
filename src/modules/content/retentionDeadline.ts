@@ -48,6 +48,18 @@ export function archivedContentDeletesOn(archivedAt: Date, floor: Date, months: 
   return addCalendarMonths(osloCalendarDate(start), months);
 }
 
+/** Kalenderdatoen i Norge for et tidspunkt, som YYYY-MM-DD. */
+export function osloDateString(at: Date): string {
+  const { year, month, day } = osloCalendarDate(at);
+  return `${pad(year, 4)}-${pad(month)}-${pad(day)}`;
+}
+
+/** En kalenderdato flyttet `days` dager fram (#1185). Kalenderdager, så sommer- og vintertid flytter den ikke. */
+export function addCalendarDays(date: { year: number; month: number; day: number }, days: number): string {
+  const at = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
+  return `${pad(at.getUTCFullYear(), 4)}-${pad(at.getUTCMonth() + 1)}-${pad(at.getUTCDate())}`;
+}
+
 /** Den seneste av datoene (YYYY-MM-DD sammenlignes som tekst). */
 export function latestDate(dates: readonly string[]): string {
   return dates.reduce((latest, date) => (date > latest ? date : latest));

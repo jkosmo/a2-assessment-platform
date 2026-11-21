@@ -136,8 +136,11 @@ async function analyzeCourseCascade(courseId: string, reader: LifecycleReader = 
   const blockers: CascadeDeleteEntry[] = [];
 
   // #1152: kursvakta, den samme som «Slett» (`deleteCourseInTx`), målt før noe fjernes. Alle grunnene vises.
+  // `details` er de samme som feilen «Slett» kaster, ikke bare tallet: #1185 sender også datoen (`untilDate`), og uten den faller
+  // klienten tilbake på tjenerens norske tekst.
   for (const block of await measureCourseDeleteBlocks(courseId, reader)) {
-    blockers.push({ id: courseId, title: courseTitle, reason: block.reason, code: block.code, details: { count: block.count } });
+    const details = block.error.details && typeof block.error.details === "object" ? (block.error.details as Record<string, unknown>) : { count: block.count };
+    blockers.push({ id: courseId, title: courseTitle, reason: block.reason, code: block.code, details });
   }
 
   const drafts = await findCourseDraftUsesForDelete({ moduleIds, sectionIds }, reader);

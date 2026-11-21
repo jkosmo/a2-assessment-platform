@@ -85,7 +85,7 @@ Du kan:
 enten «Slettes 13.05.2027» eller «Beholdes: <grunn>». Arkivert innhold som ingen deltaker har brukt, slettes av seg selv
 seks måneder etter at det ble arkivert (jobben som gjør det, kommer senere; datoen gjelder fra nå). Grunnene til å beholde
 er de samme som «Slett» ville gitt: har kursbevis, en deltaker har fullført kravet uten kursbevis, det er uklart hva kurset krevde og noen har bestått eller lest noe av det (fra 2.169.0), besvarelser venter på
-vurdering, har besvarelser, inngår i et kursbevis, ligger i et kurs som beholdes, eller står i utkastet til et kurs. Vil du
+vurdering, en deltaker har levert tekst uten å fullføre modulen (i sju dager fra leveringen, med datoen; fra 2.174.0), har besvarelser, inngår i et kursbevis, ligger i et kurs som beholdes, eller står i utkastet til et kurs. Vil du
 ikke vente, kan du trykke «Slett» selv.
 
 Det som ikke tilbys før elementet er gjenopprettet: generering og «Be om endring», oversetting, «Erstatt fra fil», «Last opp
