@@ -2,6 +2,37 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.171.0 - 2026-11-21
+
+Språk og tilgjengelighet i innholdsforvaltningen (#1173, fra konsistenssjekken #1157). Bygget av en parallell agent i en egen
+arbeidskopi, mens hovedsporet bygget 2.169.0 og 2.170.0. Bare klientkode; ingen migrering.
+
+**Hva brukerne merker:**
+- «Hopp til hovedinnhold» og navnet på språkvelgeren står på valgt språk på alle sidene i innholdsforvaltningen. Sidene sier også fra
+  til skjermleseren hvilket språk de er på (`lang`), så norsk leses med norsk uttale. Før sa alle sju sidene «engelsk».
+- Tekst som sto på norsk på engelske sider, er oversatt (27 nye nøkler på tre språk): overskriftene og fristen i klassen, plassholderen
+  for tomme språk i kurset, «Brukt i kurs» i modulbiblioteket og eierpanelet («Eiere», «Endre eiere»), som sto på bokmål overalt.
+- Feltene har navn for skjermleseren: Navn, Modultype og Sertifiseringsnivå på en ny modul, alle feltene i modulens innstillinger,
+  søk etter deltaker og kursvelgeren i klassen, og seksjonens tekstfelt.
+- Avkrysningsboksene i modulens redigeringsside har en klikkflate på minst 24 px; selve boksen er like stor.
+
+**Tester:** `test/e2e/language-accessibility-1173.spec.ts` (22) og `test/unit/language-chrome-1173.test.ts` (44). Hver retting er
+mutasjonsverifisert (ti mutasjoner, alle røde på riktig påstand). Hele admin-content-e2e var 1183/1183 i agentens arbeidskopi.
+
+**QA 2.171.0:** Codex pass 1 hadde bare versjonsnummeret (satt her). Codex nådde bruksgrensen før pass 2; en uavhengig Claude-agent
+tok den: GO, ingen regresjon, språket riktig på nynorsk og engelsk.
+
+**Kjent (ikke rettet), #1173 står åpen for dette:**
+- Bekreftelser og meldinger står fortsatt på norsk på engelske sider: avpubliser, slett og «Rydd upubliserte» i biblioteket; arkiver,
+  slett og gjenopprett klasse; avpubliser kurs og «Slett kurs og innhold».
+- Norske skjermlesernavn: menyen («Innholdsadministrasjon», «Deltakere») på 11 sider, og tre i Vurderingskvalitet.
+- Tre par med felt i modulens innstillinger (ordlengde, gyldighet, grensesone) har samme navn på begge feltene.
+- Eierpanelet i modulens arbeidsflate bytter ikke språk før noen klikker i det.
+- Enhetsvakta for rammen sjekker at attributtet finnes, ikke at det oversettes; e2e dekker de seks sidene.
+
+**Også i denne versjonen:** `doc/design/PLAN_1162_DELTAKERFLYT.md`, kartleggingen av deltakerflyten (#1162) med produkteiers
+avgjørelser. Ikke bygget.
+
 ## 2.170.0 - 2026-11-21
 
 Et arkivert kurs kan ikke ankes (produkteier 21.11.2026: «Det skal ikke være mulig å anke et arkivert kurs, da må student heller
@@ -26,6 +57,10 @@ mellom sjekken og skrivingen. Ny feilkode `appeal_course_archived` (400).
 
 **QA 2.170.0 (Codex): GO.** Rettet før commit: anken holder nå innholdslåsen delt (en arkivering kunne kommet mellom sjekken og
 skrivingen), og e2e for meldingen.
+
+**På stage 21.11.2026 kl. 10:01** (dev fa53acd3). Utrullingen gikk rent. `2-160` (7/7) og `2-161` (4/4) er kjørt på nytt mot den. Selve
+anken er ikke prøvd på stage: den krever en deltaker med et vurdert stryk, og stage-kontoen er fagansvarlig. Integrasjonstesten
+gjennom ruta og e2e-testen for meldingen dekker den.
 
 **Kjent (ikke rettet):** en anke som alt var åpen da kurset ble arkivert, kan fortsatt kreves og avgjøres. Det gir et vedtak og et
 varsel, men ikke kursbevis mens kurset er arkivert. Eksisterende, utenfor denne endringen.

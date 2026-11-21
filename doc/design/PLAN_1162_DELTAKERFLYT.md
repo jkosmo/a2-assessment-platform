@@ -2,6 +2,11 @@
 
 Status: forslag, ikke bygget (21.11.2026). Fra konsistenssjekken #1157.
 
+**Avgjort av produkteier 21.11.2026** (alle seks spørsmålene nederst; står også i `doc/DECISIONS.md`, «Deltakerflyten»): lang
+form på tilbake («← Tilbake til kurset», «← Tilbake til Mine kurs»); kursbeviset åpnes i samme fane; «Gå videre» i en modul bare
+når den er bestått; «Ta testen» i stedet for «Gjennomfør»; merket heter «Lesestoff» og «Test»; de tre tilbake-tekstene på
+produsentsidene tas i #1170.
+
 ## Kort fortalt
 
 - **Regelen:** den nyeste versjonen er fasiten. Seksjonsleseren («Steg 1 av 4», én tydelig knapp videre) er mønsteret, og
