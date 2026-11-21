@@ -1,7 +1,7 @@
 import { AppealStatus, DecisionType, SubmissionStatus } from "../../db/prismaRuntime.js";
 import { allLocaleValues } from "../../i18n/allLocaleValues.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
-import { appealRepository, createAppealRepository } from "./appealRepository.js";
+import { appealRepository, createAppealRepository, createAppealWriter } from "./appealRepository.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { runLearnerWrite } from "../../db/contentLock.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -33,19 +33,20 @@ export async function createSubmissionAppeal(input: {
     );
   }
 
-  const activeAppeal = await appealRepository.findActiveAppealForSubmission(submission.id, [
-    AppealStatus.OPEN,
-    AppealStatus.IN_REVIEW,
-  ]);
-
-  if (activeAppeal) {
-    throw new ConflictError("appeal_already_open", "Submission already has an open or in-review appeal.");
-  }
-
-  const appeal = await runInTransaction(async (tx) => {
+  // #1152: under deltakerlåsen, som vedtakene. Kursslettingen tar deltakerlåsene før den måler «ingenting venter»; uten låsen her
+  // kunne anken kommet mellom målingen og slettingen. Sjekken av en åpen anke står inne i samme transaksjon, så to samtidige
+  // anker på samme innlevering ikke begge kommer gjennom.
+  const appeal = await runLearnerWrite(input.appealedById, async (tx) => {
     const txRepo = createAppealRepository(tx);
+    const activeAppeal = await txRepo.findActiveAppealForSubmission(submission.id, [
+      AppealStatus.OPEN,
+      AppealStatus.IN_REVIEW,
+    ]);
+    if (activeAppeal) {
+      throw new ConflictError("appeal_already_open", "Submission already has an open or in-review appeal.");
+    }
 
-    const createdAppeal = await txRepo.createAppeal({
+    const createdAppeal = await createAppealWriter(tx).createAppeal({
       submissionId: submission.id,
       appealedById: input.appealedById,
       appealReason: input.appealReason,

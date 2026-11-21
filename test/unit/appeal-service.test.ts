@@ -45,8 +45,10 @@ vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
     markAppealInReviewGuarded,
     findAppealForResolution,
   },
+  // #1152: anken opprettes under deltakerlåsen, med en egen skriver, og sjekken av en åpen anke står i samme transaksjon.
+  createAppealWriter: () => ({ createAppeal }),
   createAppealRepository: () => ({
-    createAppeal,
+    findActiveAppealForSubmission,
     updateSubmissionStatus,
     markAppealResolvedGuarded,
     findAppealById,

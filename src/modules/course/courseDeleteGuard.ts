@@ -5,6 +5,8 @@
 //   1. Kursbevis (`course_has_completions`). For alltid.
 //   2. Noen har fullført kravet uten kursbevis (`course_has_completed_without_certificate`). Utstedelsen hopper over arkiverte
 //      kurs, så beviset kommer først når kurset er gjenopprettet og publisert. Sies før grunn 3: den går ikke bort av seg selv.
+//      Kan kravet ikke gjenskapes (det ble tomt fordi elementene ble arkivert senere), er grunnen i stedet at noen har bestått eller
+//      lest noe av det som falt ut (`course_requirement_unclear`, 2.169.0). Tvil gir «beholdes».
 //   3. En besvarelse i en av kursets moduler venter på vurdering, manuell behandling eller anke (`course_has_pending_reviews`). Går
 //      bort av seg selv når sakene er avgjort. ALLE modulene i kursets elementliste teller her, uansett `archivedAt` og merker
 //      (QA-porten 4a): en delt modul som ble arkivert for seg ETTER kurset, faller ut av kravet over, men en sak på den kan likevel
@@ -33,10 +35,17 @@ import { countPendingReviewsOnModules, type LifecycleReader } from "./contentLif
 import { createCourseRepository } from "./courseRepository.js";
 import { findSectionReadCredit } from "./sectionReadCredit.js";
 
-/** Kravet slik det var da kurset ble arkivert. */
-export type CourseRequirementAsArchived = { moduleIds: string[]; sectionIds: string[] };
+/**
+ * Kravet slik det var da kurset ble arkivert. `uncertain`: kravet ble tomt fordi elementene ble arkivert senere; da kan det ikke
+ * gjenskapes, og dette er elementene som falt ut (se `findCourseRequirementAsArchived`).
+ */
+export type CourseRequirementAsArchived = { moduleIds: string[]; sectionIds: string[]; uncertain?: { moduleIds: string[]; sectionIds: string[] } };
 
-export type CourseDeleteBlockCode = "course_has_completions" | "course_has_completed_without_certificate" | "course_has_pending_reviews";
+export type CourseDeleteBlockCode =
+  | "course_has_completions"
+  | "course_has_completed_without_certificate"
+  | "course_requirement_unclear"
+  | "course_has_pending_reviews";
 
 /** Én grunn til å beholde kurset: koden, tallet (`details.count`), feilen «Slett» kaster og teksten kaskadens forhåndsvisning viser. */
 export type CourseDeleteBlock = { code: CourseDeleteBlockCode; count: number; error: AppError; reason: string };
@@ -45,16 +54,28 @@ export type CourseDeleteBlock = { code: CourseDeleteBlockCode; count: number; er
  * Kravet slik det var da kurset ble arkivert, lest gjennom kursets to dører (`findCourseItemsForParticipant` og
  * `findAllCourseItems`).
  *   - Modul: med når den ikke er arkivert (som utstedelsen), eller når den ble arkivert SAMMEN med kurset
- *     (`archivedWithCourseId` = kurset). En modul arkivert for seg, før eller etter kurset, er ikke med.
+ *     (`archivedWithCourseId` = kurset). En modul arkivert for seg, før eller etter kurset, er ikke med (men se «et krav som har
+ *     blitt tomt» under).
  *   - Seksjon: med når deltakeren kan lese den nå (som utstedelsen), eller når den ble arkivert sammen med kurset OG hadde en
  *     publisert versjon (`activeVersionIdBeforeArchive`). Arkiveringen nullstiller `activeVersionId`, så døra for deltakere alene
  *     ville latt alle seksjonene falle ut. En seksjon som aldri ble publisert, er ikke med.
  * Er det uklart om et element var påkrevd, er det ikke med: tvil gjør flere «fullført», og det beholder kurset.
  * Et kurs arkivert før 2.159.0 har elementene sine aktive; de telles med av seg selv.
+ *
+ * ⚠️ ET KRAV SOM HAR BLITT TOMT (Codex, byggenotatet for 4c, 18.11.2026; produkteier valgte A 21.11.2026). Regelen over snur når
+ * ingenting er igjen: et tomt krav gjør ingen fullført, og kurset ville blitt slettet. Det skjer når kravets elementer er arkivert
+ * ETTER kurset uten å følge det: en delt modul som fulgte et ANNET kurs inn i arkivet, eller et element arkivert for seg. Hva kurset
+ * krevde, kan da ikke gjenskapes: `archivedAt` er siste arkivering, ikke tilstanden da kurset ble arkivert (QA-porten 2.169.0: en
+ * seksjon som aldri ble publisert, kan også ha falt ut). Elementene som falt ut, står derfor i `uncertain`, ikke i kravet, og
+ * vakta beholder kurset hvis noen har bestått eller lest noe av dem (`course_requirement_unclear`). Tvil gir «beholdes».
  */
 export async function findCourseRequirementAsArchived(courseId: string, reader: LifecycleReader = prisma): Promise<CourseRequirementAsArchived> {
   const repo = createCourseRepository(reader);
-  const [forParticipant, all] = await Promise.all([repo.findCourseItemsForParticipant(courseId), repo.findAllCourseItems(courseId)]);
+  const [forParticipant, all, course] = await Promise.all([
+    repo.findCourseItemsForParticipant(courseId),
+    repo.findAllCourseItems(courseId),
+    reader.course.findUnique({ where: { id: courseId }, select: { archivedAt: true } }),
+  ]);
   const moduleIds = new Set<string>();
   const sectionIds = new Set<string>();
   for (const item of forParticipant) {
@@ -67,7 +88,58 @@ export async function findCourseRequirementAsArchived(courseId: string, reader: 
     const section = item.itemType === "SECTION" ? item.section : null;
     if (section?.archivedAt && section.archivedWithCourseId === courseId && section.activeVersionIdBeforeArchive) sectionIds.add(section.id);
   }
+  const courseArchivedAt = course?.archivedAt;
+  if (moduleIds.size === 0 && sectionIds.size === 0 && courseArchivedAt) {
+    // STRENGT etter kurset: det som fulgte kurset inn i arkivet, har kursets eget tidspunkt (`now` i courseArchive.ts gis til hvert
+    // element), er alt vurdert over og står utenfor her. Også en seksjon som fulgte uten publisert versjon.
+    const fellOutLater = (row: { archivedAt: Date | null } | null | undefined) =>
+      Boolean(row?.archivedAt && row.archivedAt.getTime() > courseArchivedAt.getTime());
+    const uncertainModules = new Set<string>();
+    const uncertainSections = new Set<string>();
+    for (const item of all) {
+      if (item.itemType === "MODULE" && item.module && fellOutLater(item.module)) uncertainModules.add(item.module.id);
+      if (item.itemType === "SECTION" && item.section && fellOutLater(item.section)) uncertainSections.add(item.section.id);
+    }
+    if (uncertainModules.size > 0 || uncertainSections.size > 0) {
+      return { moduleIds: [], sectionIds: [], uncertain: { moduleIds: [...uncertainModules], sectionIds: [...uncertainSections] } };
+    }
+  }
   return { moduleIds: [...moduleIds], sectionIds: [...sectionIds] };
+}
+
+/**
+ * #1152 (produkteier, A, 21.11.2026): kravet kunne ikke gjenskapes (`uncertain`). Deltakerne uten kursbevis som har bestått minst én
+ * av modulene som falt ut, eller lest minst én av seksjonene. Har noen det, beholdes kurset. Tvil gir «beholdes».
+ *
+ * ⚠️ BEVISST UTEN UTSTEDELSENS REGLER (QA-porten 2.169.0, runde 2). Utstedelsen teller lesinger i et arkivert kurs bare fram til
+ * arkiveringen, og bestått per kurs med kravet til hovedversjon. Her er kravet ukjent, og det kan bli målt igjen om kurset gjenopprettes:
+ * en seksjon lest via et ANNET kurs etter at dette ble arkivert, kan da telle. Derfor teller enhver gyldig bestått (`ModulePass` uten
+ * `invalidatedAt`) og enhver lesing (`CourseSectionRead`) av elementene, i hvilket som helst kurs og når som helst.
+ */
+export async function findProgressOnUncertainRequirement(
+  courseId: string,
+  uncertain: NonNullable<CourseRequirementAsArchived["uncertain"]>,
+  reader: LifecycleReader = prisma,
+): Promise<string[]> {
+  const { moduleIds, sectionIds } = uncertain;
+  const [course, passes, reads] = await Promise.all([
+    reader.course.findUnique({ where: { id: courseId }, select: { versionMajor: true } }),
+    moduleIds.length > 0
+      ? reader.modulePass.findMany({ where: { moduleId: { in: [...moduleIds] }, invalidatedAt: null }, select: { userId: true }, distinct: ["userId"] })
+      : Promise.resolve([]),
+    sectionIds.length > 0
+      ? reader.courseSectionRead.findMany({ where: { sectionId: { in: [...sectionIds] } }, select: { userId: true }, distinct: ["userId"] })
+      : Promise.resolve([]),
+  ]);
+  if (!course) return [];
+  const candidates = [...new Set([...passes, ...reads].map((row) => row.userId))];
+  if (candidates.length === 0) return [];
+  const certificates = await reader.courseCompletion.findMany({
+    where: { courseId, versionMajor: course.versionMajor, userId: { in: candidates } },
+    select: { userId: true, source: true },
+  });
+  const certified = new Set(certificates.filter((row) => row.source !== "external").map((row) => row.userId));
+  return candidates.filter((userId) => !certified.has(userId));
 }
 
 /**
@@ -172,6 +244,22 @@ function completedWithoutCertificateBlock(count: number): CourseDeleteBlock {
   };
 }
 
+function requirementUnclearBlock(count: number): CourseDeleteBlock {
+  return {
+    code: "course_requirement_unclear",
+    count,
+    error: new DomainRuleError(
+      "course_requirement_unclear",
+      `Cannot delete the course: it is unclear what it required when it was archived, and ${count} participant${count === 1 ? " has" : "s have"} ` +
+        `passed or read part of it. The course stays archived.`,
+      { count },
+    ),
+    reason:
+      `Det er uklart hva kurset krevde da det ble arkivert, og ${count === 1 ? "1 deltaker" : `${count} deltakere`} har bestått eller lest ` +
+      `noe av det. Kurset blir stående arkivert.`,
+  };
+}
+
 function pendingReviewsBlock(count: number): CourseDeleteBlock {
   return {
     code: "course_has_pending_reviews",
@@ -230,11 +318,15 @@ export async function measureCourseDeleteBlocks(
   ]);
   if (completions > 0) blocks.push(completionsBlock(completions));
   if (options.stopAtFirst && blocks.length > 0) return blocks;
-  const [completed, pending] = await Promise.all([
+  // Kravet kunne ikke gjenskapes (`uncertain`): da er kravet selv tomt, og «fullført» er ingen. I stedet teller fremgangen på det som
+  // falt ut (A, 21.11.2026). Begge går ikke bort av seg selv, og sies før det som venter.
+  const [completed, unclear, pending] = await Promise.all([
     findCompletedWithoutCertificate(courseId, requirement, reader),
+    requirement.uncertain ? findProgressOnUncertainRequirement(courseId, requirement.uncertain, reader) : Promise.resolve([]),
     countPendingReviewsOnModules(allModuleIds, undefined, reader),
   ]);
   if (completed.length > 0) blocks.push(completedWithoutCertificateBlock(completed.length));
+  if (unclear.length > 0) blocks.push(requirementUnclearBlock(unclear.length));
   if (options.stopAtFirst && blocks.length > 0) return blocks;
   if (pending > 0) blocks.push(pendingReviewsBlock(pending));
   return blocks;

@@ -3,8 +3,28 @@ import type {
   SubmissionStatus as SubmissionStatusType,
 } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
+import type { LearnerTx } from "../../db/contentLock.js";
 
 type AppealRepositoryClient = Pick<typeof prisma, "appeal" | "submission" | "user" | "assessmentDecision">;
+
+/**
+ * #1152 (Codex leste byggenotatet for 4c, 18.11.2026): en ny anke opprettes under deltakerlåsen. Kursslettingen
+ * (`lockCourseDeleteLearners`, courseDeleteGuard.ts) tar deltakerlåsene og måler «ingenting venter på vurdering eller anke»;
+ * en anke opprettet uten låsen kunne kommet mellom målingen og slettingen. Klienten MÅ være en `LearnerTx`, så typesjekkeren og
+ * vakta (test/content-lock-write-guard.test.js, `appeal`) ser låsen.
+ */
+export function createAppealWriter(tx: LearnerTx) {
+  return {
+    createAppeal(data: {
+      submissionId: string;
+      appealedById: string;
+      appealReason: string;
+      appealStatus: AppealStatusType;
+    }) {
+      return tx.appeal.create({ data });
+    },
+  };
+}
 
 export function createAppealRepository(client: AppealRepositoryClient = prisma) {
   return {
@@ -55,15 +75,6 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
         },
         select: { id: true },
       });
-    },
-
-    createAppeal(data: {
-      submissionId: string;
-      appealedById: string;
-      appealReason: string;
-      appealStatus: AppealStatusType;
-    }) {
-      return client.appeal.create({ data });
     },
 
     updateSubmissionStatus(submissionId: string, submissionStatus: SubmissionStatusType) {

@@ -423,6 +423,93 @@ uenige.
 - Kaskaden og masseryddingen mot et utkast som nevner elementet.
 - Manglende overgangsrad: ingen sletting, workeren frisk.
 
+### Byggenotat for 4c, jobben (18.11.2026)
+
+4a (2.161.0) og 4b (2.162.1) er i prod. Overgangsraden ble skrevet 14.11.2026 i begge miljøer, så **ingenting kan slettes før
+14.05.2027**, verken i prod eller på stage. Dette er det 4c trenger utover planen over, kartlagt i koden etter 2.168.0.
+
+**Hva jobben gjør i en runde**
+
+1. Utenfor vinduet (02:00–05:00 Oslo-tid), i ventetiden etter oppstart (15 minutter, som de andre) eller med nødstoppen på:
+   ingenting, med grunnen i `lastSummary`.
+2. Leser overgangsraden. Mangler den eller er ugyldig: ingenting slettes, grunnen står i `lastSummary` og `lastError`, og
+   workeren er frisk (punkt 6).
+3. Finner kandidatene **uten lås**: arkiverte kurs, så moduler, så seksjoner, der `archivedContentDeletesOn(archivedAt, gulv)`
+   er i dag eller tidligere (Oslo-dato). Dette er bare et utvalg; ingenting avgjøres her.
+4. For hver kandidat, **én transaksjon under innholdslåsen**: leser overgangsraden og `archivedAt` på nytt og regner fristen på
+   nytt. Er den ikke nådd (gjenopprettet og arkivert på nytt imens), hoppes elementet over. Ellers kalles den samme indre
+   slettefunksjonen som knappen bruker (`deleteCourseInTx`, `deleteModuleInTx`, `deleteSectionInTx`), med `source:
+   "retention"`. Bildefilene til en seksjon ryddes etter commit, som ved knappen.
+5. Kaster slettefunksjonen en vakt (`AppError`: kursbevis, besvarelser, i bruk …), er svaret «beholdes». Transaksjonen rulles
+   tilbake. Elementet huskes for resten av natten (Oslo-dato), så det ikke vurderes 18 ganger. `not_found` er ingen feil.
+6. Stopper når rundens tidsbudsjett (4 minutter, under `maxTickMs` på 10) er brukt; neste runde fortsetter.
+
+**Det som må endres i koden fra 4a**
+
+- `deleteCourseInTx` får `source` i revisjonshendelsen, som modul og seksjon har.
+- Tidsgrensen for kurstransaksjonen (`COURSE_DELETE_TX_TIMEOUT_MS`) brukes også av jobben.
+
+**Revisjonsloggen:** hver sletting får `source: "retention"` (hendelsene finnes fra 4a). «Beholdes» skrives som en egen
+hendelse (`retention_kept`, med koden) bare første gang for et element etter at det ble arkivert: jobben spør revisjonsloggen
+om det finnes en slik hendelse for elementet etter `archivedAt`. Dermed blir det én rad per element, ikke én per natt.
+
+**Nødstopp:** `ARCHIVED_CONTENT_PURGE_ENABLED`, på som standard. Begrunnelsen utover utrullingen: jobben sletter for godt
+hver natt, og finnes det en feil, skal den kunne stoppes samme kveld uten en utrulling. Den koster én innstilling som leses
+ved oppstart; den står ikke i Bicep (en manuell innstilling på worker-appen ved behov).
+
+**Tørrkjøringen** (kravet i #1152 om å kjøre mot ekte data før jobben slår til): en bryter i jobben ville ikke vist noe før
+mai 2027, fordi gulvet stopper alt. I stedet et vedlikeholdsskript, `npm run maint:archived-retention-preview -- --as-of
+2027-05-20`, som kjører steg 3 og vaktene (uten lås, uten å skrive) med en tenkt dato og lister hva som ville blitt slettet
+og hva som beholdes, med grunn. Det kjøres mot stage og prod før 14.05.2027. Ingen bryter i appen.
+
+**Hvor det bor:** `src/modules/content/archivedRetentionJob.ts` (runden, ren nok til å testes med klokke og gulv) og
+`ArchivedContentRetentionMonitor.ts` (samme form som `WeeklyDigestMonitor`), registrert i `src/index.ts` for oppstart, helse og
+avslutning.
+
+**Tester:**
+
+- Jobben med flyttet klokke og gulv: under og over fristen; gjenopprettet og arkivert på nytt imens; overgangsraden mangler
+  (ingen sletting, frisk); utenfor vinduet; nødstoppen.
+- Kurs før elementer: et element som bare holdes av et kurs som slettes samme natt, går samme natt.
+- Et element med en vakt blir stående, én `retention_kept`-hendelse; neste natt ingen ny.
+- Tellingen av innleveringer, sertifiseringsstatuser og kursbevis er lik før og etter en runde.
+- Dekningsvakta: jobben har ingen egen `delete`/`deleteMany`.
+- Skriptet: samme utvalg som jobben for samme dato.
+
+### Codex leste byggenotatet (18.11.2026): IKKE KLAR
+
+To hull i vaktene fra 4a, som også gjelder «Slett»-knappen i prod i dag. De rettes i en egen versjon før jobben bygges:
+
+1. **Et krav som har blitt tomt, ser ut som et kurs uten krav.** En delt modul som ble arkivert sammen med et ANNET kurs etter
+   at dette ble arkivert, faller ut av «kravet slik det var» (`findCourseRequirementAsArchived`: merket peker på det andre
+   kurset). Var den det eneste kravet, svarer `findCompletedWithoutCertificate` «ingen» fordi kravet er tomt, og kurset kan
+   slettes selv om en deltaker har bestått alt det krevde. Regelen «tvil er ikke påkrevd» er riktig så lenge kravet har noe
+   igjen (færre krav gir flere «fullført», og det beholder). Den snur når kravet blir tomt. Rettes: blir kravet tomt, måles det
+   mot elementene som falt ut etter at kurset ble arkivert (arkivert senere enn kurset; en seksjon bare med publisert versjon før
+   arkiveringen). Er også de tomme, hadde kurset aldri krav.
+2. **En ny anke tar ikke deltakerlåsen** (`createSubmissionAppeal`, vanlig transaksjon). Den kan komme mellom målingen
+   «ingenting venter» og slettingen. Rettes: anken opprettes under deltakerlåsen (`runLearnerWrite`), som vedtakene.
+
+Til jobben (inn i byggingen av 4c):
+
+3. **En runde som feiler, skal ikke gjøre workeren usunn.** `WeeklyDigestMonitor` setter `lastCycleAt` bare ved suksess; feiler
+   hver runde på samme kurs (transaksjonsgrensen), blir overvåkeren «stalled» etter 30 minutter, og workeren startes på nytt.
+   Jobben registrerer en avsluttet runde som fremdrift også når et element feilet, med feilen i sammendraget. Budsjettet
+   sjekkes før hver kandidat, og vinduet (05:00) også. Ryddingen av bildefiler etter commit får en samlet tidsgrense.
+4. **`retention_kept`**: skrives i en egen kort transaksjon under innholdslåsen, som sjekker samme `archivedAt` og gjør oppslag
+   og innsetting der. Hendelsen er historikk, aldri grunnlag for en sletteavgjørelse. Slettehendelsene får også
+   `archivedAt` og, for kurs, navnet.
+5. **Bare vaktene er «beholdes».** `content_busy` (låsekø) og andre driftsfeil prøves igjen neste runde og skrives ikke som
+   «beholdes». Et element som holdes av et kurs, huskes ikke for natten (kurset kan slettes i neste runde). Kandidatene sorteres
+   stabilt (type, `archivedAt`, id), så neste runde fortsetter der den slapp.
+6. **Forhåndsvisningen** bruker 4b-vurderingen (`evaluateArchivedItems`, med kursene som slettes først) mot den tenkte datoen,
+   og testen krever samme sluttresultat som jobben, ikke bare samme utvalg. Rapporten sier at den bare vurderer dagens historikk.
+7. **Nødstoppen** leses ved oppstart; driftsboka sier at den virker når workeren er startet på nytt, og at en utrulling av
+   appinnstillingene ikke må skrive den over.
+8. **Bildefilene:** workeren har ikke blob-endepunktet (bare web-appen har det i Bicep), så ryddingen går mot lokal disk og
+   lykkes uten å slette noe. Kjent mangel, som før: filene blir liggende. Rettes med en infra-endring for seg, eller ved at
+   jobben overlater ryddingen til web-appen.
+
 ---
 
 ## Rekkefølge

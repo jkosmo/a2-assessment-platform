@@ -249,6 +249,90 @@ describe("#1152: «fullført uten kursbevis» holder kurset igjen, målt slik kr
     expect(deleted.status, show(deleted)).toBe(204);
   });
 
+  // Codex, byggenotatet for 4c (18.11.2026), og QA-porten 2.169.0: et krav som har blitt TOMT kan ikke gjenskapes. Kurs A har bare
+  // den delte modulen M; A arkiveres, M blir stående (brukes av B). Så arkiveres B, og M følger B (merket peker på B). For A er M nå
+  // «arkivert for seg», og kravet ble tomt. Før 2.169.0 betydde det «ingen kan ha fullført», og A kunne slettes selv om deltakeren
+  // hadde bestått alt A krevde. Produkteier valgte A (21.11.2026): tvil gir «beholdes» når noen har bestått eller lest noe av det
+  // som falt ut.
+  it("et krav som har blitt tomt (den eneste modulen fulgte et ANNET kurs inn i arkivet): den som har bestått den, holder kurset igjen (course_requirement_unclear); KONTROLL: ingen bestått → slettes", async () => {
+    const shared = await apiModule("tomt krav delt");
+    const a = await apiCourse("tomt krav A", [{ type: "MODULE", moduleId: shared }]);
+    const b = await apiCourse("tomt krav B", [{ type: "MODULE", moduleId: shared }]);
+    await archiveCourse(a);
+    expect(await prisma.module.findUniqueOrThrow({ where: { id: shared }, select: { archivedAt: true } })).toEqual({ archivedAt: null });
+    await archiveCourse(b);
+    expect(await prisma.module.findUniqueOrThrow({ where: { id: shared }, select: { archivedWithCourseId: true } })).toEqual({ archivedWithCourseId: b });
+
+    await pass(await user("tomt krav bestått"), shared);
+    expectRefused(await del(K(a)), "course_requirement_unclear", 1);
+    expect(await exists.course(a)).toBe(1);
+
+    // KONTROLL: samme oppsett uten noen som har gjort noe. Ingen fremgang på det som falt ut: slettes.
+    const shared2 = await apiModule("tomt krav delt 2");
+    const a2 = await apiCourse("tomt krav A2", [{ type: "MODULE", moduleId: shared2 }]);
+    const b2 = await apiCourse("tomt krav B2", [{ type: "MODULE", moduleId: shared2 }]);
+    await archiveCourse(a2);
+    await archiveCourse(b2);
+    const deleted = await del(K(a2));
+    expect(deleted.status, show(deleted)).toBe(204);
+  });
+
+  it("QA-porten 2.169.0 runde 2: en delt seksjon lest via et ANNET kurs etter at kurset ble arkivert, og så falt ut: kurset holdes igjen", async () => {
+    const shared = await apiSection("lest senere delt");
+    const a = await apiCourse("lest senere A", [{ type: "SECTION", sectionId: shared }]);
+    const b = await apiCourse("lest senere B", [{ type: "SECTION", sectionId: shared }]);
+    await archiveCourse(a);
+    // Lest gjennom B, etter at A ble arkivert. Utstedelsens regel ville ikke telt denne lesingen for A.
+    await read(await user("lest senere"), b, shared);
+    await archiveCourse(b);
+    expect(await prisma.courseSection.findUniqueOrThrow({ where: { id: shared }, select: { archivedWithCourseId: true } })).toEqual({ archivedWithCourseId: b });
+    expectRefused(await del(K(a)), "course_requirement_unclear", 1);
+    expect(await exists.course(a)).toBe(1);
+  });
+
+  it("KONTROLL: en bestått som er gjort ugyldig (`invalidatedAt`), holder ikke et kurs med uklart krav igjen", async () => {
+    const shared = await apiModule("ugyldig bestått delt");
+    const a = await apiCourse("ugyldig bestått A", [{ type: "MODULE", moduleId: shared }]);
+    const b = await apiCourse("ugyldig bestått B", [{ type: "MODULE", moduleId: shared }]);
+    await archiveCourse(a);
+    await archiveCourse(b);
+    const learner = await user("ugyldig bestått");
+    await pass(learner, shared);
+    await prisma.modulePass.updateMany({ where: { userId: learner, moduleId: shared }, data: { invalidatedAt: new Date() } });
+    const deleted = await del(K(a));
+    expect(deleted.status, show(deleted)).toBe(204);
+  });
+
+  it("to moduler falt ut senere, og deltakeren har bestått bare den ene: kurset holdes igjen (minst én er nok når kravet er uklart)", async () => {
+    const m1 = await apiModule("to ut 1");
+    const m2 = await apiModule("to ut 2");
+    const a = await apiCourse("to ut A", [{ type: "MODULE", moduleId: m1 }, { type: "MODULE", moduleId: m2 }]);
+    const b = await apiCourse("to ut B", [{ type: "MODULE", moduleId: m1 }, { type: "MODULE", moduleId: m2 }]);
+    await archiveCourse(a);
+    await archiveCourse(b);
+    await pass(await user("to ut bare én"), m1);
+    expectRefused(await del(K(a)), "course_requirement_unclear", 1);
+  });
+
+  it("QA-porten 2.169.0: modulen og en seksjon som aldri ble publisert, falt begge ut senere; den som har bestått modulen, holder kurset igjen (seksjonen gjør ikke kravet umulig)", async () => {
+    const shared = await apiModule("ut senere delt");
+    const draft = await apiSection("ut senere aldri publisert", false);
+    const a = await apiCourse("ut senere A", [{ type: "MODULE", moduleId: shared }, { type: "SECTION", sectionId: draft }]);
+    const b = await apiCourse("ut senere B", [{ type: "MODULE", moduleId: shared }]);
+    const c = await apiCourse("ut senere C", [{ type: "SECTION", sectionId: draft }]);
+    await archiveCourse(a);
+    expect(await prisma.courseSection.findUniqueOrThrow({ where: { id: draft }, select: { archivedAt: true } })).toEqual({ archivedAt: null });
+    await archiveCourse(b);
+    await archiveCourse(c);
+    expect(await prisma.courseSection.findUniqueOrThrow({ where: { id: draft }, select: { archivedWithCourseId: true } })).toEqual({ archivedWithCourseId: c });
+
+    await pass(await user("ut senere bestått"), shared);
+    expectRefused(await del(K(a)), "course_requirement_unclear", 1);
+    // Kaskadens forhåndsvisning sier det samme.
+    const preview = await ok(get(K(a, "/cascade-delete-preview")), "forhåndsvisning");
+    expect((preview.blockers as Array<{ id: string; code?: string }>).filter((x) => x.id === a).map((x) => x.code)).toEqual(["course_requirement_unclear"]);
+  });
+
   it("den som har kursbevis, er ikke «uten kursbevis»: kaskaden viser bare kursbevisene", async () => {
     const x = await archivedCourseWithModuleAndSection("med bevis");
     const learner = await user("med bevis");

@@ -18,6 +18,12 @@ const EXPECTED = {
     nn: "Kurset kan ikkje slettast fordi 2 deltakar(ar) har fullført kravet utan kursbevis. Kurset må gjenopprettast og publiserast for at dei skal få kursbeviset.",
     "en-GB": "The course cannot be deleted because 2 participant(s) have completed the requirement without a certificate. Restore and publish the course so they get the certificate.",
   },
+  // 2.169.0: kravet kunne ikke gjenskapes, og noen har bestått eller lest noe av det som falt ut.
+  course_requirement_unclear: {
+    nb: "Kurset kan ikke slettes: det er uklart hva kurset krevde da det ble arkivert, og 2 deltaker(e) har bestått eller lest noe av det. Kurset blir stående arkivert.",
+    nn: "Kurset kan ikkje slettast: det er uklart kva kurset kravde då det vart arkivert, og 2 deltakar(ar) har bestått eller lese noko av det. Kurset blir ståande arkivert.",
+    "en-GB": "The course cannot be deleted: it is unclear what it required when it was archived, and 2 participant(s) have passed or read part of it. The course stays archived.",
+  },
   course_has_pending_reviews: {
     nb: "Kurset kan ikke slettes ennå fordi 2 besvarelse(r) i kursets moduler venter på vurdering, manuell behandling eller anke. Kurset kan slettes når de er avgjort.",
     nn: "Kurset kan ikkje slettast enno fordi 2 svar i modulane til kurset ventar på vurdering, manuell behandling eller anke. Kurset kan slettast når dei er avgjorde.",
@@ -60,7 +66,7 @@ async function openList(page: Page) {
 const row = (page: Page) => page.locator("#coursesTableBody tr").filter({ hasText: "Arbeidsmiljø 1152" });
 
 test.describe("#1152 — «Slett» på et arkivert kurs sier hva som holder det igjen", () => {
-  for (const code of ["course_has_completed_without_certificate", "course_has_pending_reviews"] as const) {
+  for (const code of ["course_has_completed_without_certificate", "course_requirement_unclear", "course_has_pending_reviews"] as const) {
     for (const locale of ["nb", "nn", "en-GB"] as const) {
       test(`lista, ${code}, ${locale}: setningen med tallet, uten plassholder og uten tjenerens tekst`, async ({ page }) => {
         await mockCommonApis(page, { courses: [{ ...ARCHIVED_COURSE }], meRoles: ["SUBJECT_MATTER_OWNER"] });

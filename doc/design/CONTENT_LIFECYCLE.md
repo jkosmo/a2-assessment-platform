@@ -168,6 +168,9 @@ registre — da blir elementet stående arkivert.
   4a-2), i denne rekkefølgen etter kursbevisene:
   - **Fullført uten kursbevis** (`course_has_completed_without_certificate`, `{ count }`): noen har oppfylt kravet mens kurset var
     arkivert (utstedelsen hopper over arkiverte kurs). Kurset må gjenopprettes og publiseres for at de skal få beviset.
+  - **Kravet er uklart** (`course_requirement_unclear`, `{ count }`, 2.169.0): kravet ble tomt fordi elementene ble arkivert etter
+    kurset uten å følge det, så hva kurset krevde, kan ikke gjenskapes. Kurset beholdes når noen uten kursbevis har bestått eller
+    lest noe av det som falt ut. Tvil gir «beholdes».
   - **Venter på vurdering** (`course_has_pending_reviews`, `{ count }`): en besvarelse i en av kursets moduler venter på vurdering,
     manuell behandling (`UNDER_REVIEW`) eller anke. ALLE modulene i elementlista teller, også en delt modul som ble arkivert for seg
     etter kurset og derfor er ute av kravet under (QA-porten 4a). Går bort av seg selv når sakene er avgjort.

@@ -88,6 +88,8 @@ export function lifecycleBadge(item, t) {
 const RETENTION_REASON_KEYS = {
   course_has_completions: "course_has_completions",
   course_has_completed_without_certificate: "course_has_completed_without_certificate",
+  // 2.169.0: kravet kunne ikke gjenskapes, og noen har bestått eller lest noe av det som falt ut (courseDeleteGuard.ts).
+  course_requirement_unclear: "course_requirement_unclear",
   course_has_pending_reviews: "course_has_pending_reviews",
   module_has_submissions: "module_has_submissions",
   module_has_certification: "module_has_certification",
@@ -128,7 +130,7 @@ function fill(text, vars) {
 export function retentionReasonText(kept, t) {
   const key = RETENTION_REASON_KEYS[kept?.code];
   if (!key) return t("adminContent.retention.reason.other");
-  if (key === "course_has_completed_without_certificate") {
+  if (key === "course_has_completed_without_certificate" || key === "course_requirement_unclear") {
     const count = Number(kept.details?.count) || 1;
     return fill(t(`adminContent.retention.reason.${key}.${count === 1 ? "one" : "other"}`), { count });
   }

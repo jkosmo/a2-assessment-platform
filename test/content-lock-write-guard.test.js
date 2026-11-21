@@ -95,8 +95,11 @@ const LEARNER_MODELS = new Map([
   // #934 skive 5a-2: beståtte per innlevering.
   ["modulePass", ALL_WRITES],
   ["submission", new Set(["create", "createMany", "createManyAndReturn", "upsert"])],
+  // #1152 (Codex, byggenotatet for 4c): en ny anke. Kursslettingen måler «ingenting venter på anke» under deltakerlåsene; en anke
+  // opprettet uten låsen kunne kommet mellom målingen og slettingen. Som for innleveringer gjelder regelen å lage dem.
+  ["appeal", new Set(["create", "createMany", "createManyAndReturn", "upsert"])],
 ]);
-const LEARNER_TABLES_SQL = /"(CourseCompletion|CourseSectionRead|AssessmentDecision|CertificationStatus|ModulePass)"|INSERT\s+INTO\s+"Submission"/i;
+const LEARNER_TABLES_SQL = /"(CourseCompletion|CourseSectionRead|AssessmentDecision|CertificationStatus|ModulePass)"|INSERT\s+INTO\s+"(Submission|Appeal)"/i;
 
 function holdsLearnerLock(checker, expression) {
   const type = checker.getTypeAtLocation(expression);
@@ -567,7 +570,14 @@ const PROGRESS_READERS = new Map([
   ],
   [
     "modulePass",
-    new Set(["modules/course/moduleCredit.ts:readPerCourseRule", "modules/course/moduleCredit.ts:findCreditedModules", "modules/course/moduleCredit.ts:hasValidModulePass"]),
+    new Set([
+      "modules/course/moduleCredit.ts:readPerCourseRule",
+      "modules/course/moduleCredit.ts:findCreditedModules",
+      "modules/course/moduleCredit.ts:hasValidModulePass",
+      // 2.169.0 (produkteier, A, 21.11.2026): et arkivert kurs med uklart krav beholdes når noen har en gyldig bestått på en av
+      // modulene som falt ut, uansett kurs. Ikke fremdrift i kurset: kravet er ukjent, og tvil gir «beholdes».
+      "modules/course/courseDeleteGuard.ts:findProgressOnUncertainRequirement",
+    ]),
   ],
   [
     "courseModuleRequirement",

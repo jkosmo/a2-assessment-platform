@@ -84,7 +84,7 @@ Du kan:
 **Slettes eller beholdes (fra 2.162.0).** Under «Arkiverte» i listene for kurs, moduler og seksjoner står det under merket
 enten «Slettes 13.05.2027» eller «Beholdes: <grunn>». Arkivert innhold som ingen deltaker har brukt, slettes av seg selv
 seks måneder etter at det ble arkivert (jobben som gjør det, kommer senere; datoen gjelder fra nå). Grunnene til å beholde
-er de samme som «Slett» ville gitt: har kursbevis, en deltaker har fullført kravet uten kursbevis, besvarelser venter på
+er de samme som «Slett» ville gitt: har kursbevis, en deltaker har fullført kravet uten kursbevis, det er uklart hva kurset krevde og noen har bestått eller lest noe av det (fra 2.169.0), besvarelser venter på
 vurdering, har besvarelser, inngår i et kursbevis, ligger i et kurs som beholdes, eller står i utkastet til et kurs. Vil du
 ikke vente, kan du trykke «Slett» selv.
 
@@ -294,7 +294,7 @@ Det kommer an på kurset:
 - Ligger den bare i **arkiverte** kurs, kan den avpubliseres og arkiveres. Arkiverte kurs teller ikke som bruk, og vises
   heller ikke i kolonnen «Brukt i kurs» eller i kursfilteret.
 - **Slette** kan du ikke så lenge den ligger i et kurs, heller ikke et arkivert: det arkiverte kurset beholder innholdet sitt.
-  Meldingen sier hvilke av kursene som er arkiverte. Slett kurset først (et arkivert kurs uten kursbevis kan slettes); da er
+  Meldingen sier hvilke av kursene som er arkiverte. Slett kurset først (et arkivert kurs kan slettes når ingenting holder det igjen; lista sier hva som gjør det); da er
   elementet fritt og kan slettes etterpå. Lista viser datoen: et element som bare ligger i et kurs som skal slettes, får
   kursets dato.
 

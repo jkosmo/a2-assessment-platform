@@ -1863,6 +1863,22 @@ begrunnet unntak), `test/content-lock-write-guard.test.js`, `test/m2-archived-re
   bestått etter at kurset er slettet, får deltakeren aldri kursbeviset.
 - **Et kursutkast teller som bruk også ved sletting**, som ved arkivering (#1150). Det gjelder «Slett», kaskaden og
   masseryddingen av upubliserte moduler.
+- **Et krav som har blitt tomt, er uklart, og tvil gir «beholdes»** (produkteier 21.11.2026, valg A; 2.169.0). «Tvil er ikke
+  påkrevd» gir flere «fullført» så lenge kravet har noe igjen, men snur når det blir tomt: et tomt krav gjør ingen fullført, og
+  kurset kunne slettes. Det skjer når kravets elementer ble arkivert etter kurset uten å følge det (en delt modul som fulgte et
+  annet kurs inn i arkivet, eller et element arkivert for seg). Hva kurset krevde, kan da ikke gjenskapes: `archivedAt` er siste
+  arkivering, og det som falt ut, kan også være en seksjon som aldri ble publisert (QA-porten). Kurset beholdes derfor når noen
+  uten kursbevis har bestått minst én av modulene eller lest minst én av seksjonene som falt ut (`course_requirement_unclear`).
+  Valgt bort: å måle kravet så godt det går (B), der sjeldne historier med gjenoppretting og ny arkivering kunne gitt feil svar i
+  den retningen som sletter. Kostnaden ved A: noen få kurs kan bli stående arkivert lenger enn nødvendig, med grunnen i lista.
+- **En ny anke opprettes under deltakerlåsen** (2.169.0), som vedtakene. Kursslettingen måler «ingenting venter på anke» under
+  deltakerlåsene, og en anke uten låsen kunne kommet mellom målingen og slettingen.
+- **Et arkivert kurs kan ikke ankes, og stryk og anke har ingen virkning for det** (produkteier 21.11.2026: «Det skal ikke være
+  mulig å anke et arkivert kurs, da må student heller få en informativ feilmelding som forteller at kurset er arkivert, når
+  kurset er arkivert har heller ikke stryk og anke noen konsekvens»). En anke via et annet, aktivt kurs etter at kurset er
+  slettet, gjelder bare det aktive kurset; at det slettede kurset ikke får kursbevis, er slik det skal være (QA-porten 2.169.0,
+  tredje runde). **Tolkning, siden en innlevering bare kjenner modulen:** anke stoppes når modulen er arkivert, eller når alle
+  kursene den står i, er arkivert. Står modulen i minst ett aktivt kurs, eller i ingen kurs, kan den ankes. Bygges i 2.170.0.
 
 **Plan:** `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, «Etappe 4» og «Etter gjennomlesingen».
 **Sak:** #1152 · **Dato:** 2026-11-14 · **Status:** avgjort av produkteier; bygges i 4a
@@ -2371,3 +2387,20 @@ er latt stå og meldt til produkteier (gjelder også modullista).
 `figureMissingLocales` (assetCommands.ts); `test/m2-section-save-translation-1163.test.ts`, `test/unit/save-translation-1163.test.js`,
 `test/e2e/section-save-translation-1163.spec.ts`.
 **Sak:** #1163 · **Dato:** 2026-11-18 · **Status:** valgt under byggingen; ikke avklart med produkteier
+
+## Prioriteringen av funnene fra konsistenssjekken, og to avgjørelser (2026-11-21)
+
+Produkteier godkjente rekkefølgen for de 15 sakene fra #1157 (etikettene står på sakene): #1176 før slettejobben (p1, under #1148);
+så #1180 og #1178; så det deltakerne merker (#1162, #1173); så produsentsidene etter ett felles mønster (#1168, #1169, #1171); så de
+store ombyggingene med plan og planlesing først (#1177, #1179, #1170); resten lav (#1167, #1172, #1181, #1174).
+
+- **Seksjoner følger kursets og modulens eierregel** (produkteier 21.11.2026, «Ja», #1180): alle produsenter kan lese og
+  duplisere en seksjon, bare eierne kan endre den. Samme sperre og linje i redigereren som for kurs og moduler (2.165.0, #1165).
+  Det var ikke et bevisst valg at seksjoner kunne endres av alle; de ble bare ikke tatt med i #1165.
+- **Begreper med flere betydninger slås ikke sammen; hver betydning får sitt eget navn** (fra #1175, lukket som arbeidsregel).
+  «I bruk», «aktiv/publisert», «synlig/tilgjengelig/påkrevd», «påbegynt», «fullført/lest», «eier/kan endre» og «arkivert» betyr
+  hver litt forskjellige ting der de står, og hver er riktig der. Når kode som avgjør et slikt begrep røres, skal betydningen ha
+  en egen navngitt funksjon eller konstant, så et nytt sted ikke tar feil. Lagene i koden flyttes når filene uansett røres, med
+  modulens låste skriver og kursets navngitte kommandoer som mønster; ikke som en egen ombygging.
+
+**Sak:** #1157, #1175, #1180 · **Dato:** 2026-11-21 · **Status:** avgjort av produkteier

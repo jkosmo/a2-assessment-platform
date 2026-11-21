@@ -147,7 +147,7 @@ describe("#1152 4b: linja i lista", () => {
 
   it("hver kode «Slett» kan svare med, har en grunn på hvert språk; en ukjent kode får den generelle", () => {
     const codes = [
-      "course_has_completions", "course_has_completed_without_certificate", "course_has_pending_reviews",
+      "course_has_completions", "course_has_completed_without_certificate", "course_requirement_unclear", "course_has_pending_reviews",
       "module_has_submissions", "module_has_certification", "content_in_issued_certificate", "content_in_legacy_certificate",
       "content_in_archived_course", "content_in_use", "module_in_use", "delete_blocked_by_course_draft",
     ];
@@ -163,6 +163,9 @@ describe("#1152 4b: linja i lista", () => {
     expect(retentionReasonText({ code: "course_has_completed_without_certificate", details: { count: 1 } }, tFor("nb"))).toBe("en deltaker har fullført kravet uten kursbevis");
     expect(retentionReasonText({ code: "course_has_completed_without_certificate", details: { count: 3 } }, tFor("nb"))).toBe("3 deltakere har fullført kravet uten kursbevis");
     expect(retentionReasonText({ code: "course_has_completed_without_certificate", details: { count: 3 } }, tFor("en-GB"))).toBe("3 participants have completed the requirement without a certificate");
+    // 2.169.0: kravet kunne ikke gjenskapes. Tallet bøyes som over.
+    expect(retentionReasonText({ code: "course_requirement_unclear", details: { count: 1 } }, tFor("nb"))).toBe("uklart hva kurset krevde, og en deltaker har bestått eller lest noe av det");
+    expect(retentionReasonText({ code: "course_requirement_unclear", details: { count: 2 } }, tFor("nn"))).toBe("uklart kva kurset kravde, og 2 deltakarar har bestått eller lese noko av det");
   });
 
   it("ingenting for «ukjent», uten felt, eller på en rad som ikke er arkivert", () => {

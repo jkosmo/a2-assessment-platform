@@ -2,6 +2,64 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.169.0 - 2026-11-18
+
+To hull i vaktene som holder et arkivert kurs igjen fra sletting (#1152). Begge gjelder «Slett»-knappen i prod i dag, og ville
+gjeldt jobben i 4c. Codex fant dem da den leste byggenotatet for 4c (`doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, «Codex
+leste byggenotatet»). Ingen migrering.
+
+**Rettet:**
+- **Et krav som har blitt tomt.** Kurs A har bare en delt modul. A arkiveres, og modulen blir stående fordi kurs B bruker den.
+  Så arkiveres B, og modulen følger B inn i arkivet. For A var modulen da «arkivert for seg», kravet ble tomt, og et tomt krav
+  betydde «ingen kan ha fullført». A kunne slettes selv om en deltaker hadde bestått alt A krevde, og deltakeren fikk aldri
+  kursbeviset. Hva A krevde, kan da ikke gjenskapes. Produkteier valgte at tvil gir «beholdes» (21.11.2026): kurset beholdes
+  når noen uten kursbevis har bestått minst én av modulene eller lest minst én av seksjonene som falt ut, i hvilket som helst
+  kurs og når som helst. Ny kode:
+  `course_requirement_unclear`, med tekst på tre språk i lista («Beholdes: uklart hva kurset krevde, og …») og fra «Slett».
+- **En ny anke tok ikke deltakerlåsen.** Kursslettingen tar deltakerlåsene og måler «ingenting venter på anke». En anke kunne
+  komme mellom målingen og slettingen, og kurset ble slettet med en åpen anke. Nå opprettes anken under deltakerlåsen
+  (`runLearnerWrite`), og sjekken av en åpen anke står i samme transaksjon, så to samtidige anker på samme innlevering ikke
+  begge kommer gjennom.
+
+**Hva brukerne merker:** et arkivert kurs i dette tilfellet står nå som «Beholdes: uklart hva kurset krevde, og en deltaker har
+bestått eller lest noe av det» i lista, og «Slett» og «Slett med innhold» sier det samme. Anker virker som før.
+
+**Tester:** `m2-course-delete-1152` har tre nye tester:
+- et krav som har blitt tomt, med kontroll;
+- QA-portens tilfelle, en modul og en seksjon som aldri ble publisert, som falt ut senere, også i kaskadens forhåndsvisning;
+- to moduler som falt ut, der deltakeren har bestått den ene.
+
+Mutasjonene ble røde der de skulle: uten den nye grunnen, med «alle» i stedet for «minst én», og («kurs uten krav») med en ikke-streng
+sammenligning av tidspunktene. Vakta `content-lock-write-guard` krever nå deltakerlåsen for å opprette en anke; den ble rød med en
+ny `appeal.create` på en klient uten låsen. Kodene i lista og i «Slett» har tekst på tre språk (enhetstest og e2e).
+
+**QA 2.169.0, første runde (Codex): NO-GO.** Den første rettingen målte et tomt krav mot alt som ble arkivert etter kurset, som
+et krav der alt måtte være fullført. `archivedAt` sier bare når elementet sist ble arkivert, så en seksjon som aldri ble
+publisert, kunne komme med og gjøre kravet umulig. Da ble kurset slettet likevel. **Rotårsak:** rettingen gjettet hva kurset
+krevde, i stedet for å si at det ikke kan vites. Det spørsmålet hørte hjemme hos produkteier i første runde, ikke i andre.
+
+**QA 2.169.0, andre runde (Codex): NO-GO**, med ett funn, rettet:
+- **Funnet:** tellingen gjenbrukte utstedelsens lesingsregel. Den teller lesinger i et arkivert kurs bare fram til arkiveringen.
+  En deltaker som leste den delte seksjonen via et annet kurs etter at kurset ble arkivert, ble ikke talt, og kurset kunne
+  slettes.
+- **Rettingen:** nå teller enhver gyldig bestått og enhver lesing av elementene som falt ut, i hvilket som helst kurs og når som
+  helst, som avgjørelsen sier. To nye tester: lest via et annet kurs etter arkiveringen, og en bestått som er gjort ugyldig (teller
+  ikke). Begge ble røde med mutasjonen. API_REFERENCE og FEATURE_SURFACE_MAP nevner nå den nye koden.
+- **Rotårsak:** samme som i første runde, en regel fra et annet sted ble gjenbrukt der kravet er ukjent. Avgjørelsen sa «noe av
+  det», uten tidsgrense, og koden skulle sagt det samme.
+
+**QA 2.169.0, tredje runde (Codex): NO-GO.** Porten bekreftet at rettingen fra andre runde er komplett, og at den nye regelen bare
+kan holde flere kurs igjen, aldri slette mer. Dokumentasjonsfunnene er rettet (API_REFERENCE, retention-koden og `DELETE`,
+`doc/roles/admin-content.md`). Funnet som ga NO-GO: en deltaker anker et stryk via et annet, aktivt kurs etter at det arkiverte
+kurset er slettet, og får bestått; det slettede kurset får da aldri kursbevis. **Avgjort av produkteier 21.11.2026: slik skal
+det være.** Et arkivert kurs kan ikke ankes, og stryk og anke har ingen virkning for det (DECISIONS). At en anke på et arkivert
+kurs stoppes med en melding om at kurset er arkivert, bygges i 2.170.0.
+
+**Kjent (ikke rettet):**
+- To andre veier gjør en innlevering til en som venter, uten deltakerlåsen: flervalget setter `PROCESSING`
+(`mcqService.ts`), og `enqueueAssessmentJob` lager vurderingsjobben. En innlevering på en delt modul fra et annet kurs kan da
+komme mellom målingen og slettingen. Porten vurderer det som konstruert. Det tas med jobben i 4c.
+
 ## 2.168.0 - 2026-11-18
 
 Opprydding etter #1163. De gamle seksjonsrutene fikk stå én utrulling, så faner som var åpne under utrullingen ikke mistet

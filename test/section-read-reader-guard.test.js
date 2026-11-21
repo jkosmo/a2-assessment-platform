@@ -32,6 +32,9 @@ const READERS = new Map([
   ["modules/reporting/activityReport.ts:loadActivitySources", "aktivitetsrapporten og «Min statistikk»: én hendelse per lesing"],
   ["modules/reporting/activityReport.ts:getActivityRecent", "aktivitetsrapporten: det siste én person har gjort, med kurset lesingen ble gjort i"],
   ["modules/course/contentLifecycle.ts:assertSectionNotInIssuedCertificate", "vakta for gamle kursbevis (før 2.23.0): lesingen i beviset sitt kurs"],
+  // 2.169.0 (produkteier, A, 21.11.2026): kravet til et arkivert kurs kan ikke gjenskapes. Da teller ENHVER lesing av seksjonene som
+  // falt ut, i alle kurs og når som helst; utstedelsens regel (bare fram til arkiveringen) ga feil svar (QA-porten, runde 2).
+  ["modules/course/courseDeleteGuard.ts:findProgressOnUncertainRequirement", "et arkivert kurs med uklart krav: enhver lesing av det som falt ut, beholder kurset"],
 ]);
 
 // Relasjoner og rå SQL ser ikke typesjekkeren som en lesing av tabellen. De står her per fil, med grunn.
