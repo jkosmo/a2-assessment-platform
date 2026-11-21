@@ -225,7 +225,7 @@ function getListPage() {
       { key: "status", label: t("ui.status"), className: "col-status", render: (m, ctx) => lifecycleBadge(m, t) + moduleVersionChipHtml(m) + (ctx.filter === "archived" ? retentionLineHtml(m, "module", t, currentLocale) : "") },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (m) => certBadge(m.certificationLevel) },
       { key: "courses", label: t("library.col.usedInCourses"), className: "col-courses", sortValue: (m) => m.courseCount ?? 0, render: (m) => (m.courseCount > 0
-        ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${m.courseCount} kurs">${m.courseCount}</button>`
+        ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${escapeHtml(tf("library.courseCountAria", { count: m.courseCount }))}">${m.courseCount}</button>`
         : `<span class="course-count-zero">0</span>`) },
       { key: "updatedAt", label: t("ui.lastChanged"), className: "col-updated", sortValue: (m) => m.updatedAt ?? "", render: (m) => formatDate(m.updatedAt) },
     ],
@@ -486,7 +486,7 @@ async function unpublishModuleFromRow(moduleId, moduleTitle, btn) {
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/unpublish`, getHeaders, { method: "POST" });
-    showToast(`«${moduleTitle}» avpublisert.`, "success");
+    showToast(tf("library.unpublishedToast", { title: moduleTitle }), "success");
     await loadModules();
   } catch (err) {
     apiErrorToast(err);
@@ -536,7 +536,7 @@ async function duplicateModule(moduleId, btn) {
     }));
     if (!importResult?.moduleId) throw new Error(t("library.importNoId"));
 
-    showToast(`Full kopi av «${sourceTitle}» opprettet.`, "success");
+    showToast(tf("library.duplicatedToast", { title: sourceTitle }), "success");
     await loadModules();
   } catch (err) {
     apiErrorToast(err);
@@ -553,6 +553,10 @@ function showCoursesPopover(anchor, moduleId) {
   const module = allModules.find(m => m.id === moduleId);
   if (!module) return;
 
+  // #1173: tittelen og navnet sto på bokmål i HTML-en; de settes på sidens språk når lista åpnes.
+  coursesPopover.setAttribute("aria-label", t("library.coursesPopoverAria"));
+  const popoverTitle = coursesPopover.querySelector(".courses-popover-title");
+  if (popoverTitle) popoverTitle.textContent = t("library.col.usedInCourses");
   coursesPopoverList.innerHTML = (module.courses ?? [])
     .map(c => `<li>${escapeHtml(c.title ?? c.id)}</li>`)
     .join("") || `<li><em>${escapeHtml(t("library.noCourses"))}</em></li>`;

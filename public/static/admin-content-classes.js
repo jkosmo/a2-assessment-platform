@@ -442,20 +442,22 @@ function classFormBodyHtml() {
     </div>
     ${isNew ? `<div class="detail-section" data-form-untracked><p class="small" style="margin:0">${escapeHtml(tNav("classes.saveFirstMembers"))}</p></div>` : `
     <div class="detail-section" data-form-untracked>
-      <h2>Deltakere (${st.members.length})</h2>
+      <h2>${escapeHtml(tf("classes.membersHeading", { count: st.members.length }))}</h2>
       <ul class="form-rows" id="memberChips">${memberRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noMembers"))}</li>`}</ul>
       ${archived ? archivedNote : `<div class="form-add-row">
+        <label for="studentSearch" class="sr-only">${escapeHtml(tNav("classes.memberSearchLabel"))}</label>
         <input type="text" id="studentSearch" placeholder="${escapeHtml(tNav("classes.memberSearchPlaceholder"))}" autocomplete="off" />
       </div>
       <ul class="search-results" id="searchResults"></ul>`}
     </div>
     <div class="detail-section" data-form-untracked>
-      <h2>Tildelte kurs (${st.courses.length})</h2>
+      <h2>${escapeHtml(tf("classes.coursesHeading", { count: st.courses.length }))}</h2>
       <ul class="form-rows" id="courseChips">${courseRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noCourses"))}</li>`}</ul>
       ${archived ? archivedNote : `<div class="form-add-row">
+        <label for="courseSelect" class="sr-only">${escapeHtml(tNav("classes.courseSelectLabel"))}</label>
         <select id="courseSelect"><option value="">${escapeHtml(tNav("classes.pickCourse"))}</option>${courseOptions}</select>
         <label for="dueAtInput" style="font-size:13px;color:var(--color-meta);display:inline-flex;align-items:center;gap:6px">
-          Frist (valgfri)
+          ${escapeHtml(tNav("classes.deadlineOptional"))}
           <input type="date" id="dueAtInput" title="${escapeHtml(tNav("classes.deadlineLabel"))}" />
         </label>
         <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(tNav("classes.assignCourse"))}</button>
@@ -490,7 +492,7 @@ async function saveClassForm() {
     }
     const saved = await apiFetch(`/api/admin/content/classes/${encodeURIComponent(st.id)}`, getHeaders, { method: "PATCH", body: JSON.stringify({ name, description: description || null }) });
     st.klass = { ...st.klass, ...(saved.class ?? {}), canManage: true };
-    showToast("Lagret.", "success");
+    showToast(tNav("classes.saved"), "success");
     getFormPage().refreshTitle();
     return true;
   } catch (err) {

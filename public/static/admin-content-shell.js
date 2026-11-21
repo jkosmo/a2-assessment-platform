@@ -5009,6 +5009,8 @@ function renderWorkspaceNavigation() {
 
 // Translates static text that lives in the HTML source (not rendered by chat flow).
 function translatePageStaticText() {
+  // #1173: HTML-en sier lang="en-GB"; uten dette leste skjermleseren norske menyer med engelsk uttale.
+  document.documentElement.lang = menuLocale();
   for (const el of document.querySelectorAll("[data-i18n]")) {
     const key = el.getAttribute("data-i18n");
     if (key) el.textContent = t(key);

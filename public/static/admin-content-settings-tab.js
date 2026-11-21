@@ -37,6 +37,24 @@ export function createSettingsTab(ctx) {
   // new module version through saveSettingsInBackground.
   // ---------------------------------------------------------------------------
 
+  // #1173: hver rad er <dt>etikett</dt><dd>felt</dd>, og en <dt> er ingen <label> — feltene hadde ikke
+  // noe navn for skjermleseren («Navn», «Modultype» og «Sertifiseringsnivå» på en ny modul, og alle
+  // tallfeltene på en lagret). Radene får en id på <dt>, og hvert felt i <dd> som ikke alt har et navn
+  // (avkrysningsboksene står i sin egen <label>) peker dit med aria-labelledby. Én regel for begge
+  // tegningene, så en ny rad får navnet uten at noen må huske det.
+  const rowLabelId = (labelKey) => `settingsRow-${labelKey.replace(/\./g, "-")}`;
+  function linkRowLabels(host) {
+    for (const dt of host.querySelectorAll("dl.settings-list > dt[id]")) {
+      const dd = dt.nextElementSibling;
+      if (!dd || dd.tagName !== "DD") continue;
+      for (const control of dd.querySelectorAll("input, select, textarea")) {
+        if (control.type === "hidden" || control.closest("label")) continue;
+        if (control.hasAttribute("aria-label") || control.hasAttribute("aria-labelledby")) continue;
+        control.setAttribute("aria-labelledby", dt.id);
+      }
+    }
+  }
+
   // #1046 A1 (produkteier 13.09): et nytt element har ingen versjon å vise innstillinger for. Det som
   // trengs først er navn, modultype og nivå — resten kommer når modulen finnes. Verdiene skrives rett
   // inn i utkastet; Lagre oppretter modulen med dem.
@@ -51,15 +69,16 @@ export function createSettingsTab(ctx) {
     host.innerHTML = `<div class="settings-group">
       <h3 class="settings-group-title">${escapeHtml(t("shell.settings.groupModule"))}</h3>
       <dl class="settings-list">
-        <dt>${escapeHtml(t("shell.directEdit.nameLabel"))} <span class="required-note">${escapeHtml(t("shell.directEdit.required"))}</span></dt>
+        <dt id="${rowLabelId("shell.directEdit.nameLabel")}">${escapeHtml(t("shell.directEdit.nameLabel"))} <span class="required-note">${escapeHtml(t("shell.directEdit.required"))}</span></dt>
         <dd><input id="settingsNewName" class="settings-input" type="text" value="${escapeHtml(name)}" autocomplete="off" /></dd>
-        <dt>${escapeHtml(t("shell.settings.moduleType"))}</dt>
+        <dt id="${rowLabelId("shell.settings.moduleType")}">${escapeHtml(t("shell.settings.moduleType"))}</dt>
         <dd><select id="settingsModuleType" class="settings-input">${modeOptions}</select>
           <span class="settings-help">${escapeHtml(t("shell.settings.newModuleTypeHelp"))}</span></dd>
-        <dt>${escapeHtml(t("shell.settings.certificationLevel"))}</dt>
+        <dt id="${rowLabelId("shell.settings.certificationLevel")}">${escapeHtml(t("shell.settings.certificationLevel"))}</dt>
         <dd><select id="settingsCertLevel" class="settings-input">${levelOptions}</select></dd>
       </dl>
     </div>`;
+    linkRowLabels(host);
     host.querySelector("#settingsNewName")?.addEventListener("input", (e) => {
       const v = e.target.value.trim();
       ctx.sessionDraft = { ...ctx.sessionDraft, title: v ? { [ctx.contentLocale]: v } : "" };
@@ -129,7 +148,7 @@ export function createSettingsTab(ctx) {
       const help = helpText && !helpText.startsWith("shell.settings.info.")
         ? `<span class="settings-help" data-info="${escapeHtml(infoKey)}">${escapeHtml(helpText)}</span>`
         : "";
-      openGroup.push(`<dt>${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}${help}</dd>`);
+      openGroup.push(`<dt id="${rowLabelId(labelKey)}">${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}${help}</dd>`);
     };
     const emptyText = escapeHtml(t("shell.settings.notSet"));
     // #896 S3c: Innstillinger reads in the UI language, not the preview language. The summary rows
@@ -469,6 +488,7 @@ export function createSettingsTab(ctx) {
       actionHtml,
       renderVersionHistory(),
     ].join("");
+    linkRowLabels(host);
     mountCriteriaSection();
     mountPromptSection();
     mountSubmissionSchemaSection();

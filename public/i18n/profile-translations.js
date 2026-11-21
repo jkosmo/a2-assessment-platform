@@ -179,7 +179,7 @@ const own = {
     "dataview.empty": "None.",
   },
   nb: {
-    "nav.skipToContent": "Hopp til innhold",
+    "nav.skipToContent": "Hopp til hovedinnhold",
     "nav.participant": "Mine kurs",
     "nav.completedModules": "Fullførte moduler",
     "nav.manualReview": "Manuell gjennomgang",
@@ -332,7 +332,7 @@ const own = {
     "dataview.empty": "Ingen.",
   },
   nn: {
-    "nav.skipToContent": "Hopp til innhald",
+    "nav.skipToContent": "Hopp til hovudinnhald",
     "nav.participant": "Kursa mine",
     "nav.completedModules": "Fullførte modular",
     "nav.manualReview": "Manuell gjennomgang",

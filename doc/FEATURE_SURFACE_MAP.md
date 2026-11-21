@@ -1960,3 +1960,21 @@ endrede figurer og uten kall til språkmodellen, låsen, fyllingen for et eldre 
 oversetter bare det endrede, ingen «Oversett», «Avbryt» skriver ingenting, 409 lar fanen stå, figurkvitteringen, fyllingen i
 redigereren og lista), og omskrevet: `translation-structure-1109`, `section-jobs-stay-in-their-section-1154`, `section-editor`,
 `admin-content-archived-readonly-1151`.
+
+## 39. Sidens ramme på menyspråket — hopp-lenke, språkvelger, `lang`, eierpanelet (#1173)
+
+Rammen rundt innholdet er lik på alle sidene, men ble oversatt av hver side for seg, og fire sider gjorde det aldri: Moduler,
+Seksjoner, Klasser og Tema sto med «Skip to main content» og «Language» på norske sider, og alle sju sidene i
+innholdsforvaltningen sa `lang="en-GB"` (skjermleseren leste norsk med engelsk uttale).
+
+| Flate | Hvem oversetter | Merknad |
+| --- | --- | --- |
+| Hopp-lenken (`.skip-nav`, `nav.skipToContent`) og etiketten på språkvelgeren (`label[for=localeSelect]`, `locale.label`) | `public/static/content-area-nav-i18n.js` på sidene som laster den (Kurs, Moduler, Seksjoner, Tema, Vurderingskvalitet, Klasser, Status, Aktivitet, Manuell behandling, Resultater); modulens arbeidsflate (`admin-content.html`) gjennom `translatePageStaticText` i admin-content-shell.js; deltakersidene, profilen, kursbeviset og plattformsiden gjennom sin egen `applyTranslations` | Bare rammen: resten av `data-i18n` på en side eies av sidens egen bunt |
+| `lang` på `<html>` | Samme to steder for innholdsforvaltningen; de andre sidene setter den i sin `setLocale` | Følger menyspråket, også ved bytte uten ny lasting |
+| Eierpanelet (`public/static/owner-panel.js`) | Sidens `t` (`owners.*` i admin-buntens tabell) — kurs, seksjon, modul og klasse sender den | Panelet har ingen egen bunt og ingen norsk tekst i koden |
+| Felt i modulens Innstillinger (`<dt>`/`<dd>`-rader) | `linkRowLabels` i admin-content-settings-tab.js: `<dt>` får en id, feltene i `<dd>` uten eget navn peker dit med `aria-labelledby` | Gjelder både «Ny modul» og en lagret modul; en ny rad får navnet uten at noen må huske det |
+
+**Vakter:** `test/unit/language-chrome-1173.test.ts` (hver HTML-side har nøklene på hopp-lenken og etiketten; de nye nøklene er
+ikke engelske på bokmål/nynorsk; eierpanelet har ingen hardkodet norsk), `test/e2e/language-accessibility-1173.spec.ts` (seks
+sider × tre språk, bytte uten ny lasting, klassen, kursets plassholder, biblioteket, forhåndsvisningen, etikettene med
+`getByLabel`, og klikkflaten på avkrysningsboksene målt til minst 24 × 24 px).

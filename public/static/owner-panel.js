@@ -26,12 +26,15 @@ function errorMessage(error, fallback, t) {
 }
 
 export async function renderOwnerPanel({ container, contentType, contentId, getHeaders, t }) {
+  // #1173: panelets egne ord sto på bokmål uansett språk — «Eiere», «Endre eiere», «Fjern» på en engelsk
+  // side. Alle fire sidene som monterer panelet sender sin `t` (admin-buntens `owners.*`).
+  const tr = typeof t === "function" ? t : (key) => key;
   let owners = [];
   let canManage = false; // only owners/admin may change owners; everyone with access can view
   // Ownership is mostly read, rarely edited — so the panel is a compact one-line summary by default and
   // only expands into the full add/remove UI when the user chooses to edit.
   let expanded = false;
-  container.innerHTML = `<div class="owner-panel"><p class="owner-panel-loading">Laster eiere…</p></div>`;
+  container.innerHTML = `<div class="owner-panel"><p class="owner-panel-loading">${escapeHtml(tr("owners.loading"))}</p></div>`;
 
   async function load() {
     const data = await apiFetch(ownersPath(contentType, contentId), getHeaders);
@@ -52,22 +55,22 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
             (o) => `<li class="owner-row">
         <span class="owner-name">${escapeHtml(o.name)}</span>
         <span class="owner-email">${escapeHtml(o.email)}</span>
-        ${canManage ? `<button type="button" class="owner-remove btn-secondary" data-user-id="${escapeHtml(o.userId)}">Fjern</button>` : ""}
+        ${canManage ? `<button type="button" class="owner-remove btn-secondary" data-user-id="${escapeHtml(o.userId)}">${escapeHtml(tr("owners.remove"))}</button>` : ""}
       </li>`,
           )
           .join("")
-      : `<li class="owner-empty">Ingen eiere ennå — kun administrator kan redigere til en eier tildeles.</li>`;
+      : `<li class="owner-empty">${escapeHtml(tr("owners.none"))}</li>`;
     const addBox = canManage
       ? `<div class="owner-add">
-          <input type="text" class="owner-search-input" placeholder="Søk navn/e-post for å legge til eier…" aria-label="Søk etter eier" autocomplete="off" />
+          <input type="text" class="owner-search-input" placeholder="${escapeHtml(tr("owners.searchPlaceholder"))}" aria-label="${escapeHtml(tr("owners.searchAria"))}" autocomplete="off" />
           <ul class="owner-search-results" hidden></ul>
         </div>`
       : "";
     container.innerHTML = `
       <div class="owner-panel">
         <div class="owner-panel-head">
-          <h3 class="owner-panel-title">Eiere</h3>
-          <button type="button" class="owner-collapse">Ferdig</button>
+          <h3 class="owner-panel-title">${escapeHtml(tr("owners.title"))}</h3>
+          <button type="button" class="owner-collapse">${escapeHtml(tr("owners.done"))}</button>
         </div>
         <ul class="owner-list">${rows}</ul>
         ${addBox}
@@ -92,12 +95,12 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
       ? // Same-name owners are distinct users (e.g. mock + Entra identity) — expose the email in a
         // tooltip so "Joakim Kosmo, Joakim Kosmo" is explainable at a glance.
         owners.map((o) => `<span title="${escapeHtml(o.email)}">${escapeHtml(o.name)}</span>`).join(", ")
-      : `<span class="owner-none">Ingen eiere ennå</span>`;
+      : `<span class="owner-none">${escapeHtml(tr("owners.noneShort"))}</span>`;
     container.innerHTML = `
       <div class="owner-panel owner-panel--compact">
-        <span class="owner-compact-label">Eiere</span>
+        <span class="owner-compact-label">${escapeHtml(tr("owners.title"))}</span>
         <span class="owner-compact-names">${names}</span>
-        ${canManage ? `<button type="button" class="owner-edit-toggle">Endre eiere</button>` : ""}
+        ${canManage ? `<button type="button" class="owner-edit-toggle">${escapeHtml(tr("owners.edit"))}</button>` : ""}
       </div>`;
     container.querySelector(".owner-edit-toggle")?.addEventListener("click", () => {
       expanded = true;
@@ -142,7 +145,7 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
               (u) => `<li data-user-id="${escapeHtml(u.id)}"><span class="owner-name">${escapeHtml(u.name)}</span> <span class="owner-email">${escapeHtml(u.email)}</span></li>`,
             )
             .join("")
-        : `<li class="owner-empty">Ingen treff.</li>`;
+        : `<li class="owner-empty">${escapeHtml(tr("owners.noMatches"))}</li>`;
       results.hidden = false;
     } catch {
       results.hidden = true;
@@ -156,10 +159,10 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
         body: JSON.stringify({ userId }),
       });
       owners = Array.isArray(data.owners) ? data.owners : owners;
-      showToast("Eier lagt til.");
+      showToast(tr("owners.added"));
       paint();
     } catch (error) {
-      showToast(errorMessage(error, "Kunne ikke legge til eier.", t), "error");
+      showToast(errorMessage(error, tr("owners.addFailed"), t), "error");
     }
   }
 
@@ -169,10 +172,10 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
         method: "DELETE",
       });
       owners = Array.isArray(data.owners) ? data.owners : owners;
-      showToast("Eier fjernet.");
+      showToast(tr("owners.removed"));
       paint();
     } catch (error) {
-      showToast(errorMessage(error, "Kunne ikke fjerne eier.", t), "error");
+      showToast(errorMessage(error, tr("owners.removeFailed"), t), "error");
     }
   }
 
@@ -180,6 +183,6 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
     await load();
     paint();
   } catch {
-    container.innerHTML = `<div class="owner-panel"><p class="owner-panel-error">Kunne ikke laste eiere.</p></div>`;
+    container.innerHTML = `<div class="owner-panel"><p class="owner-panel-error">${escapeHtml(tr("owners.loadFailed"))}</p></div>`;
   }
 }

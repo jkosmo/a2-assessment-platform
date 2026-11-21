@@ -48,7 +48,9 @@
       #dialogGenerate .chat-form-col { gap: 8px; }
       #dialogGeneratePlan .chat-textarea { padding: 6px 10px; font-size: 13px; }
       /* #1062: avkryssing i Innstillinger — etikett og boks på én linje, ikke shared.css sin fulle bredde. */
-      .settings-check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-text); }
+      /* #1173: etiketten ER klikkflaten for avkrysningsboksen (den omslutter den). Med 13–18 px boks og 18–19 px
+         linjehøyde var flaten under 24 px (WCAG 2.5.8); min-height gir 24 px uten å endre boksen. */
+      .settings-check { display: inline-flex; align-items: center; gap: 8px; min-height: 24px; font-size: 14px; color: var(--color-text); }
       .settings-check input[type="checkbox"] { width: auto; min-height: 0; margin: 0; }
       /* #934 skive 5b: bredden fra shared.css kommer i tillegg til utfyllingen, og det flyter over på en telefon. */
       #modulePublishDialog { box-sizing: border-box; width: min(620px, calc(100vw - 24px)); max-width: none; }
@@ -127,7 +129,7 @@
       .preview-edit-mcq-item[open] > .preview-edit-mcq-summary .preview-edit-mcq-summary-stem { display: none; }
       .preview-edit-mcq-option { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: center; }
       .save-error-issues { margin-top: 8px; font-size: 12px; color: var(--color-meta); font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
-      .preview-edit-mcq-multiple { display: inline-flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: 13px; color: var(--color-meta); cursor: pointer; }
+      .preview-edit-mcq-multiple { display: inline-flex; align-items: center; gap: 8px; min-height: 24px; margin: 6px 0 0; font-size: 13px; color: var(--color-meta); cursor: pointer; }
       .preview-edit-mcq-multiple input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; flex-shrink: 0; }
       .preview-edit-mcq-help { font-size: 12px; color: var(--color-meta); }
       .preview-edit-actions {
@@ -462,7 +464,7 @@
         <nav id="workspaceNav" class="workspace-nav"></nav>
         <div class="locale-picker">
           <span id="appVersion" class="version-badge">…</span>
-          <label for="localeSelect" class="sr-only">Language</label>
+          <label for="localeSelect" class="sr-only" data-i18n="locale.label">Language</label>
           <select id="localeSelect" class="locale-select-compact"></select>
         </div>
       </div>
@@ -492,7 +494,7 @@
       <div class="workspace-shell" id="tabPanelModule" role="tabpanel" aria-labelledby="tabEdit">
 
         <!-- Preview pane -->
-        <section class="card preview-pane" aria-label="Modulforhåndsvisning">
+        <section class="card preview-pane" aria-label="Module preview" data-i18n-aria-label="shell.preview.paneAria">
           <div id="previewShows" class="small preview-shows" hidden style="display:none"></div>
           <!-- #1151 skive 3c: en arkivert modul kan ikke endres. Sperren ligger RUNDT innholdet, ikke i det: skjemaet,
                spørsmålene og kriteriene tegnes på nytt mange steder, og alt som tegnes inn her, arver `disabled`

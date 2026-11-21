@@ -1041,13 +1041,13 @@ function sectionEditorBodyHtml() {
         </div>
         <div class="editor-single">
           <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-            <span>${escapeHtml(L("markdown"))} <span class="required-note">${escapeHtml(t("form.required"))}</span></span>
+            <span id="markdownInputLabel">${escapeHtml(L("markdown"))} <span class="required-note">${escapeHtml(t("form.required"))}</span></span>
             <span data-form-untracked>
               ${!sectionCanEdit() ? "" : `<button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px" ${editing.id ? "" : `disabled title="${escapeHtml(L("saveFirst"))}"`}>${escapeHtml(L("uploadImage"))}</button>`}
               <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />
             </span>
           </div>
-          <textarea id="markdownInput" ${editing.canManage === false ? "readonly" : ""}>${escapeHtml(editing.body[editing.editLocale])}</textarea>
+          <textarea id="markdownInput" aria-labelledby="markdownInputLabel" ${editing.canManage === false ? "readonly" : ""}>${escapeHtml(editing.body[editing.editLocale])}</textarea>
         </div>
         <input type="file" id="replaceFromFileInput" accept="${SECTION_FILE_ACCEPT}" hidden data-form-untracked />
         <span class="editor-status" id="editorStatus"></span>

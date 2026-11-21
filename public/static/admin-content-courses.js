@@ -2194,13 +2194,13 @@ function courseDetailBodyHtml() {
               </label>
               <input id="title-${loc}" type="text" data-field="title" data-locale="${loc}"${loc === "nb" ? " data-form-title" : ""}
                 value="${escapeHtml(localeValues[loc].title)}"
-                placeholder="${loc === "nb" ? "" : "Viser bokmål hvis tomt"}"
+                placeholder="${loc === "nb" ? "" : escapeHtml(t("courses.fallbackPlaceholder"))}"
                 autocomplete="off" />
             </div>
             <div class="form-field">
               <label for="desc-${loc}">${escapeHtml(t("ui.description"))}</label>
               <textarea id="desc-${loc}" data-field="description" data-locale="${loc}"
-                placeholder="${loc === "nb" ? "" : "Viser bokmål hvis tomt"}">${escapeHtml(localeValues[loc].description)}</textarea>
+                placeholder="${loc === "nb" ? "" : escapeHtml(t("courses.fallbackPlaceholder"))}">${escapeHtml(localeValues[loc].description)}</textarea>
             </div>
           </div>`).join("")}
 
