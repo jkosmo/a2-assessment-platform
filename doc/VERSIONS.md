@@ -63,6 +63,13 @@ leverte for én dag siden; nå åtte.
   lenge, med en dato som flytter seg. Det beholder for mye, aldri for lite (som «venter på vurdering»).
 - Et kurs arkivert for seg før 2.159.0 har modulene sine aktive; der kan de sju dagene starte etter arkiveringen.
 
+**På stage 21.11.2026** (dev 0d5cd2f0). Stage-testen `release-2-174-pabegynt-fritekst` 7/7 mot ekte stage: levert tekst i en modul
+med fritekst og flervalg, kurset arkivert, «Slett» svarte `course_has_unfinished_submissions` med `{ count: 1, untilDate:
+"2026-11-28" }`, og lista det samme. Kontrollen (ren flervalgsmodul, bare åpnet) ble slettet. Flervalget kunne fortsatt startes etter
+arkiveringen. I nettleseren sto «Beholdes: en deltaker har levert tekst uten å fullføre, til 28.11.2026» under «Arkiverte», og
+«Slett» ga toasten med «kurset kan slettes fra 28.11.2026». Deltakersidene lastet uten modulfeil (tre 403 på ressurser for
+stage-kontoen, ikke skript). Testkurset «Stage-test 2.174.0 … kurs A» står arkivert til 28.11. og fritekstmodulen for godt.
+
 ## 2.173.0 - 2026-11-21
 
 Deltakeren: kursbevis og tilbake (#1162, skive 1–4), etter produkteiers avgjørelser 21.11.2026 (DECISIONS, «Deltakerflyten»). Bygget
