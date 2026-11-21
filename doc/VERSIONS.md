@@ -35,6 +35,11 @@ mutasjonsverifisert per skive. Ti eksisterende e2e-filer fikk de nye tekstene. H
 - Modultittelen i hodet får 55–69 px på 360 px og kuttes med «…» til skive 5 bygger hodet på nytt.
 - Bare Chromium er testet. Nettleserens tilbake fra kursbeviset på en ekte telefon (særlig iOS Safari) bør prøves på stage.
 
+**På stage 21.11.2026 kl. 12:58** (dev 04c74342). Stage-testen for deltakerens tilbake-navigasjon (`release-2-164-deltaker-tilbake`)
+feilet én gang ved første opptegning av siden, og var 4/4 grønn ved ny kjøring. **I prod 21.11.2026 kl. 14:07**, sammen med 2.172.0
+(04c74342, uten stage-leddet). App og worker viser 2.173.0, og begge svarer friskt på `/healthz`. Loggene etter utrullingen har ingen
+feillinjer. De tre 503-svarene på `/healthz` i timen rundt er samme bakgrunnsnivå som før (4–7 i døgnet de tre siste dagene).
+
 ## 2.172.0 - 2026-11-21
 
 En arkivert modul som deltakere bare har åpnet, aldri levert, kan slettes (#1176). Ingen migrering.
@@ -84,7 +89,7 @@ bare på tabellene under innleveringen, og hullet lå i raden selv. Begge er ret
 **På stage 21.11.2026** (dev 50e505cc). Utrullingen gikk rent. Målt mot ekte data på stage, lista over arkiverte moduler
 (`includeRetention=1`): de fire modulene stage-testen for 2.164.0 åpnet uten å svare (der #1176 ble funnet), viser nå «slettes
 2027-05-15», ikke «Beholdes: har besvarelser». Av 110 arkiverte moduler holdes 37 fortsatt igjen med `module_has_submissions`
-(leverte besvarelser) og én med `content_in_archived_course`; 72 har dato.
+(leverte besvarelser) og én med `content_in_archived_course`; 72 har dato. **I prod 21.11.2026 kl. 14:07** med 2.173.0.
 
 **Integrasjonsrekka:** 1448 av 1450 grønne. De to røde er tidsgrenser i `m2-learner-lock-934-5a1` (5903 ms mot 5500, og 2928 mot
 2500). De feilet på samme måte uten endringene i denne versjonen (kontroll med `git stash`), så de er ustabile på maskinen, ikke en
