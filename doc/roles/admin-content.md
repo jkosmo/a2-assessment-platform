@@ -284,7 +284,9 @@ Allerede leverte besvarelser ferdigbehandles. Ingen nye besvarelser kan leveres 
 
 **Kan jeg slette en modul som har besvarelser?**
 Nei. Moduler med besvarelser kan bare arkiveres, ikke slettes. En arkivert modul uten besvarelser kan slettes, også når den
-har lagrede versjoner (fra 2.161.0).
+har lagrede versjoner (fra 2.161.0). Fra 2.172.0 teller en ren flervalgsmodul som deltakere bare har åpnet, uten å svare, som
+uten besvarelser: den kan slettes, og de tomme radene går med. Fritekst som er levert, teller alltid som en besvarelse, også før
+den er vurdert.
 
 **Kan jeg avpublisere, arkivere eller slette en modul eller seksjon som ligger i et kurs?**
 Det kommer an på kurset:

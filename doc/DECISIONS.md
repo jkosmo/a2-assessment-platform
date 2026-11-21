@@ -1896,6 +1896,14 @@ Planen sa hva; dette er valgene som ikke sto der.
 - **Rekkefølgen i «Slett» for en modul:** arkivert → ligger i et kurs → innleveringer → sertifiseringer → utkast. Det varige
   (historikken) sies før det forfatteren kan rydde selv (utkastet), så forfatteren ikke rydder et utkast og så møter en sperre som
   aldri går bort. For seksjoner kommer utkastet etter kursbeviset av samme grunn.
+- **Bare leverte innleveringer er deltakerhistorikk** (#1176, 2.172.0, forslaget i saken; prioritert p1 av produkteier 21.11.2026).
+  I en ren flervalgsmodul lages innleveringen når deltakeren åpner modulen. Er ingenting levert eller vurdert (hvitelisten i
+  `content/openedOnlySubmission.ts`), holder den ikke modulen igjen, og den slettes med modulen sammen med flervalgsforsøket uten
+  svar. **Fritekst som er levert men ikke vurdert, er alltid historikk** (QA 2.172.0): i en modul med fritekst lages innleveringen
+  når teksten leveres, så bare `MCQ_ONLY` kan ha en tom innlevering. Samme definisjon i lista over arkiverte, «Slett», kaskaden og
+  jobben (4c). Hvitelisten er strengere enn regelen for «venter på vurdering» (2.164.1), fordi den avgjør hva som slettes.
+  Rapportenes «påbegynt» er en egen regel og er uendret: en åpnet modul gjør fortsatt deltakeren påbegynt, men når modulen slettes,
+  forsvinner raden, og gamle tall i aktivitetsrapporten, «Min statistikk» og ukesoppsummeringen blir litt lavere.
 - **Modulen slettes av skriveren (`deleteModule` i adminContentRepository.ts), eierradene av kommandoen.** Masseryddingen sletter
   fortsatt selv (motsatt regel), nå én modul per kall (`purgeUnpublishedModule`), så testene kan rydde én bestemt modul uten å ta
   alle upubliserte moduler i databasen.

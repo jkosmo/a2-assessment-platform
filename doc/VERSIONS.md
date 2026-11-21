@@ -2,6 +2,58 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.172.0 - 2026-11-21
+
+En arkivert modul som deltakere bare har åpnet, aldri levert, kan slettes (#1176). Ingen migrering.
+
+**Hva forfatteren merker:** før sto en slik modul som «Beholdes: har besvarelser» for alltid, og «Slett» sa at deltakere hadde levert.
+Nå kan den slettes, og lista viser datoen. En modul med en levert besvarelse holdes igjen som før, og tallet i meldingen er de leverte.
+Slettejobben som kommer i 4c (#1152), bruker samme regel.
+
+**Slik virker det:** i en ren flervalgsmodul lages innleveringen når deltakeren åpner modulen. `content/openedOnlySubmission.ts` sier
+når den er tom: modulversjonen er `MCQ_ONLY`; status `SUBMITTED`; ingen KI-erklæring eller vedlegg; ingen vurderingsjobb, avgjørelse,
+anke, manuell behandling, KI-vurdering eller bestått; og et eventuelt flervalgsforsøk er verken fullført eller besvart. Alt annet er
+deltakerhistorikk, også fritekst som er levert men ikke vurdert. Vakta teller bare de leverte (`moduleDeleteSummarySelect`), og
+slettingen fjerner de tomme radene og forsøkene deres før versjonene (`deleteModule` i skriveren). Er en innlevering blitt levert
+mellom vakta og slettingen, blir den stående, og fremmednøkkelen stopper slettingen, så alt rulles tilbake.
+
+**Tester:**
+- `m2-module-delete-opened-1176`, gjennom rutene, med en ren flervalgsmodul: bare åpnede innleveringer (med og uten forsøk) slettes
+  med modulen, og lista viser datoen. Kontroller som holder modulen igjen:
+  - fritekst levert i en modul med fritekst og flervalg, før flervalget er sendt inn (teksten står);
+  - vurderingsjobb;
+  - flervalg fullført, og flervalg med svar uten at forsøket er markert fullført;
+  - status `COMPLETED`;
+  - en avgjørelse.
+- `unit/opened-only-submission-1176` leser HVERT felt på `Submission` i skjemaet, både kolonner og tabeller under. Hvert felt må være
+  med i definisjonen eller nevnt med grunn. Den krever også at hver tabell i definisjonen er «ingenting finnes».
+
+**QA 2.172.0, andre runde (Claude-agent): GO.** Ingen vei i normal bruk der en innlevering med historikk passer definisjonen: i en
+ren flervalgsmodul skrives svarene, «fullført» og ny status i samme transaksjon, og en innlevering bytter aldri modulversjon.
+Rettet etterpå: kommentaren øverst i `openedOnlySubmission.ts`, teksten om kappløpet over, og forfatterdokumentasjonen
+(`doc/roles/admin-content.md`, `CONTENT_LIFECYCLE.md`).
+
+**QA 2.172.0, første runde (Claude-agent; Codex har nådd bruksgrensen): NO-GO, rettet.** Definisjonen bygget på saken: «en
+innlevering lages når modulen åpnes». Det stemmer bare for rene flervalgsmoduler. Med fritekst lages innleveringen når teksten
+leveres, og i en modul med fritekst og flervalg står den som `SUBMITTED` uten vurderingsjobb til flervalget er sendt inn. Den så tom
+ut, og den leverte teksten kunne blitt slettet for godt. **Rotårsak:** testfiksturen laget en tilstand som ikke finnes, en innlevering
+med tom tekst i en modul med fritekst. Den bekreftet premisset i stedet for å prøve det (CLAUDE.md, «Pre-flight» punkt 4). Vakta så
+bare på tabellene under innleveringen, og hullet lå i raden selv. Begge er rettet.
+
+**Kjent (ikke rettet):**
+- Et kappløp mellom «Slett» og en deltaker som sender inn flervalget, gir en 500 i stedet for en egen melding. Vinner innsendingen,
+  rulles slettingen tilbake. Vinner slettingen, går innsendingen tapt; svarene står bare i deltakerens kladd i nettleseren, og
+  flervalgsrutene sier ikke at modulen er arkivert. Det krever at modulen har stått arkivert utenfor alle kurs, og at deltakeren har
+  siden åpen fra før og sender inn akkurat da.
+- Masseryddingen av upubliserte moduler teller fortsatt alle innleveringer, også de som bare er åpnet. Den er strengere, og det er
+  trygt.
+
+**Integrasjonsrekka:** 1448 av 1450 grønne. De to røde er tidsgrenser i `m2-learner-lock-934-5a1` (5903 ms mot 5500, og 2928 mot
+2500). De feilet på samme måte uten endringene i denne versjonen (kontroll med `git stash`), så de er ustabile på maskinen, ikke en
+feil herfra (som #1184).
+- Aktivitetsrapporten, «Min statistikk» og ukesoppsummeringen teller en innlevering som «påbegynt». Når en slik modul slettes, blir
+  de gamle tallene litt lavere for perioder som er ferdige. Regelen for «påbegynt» er uendret; det er radene den teller, som slettes.
+
 ## 2.171.0 - 2026-11-21
 
 Språk og tilgjengelighet i innholdsforvaltningen (#1173, fra konsistenssjekken #1157). Bygget av en parallell agent i en egen

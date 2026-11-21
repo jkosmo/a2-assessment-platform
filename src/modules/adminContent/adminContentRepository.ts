@@ -3,6 +3,7 @@ import type { AssessmentMode } from "@prisma/client";
 import type { ContentWriteTx } from "../../db/contentLock.js";
 import { AppError } from "../../errors/AppError.js";
 import { resolvePublishNumber, type ModuleVersionKind } from "./moduleVersioning.js";
+import { deliveredSubmissionWhere, openedOnlySubmissionWhere } from "../content/openedOnlySubmission.js";
 
 type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseItem" | "contentOwner">;
 
@@ -16,7 +17,9 @@ const moduleDeleteSummarySelect = {
   _count: {
     select: {
       versions: true,
-      submissions: true,
+      // #1176: bare LEVERTE innleveringer er deltakerhistorikk. En som bare er åpnet, holder ikke modulen igjen; den slettes med
+      // den (`deleteModule` i skriveren under). Samme definisjon begge steder: content/openedOnlySubmission.ts.
+      submissions: { where: deliveredSubmissionWhere },
       mcqSetVersions: true,
       certificationStatuses: true,
       rubricVersions: true,
@@ -656,6 +659,16 @@ export function createAdminContentWriter(client: ContentWriteTx) {
      * Bestått (`ModulePass`) og kurskrav (`CourseModuleRequirement`) går av seg selv (`onDelete: Cascade`).
      */
     async deleteModule(moduleId: string) {
+      // #1176: innleveringer som bare er åpnet (og flervalgsforsøkene deres, uten svar), FØR versjonene: de peker på modulversjonen
+      // med `onDelete: Restrict`. Bare de som fortsatt er tomme nå, slettes (samme `where` i slettingen); er en blitt levert siden
+      // vakta målte, blir den stående, og `moduleVersion.deleteMany` under feiler på fremmednøkkelen, så hele transaksjonen rulles
+      // tilbake (kjent mangel: svaret er da en 500, ikke en egen melding; krever et kappløp med en modul som har stått arkivert).
+      const opened = await client.submission.findMany({ where: { moduleId, ...openedOnlySubmissionWhere }, select: { id: true } });
+      if (opened.length > 0) {
+        const ids = opened.map((row) => row.id);
+        await client.mCQAttempt.deleteMany({ where: { submissionId: { in: ids }, completedAt: null, responses: { none: {} } } });
+        await client.submission.deleteMany({ where: { id: { in: ids }, ...openedOnlySubmissionWhere } });
+      }
       await client.module.update({ where: { id: moduleId }, data: { activeVersionId: null } });
       await client.moduleVersion.deleteMany({ where: { moduleId } });
       await client.mCQQuestion.deleteMany({ where: { moduleId } });

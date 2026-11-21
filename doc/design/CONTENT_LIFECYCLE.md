@@ -183,7 +183,8 @@ registre — da blir elementet stående arkivert.
   merkene nullstilles. **Låsene:** et vedtak tar bare deltakerlåsen, så slettingen tar deltakerlåsene for alle som har levert på
   en av kursets moduler, under innholdslåsen og før målingen (`lockCourseDeleteLearners`). Ikke `findCourseInProgressParticipants`:
   den ser bort fra arkiverte elementer og hører til arkiveringsdialogen. Kode: `courseDeleteGuard.ts`.
-- **Modul (#1152):** er i et kurs, også et arkivert (G2); har innleveringer (`module_has_submissions`) eller
+- **Modul (#1152):** er i et kurs, også et arkivert (G2); har leverte innleveringer (`module_has_submissions`; fra 2.172.0 teller ikke
+  en innlevering i en ren flervalgsmodul som bare er åpnet, `content/openedOnlySubmission.ts`, #1176) eller
   sertifiseringsstatus (`module_has_certification`); eller står i et lagret utkast til et aktivt kurs
   (`delete_blocked_by_course_draft`). **Versjoner holder den ikke lenger igjen:** en arkivert modul uten deltakerhistorikk
   slettes med modulversjonene, flervalgsspørsmålene og -settene, kriteriene og ledetekstene, i den rekkefølgen
