@@ -114,8 +114,8 @@ const own = {
     "profile.courses.table.completedAt": "Completed",
     "profile.courses.takenOutside": "Taken outside the platform",
     "profile.courses.table.level": "Level",
-    "profile.courses.table.certificate": "Certificate",
-    "profile.courses.view": "View certificate",
+    "profile.courses.table.certificate": "Course certificate",
+    "profile.courses.view": "View course certificate",
     "profile.courses.versionSuffix": " (version {n})",
 
     // GDPR rights

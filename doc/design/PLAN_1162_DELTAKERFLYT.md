@@ -1,6 +1,6 @@
 # #1162 — Deltakeren: seksjon og modul åpnes ulikt, «tilbake» heter mange ting, kursbeviset har tre navn
 
-Status: forslag, ikke bygget (21.11.2026). Fra konsistenssjekken #1157.
+Status: skive 1 bygget på grenen `1162-deltaker` (21.11.2026); resten er forslag. Fra konsistenssjekken #1157.
 
 **Avgjort av produkteier 21.11.2026** (alle seks spørsmålene nederst; står også i `doc/DECISIONS.md`, «Deltakerflyten»): lang
 form på tilbake («← Tilbake til kurset», «← Tilbake til Mine kurs»); kursbeviset åpnes i samme fane; «Gå videre» i en modul bare
@@ -130,7 +130,7 @@ Hver skive kan rulles ut alene, i denne rekkefølgen. Ingen av dem rører server
 
 | Skive | Hva | Prototype først? | Tester |
 | --- | --- | --- | --- |
-| 1. Kursbevis-ordet | Nøklene i `participant-translations.js` og `profile-translations.js` (tre språk); fjern `courses.certificate.short` og `.earned`; CSS-regelen i `participant.html:203` faller bort | Nei, bare tekst | e2e: lenketeksten på kursraden, eldre versjon og profilen på tre språk, også på 390 px |
+| 1. Kursbevis-ordet **(bygget)** | Nøklene i `participant-translations.js` og `profile-translations.js` (tre språk); fjern `courses.certificate.short` og `.earned`; CSS-regelen i `participant.html:203` faller bort | Nei, bare tekst | e2e: lenketeksten på kursraden, eldre versjon og profilen på tre språk, også på 390 px |
 | 2. «Tilbake»-tekstene | `courses.section.close`, `courses.module.close`, `courses.backToList`, `certificate.back`, `discussion.action.back` | Nei, men mål bredden: «← Tilbake til Mine kurs» og hodet med «← Tilbake til kurset» på 390 og 360 px | e2e på tre språk; skjermbilde på 360 px |
 | 3. Kursbeviset i samme fane | Fjern `target="_blank"` (`participant.js:4875`, `:4887`, `profile.js:434`); `?fra=profil` og lenketeksten på beviset (`certificate.js`) | Nei, oppførsel; avgjørelse 2 først | e2e: åpne beviset, nettleserens tilbake står i kurset (med åpent element) og i profilen |
 | 4. Lest seksjon | `renderSectionReaderInto` velger tekst ut fra `entry.read`; ingen ny `POST …/read` når den er lest | Nei | e2e: lest seksjon viser «Gå videre» og sender ikke lesingen; ulest som før (kontroll) |

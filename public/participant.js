@@ -4872,7 +4872,7 @@ function buildCourseAccordionItem(course, options = {}) {
             <span class="sr-only">${escapeHtmlP(t("courses.status.completed"))}</span>
           </span>
         </button>
-        ${completion ? `<a class="course-certificate-link" href="/certificate?id=${encodeURIComponent(completion.certificateId)}" target="_blank" rel="noopener"><span class="course-certificate-link-kind">${escapeHtmlP(t("courses.certificate.short"))} · </span>${escapeHtmlP(t("courses.certificate.view"))}</a>` : ""}
+        ${completion ? `<a class="course-certificate-link" href="/certificate?id=${encodeURIComponent(completion.certificateId)}" target="_blank" rel="noopener">${escapeHtmlP(t("courses.certificate.view"))}</a>` : ""}
         <span class="course-accordion-chevron" aria-hidden="true">&#8250;</span>
       </div>
       ${progressHtml}
@@ -4884,7 +4884,7 @@ function buildCourseAccordionItem(course, options = {}) {
     const earlier = participantEarlierCompletions[course.id];
     const earlierHtml = earlier
       ? `<p class="course-new-version-note small">${escapeHtmlP(t("courses.newVersion.hint"))}
-          <a class="course-certificate-link course-certificate-link--earlier" href="/certificate?id=${encodeURIComponent(earlier.certificateId)}" target="_blank" rel="noopener">${escapeHtmlP(fillPlaceholders(t("courses.certificate.earlier"), { n: earlier.versionMajor }))} · ${escapeHtmlP(t("courses.certificate.view"))}</a></p>`
+          <a class="course-certificate-link course-certificate-link--earlier" href="/certificate?id=${encodeURIComponent(earlier.certificateId)}" target="_blank" rel="noopener">${escapeHtmlP(fillPlaceholders(t("courses.certificate.earlier"), { n: earlier.versionMajor }))}</a></p>`
       : "";
     const badgeHtml = earlier
       ? `<span class="module-status-badge course-new-version-badge" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(t("courses.newVersion"))}</span>`

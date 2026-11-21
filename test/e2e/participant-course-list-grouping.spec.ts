@@ -171,16 +171,18 @@ test("2.152.0: et fullført kurs åpnet fra kortet står alene, med egen grønn 
 });
 
 for (const width of [390, 360]) {
-  test(`2.152.0: på telefon (${width} px) står «Vis bevis» alene, radene er tette, og en lang tittel går ikke ut av kortet`, async ({ page }) => {
+  test(`2.152.0: på telefon (${width} px) står «Vis kursbevis» hel, radene er tette, og en lang tittel går ikke ut av kortet`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
     await fiveDone(page);
     const group = page.locator(".course-done-group");
     const link = group.locator('[data-course-id="d1"] .course-certificate-link');
-    await expect(link).toHaveText(/Vis bevis/);
-    await expect(link.locator(".course-certificate-link-kind")).toBeHidden();
+    // #1162: samme tekst som på PC; «Sertifikat ·» som ble skjult på telefon, er borte.
+    await expect(link).toHaveText("Vis kursbevis");
     const row = await group.locator('[data-course-id="d1"] .course-done-row').boundingBox();
     expect(row!.height).toBeGreaterThanOrEqual(35);
-    expect(row!.height).toBeLessThanOrEqual(48);
+    // #1162: «Vis kursbevis» er lengre enn «Vis bevis». På 360 px brekker en middels lang tittel da over to linjer (målt
+    // 59 px); lenka står fortsatt på én linje. Mer enn to linjer er feil.
+    expect(row!.height).toBeLessThanOrEqual(width === 360 ? 64 : 48);
     // Den lange tittelen (ett ord) brytes inne i kortet; lenka står fortsatt innenfor.
     const groupBox = await group.boundingBox();
     const longLink = await group.locator('[data-course-id="d4"] .course-certificate-link').boundingBox();
@@ -250,7 +252,7 @@ test("#939 + #1137: et fullført kurs er én grønn rad — med hel grønn linje
   await expect(doneItem.locator(".course-accordion-header a")).toHaveCount(0);
 });
 
-test("#939: et klikk på «Vis bevis» åpner beviset — det navigerer ikke lista bak det", async ({ page }) => {
+test("#939: et klikk på «Vis kursbevis» åpner beviset — det navigerer ikke lista bak det", async ({ page }) => {
   await mockBase(page);
   await page.route("**/api/courses", (route: Route) =>
     route.fulfill({

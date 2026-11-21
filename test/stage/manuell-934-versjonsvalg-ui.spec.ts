@@ -201,7 +201,7 @@ test("3. «Mine kurs»: «Ny versjon», forklaringen og «Kursbevis, versjon 1»
   await kort.locator(".course-accordion-header").click();
   const lenke = kort.locator("a.course-certificate-link--earlier");
   await expect(lenke).toBeVisible({ timeout: 30_000 });
-  await expect(lenke).toContainText("Kursbevis, versjon 1");
+  await expect(lenke).toContainText("Vis kursbevis for versjon 1");
   await expect(lenke).toHaveAttribute("href", `/certificate?id=${tilstand.bevisV1}`);
   const hint = (await kort.locator(".course-new-version-note").innerText()).trim();
   noter("forklaring på kortet", hint);

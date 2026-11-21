@@ -109,6 +109,11 @@ change to issuance, fetch-wiring, or rendering must be verified on all three:
 | `/profile` → fanen «Beståtte kurs» (2.141.0; link only, no certificate id) | `public/profile.js` | on profile render, together with `/api/me/stats` |
 | Printable `/certificate?id=…` | `public/certificate.js` | fetches `/api/courses/completions/:id` |
 
+**One name (#1162, 2026-11-21):** the certificate is «Kursbevis» («Course certificate»), and every link to it says
+**«Vis kursbevis»** («View course certificate»), also on a phone: the course row (`courses.certificate.view`), the older-version
+note (`courses.certificate.earlier`, «Vis kursbevis for versjon {n}») and the profile (`profile.courses.view`). «Sertifikat» is
+not used for it. Guard: `test/e2e/participant-flow-1162.spec.ts` (three languages, 390 and 360 px).
+
 **Issuance gates (server):** a completion is issued when **all modules passed AND all sections
 read**, for any course with ≥1 element — including **module-less reading courses** (#476/#580).
 `reconcileCourseCompletionsForUser` (run on `GET /api/courses/completions`) backfills any missed

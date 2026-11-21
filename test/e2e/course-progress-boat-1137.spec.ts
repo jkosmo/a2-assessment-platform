@@ -358,7 +358,7 @@ test.describe("#1137 seilbåten på fremdriftslinja", () => {
         expect(boat!.x + 32).toBeLessThanOrEqual(card!.x + card!.width);
       }
 
-      // Fullført rad: tittel og «Kursbevis · Vis bevis» overlapper ikke.
+      // Fullført rad: tittel og «Vis kursbevis» overlapper ikke.
       const title = await item(page, "cC").locator(".course-accordion-title").boundingBox();
       const cert = await item(page, "cC").locator(".course-certificate-link").boundingBox();
       const overlaps = title!.x < cert!.x + cert!.width && cert!.x < title!.x + title!.width

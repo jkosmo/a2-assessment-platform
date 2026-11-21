@@ -133,7 +133,7 @@ Kurs grupperer flere moduler. Kursbevis utstedes automatisk når alle moduler i 
 
 1. Gå til `/participant` — «Mine kurs»-seksjonen viser kursfremdrift
 2. Klikk på et kurs for å se hvilke moduler som inngår og hvilke du har bestått
-3. Et fullført kurs står nederst i sitt tema, med lenke til kursbeviset. Beviset finnes også i Profil.
+3. Et fullført kurs står nederst i sitt tema, med lenken «Vis kursbevis». Beviset finnes også i Profil, med samme lenke.
 
 ## Vanlige spørsmål
 

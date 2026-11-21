@@ -29,8 +29,8 @@ i, utstedes like etter, av workeren; mangler ett, kommer det når «Mine kurs» 
 
 Beviset nås fra kurskortet i «Mine kurs» (`/participant`) og fra fanen «Beståtte kurs» i Profil:
 
-1. **I «Mine kurs»** på et fullført kurs — sammen med en **«Vis bevis»**-lenke. Fullførte kurs står
-   nederst i hvert tema.
+1. **I «Mine kurs»** på et fullført kurs — med lenken **«Vis kursbevis»**, også på telefon. Fullførte kurs står
+   nederst i hvert tema. Har kurset fått en ny hovedversjon, heter lenken til det gamle beviset «Vis kursbevis for versjon 2».
 2. **I Profil** (`/profile`), fanen «Beståtte kurs» — hvert bevis har lenken **«Vis kursbevis»**.
    Bevis-IDen står ikke lenger i tabellen (2.141.0); den står på selve beviset.
 

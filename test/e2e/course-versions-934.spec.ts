@@ -67,7 +67,8 @@ test.describe("#934 — kursbevis per hovedversjon", () => {
     const lenke = ny.locator("a.course-certificate-link--earlier");
     await expect(lenke).toBeVisible();
     await expect(lenke).toHaveAttribute("href", "/certificate?id=cert-v2");
-    await expect(lenke).toContainText("Kursbevis, versjon 2");
+    // #1162: lenken heter «Vis kursbevis» overalt; for et eldre bevis med versjonen.
+    await expect(lenke).toHaveText("Vis kursbevis for versjon 2");
     await expect(vanlig.locator("a.course-certificate-link--earlier")).toHaveCount(0);
   });
 
