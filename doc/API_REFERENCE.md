@@ -318,6 +318,11 @@ courses and saved drafts of them, not archived courses), titles in the request's
 back. `published`: the module has a live version (archiving unpublishes it, I3). The archive re-checks under the content lock,
 so a module added to a course in between is still refused there. `404 module_not_found`.
 
+**`GET /api/admin/content/sections/:sectionId/archive-preview` (#1168, 2.179.0).** The same for a section, so the section
+list and the section editor ask first (before: a browser confirm, then the refusal after «yes»). Same access as
+`POST …/sections/:sectionId/archive` (owner or ADMINISTRATOR, `403 content_ownership`). Returns `{ sectionId, archived,
+published, uses }`, `uses` as above from the same rule as the block in `POST …/archive`. `404 section_not_found`.
+
 **Version numbers (2.136.0), additive; `versionNo` stands as before.** `GET /api/admin/content/modules/library`: `activeVersionMajor`, `activeVersionMinor` (`null` without an active version). `GET /api/modules` and `GET /api/modules/:moduleId`: `versionMajor`, `versionMinor` on `activeVersion`. `GET /api/admin/content/modules/:moduleId/export`: `versionMajor`, `versionMinor` on each of `versions.moduleVersions` (`null` for a version never published).
 
 #### Restore an earlier module version (#896 S5)

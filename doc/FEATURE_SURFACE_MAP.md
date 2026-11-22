@@ -1717,7 +1717,25 @@ bibliotekets dialoger 48 px over på en 390 px-skjerm.
 kontroll uten bruk), `test/m2-content-read-by-producers-1165.test.ts` (eierskapsvakta),
 `test/e2e/admin-content-module-lifecycle-dialogs-1168.spec.ts` (sperret, bekreftet, Avbryt, upublisert kontroll,
 gjenoppretting, sletting, fokus, 390 px), og `admin-content-archived-readonly-1151.spec.ts` (modulsida). Seks mutasjoner,
-alle røde. **Ikke gjort i #1168 ennå:** seksjon, klasse, tema og kursets «Avpubliser» (se saken).
+alle røde.
+
+**Seksjonen (2.179.0)** bruker den samme dialogen (`confirmSectionArchive`, `confirmSectionDelete`; tekstene
+`sections.archiveDialog.*`, `sections.deleteDialog.*`, `sections.restoredAsDraft`):
+
+| Handling | Flate | Hvor | Hva |
+|---|---|---|---|
+| Arkiver | Seksjonslista, raden (eller «Mer») | `archiveSectionFromList` i `admin-content-sections.js` | Henter `GET …/sections/:id/archive-preview`, som modulen. Før: `window.confirm`, og avslaget kom etter ja |
+| Arkiver | Seksjonsredigereren, hodet | `archiveSectionInEditor` | Samme dialog. Byttet forfatteren seksjon mens dialogen sto, arkiveres ikke den som vises |
+| Gjenopprett | Lista og redigereren | ingen dialog | `sections.restoredAsDraft`: «… er gjenopprettet som utkast» |
+| Slett | Redigereren (bare arkivert) | `deleteSection` → `confirmSectionDelete` | Sidas dialog. Den gamle teksten lovte at seksjonen «forsvinner fra alle kurs som bruker den»; tjeneren nekter å slette en seksjon som står i et kurs |
+
+**Vakter (seksjonen):** `test/m2-section-archive-preview-1168.test.ts`, `m2-content-read-by-producers-1165` (eierskapsvakta),
+`content-in-use-guard` (ruta står blant brukerne av regelen), `test/e2e/admin-content-section-lifecycle-dialogs-1168.spec.ts`
+(lista og redigereren: sperret, bekreftet, Avbryt, upublisert kontroll, gjenoppretting, fokus, 390 px), `section-editor.spec.ts`
+(sletting), og kappløpene i `admin-content-archive-in-course-draft-1150`, `admin-content-delete-archived-course-1149` og
+`section-jobs-stay-in-their-section-1154`. Seks mutasjoner, alle røde.
+
+**Ikke gjort i #1168 ennå:** klasse, tema, kursets slettetekst og kursets «Avpubliser» (se saken).
 
 ### 33e. Arkivert er urørlig, og slett krever arkivert (#1151 skive 3a, 3b og 3c)
 

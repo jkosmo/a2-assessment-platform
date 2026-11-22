@@ -389,15 +389,23 @@ test.describe("#1046 D3 — sletting av seksjon bor i editoren, bare for arkiver
     const slett = await revealRowAction(page, page.locator("#sectionDeleteBtn"));
     await expect(slett).toBeVisible();
 
-    // Avbryt i bekreftelsen → ingenting sendes.
-    page.once("dialog", (d) => d.dismiss());
+    // #1168: sidas dialog, ikke nettleserens spørreboks. Avbryt i bekreftelsen → ingenting sendes.
+    const browserQuestions: string[] = [];
+    page.on("dialog", (d) => { browserQuestions.push(d.message()); void d.dismiss(); });
     await slett.click();
+    await expect(page.locator("#moduleLifecycleDialog")).toHaveAttribute("data-module-dialog", "delete");
+    // Denne fila kjører på engelsk (standard i e2e).
+    await expect(page.locator("#moduleLifecycleDialogTitle")).toHaveText("Delete «Deletable»");
+    await expect(page.locator("#moduleLifecycleDialogText")).toHaveText("The section is deleted for good. This cannot be undone.");
+    await page.locator("#moduleLifecycleDialogCancelBtn").click();
     expect(bleSlettet()).toBe(false);
 
     // Bekreft → DELETE går, og forfatteren står i lista igjen.
-    page.once("dialog", (d) => { expect(d.message()).toMatch(/helt sikker|sure/i); return d.accept(); });
     await (await revealRowAction(page, page.locator("#sectionDeleteBtn"))).click();
+    await expect(page.locator("#moduleLifecycleDialogConfirmBtn")).toHaveText("Delete the section");
+    await page.locator("#moduleLifecycleDialogConfirmBtn").click();
     await expect.poll(bleSlettet).toBe(true);
+    expect(browserQuestions).toEqual([]);
     await expect(page.locator("#sectionsTableBody")).toBeAttached();
   });
 

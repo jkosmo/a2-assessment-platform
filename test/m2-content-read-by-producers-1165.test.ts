@@ -181,6 +181,7 @@ describe("#1165: en annen produsent kan lese kurs og moduler hen ikke eier", () 
       M(moduleId, "/passed-count"),
       M(moduleId, "/archive-preview"),
       M(moduleId, `/module-versions/${moduleVersionId}/publish-preview-versioned`),
+      S(sectionId, "/archive-preview"),
     ];
     for (const path of guarded) {
       const refused = await other.get(path);

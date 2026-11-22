@@ -1,18 +1,26 @@
-// #1168: dialogene for «Arkiver» og «Slett» på en modul, i kursets mønster (#1150): sjekk først, vis konsekvensene før
-// forfatteren trykker, på brukerens språk, og fokus tilbake til knappen etterpå. Før arkiverte modulen uten spørsmål og fikk
-// et avslag etterpå, og slettingen brukte nettleserens spørreboks med fast tekst.
+// #1168: dialogene for «Arkiver» og «Slett» på en modul eller en seksjon, i kursets mønster (#1150): sjekk først, vis
+// konsekvensene før forfatteren trykker, på brukerens språk, og fokus tilbake til knappen etterpå. Før arkiverte modulen uten
+// spørsmål og fikk et avslag etterpå, seksjonen spurte med nettleserens spørreboks og fikk avslaget etterpå, og slettingen
+// brukte nettleserens spørreboks med fast tekst.
 //
-// Brukes fra biblioteket (admin-content-library.js) og modulsida (admin-content-shell.js). Dialogen lages første gang den trengs,
-// så de to sidene ikke trenger hver sin markup. Stilene står i shared.css (.module-lifecycle-dialog).
+// Brukes fra biblioteket (admin-content-library.js), modulsida (admin-content-shell.js) og seksjonssida
+// (admin-content-sections.js). Dialogen lages første gang den trengs, så sidene ikke trenger hver sin markup. Stilene står i
+// shared.css (.module-lifecycle-dialog). Navnet er fra første skive (moduler); dialogen er den samme for begge.
 //
-// Kursene som holder modulen igjen, kommer fra tjeneren (`GET …/archive-preview`), med den samme regelen som sperren i
-// `POST …/archive`. Klienten regner ikke ut regelen selv. Arkiveringen sjekker på nytt; svarer den nei likevel (noen la modulen
-// inn i et kurs i mellomtiden), viser kalleren tjenerens oversatte grunn som før.
+// Kursene som holder elementet igjen, kommer fra tjeneren (`GET …/archive-preview`), med den samme regelen som sperren i
+// `POST …/archive`. Klienten regner ikke ut regelen selv. Arkiveringen sjekker på nytt; svarer den nei likevel (noen la
+// elementet inn i et kurs i mellomtiden), viser kalleren tjenerens oversatte grunn som før.
 
 import { escapeHtml } from "./html-escape.js";
 import { setHidden } from "./dom-visibility.js";
 
 const DIALOG_ID = "moduleLifecycleDialog";
+
+// Hvor forhåndsvisningen hentes, og hvilke tekster dialogen bruker (`<keys>.archiveDialog.*`, `<keys>.deleteDialog.*`).
+const ITEMS = {
+  module: { previewUrl: (id) => `/api/admin/content/modules/${encodeURIComponent(id)}/archive-preview`, keys: "library" },
+  section: { previewUrl: (id) => `/api/admin/content/sections/${encodeURIComponent(id)}/archive-preview`, keys: "sections" },
+};
 
 // Sant mens en forhåndsvisning hentes: et klikk på «Arkiver» i en annen rad i den tiden åpner ingenting (QA 2.178.0).
 let dialogPending = false;
@@ -91,21 +99,22 @@ function focusBack(button) {
   (menuToggle ?? button).focus();
 }
 
-function usesListHtml(uses, t) {
+function usesListHtml(uses, t, keys) {
   const items = uses.map((use) => {
     const href = `/admin-content/courses/${encodeURIComponent(use.courseId)}`;
-    const note = use.via === "draft" ? ` <span class="module-lifecycle-note">${escapeHtml(t("library.archiveDialog.viaDraft"))}</span>` : "";
+    const note = use.via === "draft" ? ` <span class="module-lifecycle-note">${escapeHtml(t(`${keys}.archiveDialog.viaDraft`))}</span>` : "";
     return `<li data-course-id="${escapeHtml(use.courseId)}"><a href="${href}">${escapeHtml(use.title || use.courseId)}</a>${note}</li>`;
   });
   return `<section data-lifecycle-part="usedIn"><ul>${items.join("")}</ul></section>`;
 }
 
 /**
- * «Arkiver»: spør tjeneren først. Holder et aktivt kurs (eller et lagret kursutkast) modulen igjen, vises kursene med lenker og
+ * «Arkiver»: spør tjeneren først. Holder et aktivt kurs (eller et lagret kursutkast) elementet igjen, vises kursene med lenker og
  * ingen bekreftknapp. Ellers sier dialogen hva som skjer, og svaret er om forfatteren bekreftet.
  * Svar: `{ confirmed: boolean }`, eller `{ error }` når forhåndsvisningen ikke kom (kalleren viser feilen som før).
  */
-export async function confirmModuleArchive({ moduleId, title, t, tf, apiFetch, getHeaders, returnFocusTo = null }) {
+async function confirmItemArchive(item, { id, title, t, tf, apiFetch, getHeaders, returnFocusTo = null }) {
+  const { previewUrl, keys } = ITEMS[item];
   // Knappen er opptatt mens forhåndsvisningen hentes (et dobbeltklikk skal ikke åpne to), men ikke mens dialogen står: da må
   // fokus kunne gå tilbake til den.
   // Står dialogen åpen, eller hentes en annen forhåndsvisning, skjer ingenting (én om gangen).
@@ -114,7 +123,7 @@ export async function confirmModuleArchive({ moduleId, title, t, tf, apiFetch, g
   if (returnFocusTo) returnFocusTo.disabled = true;
   let preview;
   try {
-    preview = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/archive-preview`, getHeaders);
+    preview = await apiFetch(previewUrl(id), getHeaders);
   } catch (error) {
     return { error };
   } finally {
@@ -122,42 +131,59 @@ export async function confirmModuleArchive({ moduleId, title, t, tf, apiFetch, g
     if (returnFocusTo) returnFocusTo.disabled = false;
   }
   const uses = Array.isArray(preview?.uses) ? preview.uses : [];
-  const heading = tf("library.archiveDialog.title", { title });
+  const heading = tf(`${keys}.archiveDialog.title`, { title });
   if (uses.length > 0) {
     await showModuleDialog({
       kind: "archive-blocked",
       title: heading,
-      text: tf(uses.length === 1 ? "library.archiveDialog.blockedOne" : "library.archiveDialog.blockedMany", { count: uses.length }),
-      bodyHtml: usesListHtml(uses, t),
+      text: tf(uses.length === 1 ? `${keys}.archiveDialog.blockedOne` : `${keys}.archiveDialog.blockedMany`, { count: uses.length }),
+      bodyHtml: usesListHtml(uses, t, keys),
       cancelLabel: t("ui.action.close"),
       returnFocusTo,
     });
     return { confirmed: false };
   }
   const bodyHtml = preview?.published === true
-    ? `<p class="dialog-text" data-lifecycle-part="unpublishes">${escapeHtml(t("library.archiveDialog.published"))}</p>`
+    ? `<p class="dialog-text" data-lifecycle-part="unpublishes">${escapeHtml(t(`${keys}.archiveDialog.published`))}</p>`
     : "";
   const confirmed = await showModuleDialog({
     kind: "archive",
     title: heading,
-    text: t("library.archiveDialog.intro"),
+    text: t(`${keys}.archiveDialog.intro`),
     bodyHtml,
-    confirmLabel: t("library.archiveDialog.confirm"),
+    confirmLabel: t(`${keys}.archiveDialog.confirm`),
     cancelLabel: t("ui.action.cancel"),
     returnFocusTo,
   });
   return { confirmed };
 }
 
-/** «Slett» for en arkivert modul. Tjeneren avgjør om den kan slettes; avslaget vises av kalleren som før. */
-export function confirmModuleDelete({ title, t, tf, returnFocusTo = null }) {
+/** «Slett» for et arkivert element. Tjeneren avgjør om det kan slettes; avslaget vises av kalleren som før. */
+function confirmItemDelete(item, { title, t, tf, returnFocusTo = null }) {
+  const { keys } = ITEMS[item];
   return showModuleDialog({
     kind: "delete",
-    title: tf("library.deleteDialog.title", { title }),
-    text: t("library.deleteDialog.text"),
-    confirmLabel: t("library.deleteDialog.confirm"),
+    title: tf(`${keys}.deleteDialog.title`, { title }),
+    text: t(`${keys}.deleteDialog.text`),
+    confirmLabel: t(`${keys}.deleteDialog.confirm`),
     confirmClass: "btn-danger",
     cancelLabel: t("ui.action.cancel"),
     returnFocusTo,
   });
+}
+
+export function confirmModuleArchive({ moduleId, ...rest }) {
+  return confirmItemArchive("module", { id: moduleId, ...rest });
+}
+
+export function confirmModuleDelete(options) {
+  return confirmItemDelete("module", options);
+}
+
+export function confirmSectionArchive({ sectionId, ...rest }) {
+  return confirmItemArchive("section", { id: sectionId, ...rest });
+}
+
+export function confirmSectionDelete(options) {
+  return confirmItemDelete("section", options);
 }

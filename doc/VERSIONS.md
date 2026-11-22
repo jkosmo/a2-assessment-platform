@@ -2,6 +2,37 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.179.0 - 2026-11-22
+
+#1168, andre skive: seksjonens «Arkiver», «Gjenopprett» og «Slett» følger modulen (2.178.0) og kurset (#1150). Ingen
+migrering.
+
+**Hva brukerne merker:**
+- **Arkiver** (seksjonslista og hodet i redigereren) spør tjeneren først. Holder et aktivt kurs eller et lagret kursutkast
+  seksjonen igjen, viser dialogen kursene med lenker og bare «Lukk». Før spurte nettleserens spørreboks «Arkivere denne
+  seksjonen?», og avslaget kom etter ja. Ellers sier dialogen hva som skjer, med «Arkiver seksjonen».
+- **Slett** (arkivert seksjon, i redigereren) har sidas dialog. Den gamle spørreboksen sa at seksjonen «forsvinner fra alle
+  kurs som bruker den», men tjeneren nekter å slette en seksjon som står i et kurs.
+- **Gjenopprett** sier hva som kom tilbake: «… er gjenopprettet som utkast. Publiser den når du er klar.» Før: «Seksjon
+  gjenopprettet.»
+
+**Tjeneren:** ny lesing `GET /api/admin/content/sections/:sectionId/archive-preview` (`{ sectionId, archived, published, uses }`),
+fra den samme regelen som sperren i `POST …/archive`, eierskapsvaktet. Dialogmodulen fra 2.178.0
+(`module-lifecycle-dialogs.js`) tar nå både moduler og seksjoner; modulens oppførsel er uendret.
+
+**Tester:** `m2-section-archive-preview-1168` (forhåndsvisningen = sperren, kontroll, språk, 404),
+`admin-content-section-lifecycle-dialogs-1168` (e2e, sju tilfeller i lista og redigereren), vaktlistene i
+`content-in-use-guard` og `m2-content-read-by-producers-1165`, og fire e2e-filer som klikket gjennom spørreboksen. Seks
+mutasjoner, alle røde: forhåndsvisningen alltid tom, uten språk, spørreboksen tilbake i lista, i redigereren og ved sletting,
+og den gamle gjenopprettingsmeldingen. Full runde grønn: enhet 3467, DOM 109, e2e 1248, integrasjon 1495.
+
+**QA 2.179.0** (Codex): GO. Rettet etterpå: meldingen etter gjenoppretting eller arkivering i redigereren tok tittelen fra
+seksjonen som vises nå, ikke den handlingen startet i (forfatteren byttet seksjon før svaret kom); og de to nye rutene sto ikke
+i `doc/route-map.md` (heller ikke modulens fra 2.178.0). Den første har fått en e2e-test (gjenoppretting holdt tilbake mens
+forfatteren åpner en annen seksjon), rød med den gamle linjen. De andre funnene er resten av #1168, under.
+
+**Gjenstår i #1168:** klasse og tema (spørreboks, temaets telling), kursets slettetekst, og «Avpubliser» på kurs.
+
 ## 2.178.1 - 2026-11-22
 
 Engelsk lenke til kursbeviset heter **«View certificate»** (før «View course certificate»): på kursraden, ved en eldre

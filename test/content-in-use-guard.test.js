@@ -533,6 +533,8 @@ describe("#1149: «hvilke kurs bruker dette elementet» svares i contentLifecycl
       "modules/course/courseArchivePreview.ts",
       // #1168: forhåndsvisningen av «Arkiver» for en modul (`GET …/modules/:id/archive-preview`), den samme regelen som sperren.
       "routes/adminContent.ts",
+      // #1168: det samme for en seksjon (`GET …/sections/:id/archive-preview`).
+      "routes/adminSections.ts",
     ]);
     // Importen og forhåndsvisningen spør regelen, ikke kursene alene (som ikke ser utkastene).
     for (const rel of users) {

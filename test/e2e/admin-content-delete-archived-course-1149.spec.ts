@@ -87,8 +87,8 @@ test.describe("#1149 — sletting stoppet av et arkivert kurs: meldingen sier hv
         body: { error: "content_in_archived_course", message: SERVER_MESSAGE, details: DETAILS },
       });
 
-      page.once("dialog", (dialog) => dialog.accept());
       await (await revealRowAction(page, page.locator("#sectionDeleteBtn"))).click();
+      await page.locator("#moduleLifecycleDialogConfirmBtn").click();
       await expect.poll(deleteCalls).toBe(1);
 
       const toast = page.locator(".toast__message");
@@ -107,8 +107,8 @@ test.describe("#1149 — sletting stoppet av et arkivert kurs: meldingen sier hv
       body: { error: "content_in_use", message: SERVER_MESSAGE, details: { count: 1, courseTitles: ["Kurs A"] } },
     });
 
-    page.once("dialog", (dialog) => dialog.accept());
     await (await revealRowAction(page, page.locator("#sectionDeleteBtn"))).click();
+    await page.locator("#moduleLifecycleDialogConfirmBtn").click();
     await expect.poll(deleteCalls).toBe(1);
     await expect(page.locator(".toast__message")).toHaveText("Innholdet er i bruk i 1 kurs: Kurs A. Fjern det fra kursene først, eller avpubliser dem.");
   });

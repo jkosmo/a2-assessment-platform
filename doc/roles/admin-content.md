@@ -74,6 +74,14 @@ API:
 **Slett modulen**. Kan den ikke slettes (besvarelser, kursbevis, et kurs eller et kursutkast holder den igjen), sier meldingen
 hvorfor.
 
+#### Arkivere, gjenopprette og slette en seksjon (fra 2.179.0, #1168)
+
+Seksjonene virker som modulene over. **Arkiver** (i seksjonslista eller i hodet når seksjonen er åpen) sjekker først om et
+kurs holder seksjonen igjen. Står den i et aktivt kurs eller i et lagret kursutkast, viser dialogen kursene med lenker og bare
+«Lukk». Ellers sier den hva som skjer, og seksjonen arkiveres når du klikker **Arkiver seksjonen** (en publisert seksjon
+avpubliseres også). **Gjenopprett** spør ikke, og sier at seksjonen kom tilbake som utkast. **Slett** finnes bare på en
+arkivert seksjon, i hodet når den er åpen, og åpner en dialog; seksjonen slettes først når du klikker **Slett seksjonen**.
+
 #### Hva du ser på en arkivert modul eller seksjon
 
 Et arkivert element kan åpnes og leses, men ikke endres (som et arkivert kurs). Linja under statusmerket sier «Modulen er

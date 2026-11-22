@@ -24,6 +24,7 @@ import { renderOwnerPanel } from "/static/owner-panel.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { createListPage } from "/static/list-page.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { confirmSectionArchive, confirmSectionDelete } from "/static/module-lifecycle-dialogs.js";
 import {
   lagretTittelkart,
   manglendeSpraak,
@@ -316,8 +317,8 @@ function getListPage() {
       else if (action === "publish") publishFromList(item, "published");
       else if (action === "publish-new") publishFromList(item, "newVersionPublished");
       else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
-      else if (action === "archive") { if (window.confirm(L("confirmArchive"))) sectionLifecycle(id, "archive", "archived"); }
-      else if (action === "restore") sectionLifecycle(id, "restore", "restored");
+      else if (action === "archive") archiveSectionFromList(id, btn, item);
+      else if (action === "restore") sectionLifecycle(id, "restore", "restoredAsDraft", displayTitle(item?.title));
     },
     afterRender: () => {
       document.getElementById("newSectionBtn")?.addEventListener("click", () => goTo("editor", null));
@@ -596,11 +597,20 @@ async function publishFromList(item, toastKey) {
   }
 }
 
-// #705: én felles handler for de fire livssyklus-overgangene (POST .../{action}).
-async function sectionLifecycle(sectionId, action, toastKey) {
+// #1168: «Arkiver» spør tjeneren først (module-lifecycle-dialogs.js), som modulen og kurset. Før: spørreboks, og så et avslag
+// etterpå hvis et kurs holdt seksjonen igjen.
+async function archiveSectionFromList(sectionId, btn, item) {
+  const result = await confirmSectionArchive({ sectionId, title: displayTitle(item?.title), t, tf, apiFetch, getHeaders, returnFocusTo: btn });
+  if (result.error) { apiErrorToast(result.error); return; }
+  if (result.confirmed) await sectionLifecycle(sectionId, "archive", "archived");
+}
+
+// #705: én felles handler for de fire livssyklus-overgangene (POST .../{action}). `title` fyller `{title}` i meldingen
+// (#1168: «… er gjenopprettet som utkast»).
+async function sectionLifecycle(sectionId, action, toastKey, title = "") {
   try {
     await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}/${action}`, getHeaders, { method: "POST" });
-    showToast(L(toastKey));
+    showToast(tf(`sections.${toastKey}`, { title }));
     renderListView();
   } catch (err) {
     // #916: a publish blocked by the translation gate gets the field × language message, not the
@@ -855,8 +865,10 @@ async function duplicateSection(sectionId, btn) {
   }
 }
 
-async function deleteSection(sectionId) {
-  if (!window.confirm(L("confirmDelete"))) return;
+// #1168: sidas egen dialog, ikke nettleserens spørreboks. Den gamle teksten sa at seksjonen «forsvinner fra alle kurs som
+// bruker den»; tjeneren nekter å slette en seksjon som står i et kurs, så den gjør ikke det.
+async function deleteSection(sectionId, btn = null) {
+  if (!await confirmSectionDelete({ title: editorTitle(), t, tf, returnFocusTo: btn })) return;
   try {
     await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}`, getHeaders, { method: "DELETE" });
     showToast(L("deleted"));
@@ -1097,10 +1109,24 @@ function bindHeaderActions() {
     if (!getFormPage().confirmLeave()) return;
     if (action === "export") return exportSectionPackage(editing.id, btn);
     if (action === "publish" || action === "unpublish") return toggleSectionLifecycle(action, btn);
-    if (action === "archive") { if (window.confirm(L("confirmArchive"))) await lifecycleInEditor("archive", "archived"); return; }
-    if (action === "restore") return lifecycleInEditor("restore", "restored");
-    if (action === "delete") return deleteSection(editing.id);
+    if (action === "archive") return archiveSectionInEditor(btn);
+    if (action === "restore") return lifecycleInEditor("restore", "restoredAsDraft");
+    if (action === "delete") return deleteSection(editing.id, btn);
   });
+}
+
+// Tittelen slik den er lagret, på sidas språk (dialogene og meldingene sier hvilken seksjon det gjelder). `session`: seksjonen
+// handlingen ble startet i — svaret kan komme etter at forfatteren har åpnet en annen (QA 2.179.0).
+function editorTitle(session = editing) {
+  return pickLocalizedText(session?.savedTitle ?? session?.title ?? {}, currentLocale) || pickLocalizedText(session?.title ?? {}, currentLocale) || "(uten tittel)";
+}
+
+async function archiveSectionInEditor(btn) {
+  const session = editing;
+  const result = await confirmSectionArchive({ sectionId: session.id, title: editorTitle(), t, tf, apiFetch, getHeaders, returnFocusTo: btn });
+  if (result.error) { apiErrorToast(result.error); return; }
+  // Forfatteren åpnet en annen seksjon mens dialogen sto: ikke arkiver den som vises nå.
+  if (result.confirmed && editing === session) await lifecycleInEditor("archive", "archived");
 }
 
 function bindEditorHandlers() {
@@ -1133,7 +1159,7 @@ async function lifecycleInEditor(action, toastKey) {
     session.archivedAt = data.section?.archivedAt ?? (action === "archive" ? new Date().toISOString() : null);
     session.activeVersionId = data.section?.activeVersionId ?? session.activeVersionId;
     session.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
-    showToast(L(toastKey));
+    showToast(tf(`sections.${toastKey}`, { title: editorTitle(session) }));
     // #1151 skive 3c: arkivering og gjenoppretting endrer hele skjemaet (sperren, Lagre, Oversett, bildeknappen), ikke
     // bare hodet. Seksjonen hentes på nytt: forfatteren har alt svart på «forlate uten å lagre?» (bindHeaderActions), så
     // skjemaet viser det som er lagret, og «Alt lagret».
