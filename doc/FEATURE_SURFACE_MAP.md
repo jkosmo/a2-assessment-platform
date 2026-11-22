@@ -1735,7 +1735,9 @@ alle røde.
 (sletting), og kappløpene i `admin-content-archive-in-course-draft-1150`, `admin-content-delete-archived-course-1149` og
 `section-jobs-stay-in-their-section-1154`. Seks mutasjoner, alle røde.
 
-**Ikke gjort i #1168 ennå:** klasse, tema, kursets slettetekst og kursets «Avpubliser» (se saken).
+**Kurset (2.180.0):** «Avpubliser» og slettedialogens tekst, se §36 («Avpubliseringen»).
+
+**Ikke gjort i #1168 ennå:** klasse og tema (se saken).
 
 ### 33e. Arkivert er urørlig, og slett krever arkivert (#1151 skive 3a, 3b og 3c)
 
@@ -1946,8 +1948,16 @@ er latt stå og gjelder bare rader opprettet utenom (testfiksturer).
 upublisert innhold og versjonsspørsmålet står i den samme), og ved «Publiser utkastet» med versjonsspørsmål står hvem som ser
 kurset i versjonsdialogen (`askCourseVersion` med `audience`).
 
+**Avpubliseringen** (#1168, 2.180.0, «Avpubliser» i lista og i hodet; `unpublishCourseInAdmin`): den samme dialogen
+(`openCoursePublishDialog`, `mode: "plain"`) med egne ord, og de samme tallene: «Hvem mister tilgangen» (`courses.unpublishDialog.*`,
+`publishAudienceHtml(audience, keys)` tar nøklene uttrykkelig, ingen standard). Kursets egen synlighet, ikke utkastets. Før:
+`window.confirm`. Tjeneren har ingen sperre her (avpublisering kan gjøres om med en ny publisering). Kursets slettedialog
+(`courses.deleteDialog.text`) sier nå at både modulene og seksjonene blir stående; før nevnte den bare modulene.
+
 **Vakter:** `test/unit/new-course-default-guard-1164.test.ts` (dekningsvakt: ingen kode i `src/` oppretter en kursrad utenom
-`createCourse`), `test/m2-course-publish-1164.test.ts` (hver vei, kontrollene, publikummet), `test/e2e/admin-content-course-publish-dialog-1164.spec.ts`.
+`createCourse`), `test/m2-course-publish-1164.test.ts` (hver vei, kontrollene, publikummet), `test/e2e/admin-content-course-publish-dialog-1164.spec.ts`
+(også overskriften i versjonsdialogen), `test/e2e/admin-content-course-unpublish-dialog-1168.spec.ts` (åpent, begrenset, Avbryt, Esc,
+kontroll av publiseringens ord, 390 px), `admin-content-workspaces.spec.ts` (avpublisering fra lista, slettedialogens tekst).
 
 ## 37. Andres kurs, moduler og seksjoner — skrivebeskyttet lesing (#1165, #1180)
 

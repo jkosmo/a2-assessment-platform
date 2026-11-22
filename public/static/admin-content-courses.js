@@ -440,18 +440,20 @@ async function loadPublishAudience(courseId, { fromDraft = false } = {}) {
 /**
  * #1164: avsnittet «Hvem ser kurset etterpå». Et åpent kurs: alle deltakere. Et begrenset: klassene med antall, de enkeltvis
  * tildelte og tallet i alt (en person i flere klasser telles én gang, på tjeneren). Ingen tildelt: at ingen ser det ennå.
+ * #1168: «Avpubliser» viser de samme menneskene som «Hvem mister tilgangen» (`keys` = `courses.unpublishDialog`): overskriften
+ * og de tre setningene byttes, tellingene er de samme.
  */
-function publishAudienceHtml(audience) {
+function publishAudienceHtml(audience, keys) {
   if (!audience) return "";
-  const heading = `<h3 class="cascade-delete-heading">${escapeHtml(t("courses.publishDialog.audienceHeading"))}</h3>`;
+  const heading = `<h3 class="cascade-delete-heading">${escapeHtml(t(`${keys}.audienceHeading`))}</h3>`;
   if (audience.policy === "OPEN") {
-    return `<section data-publish-audience="open">${heading}<p class="dialog-text">${escapeHtml(t("courses.publishDialog.audienceOpen"))}</p></section>`;
+    return `<section data-publish-audience="open">${heading}<p class="dialog-text">${escapeHtml(t(`${keys}.audienceOpen`))}</p></section>`;
   }
   const classes = Array.isArray(audience.classes) ? audience.classes : [];
   const individuals = Number(audience.individualCount) || 0;
   const total = Number(audience.totalCount) || 0;
   if (classes.length === 0 && individuals === 0) {
-    return `<section data-publish-audience="none">${heading}<p class="dialog-text">${escapeHtml(t("courses.publishDialog.audienceNone"))}</p></section>`;
+    return `<section data-publish-audience="none">${heading}<p class="dialog-text">${escapeHtml(t(`${keys}.audienceNone`))}</p></section>`;
   }
   const count = (n) => tf(n === 1 ? "courses.publishDialog.participantsOne" : "courses.publishDialog.participantsMany", { n });
   const rows = [
@@ -459,7 +461,7 @@ function publishAudienceHtml(audience) {
     individuals > 0 ? `<li class="cascade-publish-item" data-audience-individuals><span class="cascade-publish-item-title">${escapeHtml(tf("courses.publishDialog.individuals", { n: individuals }))}</span></li>` : "",
   ].join("");
   return `<section data-publish-audience="restricted">${heading}
-    <p class="dialog-text">${escapeHtml(t("courses.publishDialog.audienceRestricted"))}</p>
+    <p class="dialog-text">${escapeHtml(t(`${keys}.audienceRestricted`))}</p>
     <ul class="cascade-publish-list">${rows}</ul>
     <p class="dialog-text" data-audience-total>${escapeHtml(tf(total === 1 ? "courses.publishDialog.totalOne" : "courses.publishDialog.totalMany", { n: total }))}</p>
   </section>`;
@@ -580,7 +582,7 @@ function renderCascadeItemList(items, { showBlockers }) {
  *     kurset har kursbevis (`versionCourse`).
  *   - `blocked` (#734): noe kan ikke publiseres. Lista med grunnene, og bare «Lukk» (I1).
  */
-function openCoursePublishDialog({ mode, items = [], audience = null, versionCourse = null, title = "", confirmLabel = "" }) {
+function openCoursePublishDialog({ mode, items = [], audience = null, versionCourse = null, title = "", confirmLabel = "", text: plainText = "", audienceKeys = "courses.publishDialog" }) {
   const dialog = cascadePublishDialog;
   const titleEl = document.getElementById("cascadePublishTitle");
   const textEl = document.getElementById("cascadePublishText");
@@ -608,14 +610,14 @@ function openCoursePublishDialog({ mode, items = [], audience = null, versionCou
       ? (t("adminContent.courses.cascadePublish.blockedText") || t("courses.publish.blockedBody"))
       : mode === "cascade"
         ? (t("adminContent.courses.cascadePublish.confirmText") || t("courses.publish.cascadeBody"))
-        : "";
+        : plainText;
     textEl.textContent = text;
     setHidden(textEl, !text);
   }
   if (listEl) listEl.innerHTML = mode === "plain" ? "" : renderCascadeItemList(items, { showBlockers: blocked });
   // Hvem som ser kurset, står ikke i den sperrede utgaven: der publiseres ingenting.
   if (audienceEl) {
-    audienceEl.innerHTML = blocked ? "" : publishAudienceHtml(audience);
+    audienceEl.innerHTML = blocked ? "" : publishAudienceHtml(audience, audienceKeys);
     setHidden(audienceEl, blocked || !audience);
   }
   const asksVersion = !blocked && versionCourse != null;
@@ -961,7 +963,7 @@ function askCourseVersion(course, changes, { saveKey = "courses.version.save", a
   // to ganger om én handling). Lagringen sender ingen `audience`, og da står avsnittet skjult.
   const audienceEl = document.getElementById("courseVersionAudience");
   if (audienceEl) {
-    audienceEl.innerHTML = publishAudienceHtml(audience);
+    audienceEl.innerHTML = publishAudienceHtml(audience, "courses.publishDialog");
     setHidden(audienceEl, !audience);
   }
   cancelBtn.textContent = t("courses.version.cancel");
@@ -1648,10 +1650,36 @@ function initCourseArchiveDialog() {
   });
 }
 
-// #705: avpubliser et kurs (motstykke til Publiser). G3-vakta (påbegynt deltaker) i backend gir
-// en forklarende feilmelding hvis det ikke er lov.
+// #705: avpubliser et kurs (motstykke til Publiser). Ingen sperre på tjeneren: avpublisering kan alltid gjøres om med en ny
+// publisering (courseCommands.ts, `unpublishCourse`).
+// #1168: i publiseringsdialogens form (#1164), ikke nettleserens spørreboks: den sier hvem som mister tilgangen, med de samme
+// tallene som «Publiser» viser (`GET …/publish-audience`, kursets egen synlighet, ikke utkastets).
 async function unpublishCourseInAdmin(courseId, courseTitle, triggerButton = null) {
-  if (!window.confirm(tf("courses.unpublishConfirm", { title: courseTitle }))) {
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.setAttribute("aria-busy", "true");
+  }
+  let audience;
+  try {
+    audience = await loadPublishAudience(courseId);
+  } catch (err) {
+    apiErrorToast(err);
+    triggerButton?.removeAttribute("aria-busy");
+    if (triggerButton) triggerButton.disabled = false;
+    return;
+  }
+  triggerButton?.removeAttribute("aria-busy");
+  if (triggerButton) triggerButton.disabled = false;
+  const answer = await openCoursePublishDialog({
+    mode: "plain",
+    audience,
+    title: tf("courses.unpublishDialog.title", { title: courseTitle }),
+    text: t("courses.unpublishDialog.text"),
+    confirmLabel: t("courses.unpublishDialog.confirm"),
+    audienceKeys: "courses.unpublishDialog",
+  });
+  if (!answer) {
+    returnFocusTo(triggerButton);
     return;
   }
   if (triggerButton) triggerButton.disabled = true;

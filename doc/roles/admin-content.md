@@ -183,6 +183,14 @@ Har kurset innhold som ikke er publisert, står det i den samme dialogen, og pub
 og innholdet er endret, spør den samme dialogen om det er en mindre eller en hovedversjon. **Avbryt** eller Esc publiserer
 ingenting. Ved **Publiser utkastet** gjelder synligheten slik den står i utkastet.
 
+#### Avpublisere et kurs (fra 2.180.0, #1168)
+
+**Avpubliser** spør i den samme dialogen, og sier **hvem som mister tilgangen**: alle deltakere når kurset er åpent, eller de
+tildelte (klassene, de enkeltvis tildelte og tallet i alt) når det er begrenset. Kurset blir skjult for deltakerne til du
+publiserer det igjen. **Avbryt** eller Esc avpubliserer ingenting.
+
+**Slette et kurs:** slettedialogen sier at modulene og seksjonene blir stående i biblioteket som de er. Bare kurset slettes.
+
 #### Andres kurs, moduler og seksjoner (#1165, seksjoner fra 2.177.0, #1180)
 
 Du kan åpne kurs, moduler og seksjoner andre produsenter eier, for å lese dem. Under statusmerket står «Du kan lese, men bare

@@ -3967,6 +3967,8 @@ test.describe("admin content browser coverage", () => {
 
     await expect(page.locator("#deleteDialog")).toHaveAttribute("open", "");
     await expect(page.locator("#deleteDialogText")).toContainText("Trade unions");
+    // #1168: teksten sier hva som skjer med både modulene og seksjonene, ikke bare modulene.
+    await expect(page.locator("#deleteDialogText")).toContainText("The modules and sections stay in the library as they are.");
   });
 
   // #705: enhetlig livssyklus — kurslista har nå Avpubliser (motstykke til Publiser) + status-merkelapp.
@@ -3999,8 +4001,10 @@ test.describe("admin content browser coverage", () => {
     await expect(row.locator(".status-badge")).toHaveText("Published");
     await expect(row.locator('[data-action="unpublish"]')).toBeVisible();
 
-    page.once("dialog", (dialog) => dialog.accept());
+    // #1168: sidas dialog (som «Publiser»), ikke nettleserens spørreboks.
     await row.locator('[data-action="unpublish"]').click();
+    await expect(page.locator("#cascadePublishTitle")).toHaveText("Unpublish «Trade unions»?");
+    await page.locator("#cascadePublishConfirmBtn").click();
 
     await expect.poll(() => state.mutableCourses[0]?.publishedAt ?? null).toBeNull();
     // Etter avpublisering: status → Utkast, og Publiser-knappen kommer tilbake.

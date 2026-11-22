@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.180.0 - 2026-11-22
+
+#1168, tredje skive: kurset. Ingen migrering, ingen ny rute.
+
+**Hva brukerne merker:**
+- **Avpubliser** på et kurs (lista og hodet) har sidas dialog i stedet for nettleserens spørreboks, i samme form som
+  «Publiser» (#1164): «Avpublisere «…»?», og **hvem som mister tilgangen** med de samme tallene som «Publiser» viser (alle
+  deltakere når kurset er åpent; klassene, de enkeltvis tildelte og tallet i alt når det er begrenset). Avbryt og Esc sender
+  ingenting.
+- **Slett** på et arkivert kurs sier at modulene **og seksjonene** blir stående i biblioteket som de er. Før nevnte teksten bare
+  modulene.
+
+**Klienten:** `unpublishCourseInAdmin` henter `GET …/publish-audience` (kursets egen synlighet) og åpner `openCoursePublishDialog`
+med egen tittel, tekst og knapp og `audienceKeys: "courses.unpublishDialog"`. `publishAudienceHtml` tar nøklene uttrykkelig;
+versjonsdialogen («Publiser utkastet») sender publiseringens.
+
+**Tester:** `admin-content-course-unpublish-dialog-1168` (e2e: åpent, begrenset, Avbryt, Esc, kontroll av at «Publiser» har sine
+egne ord, 390 px), `admin-content-workspaces` (avpublisering fra lista gjennom dialogen, slettedialogens tekst),
+`admin-content-course-publish-dialog-1164` (overskriften i versjonsdialogen), `language-chrome-1173` (de nye nøklene, og
+seksjonenes fra 2.179.0, er oversatt). Mutasjoner, alle røde: spørreboksen tilbake, publiseringens ord i avpubliseringen,
+den gamle slettedialogteksten, avpubliseringens ord i publiseringen og i versjonsdialogen. Én mutasjon overlevde først (en
+standardverdi bare versjonsdialogen brukte, og ingen test leste overskriften der): standardverdien er fjernet, og testen leser
+den nå.
+
+**Gjenstår i #1168:** klasse og tema (spørreboks, temaets telling).
+
 ## 2.179.0 - 2026-11-22
 
 #1168, andre skive: seksjonens «Arkiver», «Gjenopprett» og «Slett» følger modulen (2.178.0) og kurset (#1150). Ingen

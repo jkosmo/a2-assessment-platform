@@ -263,6 +263,9 @@ test.describe("#1164 «Publiser utkastet»", () => {
     // Synlig, ikke bare i DOM-en (mutasjonsprøven: et skjult avsnitt besto `toContainText`).
     await expect(versionDialog.locator("[data-publish-audience='restricted']")).toBeVisible();
     await expect(versionDialog.locator("[data-publish-audience='restricted']")).toContainText("Prosjektledere Bergen");
+    // #1168: «Avpubliser» bruker de samme tallene med egne ord; her er det publiseringens.
+    await expect(versionDialog.locator("[data-publish-audience='restricted'] h3")).toHaveText("Hvem ser kurset etterpå");
+    await expect(versionDialog.locator("[data-publish-audience='restricted']")).toContainText("Bare de som er tildelt kurset:");
     await expect(dialog(page)).toBeHidden();
     await page.locator("#courseVersionSaveBtn").click();
     await expect.poll(() => draftPublish.length).toBe(1);
