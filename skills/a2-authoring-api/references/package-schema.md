@@ -75,7 +75,7 @@ write the body: [section-content.md](section-content.md).
 
 The question stands on the `:::tenk` line; the answer below it; `:::` closes it. Never inside a
 `:::kort` frame. When to use it: [section-content.md](section-content.md#think-first). The other
-frames — `:::sjekk`, `:::steg`, `:::skriv`, `:::repetisjon`, `:::par` — are written the same way, each line of
+frames — `:::sjekk`, `:::steg`, `:::skriv`, `:::repetisjon`, `:::par`, `:::feil` — are written the same way, each line of
 the frame on its own `\n`, with a blank line (`\n\n`) above the opening line.
 
 **Keep the text in files**, one per language, and point at them with `bodyFiles` instead of
@@ -146,6 +146,7 @@ at the file**:
 | `rubric` | required | required | not allowed |
 | `promptTemplate` | required | required | not allowed |
 | `mcqSet` | required | not allowed | required |
+| `modelAnswer` (an example answer — [modules.md](modules.md#example-answer)) | required by `produce-course.mjs` | required by `produce-course.mjs` | not allowed |
 | `assessorExpectedContent`, `candidateTaskConstraints`, `submissionSchema`, `assessmentPolicy`, `assessmentBlueprint` | optional | optional | optional |
 
 A free-text module (texts shown in one language here to keep the example short — write all
@@ -165,8 +166,10 @@ three):
       "assessmentMode": "FREETEXT_ONLY",
       "taskText": "Beskriv hvilket behandlingsgrunnlag som gjelder når …",
       "assessorExpectedContent": "Kandidaten identifiserer artikkel 6(1)(b) og begrunner …",
+      "modelAnswer": "Behandlingsgrunnlaget er avtale, artikkel 6(1)(b): kunden har bestilt …",
+      "assessmentPolicy": { "practical": { "modelAnswerAfterAssessment": true } },
       "rubric": {
-        "criteria": { "identifisering": "0–4: …", "begrunnelse": "0–4: …" },
+        "criteria": { "identifisering": "0–4: 0 = …; 2 = …; 4 = …", "begrunnelse": "0–4: 0 = …; 2 = …; 4 = …" },
         "scalingRule": { "practical_weight": 100, "max_total": 8 }
       },
       "promptTemplate": {
@@ -190,6 +193,16 @@ A multiple-choice module has no `taskText`, `rubric` or `promptTemplate`, and ha
 "assessmentPolicy": { "passRules": { "mcqMinPercent": 75 } }
 ```
 
+A practice module can also draw from the bank and show the answers after submission
+([modules.md](modules.md#practice-a-draw-and-a-review)):
+
+```json
+"assessmentPolicy": {
+  "passRules": { "mcqMinPercent": 75 },
+  "mcq": { "questionsPerAttempt": 10, "reviewAfterSubmit": true }
+}
+```
+
 `correctAnswer` is written out in full and equals one of `options` exactly — in every language.
 Write three or four options. A module with both has the free-text fields and `mcqSet`.
 
@@ -206,6 +219,30 @@ At least one is correct; every option may be. The learner is told to select all 
 the question right only by choosing exactly the correct ones. An export also writes `correctAnswer`
 on such a question (the first correct one); leave it as it is. When and how to write one:
 [modules.md](modules.md#select-all-that-apply).
+
+A **put-in-the-right-order** question has `"questionType": "order"`, and its `options` ARE the
+right order — there is no `correctAnswers`:
+
+```json
+{ "questionType": "order", "stem": "…", "options": ["first step", "second step", "third step"],
+  "rationale": "…" }
+```
+
+3–6 items, none twice, in the same order in every language. An export also writes `correctAnswer`
+(the first item); leave it as it is. When and how to write one:
+[modules.md](modules.md#put-in-the-right-order).
+
+A **fill-in-the-missing-word** question has `"questionType": "fill"`, one blank (`___`) in the stem,
+and its `options` ARE the accepted answers — the learner never sees them:
+
+```json
+{ "questionType": "fill", "stem": "Fristen for å klage er ___ uker.", "options": ["tre", "3"],
+  "rationale": "…" }
+```
+
+1–6 accepted answers, none twice, one blank in every language. An export also writes `correctAnswer`
+(the first answer); leave it as it is. When and how to write one:
+[modules.md](modules.md#fill-in-the-missing-word).
 
 `certificationLevel` is `basic`, `intermediate` or `advanced`
 ([course-design.md](course-design.md#level-and-scope)). How to write tasks, criteria and

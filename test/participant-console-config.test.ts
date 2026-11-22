@@ -124,27 +124,9 @@ describe("participant console runtime config", () => {
     expect(response.text).toContain("deltakere-subnav.js");
   });
 
-  it("301-redirects the old /admin-content/classes URL to /deltakere/klasser (#765)", async () => {
-    const response = await request(app).get("/admin-content/classes");
-
-    expect(response.status).toBe(301);
-    expect(response.headers.location).toBe("/deltakere/klasser");
-  });
-
-  it("redirects the retired /calibration page to the canonical quality workspace (#836)", async () => {
-    const response = await request(app).get("/calibration");
-
-    expect(response.status).toBe(301);
-    expect(response.headers.location).toBe("/admin-content/calibration");
-  });
-
-  it("serves dedicated participant completed-modules page", async () => {
-    const response = await request(app).get("/participant/completed");
-
-    expect(response.status).toBe(200);
-    expect(response.text).toContain("participant-completed.js");
-    expect(response.text).toContain('id="courseCertSection"');
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 2): omdirigeringene fra fjernede adresser (/admin-content/classes, /calibration,
+  // /participant/completed, /admin-content/advanced, /admin-content/module/:id/advanced, /admin-content?moduleId=) står i
+  // tabellen i test/removed-routes.test.ts.
 
   it("serves profile page with completed courses section", async () => {
     const response = await request(app).get("/profile");
@@ -159,28 +141,6 @@ describe("participant console runtime config", () => {
 
     expect(response.status).toBe(200);
     expect(response.text).toContain("admin-content-library.js");
-  });
-
-  // v1.2.18 (#352): /admin-content/advanced (no module context) er retired — 301 til
-  // /admin-content (library). Avansert-editoren ligger nå kun på /admin-content/module/:id/advanced.
-  it("redirects bare /admin-content/advanced to library", async () => {
-    const response = await request(app).get("/admin-content/advanced");
-    expect(response.status).toBe(301);
-    expect(response.headers.location).toBe("/admin-content");
-  });
-
-  // #896 S3c: Avansert er slettet. URL-en overlever som 301 inn i arbeidsflaten, så bokmerker og
-  // gamle lenker lander på riktig sted i stedet for en 404 — men den serverer ingen side lenger.
-  it("redirects the retired advanced editor into the module workspace", async () => {
-    const response = await request(app).get("/admin-content/module/test-module/advanced");
-    expect(response.status).toBe(301);
-    expect(response.headers.location).toBe("/admin-content/module/test-module/conversation");
-  });
-
-  it("redirects legacy /admin-content?moduleId=X to canonical conversation URL", async () => {
-    const response = await request(app).get("/admin-content?moduleId=test-module");
-    expect(response.status).toBe(301);
-    expect(response.headers.location).toBe("/admin-content/module/test-module/conversation");
   });
 
   // #953: «vurderinger som ga opp» er en driftsflate for administrator. Vakta pinner tre ting som
@@ -240,7 +200,6 @@ describe("participant console runtime config", () => {
   it("serves shared stylesheet and links it from all workspace pages", async () => {
     const workspacePages = [
       "/participant",
-      "/participant/completed",
       "/review",
       // #896 S3c: /admin-content/module/:id/advanced was in this loop as "the full editor that
       // retains the mock-identity panel". The page is deleted and the route is a 301, so every
@@ -307,12 +266,6 @@ describe("participant console runtime config", () => {
         expect(response.text).not.toContain('id="historySection"'); // #767: removed (overlapped with Fullførte)
       }
 
-      if (pagePath === "/participant/completed") {
-        expect(response.text).toContain('id="outputStatus"');
-        expect(response.text).not.toContain('id="flowProgress"');
-        expect(response.text).toContain('id="courseCertSection"');
-      }
-
     }
 
     const cssResponse = await request(app).get("/static/shared.css");
@@ -373,7 +326,7 @@ describe("participant console runtime config", () => {
     expect(participantJsResponse.text).toContain('wrapper.className = "mcq-question-card"');
     expect(participantJsResponse.text).toContain('adminContent.participantPreview.v1');
     expect(participantJsResponse.text).toContain('draft.savedSwitchToast');
-    expect(participantJsResponse.text).toContain('async function openCourseModule(courseId, moduleId)');
+    expect(participantJsResponse.text).toContain('async function openCourseModule(courseId, moduleId, retakeRequired)');
     // The serial course spine replaced the flat list of identical `course-module-button` rows;
     // `course-module-row` is still the stable hook the inline-open machinery (#865) and the e2e
     // guards select on. Behaviour is covered by test/e2e/participant-course-sequence.spec.ts.
@@ -402,7 +355,7 @@ describe("participant console runtime config", () => {
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/courses?${params}`, headers)');
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/completion/details?${params}`, headers)');
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/courses/details?${params}`, headers)');
-    expect(resultsJsResponse.text).toContain('function renderCourseLearners(rows)');
+    expect(resultsJsResponse.text).toContain('function renderCourseLearners(rows');
     expect(resultsJsResponse.text).toContain('tr.tabIndex = 0');
     // #966 hadde en tomrad med colspan="8". #1046 J6: tom tabell skjules i stedet (setTableEmpty),
     // så det finnes ingen tomrad som kan spenne feil antall kolonner.
@@ -423,12 +376,6 @@ describe("participant console runtime config", () => {
     // The composed save (#906) — one call, one transaction. It replaced the five-call sequence,
     // and a regression to separate calls is exactly what this file is positioned to catch.
     expect(adminContentShellResponse.text).toContain("commitOrProposeGenerated");
-
-    const participantCompletedJsResponse = await request(app).get("/static/participant-completed.js");
-    expect(participantCompletedJsResponse.status).toBe(200);
-    expect(participantCompletedJsResponse.text).toContain('/api/courses/completions');
-    expect(participantCompletedJsResponse.text).toContain('courseCertList');
-    expect(participantCompletedJsResponse.text).toContain('renderCourseCertificates');
 
     const profileJsResponse = await request(app).get("/static/profile.js");
     expect(profileJsResponse.status).toBe(200);

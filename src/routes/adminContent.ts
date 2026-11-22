@@ -1,5 +1,10 @@
-import { Router, type Request } from "express";
-import { mcqQuestionTypeFields } from "../modules/adminContent/adminContentSchemas.js";
+import { Router, type Request, type Response } from "express";
+import { mcqQuestionTypeFields, publishModuleVersionedBodySchema } from "../modules/adminContent/adminContentSchemas.js";
+import { prisma } from "../db/prisma.js";
+import { localizeContentText } from "../i18n/content.js";
+import { findAffectedCourses, withVersionChoiceRights } from "../modules/course/courseVersioning.js";
+import { hasValidModulePass } from "../modules/course/moduleCredit.js";
+import { publishModuleVersioned } from "../modules/course/versionedPublishService.js";
 import { z } from "zod";
 import {
   createModule,
@@ -83,9 +88,12 @@ import {
   localizeTitle,
 } from "../modules/adminContent/llmContentGenerationService.js";
 import { validateMcqDistractors, validateScenarioDraft } from "../modules/adminContent/contentValidationService.js";
+import { mcqCueWarnings, packageCueWarnings } from "../modules/adminContent/mcqCueWarnings.js";
+import { packageRubricWarnings, rubricWarnings } from "../modules/adminContent/rubricWarnings.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { isExtractionJobOwner, rememberExtractionJobOwner } from "../modules/adminContent/extractionJobOwners.js";
-import { findCoursesContainingModule, inUseMessage } from "../modules/course/contentLifecycle.js";
+import { describeModuleDeleteBlock, findActiveUsesOfItems } from "../modules/course/contentLifecycle.js";
+import { retentionRequested } from "../modules/content/archivedRetention.js";
 import {
   submitParseJob,
   getParsedResult,
@@ -104,7 +112,8 @@ import { adminUsersRouter } from "./adminUsers.js";
 import { adminSectionsRouter } from "./adminSections.js";
 import { generateLimiter, extractLimiter, intentLogLimiter } from "../middleware/rateLimiting.js";
 import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
-import { assertContentOwnership } from "../modules/content/contentOwnershipService.js";
+import { assertContentOwnership, listManageableContentIds } from "../modules/content/contentOwnershipService.js";
+import { assertArchivedBeforeLock } from "../modules/content/archivedGuard.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
 import { evaluateModulePublishGate } from "../modules/adminContent/modulePublishGate.js";
@@ -248,6 +257,11 @@ adminContentRouter.post("/modules", async (request, response) => {
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });
   } catch (error) {
+    // #934 skive 4a: innholdslåsen ga opp (503 content_busy) — det skal klienten få, ikke en valideringsfeil.
+    if (error instanceof AppError && error.code === "content_busy") {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_module_failed", message: "Could not create module." });
   }
 });
@@ -259,6 +273,8 @@ adminContentRouter.get("/modules/library", async (request, response) => {
       locale as Parameters<typeof listLibraryModules>[0],
       request.context?.userId,
       hasAnyRole(request.context?.roles, ADMIN_ONLY),
+      // #1152 skive 4b-2: svaret om sletting bare når klienten ber om det (filteret «Arkiverte»).
+      { includeRetention: retentionRequested(request.query.includeRetention) },
     );
     response.json({ modules });
   } catch {
@@ -332,14 +348,20 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
 
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    // #1151 (G4): «slett krever arkivert» kommer før «ligger i et kurs», som i `deleteModule` (som sjekker på nytt etter låsen).
+    await assertArchivedBeforeLock({ type: "MODULE", id: request.params.moduleId });
     // #705: G2 use-lock — reuse the shared named-courses message (same as unpublish/archive) so the
     // three withdrawing actions read identically; keep the 409/`module_in_use`/`courseCount` shape.
-    const courses = await findCoursesContainingModule(request.params.moduleId);
-    if (courses.length > 0) {
-      response.status(409).json({
-        error: "module_in_use",
-        message: inUseMessage("Modulen", "slettes", courses),
-        courseCount: courses.length,
+    // #1149: sletting teller ALLE kurs, også arkiverte. Ligger modulen i et arkivert kurs, er koden
+    // `content_in_archived_course` (400), og `details` sier hvilke kurs som er arkiverte. `deleteModule`
+    // sjekker det samme på nytt etter innholdslåsen; denne forhåndssjekken finnes for `courseCount` øverst.
+    const blocked = await describeModuleDeleteBlock(request.params.moduleId);
+    if (blocked) {
+      response.status(blocked.error.httpStatus).json({
+        error: blocked.error.code,
+        message: blocked.error.message,
+        courseCount: blocked.courseCount,
+        details: blocked.error.details,
       });
       return;
     }
@@ -386,8 +408,23 @@ adminContentRouter.post("/modules/purge-unpublished", async (request, response) 
     response.status(400).json({ error: "confirmation_required", message: "Body must include { confirmation: 'SLETT' }." });
     return;
   }
+  // #1152 (QA-porten 4a): modulene forhåndsvisningen viste. Bare de slettes, og bare hvis de fortsatt er kandidater. Uten en brukbar
+  // liste (en fane fra før denne endringen) kunne en modul laget mens dialogen sto åpen, bli slettet uten at noen så den: 409,
+  // ingenting slettet. En liste som ikke er id-er, svarer det samme: siden sendte ikke det den viste.
+  const expectedModuleIds: unknown = request.body?.expectedModuleIds;
+  if (
+    !Array.isArray(expectedModuleIds)
+    || expectedModuleIds.length > 5000
+    || !expectedModuleIds.every((id: unknown) => typeof id === "string" && id.length > 0)
+  ) {
+    response.status(409).json({
+      error: "purge_confirmation_outdated",
+      message: "This page did not send the list of modules it showed (an older version?). Reload the page and try again; nothing was deleted.",
+    });
+    return;
+  }
   try {
-    const result = await purgeUnpublishedModules(actorId);
+    const result = await purgeUnpublishedModules(actorId, expectedModuleIds as string[]);
     response.json(result);
   } catch (error) {
     response.status(500).json({ error: "purge_failed", message: error instanceof Error ? error.message : "unknown" });
@@ -426,17 +463,22 @@ adminContentRouter.get("/modules/:moduleId/export", async (request, response) =>
     return;
   }
   try {
-    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
-    // The export carries the MCQ answer key and rationale for everyone who gets this far.
+    // #1165 (produkteier 14.11.2026, «Produsenter bør kunne se hverandres innhold»): LESINGEN ER ÅPEN FOR ALLE FORFATTERE, som
+    // kursdetaljen og seksjonene. Før krevde ruta eierskap, og en produsent kunne ikke åpne en annens modul for å lese. Modulsida
+    // viser modulen skrivebeskyttet når `canManage` er usann; skriverutene er fortsatt vaktet. Se doc/DECISIONS.md, «Fagansvarlige
+    // deler innsyn», og `test/content-read-open-by-decision.test.ts`.
     //
-    // #392 (v1.1.11) stripped them for non-ADMINISTRATOR callers. That control protected
-    // nothing: assertModuleOwnership above already limits this route to an owner of THIS
-    // module or an admin, the owner authored the answers and reads them in the editor, and
-    // /modules/:id/export-package hands the same owner the same answers untouched. All it
-    // achieved was a lossy backup - export then import silently returned a module with no
-    // answer key. Product decision 2026-08-14: the key belongs in the export.
+    // The export carries the MCQ answer key and rationale. #392 (v1.1.11) stripped them for non-ADMINISTRATOR callers; product
+    // decision 2026-08-14: the key belongs in the export, and 2026-09-08 (#1031): the key is not protected from other authors
+    // either («Vi skal ikke ta høyde for å sikre oss mot juks, det er umulig»).
     const bundle = await getModuleContentBundle(request.params.moduleId);
-    response.json({ moduleExport: bundle });
+    const manageable = await listManageableContentIds({
+      contentType: "MODULE",
+      contentIds: [request.params.moduleId],
+      actorUserId: actorId,
+      roles: request.context?.roles ?? [],
+    });
+    response.json({ moduleExport: { ...bundle, canManage: manageable.has(request.params.moduleId) } });
   } catch (error) {
     if (error instanceof AppError) {
       respondWithAppError(response, error);
@@ -513,6 +555,9 @@ adminContentRouter.post("/modules/import", idempotency("modules.import"), async 
       // #995: kalleren (forfatter eller agent) skal vite at modulen ble holdt tilbake som utkast —
       // ellers tror den pakken gikk live. Kursimport har hatt dette siden #957.
       heldBackByTranslationGate: result.heldBackByTranslationGate,
+      // #1119: spørsmål der svaret kan røpe seg — varsel, ikke stopp.
+      cueWarnings: packageCueWarnings(data.payload).flatMap((set) => set.warnings),
+      rubricWarnings: packageRubricWarnings(data.payload).flatMap((entry) => entry.warnings),
       links: moduleAdminLinks(result.moduleId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });
@@ -541,7 +586,8 @@ adminContentRouter.get("/modules/:moduleId/export-package", async (request, resp
     return;
   }
   try {
-    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    // #1165: åpen for alle forfattere, som kurseksporten (#1031) og seksjonens. «Eksporter» og «Dupliser» står på andres
+    // moduler i lista (#1046: lese- og kopihandlinger), og ga 403 her. Importen av kopien gjør den som kopierer til eier.
     // #896 S6: ?moduleVersionId= lets the workspace export the version it is showing. Omitted, the
     // historical rule applies (live version, else latest) — what the module list and course export
     // want.
@@ -595,8 +641,14 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions", async (request, re
       scalingRule: data.scalingRule,
       active: data.active ?? true,
     });
-    response.status(201).json({ rubricVersion });
+    // #1122: kriterier med én linje for hele skalaen — varsel, ikke stopp.
+    response.status(201).json({ rubricVersion, rubricWarnings: rubricWarnings(data.criteria) });
   } catch (error) {
+    // #1151: en kjent feil (eierskap, `module_archived`, `503 content_busy`) går videre med koden sin.
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_rubric_version_failed", message: "Could not create rubric version." });
   }
 });
@@ -636,8 +688,14 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions/ensure", generateLim
       blueprint: normalizeAssessmentBlueprint(data.blueprint),
       force: data.force,
     });
-    response.status(result.reused ? 200 : 201).json(result);
+    // #1122: en gjenbrukt rubrikk er alt vurdert; en ny (fra KI eller standardrubrikken) får varselet.
+    response.status(result.reused ? 200 : 201).json({ ...result, rubricWarnings: result.reused ? [] : rubricWarnings(result.criteria) });
   } catch (err) {
+    // #1151: som over.
+    if (err instanceof AppError) {
+      respondWithAppError(response, err);
+      return;
+    }
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "ensure_rubric_failed", message });
   }
@@ -669,6 +727,11 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions/sync-blueprint", asy
     }
     response.json(result);
   } catch (err) {
+    // #1151: som over.
+    if (err instanceof AppError) {
+      respondWithAppError(response, err);
+      return;
+    }
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "sync_blueprint_failed", message });
   }
@@ -693,6 +756,11 @@ adminContentRouter.post("/modules/:moduleId/prompt-template-versions", async (re
     );
     response.status(201).json({ promptTemplateVersion });
   } catch (error) {
+    // #1151: som over.
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_prompt_template_version_failed", message: "Could not create prompt template version." });
   }
 });
@@ -716,6 +784,11 @@ adminContentRouter.post("/modules/:moduleId/mcq-set-versions", async (request, r
     );
     response.status(201).json({ mcqSetVersion });
   } catch (error) {
+    // #1151: som over.
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_mcq_set_version_failed", message: "Could not create MCQ set version." });
   }
 });
@@ -739,6 +812,12 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
     );
     response.status(201).json({ moduleVersion });
   } catch (error) {
+    // #934 skive 4a: innholdslåsen ga opp (503 content_busy) — det skal klienten få, ikke en valideringsfeil.
+    // #1151: og alle andre kjente feil (eierskap, `module_archived`), med koden sin.
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_module_version_failed", message: "Could not create module version." });
   }
 });
@@ -839,6 +918,7 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
       assessmentMode: data.assessmentMode,
       taskText: data.taskText,
       assessorExpectedContent: data.assessorExpectedContent,
+      modelAnswer: data.modelAnswer,
       candidateTaskConstraints: data.candidateTaskConstraints,
       assessmentBlueprint: data.assessmentBlueprint,
       rubric: data.rubric,
@@ -850,7 +930,8 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
       submissionSchema: data.submissionSchema,
       assessmentPolicy: data.assessmentPolicy,
     });
-    response.status(201).json(result);
+    // #1119: lagring i redigeringsverktøyet — varsel om spørsmål der svaret kan røpe seg, ikke stopp.
+    response.status(201).json({ ...result, cueWarnings: mcqCueWarnings(data.mcqSet?.questions), rubricWarnings: rubricWarnings(data.rubric?.criteria) });
   } catch (err) {
     if (err instanceof AppError) {
       respondWithAppError(response, err);
@@ -877,6 +958,9 @@ adminContentRouter.post("/modules/:moduleId/benchmark-example-versions", async (
   }
 
   try {
+    // #1151 (sidefunn): eksempelsvarene lager en ny ledetekstversjon på modulen, og var den ene skriveruta for en modul uten
+    // eierskapsvakt. Samme vakt som søstrene over.
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const benchmarkExampleVersion = await createBenchmarkExampleVersion({
       moduleId: request.params.moduleId,
       basePromptTemplateVersionId: data.basePromptTemplateVersionId,
@@ -887,6 +971,11 @@ adminContentRouter.post("/modules/:moduleId/benchmark-example-versions", async (
     });
     response.status(201).json({ benchmarkExampleVersion });
   } catch (error) {
+    // #1151: kjente feil (eierskap, `module_archived`, `503 content_busy`) med koden sin.
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
     response.status(400).json({ error: "create_benchmark_example_version_failed", message: "Could not create benchmark example version." });
   }
 });
@@ -956,6 +1045,72 @@ const publishModuleVersionBodySchema = z.object({
   supersedesEarlierPasses: z.boolean().optional(),
 });
 
+/**
+ * #372: blueprint-aware pre-publish gate for one version. Blocks if any blocking issue surfaces; warnings are returned but do not
+ * block (the author can choose to publish anyway via the existing UI flow). `null`: the version is not on this module.
+ * #934 skive 5a-3: felles for den gamle ruta og `publish-versioned`, så de to ikke kan svare ulikt.
+ */
+async function evaluateModuleVersionGate(moduleId: string, moduleVersionId: string) {
+  const bundle = await getModuleContentBundle(moduleId);
+  const moduleVersionData = bundle.versions.moduleVersions.find((v) => v.id === moduleVersionId);
+  if (!moduleVersionData) return null;
+  const mcqSetVersion = bundle.versions.mcqSetVersions.find(
+    (v) => v.id === moduleVersionData.mcqSetVersionId,
+  );
+  const rawBlueprint = (moduleVersionData as { assessmentBlueprint?: string | null }).assessmentBlueprint;
+  // #896 S4 / #955 / #956: ÉN gate, felles med kaskaden og importen (`evaluateModulePublishGate`).
+  // Denne døra har DEKODEDE verdier fra bundelen (LocalizedText-objekter, `options` ikke
+  // `optionsJson`), så de serialiseres tilbake til lagringsformatet gaten leser. Å sende de dekodede
+  // objektene rett inn kompilerte til `[object Object]` i et tidligere utkast av dette.
+  const serialize = (value: unknown): string | null =>
+    value === null || value === undefined ? null : localizedTextCodec.serialize(value as never);
+  return evaluateModulePublishGate({
+    module: {
+      title: serialize(bundle.module.title),
+      description: serialize(bundle.module.description),
+      archivedAt: bundle.module.archivedAt ?? null,
+    },
+    version: {
+      taskText: serialize(moduleVersionData.taskText),
+      candidateTaskConstraints: serialize(moduleVersionData.candidateTaskConstraints),
+      assessorExpectedContent: serialize(moduleVersionData.assessorExpectedContent),
+      modelAnswer: serialize(moduleVersionData.modelAnswer),
+      assessmentBlueprint: typeof rawBlueprint === "string" ? rawBlueprint : null,
+    },
+    mcqQuestions: (mcqSetVersion?.questions ?? []).map((question) => ({
+      stem: serialize(question.stem),
+      optionsJson: JSON.stringify((question.options ?? []).map((option) => serialize(option))),
+      correctAnswer: serialize(question.correctAnswer ?? null),
+      rationale: serialize(question.rationale),
+    })),
+  });
+}
+
+/** Svarer 404 eller 422 når versjonen ikke kan publiseres. `true`: den kan det. */
+function respondUnlessPublishable(
+  response: Response,
+  validation: Awaited<ReturnType<typeof evaluateModuleVersionGate>>,
+): validation is NonNullable<Awaited<ReturnType<typeof evaluateModuleVersionGate>>> {
+  // #705: G1 must be single-source — no unguarded fallthrough. A version that isn't present on the
+  // module can't be validated, so it can't be published; reject instead of publishing blind.
+  if (!validation) {
+    response.status(404).json({
+      error: "module_version_not_found",
+      message: "The module version to publish was not found on this module.",
+    });
+    return false;
+  }
+  if (!validation.valid) {
+    response.status(422).json({
+      error: "publish_blocked_by_validation",
+      message: "Pre-publish validation found blocking issues. See `issues` for details.",
+      issues: validation.issues,
+    });
+    return false;
+  }
+  return true;
+}
+
 adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/publish", async (request, response) => {
   const actorId = request.context?.userId;
   if (!actorId) {
@@ -972,59 +1127,8 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
 
-    // #372: Run blueprint-aware pre-publish gate. Blocks if any blocking
-    // issue surfaces; warnings are returned but do not block (the author
-    // can choose to publish anyway via the existing UI flow).
-    const bundle = await getModuleContentBundle(request.params.moduleId);
-    const moduleVersionData = bundle.versions.moduleVersions.find(
-      (v) => v.id === request.params.moduleVersionId,
-    );
-    // #705: G1 must be single-source — no unguarded fallthrough. A version that isn't present on the
-    // module can't be validated, so it can't be published; reject instead of publishing blind.
-    if (!moduleVersionData) {
-      response.status(404).json({
-        error: "module_version_not_found",
-        message: "The module version to publish was not found on this module.",
-      });
-      return;
-    }
-    const mcqSetVersion = bundle.versions.mcqSetVersions.find(
-      (v) => v.id === moduleVersionData.mcqSetVersionId,
-    );
-    const rawBlueprint = (moduleVersionData as { assessmentBlueprint?: string | null }).assessmentBlueprint;
-    // #896 S4 / #955 / #956: ÉN gate, felles med kaskaden og importen (`evaluateModulePublishGate`).
-    // Denne døra har DEKODEDE verdier fra bundelen (LocalizedText-objekter, `options` ikke
-    // `optionsJson`), så de serialiseres tilbake til lagringsformatet gaten leser. Å sende de dekodede
-    // objektene rett inn kompilerte til `[object Object]` i et tidligere utkast av dette.
-    const serialize = (value: unknown): string | null =>
-      value === null || value === undefined ? null : localizedTextCodec.serialize(value as never);
-    const validation = evaluateModulePublishGate({
-      module: {
-        title: serialize(bundle.module.title),
-        description: serialize(bundle.module.description),
-        archivedAt: bundle.module.archivedAt ?? null,
-      },
-      version: {
-        taskText: serialize(moduleVersionData.taskText),
-        candidateTaskConstraints: serialize(moduleVersionData.candidateTaskConstraints),
-        assessorExpectedContent: serialize(moduleVersionData.assessorExpectedContent),
-        assessmentBlueprint: typeof rawBlueprint === "string" ? rawBlueprint : null,
-      },
-      mcqQuestions: (mcqSetVersion?.questions ?? []).map((question) => ({
-        stem: serialize(question.stem),
-        optionsJson: JSON.stringify((question.options ?? []).map((option) => serialize(option))),
-        correctAnswer: serialize(question.correctAnswer ?? null),
-        rationale: serialize(question.rationale),
-      })),
-    });
-    if (!validation.valid) {
-      response.status(422).json({
-        error: "publish_blocked_by_validation",
-        message: "Pre-publish validation found blocking issues. See `issues` for details.",
-        issues: validation.issues,
-      });
-      return;
-    }
+    const validation = await evaluateModuleVersionGate(request.params.moduleId, request.params.moduleVersionId);
+    if (!respondUnlessPublishable(response, validation)) return;
     // Warnings still go through; surfaced in response so the UI can display them.
     const moduleVersion = await publishModuleVersion(
       request.params.moduleId,
@@ -1034,6 +1138,79 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
       { supersedesEarlierPasses: parsedBody.data.supersedesEarlierPasses === true },
     );
     response.json({ moduleVersion, validationWarnings: validation.issues });
+  } catch (error) {
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
+    response.status(400).json({ error: "publish_module_version_failed", message: "Could not publish module version." });
+  }
+});
+
+// #934 skive 5a-3: tallene dialogen viser før publiseringen: kursene modulen ligger i og som har vært ute, med antall kursbevis og
+// antall som får e-post. De samme funksjonene som publiseringen bruker.
+adminContentRouter.get("/modules/:moduleId/module-versions/:moduleVersionId/publish-preview-versioned", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    const version = await prisma.moduleVersion.findFirst({
+      where: { id: request.params.moduleVersionId, moduleId: request.params.moduleId },
+      select: { id: true, versionNo: true, versionMajor: true, versionMinor: true },
+    });
+    if (!version) {
+      response.status(404).json({ error: "module_version_not_found", message: "The module version to publish was not found on this module." });
+      return;
+    }
+    const highest = await prisma.moduleVersion.aggregate({ where: { moduleId: request.params.moduleId }, _max: { versionMajor: true } });
+    const locale = requestLocale(request);
+    const courses = await withVersionChoiceRights(prisma, await findAffectedCourses(prisma, [{ moduleId: request.params.moduleId }]), {
+      userId: actorId,
+      roles: request.context?.roles ?? [],
+    });
+    response.json({
+      moduleId: request.params.moduleId,
+      moduleVersion: version,
+      currentMajor: highest._max.versionMajor,
+      anyonePassed: await hasValidModulePass(prisma, request.params.moduleId),
+      courses: courses.map((course) => ({ ...course, title: localizeContentText(locale, course.title) ?? course.title })),
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
+    response.status(400).json({ error: "publish_preview_failed", message: "Could not preview publishing." });
+  }
+});
+
+// #934 skive 5a-3: publisering med svar per kurs (doc/DESIGN_934.md, «5a-3»). Rollen settes av monteringen av /api/admin/content,
+// eierskapet her. Agent-tokenet slipper ikke til (`agentTokenScope.ts`). En gammel server svarer 404, så ingenting lagres med feil regel.
+adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/publish-versioned", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const parsedBody = publishModuleVersionedBodySchema.safeParse(request.body ?? {});
+  if (!parsedBody.success) {
+    response.status(400).json({ error: "validation_error", issues: parsedBody.error.issues });
+    return;
+  }
+  try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    const validation = await evaluateModuleVersionGate(request.params.moduleId, request.params.moduleVersionId);
+    if (!respondUnlessPublishable(response, validation)) return;
+    const result = await publishModuleVersioned(
+      request.params.moduleId,
+      request.params.moduleVersionId,
+      { userId: actorId, roles: request.context?.roles ?? [] },
+      parsedBody.data,
+    );
+    response.json({ ...result, validationWarnings: validation.issues });
   } catch (error) {
     if (error instanceof AppError) {
       respondWithAppError(response, error);
@@ -1077,6 +1254,34 @@ adminContentRouter.get("/modules/archive", async (request, response) => {
     response.json({ modules });
   } catch {
     response.status(500).json({ error: "list_archive_failed" });
+  }
+});
+
+// #1168: hva en arkivering av modulen ville møtt, så dialogen kan sjekke først (kursets mønster, #1150). Kursene som holder
+// modulen igjen kommer fra den SAMME utregningen som sperren i `archiveModule` (`findActiveUsesOfItems`, «brukes andre steder»):
+// klienten etterligner ikke regelen. Bare lesing; arkiveringen sjekker på nytt under innholdslåsen. Samme vakt som
+// `POST …/archive`, så den står blant de vaktede lesingene i test/m2-content-read-by-producers-1165.test.ts.
+adminContentRouter.get("/modules/:moduleId/archive-preview", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  try {
+    const moduleId = request.params.moduleId;
+    await assertModuleOwnership(moduleId, actorId, request.context?.roles ?? []);
+    const module = await prisma.module.findUnique({ where: { id: moduleId }, select: { archivedAt: true, activeVersionId: true } });
+    if (!module) throw new NotFoundError("Module", "module_not_found", "Module not found.");
+    const uses = (await findActiveUsesOfItems({ moduleIds: [moduleId], sectionIds: [] }, { locale: requestLocale(request) }))
+      .modules.get(moduleId) ?? [];
+    response.json({ moduleId, archived: module.archivedAt !== null, published: module.activeVersionId !== null, uses });
+  } catch (error) {
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
+    response.status(400).json({ error: "archive_preview_failed", message: "Could not check the module." });
   }
 });
 
@@ -1347,7 +1552,7 @@ adminContentRouter.post("/generate/rubric", generateLimiter, async (request, res
       ...data,
       blueprint: normalizeAssessmentBlueprint(data.blueprint),
     });
-    response.json({ rubric });
+    response.json({ rubric, rubricWarnings: rubricWarnings(rubric.criteria) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "generation_failed", message });
@@ -1454,11 +1659,17 @@ adminContentRouter.post("/generate/mcq", generateLimiter, async (request, respon
     const validation = validateMcqDistractors(result.questions);
     response.json({
       questions: result.questions,
+      // #1077 leveranse 2: hvorfor KI ikke laget noe «sett i riktig rekkefølge» — klienten sier det.
+      ...(result.noOrderReason ? { noOrderReason: result.noOrderReason } : {}),
+      // Leveranse 3b: det samme for «fyll inn ordet som mangler».
+      ...(result.noFillReason ? { noFillReason: result.noFillReason } : {}),
       validation: {
         valid: validation.valid,
         // #551: include the deterministic length-cue warning alongside distractor-quality issues.
         issues: [...validation.issues, ...(result.validationWarnings ?? [])],
       },
+      // #1119: samme kontroll som skillet og importen. Lengden for hele settet meldes alt av #551.
+      cueWarnings: mcqCueWarnings(result.questions, { omit: ["length_bias"] }),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

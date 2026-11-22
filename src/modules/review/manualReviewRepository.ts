@@ -1,5 +1,4 @@
 import type { ReviewStatus as ReviewStatusType, SubmissionStatus as SubmissionStatusType } from "@prisma/client";
-import type { CreateAssessmentDecisionInput } from "../../repositories/decisionRepository.js";
 import { prisma } from "../../db/prisma.js";
 
 type ManualReviewRepositoryClient = Pick<typeof prisma, "manualReview" | "assessmentDecision" | "submission">;
@@ -201,10 +200,6 @@ export function createManualReviewRepository(client: ManualReviewRepositoryClien
           },
         },
       });
-    },
-
-    createOverrideDecision(data: CreateAssessmentDecisionInput) {
-      return client.assessmentDecision.create({ data });
     },
 
     // #791: atomic guarded resolve. Same guard as the claim; count 0 → another reviewer finalized first →

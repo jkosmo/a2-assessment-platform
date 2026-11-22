@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="course-boat-svg tb-figure" width="60" height="34" viewBox="0 0 60 34" focusable="false">
+  <path class="tb-stripes" d="M37 16 L47 16"></path>
+  <circle class="tb-ball tb-ball--small" cx="18" cy="20" r="8"></circle>
+</svg>

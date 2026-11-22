@@ -18,8 +18,38 @@ type AssessmentContext = {
   promptTemplateUserTemplate?: string;
   promptTemplateExamplesJson?: string;
   rubricCriteriaIds?: string[];
+  /** #1135: what each criterion means. Without it the model saw only the IDs. */
+  rubricCriteria?: Array<{ id: string; label: string | null; description: string | null; scaleMax: number | null; steps?: Array<{ step: number; text: string }> }>;
   submissionFieldLabels?: string[];
 };
+
+/**
+ * #1135: the criteria as the author wrote them, so each score follows the criterion's own steps.
+ * A criterion described on another scale (0–2) is scored on the contract's 0–4 by a fixed mapping
+ * stated in the prompt, so the decision's clamp and max (criteria × 4) stay as they are. A criterion
+ * with nothing to say (only an ID or a weight) is listed by its ID, as before.
+ */
+export function buildRubricCriteriaSection(criteria: AssessmentContext["rubricCriteria"]): string | null {
+  const described = (criteria ?? []).filter((c) => c.label || c.description);
+  if (described.length === 0) return null;
+  const lines = (criteria ?? []).map((c) => {
+    const head = c.label ? `${c.id} — ${c.label}` : c.id;
+    if (!c.description) return `- ${head}`;
+    // Poenget gis på kriteriets egen skala; plattformen regner om (normalizeRubricScoresToContract).
+    const mapping = c.scaleMax ? ` [score 0–${c.scaleMax}]` : "";
+    return `- ${head}${mapping}: ${c.description}`;
+  });
+  return [
+    // #1135, målt på stage 2026-10-27: med bare den første setningen trakk modellen et fullgodt svar for
+    // ting trinnet ikke nevner («bare ett oppfølgingspunkt», «ikke som egen liste») — og for ting som
+    // ikke stemte («står ikke først» om et vedtak som sto først). Snitt 80 for et svar som skulle hatt 100.
+    "Rubric criteria (score each criterion by its own description; where the description names the steps, the score is the step the submission reaches — not your own idea of the criterion):\n" +
+      "- Give the highest step when the submission does what that step describes. Do not deduct for anything the step does not name — layout, list form, the number of points, or wording — and do not require more than the task text asks for.\n" +
+      "- When the submission sits between two steps, give the higher one only if it meets everything the higher step names; otherwise the lower.\n" +
+      "- Each rationale names what the submission did that places it on that step, quoting or paraphrasing the submission; a deduction names what the step requires that is missing.",
+    ...lines,
+  ].join("\n");
+}
 
 type AzureOpenAiRuntimeConfig = {
   endpoint: string;
@@ -57,80 +87,135 @@ export async function evaluatePracticalWithLlm(input: AssessmentContext): Promis
   throw new Error(`Unsupported LLM mode: ${env.LLM_MODE}`);
 }
 
+/**
+ * #1135, målt på stage 2026-10-26: bedt om å regne et 0–2-kriterium om til 0–4 i prompten, ga modellen
+ * likevel trinnet på kriteriets egen skala — et perfekt svar (2 + 2 + 2) ble 6 av 12, altså 50 %, mot
+ * 100 % før. Omregningen hører ikke hjemme hos modellen. Modellen gir poeng på kriteriets EGEN skala
+ * (kontrakten sier hvilken), og her regnes det om til 0–4, som avgjørelsen (clamp og maks = antall × 4)
+ * bygger på. Et kriterium uten egen skala står urørt.
+ */
+export function normalizeRubricScoresToContract(
+  result: LlmStructuredAssessment,
+  criteria: AssessmentContext["rubricCriteria"],
+): LlmStructuredAssessment {
+  const scales = new Map((criteria ?? []).filter((c) => c.scaleMax).map((c) => [c.id, c.scaleMax as number]));
+  if (scales.size === 0) return result;
+  const rubricScores: Record<string, number> = { ...result.rubric_scores };
+  for (const [id, scaleMax] of scales) {
+    const score = rubricScores[id];
+    if (typeof score !== "number") continue;
+    rubricScores[id] = Math.max(0, Math.min(4, Math.round((score * 4) / scaleMax)));
+  }
+  const rubricTotal = Object.values(rubricScores).reduce((sum, value) => sum + value, 0);
+  return { ...result, rubric_scores: rubricScores, rubric_total: rubricTotal };
+}
+
+/**
+ * 2.140.0 (QA-funn): plattformen retter kriteriepoengene (trinnvalg, skala), men modellens
+ * `practical_score_scaled` fulgte ikke med. Sammenligningen mellom første og andre vurdering leser det tallet,
+ * og to vurderinger med samme kriteriepoeng kunne meldes uenige. Derfor regnes delpoenget ALLTID fra de
+ * rettede poengene, på kontraktens 0–70, slik vedtaket gjør: modulens egne kriterier, hvert klemt til 0–4,
+ * manglende teller 0, og kriteriene × 4 som tak. Alltid, ikke bare når noe ble rettet: to rettelser kan
+ * oppheve hverandre i tall, og en vurdering som ikke ble rettet, skal sammenlignes på samme mål.
+ *
+ * Uten kriterier i modulen står modellens tall (QA runde 3): vedtaket bruker da `scalingRule.max_total` som tak,
+ * og det har ikke denne funksjonen.
+ */
+export function practicalFromRubricScores(
+  result: LlmStructuredAssessment,
+  criteriaIds: string[] | undefined,
+): LlmStructuredAssessment {
+  const ids = criteriaIds ?? [];
+  if (ids.length === 0) return result;
+  const total = ids.reduce((sum, id) => sum + Math.max(0, Math.min(4, result.rubric_scores[id] ?? 0)), 0);
+  const practical = Number(((total / (ids.length * 4)) * 70).toFixed(2));
+  return { ...result, practical_score_scaled: practical };
+}
+
+/**
+ * #1135, målt mot stage-modellen 2026-10-27: på et svar midt på skalaen skrev modellen en begrunnelse
+ * som ordrett beskrev trinn 1 («står der, men blandet med diskusjonen») og ga 0. Det skjedde med begge
+ * modellene, ved temperatur 0, og en uvesentlig endring i meldingen vippet det mellom 0 og 33.
+ *
+ * Derfor velger modellen trinnets TEKST (`criterion_steps`), og poenget er det trinnet teksten tilhører.
+ * Gjenkjennes ikke teksten — eller passer den på flere trinn — står modellens eget tall.
+ */
+export function scoresFromChosenSteps(
+  result: LlmStructuredAssessment,
+  criteria: AssessmentContext["rubricCriteria"],
+): LlmStructuredAssessment {
+  const chosen = result.criterion_steps;
+  if (!chosen) return result;
+  const rubricScores: Record<string, number> = { ...result.rubric_scores };
+  let changed = false;
+  for (const criterion of criteria ?? []) {
+    const quoted = chosen[criterion.id];
+    if (typeof quoted !== "string" || !criterion.steps?.length) continue;
+    const step = matchStep(quoted, criterion.steps);
+    if (step !== null && rubricScores[criterion.id] !== step) {
+      rubricScores[criterion.id] = step;
+      changed = true;
+    }
+  }
+  if (!changed) return result;
+  const rubricTotal = Object.values(rubricScores).reduce((sum, value) => sum + value, 0);
+  return { ...result, rubric_scores: rubricScores, rubric_total: rubricTotal };
+}
+
+const comparable = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/^\s*\d+\s*[=:.)–-]\s*/, "")
+    .replace(/[«»"'“”.;:,!?()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+function matchStep(quoted: string, steps: Array<{ step: number; text: string }>): number | null {
+  const wanted = comparable(quoted);
+  if (!wanted) return null;
+  const exact = steps.filter((s) => comparable(s.text) === wanted);
+  if (exact.length === 1) return exact[0]!.step;
+  // Modellen kan ta med litt mer eller litt mindre enn trinnet; ett trinn som rommer det, eller som det rommer.
+  const partial = steps.filter((s) => {
+    const own = comparable(s.text);
+    return own.length >= 8 && wanted.length >= 8 && (own.includes(wanted) || wanted.includes(own));
+  });
+  return partial.length === 1 ? partial[0]!.step : null;
+}
+
 export async function evaluatePracticalWithAzureOpenAi(
   input: AssessmentContext,
   config: AzureOpenAiRuntimeConfig,
 ): Promise<LlmStructuredAssessment> {
   const timeoutController = new AbortController();
   const timeout = setTimeout(() => timeoutController.abort(), config.timeoutMs);
-  const tokenParameterSequence = resolveTokenParameterSequence(config.tokenLimitParameter);
-  let lastProviderError: Error | null = null;
 
   try {
-    for (let index = 0; index < tokenParameterSequence.length; index += 1) {
-      const tokenParameter = tokenParameterSequence[index];
+    const responseBody = await postChatCompletionWithFallback(
+      config,
+      (tokenParameter, includeTemperature) => buildAzureOpenAiRequestBody(input, config, tokenParameter, includeTemperature),
+      timeoutController.signal,
+      { retryLabel: "[#603] Azure OpenAI assessment", failureLabel: "Azure OpenAI request failed" },
+    );
 
-      for (const includeTemperature of [true, false]) {
-        // #603: retry transient 429 (TPM-quota) / 5xx with Retry-After-aware backoff — same policy
-        // as the authoring client. Non-retryable statuses (incl. the 400-class unsupported-param /
-        // unsupported-temperature signals) return on the first attempt so the fallback loop below
-        // still drives them. The overall timeout signal bounds total time across retries.
-        const response = await fetchAzureOpenAiWithRetry(
-          buildAzureOpenAiCompletionsUrl(config),
+    const assistantContent = extractAssistantContent(responseBody);
+    const parsedStructuredPayload = parseStructuredPayload(assistantContent);
+    const parsedAssessment = llmResponseCodec.parse(parsedStructuredPayload);
+
+    // #1135: trinnet modellen valgte setter poenget; så regnes kriteriets egen skala om til 0–4 her,
+    // ikke av modellen.
+    return practicalFromRubricScores(
+      normalizeRubricScoresToContract(
+        scoresFromChosenSteps(
           {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "api-key": config.apiKey,
-            },
-            body: JSON.stringify(buildAzureOpenAiRequestBody(input, config, tokenParameter, includeTemperature)),
-            signal: timeoutController.signal,
+            ...parsedAssessment,
+            red_flags: normalizeRedFlags(parsedAssessment.red_flags),
           },
-          {
-            onRetry: ({ status, waitMs, attempt, maxAttempts }) =>
-              console.warn(
-                `[#603] Azure OpenAI assessment ${status} — retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts}).`,
-              ),
-          },
-        );
-
-        const rawBody = await response.text();
-        const responseBody = parseJsonBody(rawBody);
-
-        if (!response.ok) {
-          if (
-            config.tokenLimitParameter === "auto" &&
-            index < tokenParameterSequence.length - 1 &&
-            isUnsupportedTokenParameterError(responseBody, tokenParameter)
-          ) {
-            break;
-          }
-
-          if (includeTemperature && isUnsupportedTemperatureError(responseBody)) {
-            continue;
-          }
-
-          const providerMessage = extractProviderErrorMessage(responseBody);
-          lastProviderError = new Error(
-            `Azure OpenAI request failed (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`,
-          );
-          throw lastProviderError;
-        }
-
-        const assistantContent = extractAssistantContent(responseBody);
-        const parsedStructuredPayload = parseStructuredPayload(assistantContent);
-        const parsedAssessment = llmResponseCodec.parse(parsedStructuredPayload);
-
-        return {
-          ...parsedAssessment,
-          red_flags: normalizeRedFlags(parsedAssessment.red_flags),
-        };
-      }
-    }
-
-    throw (
-      lastProviderError ??
-      new Error("Azure OpenAI request failed for all configured token parameter strategies.")
+          input.rubricCriteria,
+        ),
+        input.rubricCriteria,
+      ),
+      input.rubricCriteriaIds,
     );
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -176,7 +261,8 @@ function buildStubModelAnswer(input: ModelAnswerContext): string {
   return task ? `Model answer addressing: ${task}` : "Model answer.";
 }
 
-async function generateModelAnswerWithAzureOpenAi(
+// Eksportert for testen av reserven (#1147).
+export async function generateModelAnswerWithAzureOpenAi(
   input: ModelAnswerContext,
   config: AzureOpenAiRuntimeConfig,
 ): Promise<string> {
@@ -197,33 +283,18 @@ async function generateModelAnswerWithAzureOpenAi(
           (input.moduleGuidanceText ? `\n\nGuidance:\n${input.moduleGuidanceText}` : ""),
       },
     ];
-    const tokenParameter = config.tokenLimitParameter === "auto" ? "max_tokens" : config.tokenLimitParameter;
-    const body: Record<string, unknown> = { messages, [tokenParameter]: config.maxTokens };
-    if (Number.isFinite(config.temperature)) body.temperature = config.temperature;
-
-    const response = await fetchAzureOpenAiWithRetry(
-      buildAzureOpenAiCompletionsUrl(config),
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", "api-key": config.apiKey },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      },
-      {
-        onRetry: ({ status, waitMs, attempt, maxAttempts }) =>
-          console.warn(
-            `[#475] Azure OpenAI model-answer ${status} — retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts}).`,
-          ),
-      },
+    // #1147: samme reserve som vurderingen. Med `auto` valgte denne alltid `max_tokens`, som modellen i prod avviser —
+    // likhetssjekken feilet ved hver innlevering fra minst 2026-10-14.
+    const responseBody = await postChatCompletionWithFallback(
+      config,
+      (tokenParameter, includeTemperature) => ({
+        messages,
+        [tokenParameter]: config.maxTokens,
+        ...(includeTemperature && Number.isFinite(config.temperature) && { temperature: config.temperature }),
+      }),
+      controller.signal,
+      { retryLabel: "[#475] Azure OpenAI model-answer", failureLabel: "Azure OpenAI model-answer request failed" },
     );
-    const rawBody = await response.text();
-    const responseBody = parseJsonBody(rawBody);
-    if (!response.ok) {
-      const providerMessage = extractProviderErrorMessage(responseBody);
-      throw new Error(
-        `Azure OpenAI model-answer request failed (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`,
-      );
-    }
     return extractAssistantContent(responseBody) ?? "";
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -343,6 +414,59 @@ function buildAzureOpenAiCompletionsUrl(config: AzureOpenAiRuntimeConfig): strin
   return `${trimmedEndpoint}/openai/deployments/${encodedDeployment}/chat/completions?api-version=${encodedApiVersion}`;
 }
 
+type TokenParameter = "max_tokens" | "max_completion_tokens";
+
+/**
+ * #1147: ett kall mot chat/completions med reserven alle kall skal ha. Med `auto` prøves `max_completion_tokens` først og
+ * `max_tokens` etter; en avvist temperatur prøves på nytt uten. Gir tilbake svarkroppen (JSON) når kallet lykkes, og kaster
+ * `<failureLabel> (<status>: <melding>).` ellers.
+ *
+ * #603: forbigående 429 (TPM-kvote) og 5xx prøves på nytt med Retry-After. Statuser som ikke prøves på nytt (blant dem
+ * 400-svarene om parameter og temperatur) kommer tilbake på første forsøk, så løkka her styrer dem. Tidsavbruddet i
+ * `signal` gjelder hele kallet, på tvers av forsøkene.
+ */
+async function postChatCompletionWithFallback(
+  config: AzureOpenAiRuntimeConfig,
+  buildBody: (tokenParameter: TokenParameter, includeTemperature: boolean) => Record<string, unknown>,
+  signal: AbortSignal,
+  labels: { retryLabel: string; failureLabel: string },
+): Promise<unknown> {
+  const tokenParameterSequence = resolveTokenParameterSequence(config.tokenLimitParameter);
+  for (let index = 0; index < tokenParameterSequence.length; index += 1) {
+    const tokenParameter = tokenParameterSequence[index]!;
+    for (const includeTemperature of [true, false]) {
+      const response = await fetchAzureOpenAiWithRetry(
+        buildAzureOpenAiCompletionsUrl(config),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "api-key": config.apiKey },
+          body: JSON.stringify(buildBody(tokenParameter, includeTemperature)),
+          signal,
+        },
+        {
+          onRetry: ({ status, waitMs, attempt, maxAttempts }) =>
+            console.warn(`${labels.retryLabel} ${status} — retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts}).`),
+        },
+      );
+      const responseBody = parseJsonBody(await response.text());
+      if (response.ok) return responseBody;
+
+      if (
+        config.tokenLimitParameter === "auto" &&
+        index < tokenParameterSequence.length - 1 &&
+        isUnsupportedTokenParameterError(responseBody, tokenParameter)
+      ) {
+        break;
+      }
+      if (includeTemperature && isUnsupportedTemperatureError(responseBody)) continue;
+
+      const providerMessage = extractProviderErrorMessage(responseBody);
+      throw new Error(`${labels.failureLabel} (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`);
+    }
+  }
+  throw new Error(`${labels.failureLabel} for all configured token parameter strategies.`);
+}
+
 function buildAzureOpenAiRequestBody(
   input: AssessmentContext,
   config: AzureOpenAiRuntimeConfig,
@@ -381,17 +505,23 @@ function resolveTokenParameterSequence(
   return ["max_completion_tokens", "max_tokens"];
 }
 
-function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "system" | "user"; content: string }> {
+// Eksportert for testen av at kriteriene når prompten (#1135).
+export function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "system" | "user"; content: string }> {
   const systemPrompt = (input.promptTemplateSystem ?? "").trim() || DEFAULT_SYSTEM_PROMPT;
   const userPromptTemplate = (input.promptTemplateUserTemplate ?? "").trim();
   const passContext =
     input.assessmentPass === "secondary"
       ? "This is a secondary, independent assessment pass."
       : "This is the primary assessment pass.";
-  const examplesJson = (input.promptTemplateExamplesJson ?? "").trim();
+  // #1135: en tom liste («[]») er ingen eksempler — linja ga bare støy i meldingen.
+  const examplesJson = (input.promptTemplateExamplesJson ?? "").trim().replace(/^\[\s*\]$/, "");
   const responseLanguageInstruction = buildResponseLanguageInstruction(input.responseLocale ?? "en-GB");
   const criteriaIds = input.rubricCriteriaIds?.length ? input.rubricCriteriaIds : DEFAULT_CRITERIA_IDS;
-  const responseContract = buildRequiredResponseContract(criteriaIds);
+  const responseContract = buildRequiredResponseContract(
+    criteriaIds,
+    Object.fromEntries((input.rubricCriteria ?? []).filter((c) => c.scaleMax).map((c) => [c.id, c.scaleMax as number])),
+    (input.rubricCriteria ?? []).filter((c) => (c.steps?.length ?? 0) >= 2).map((c) => c.id),
+  );
 
   const submissionFieldsSection =
     input.submissionFieldLabels?.length
@@ -403,6 +533,7 @@ function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "syst
     passContext,
     responseLanguageInstruction,
     responseContract,
+    buildRubricCriteriaSection(input.rubricCriteria),
     input.moduleTaskText ? `Participant assignment context:\n${input.moduleTaskText}` : null,
     input.moduleGuidanceText ? `Assessor expected content (hidden from candidate — grading support only):\n${input.moduleGuidanceText}` : null,
     "Scoring constraint: evaluate the submission strictly against the Participant assignment context above. Use the Assessor expected content only as grading support — do not penalise the candidate for missing a point unless the visible Participant assignment context reasonably implies that point is expected at this certification level. Do not import requirements, criteria, or expectations from your own domain knowledge. improvement_advice must only suggest ways to better address what the task actually asks for.",
@@ -554,17 +685,27 @@ function describeEnumForPrompt(
 
 // Eksportert BARE for vakta i test/unit/response-contract-criteria.test.ts. Kriteriene kan finnes i
 // regelfila og likevel aldri nå modellen — det er samme stille feil som saken retter, ett lag ned.
-export function buildRequiredResponseContract(criteriaIds: string[]): string {
-  const criteriaList = criteriaIds.map((id) => `  - ${id}`).join("\n");
+export function buildRequiredResponseContract(
+  criteriaIds: string[],
+  scales: Record<string, number> = {},
+  steppedIds: string[] = [],
+): string {
+  // #1135: a criterion with its own scale (0–2) is scored on that scale; the platform converts to 0–4.
+  const criteriaList = criteriaIds.map((id) => (scales[id] ? `  - ${id} (0..${scales[id]})` : `  - ${id}`)).join("\n");
+  // #1135: rationale and chosen step come BEFORE the score — the model decides on the step's text first,
+  // and the platform takes the score from the step it chose (scoresFromChosenSteps).
+  const stepsLine = steppedIds.length
+    ? `\n- criterion_steps: object with, for each of ${steppedIds.join(", ")}, the text of the step whose description fits the submission, copied exactly from the criterion below (without the number). The score is that step's number.`
+    : "";
   return `
-JSON response contract:
+JSON response contract (fields in this order):
 - module_id: string
-- rubric_scores: object with integer values 0..4 for each rubric criterion:
+- criterion_rationales: object with one concise string rationale per rubric criterion key (same keys as rubric_scores)${stepsLine}
+- rubric_scores: object with integer values for each rubric criterion — 0..4, or 0..N where a criterion below says (0..N):
 ${criteriaList}
 - rubric_total: integer equal to sum of rubric_scores values
 - practical_score_scaled: number 0..70
 - pass_fail_practical: boolean
-- criterion_rationales: object with one concise string rationale per rubric criterion key (same keys as rubric_scores)
 - improvement_advice: array of up to 10 concise strings
 - red_flags: array of objects with fields: code (string), severity (string), description (string)
 - Use red_flags only when the stated criteria below are clearly met. If uncertain, do not flag. Return an empty array if no flag applies.

@@ -1,5 +1,6 @@
 import type { LocalizedTheme } from "./courseThemeService.js";
 import type { ContentLifecycle } from "../content/lifecycle.js";
+import type { ArchivedRetention } from "../content/archivedRetention.js";
 
 export type CourseStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
@@ -9,6 +10,8 @@ export interface CourseListItem {
   description: string | null;
   /** #1093: satt plassering i «Mine kurs», eller null (alfabetisk). */
   sortOrder: number | null;
+  /** 2.121.0: kursets navn i delingslenka (/kurs/<slug>). Settes ved første publisering. */
+  slug: string | null;
   /** 2.102.0: lokalisert og alfabetisk. Bare lista over kurs («Mine kurs») fyller den. */
   themes?: LocalizedTheme[];
   moduleCount: number;
@@ -46,7 +49,8 @@ export interface CourseModuleEntry {
 // Klienten utledet før «ikke påkrevd» fra `available: false` og tilbød «Avslutt kurset» i kurs
 // serveren ikke ville utstedt bevis for. Feltet finnes for at den ikke skal måtte gjette.
 export type CourseSequenceItem =
-  | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS" | "REVISED_RETAKE_REQUIRED"; discussionsEnabled: boolean; available: boolean; required: boolean }
+  // #934 skive 5a-3: `retakeRequired` finnes bare med den nye regelen, og sier til modulsiden at den skal tilby et nytt forsøk.
+  | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS" | "REVISED_RETAKE_REQUIRED"; retakeRequired?: true; discussionsEnabled: boolean; available: boolean; required: boolean }
   // #944: `available` er PÅKREVD på begge variantene. Var det valgfritt på SECTION, ville en kaller
   // som glemte det fått `undefined` — som er falsy, men også umulig å skille fra «ikke vurdert».
   // Typen tvinger nå fram et svar, slik at neste sti ikke kan la det stå åpent i stillhet.
@@ -87,6 +91,11 @@ export interface AdminCourseListItem {
   canManage: boolean;
   /** 2.102.0: lokalisert og alfabetisk, for filteret i kursoversikten. */
   themes: LocalizedTheme[];
+  /** #934 skive 3: kursets versjon, vist som «v3.2» i lista. */
+  versionMajor: number;
+  versionMinor: number;
+  /** #1152 skive 4b: bare på arkiverte kurs. «Slettes <dato>», «beholdes» med koden, eller ukjent (content/archivedRetention.ts). */
+  retention?: ArchivedRetention;
 }
 
 export interface AdminCourseDetail {
@@ -96,6 +105,10 @@ export interface AdminCourseDetail {
   certificationLevel: string | null;
   enrollmentPolicy: string;
   discussionsEnabled: boolean;
+  /** 2.119.0: e-post til kursets eiere om nye spørsmål. */
+  discussionOwnerNotifications: boolean;
+  /** 2.121.0: delingslenkas navn; null til kurset er publisert første gang. */
+  slug: string | null;
   /** #1093: plassering i «Mine kurs», eller null (alfabetisk). */
   sortOrder: number | null;
   /** 2.102.0: kursets tema i «Mine kurs». */
@@ -103,6 +116,23 @@ export interface AdminCourseDetail {
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;
+  /** #934 skive 3: kursets versjon, og hvor mange som har kursbevis for den nåværende hovedversjonen —
+   *  dem en ny hovedversjon gjelder. Forfatterdialogen viser tallet og spør bare når det er over null. */
+  versionMajor: number;
+  versionMinor: number;
+  certificateHolders: number;
+  /** #934 skive 4b: hvor mange en ny hovedversjon sender e-post til (`findMajorVersionRecipients`): alle med
+   *  kursbevis for kurset, aktive og ikke anonymiserte. Kan være høyere enn `certificateHolders`. */
+  majorEmailRecipients: number;
+  /** #934 skive 4a: telleren kursskjemaet sender tilbake når det lagrer (`expectedRevision`). Har noen andre
+   *  lagret kurset siden, avvises lagringen med 409 `course_changed`. */
+  contentRevision: number;
+  /** #1140 etappe 2: har kurset et lagret utkast? Utkastet selv hentes med `GET …/draft`. Et publisert kurs med utkast har
+   *  `lifecycle: "published_with_draft"`; et avpublisert kurs kan ha en utkastrad liggende igjen (`hasDraft` sann, `draft`). */
+  hasDraft: boolean;
+  /** #1165: kan den som spør endre kurset (eier eller administrator)? Lesingen er åpen for alle forfattere. */
+  canManage: boolean;
+  lifecycle: ContentLifecycle;
   modules: Array<{
     moduleId: string;
     sortOrder: number;

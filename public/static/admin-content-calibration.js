@@ -584,6 +584,12 @@ function mountWorkspace() {
     const text = t(key);
     if (text && text !== key) node.textContent = text;
   });
+  // #1173 (rest): tre skjermlesernavn i malen sto på bokmål.
+  pageContent.querySelectorAll("[data-i18n-aria-label]").forEach((node) => {
+    const key = node.getAttribute("data-i18n-aria-label");
+    const text = t(key);
+    if (text && text !== key) node.setAttribute("aria-label", text);
+  });
 
   // Owner segmented control
   el.qOwnerSeg.addEventListener("click", (event) => {

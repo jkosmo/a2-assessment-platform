@@ -34,13 +34,14 @@ const INLINE_THRESHOLD = /\b\w*[Pp]ercent(?:Score)?\w*\s*[<>]=?\s*\d+/g;
 /** Et hardkodet tall der grensen skal komme fra policyen. */
 const HARDCODED_DEFAULT = /mcqMinPercent\s*\?\?\s*\d+/g;
 
-/** Filer som med vilje står utenfor. Hver MÅ ha en grunn. */
-const EXCEPTIONS = {
-  // Beholder sin egen `?? DEFAULT_MCQ_ONLY_MIN_PERCENT` som siste skanse hvis regelen
-  // returnerer null for en modus den ikke kjenner. Konstanten kommer fra mcqPassRule.
-  "modules/assessment/decisionService.ts":
-    "kaller resolveMcqMinPercent og faller tilbake på den delte konstanten, ikke på et eget tall",
-};
+/**
+ * Filer som med vilje står utenfor. Hver MÅ ha en grunn.
+ *
+ * Testgjennomgangen 2026-11 (avsnitt 5.2): `decisionService.ts` sto her, men har ingen treff på mønstrene — den faller
+ * tilbake på den delte konstanten (`?? DEFAULT_MCQ_ONLY_MIN_PERCENT_VALUE`), ikke på et tall. Unntaket dekket ingenting,
+ * men ville sluppet gjennom et senere brudd i nettopp fila der vedtaket fattes. Fjernet.
+ */
+const EXCEPTIONS = {};
 
 function collect(dir) {
   const out = [];
@@ -82,7 +83,9 @@ function analyse() {
 }
 
 describe("#949 MCQ-grensen bestemmes ett sted", () => {
-  const { offenders, hitsAtHome, scanned } = analyse();
+  // `hitsAtHome` brukes ikke: hjemmefila sammenligner mot en variabel og har ingen treff (se kontrollen under).
+  // Testgjennomgangen 2026-11 fjernet `expect(hitsAtHome).toBeGreaterThanOrEqual(0)`, som aldri kunne feile.
+  const { offenders, scanned } = analyse();
 
   it("detektoren virker — den fanger den gamle linja", () => {
     // ⚠️ KONTROLLASSERTION, og den måtte omformuleres: første utkast krevde at HJEMMEfila selv
@@ -102,7 +105,6 @@ describe("#949 MCQ-grensen bestemmes ett sted", () => {
     const home = readFileSync(join(SRC, HOME), "utf8");
     expect(home).toMatch(/DEFAULT_MCQ_ONLY_MIN_PERCENT\s*=\s*70/);
     expect(scanned, "ingen filer skannet").toBeGreaterThan(50);
-    expect(hitsAtHome).toBeGreaterThanOrEqual(0);
   });
 
   it("hvert unntak gjelder en fil som finnes", () => {

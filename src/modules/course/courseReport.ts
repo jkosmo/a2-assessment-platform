@@ -8,6 +8,8 @@ import { effectiveCourseIds } from "../reporting/scopeRules.js";
 import { computeCourseStatus } from "./courseQueries.js";
 import { isSettledSubmission } from "../submission/submissionOutcome.js";
 import { round2 } from "../reporting/csvExport.js";
+import { prisma } from "../../db/prisma.js";
+import { findSectionReadCredit } from "./sectionReadCredit.js";
 
 type CourseReportRow = {
   courseId: string;
@@ -32,7 +34,9 @@ type CourseLearnerRow = {
   participantDepartment: string | null;
   courseId: string;
   courseTitle: string;
-  status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
+  // #934: NEEDS_NEW_VERSION = har kursbevis for en eldre hovedversjon, men ikke for den nåværende. Ikke
+  // stryk, ikke «ikke startet» — en egen kategori (produkteier 2026-11-01).
+  status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "NEEDS_NEW_VERSION";
   passedModules: number;
   failedModules: number;
   underReviewModules: number;
@@ -43,8 +47,29 @@ type CourseLearnerRow = {
   score: number | null;
   latestActivityAt: string | null;
   completedAt: string | null;
+  /** #1145: hvor beviset kom fra; `external` har ingen dato (`completedAt` er null). Null når deltakeren ikke har bevis. */
+  completionSource: "platform" | "external" | null;
   certificateId: string | null;
+  /** #934: hovedversjonen til deltakerens nyeste eldre bevis, når hen ikke har bevis for den nåværende. */
+  earlierCertificateVersion: number | null;
 };
+
+// Rapporten leses for å se hvem som har fullført (produkteier 2026-11-07): de ferdige øverst, og innenfor hver
+// status de med nyeste aktivitet først. Den som aldri har vært aktiv, kommer sist. Navnet gir en fast rekkefølge.
+const LEARNER_STATUS_ORDER: Record<CourseLearnerRow["status"], number> = {
+  COMPLETED: 0,
+  NEEDS_NEW_VERSION: 1,
+  IN_PROGRESS: 2,
+  NOT_STARTED: 3,
+};
+
+function compareLearnerRows(a: CourseLearnerRow, b: CourseLearnerRow): number {
+  return (
+    LEARNER_STATUS_ORDER[a.status] - LEARNER_STATUS_ORDER[b.status] ||
+    (b.latestActivityAt ?? "").localeCompare(a.latestActivityAt ?? "") ||
+    a.participantName.localeCompare(b.participantName, "nb")
+  );
+}
 
 // #969: «hvem er med i dette kurset» besvares ETT sted — `resolveCourseAudience` (#498), det samme
 // publikummet kullstatus-dashbordet og påminnelsesjobben bruker. Rapporten hadde sin egen, fjerde
@@ -84,7 +109,8 @@ async function resolveReportAudienceIds(courseId: string, orgUnit: string | unde
  *   fullført     har et kursbevis i vinduet — kan ha mistet tildelingen etterpå
  *   aktiv        har levert på en av kursets moduler — dekker ENTRA-klasser, som ikke er
  *                oppløsbare hos oss, og som derfor ikke finnes i den første kilden
- *   leser        har lest en seksjon i kurset i vinduet (#1010)
+ *   leser        har lest en seksjon i kurset i vinduet (#1010). #1156: en av kursets seksjoner, i hvilket som helst kurs, når
+ *                lesingen teller her (`findSectionReadCredit`, lista `all`: også arkiverte seksjoner, som før)
  *
  * Den tredje er lagt til etter at #969 alene KRYMPET nevneren for Entra-tildelte kurs: deltakere som
  * talte før (via innlevering) forsvant. Én fiks gjorde ett tall riktigere og et annet galere.
@@ -111,13 +137,13 @@ async function resolveCourseParticipantIds(
     resolveReportAudienceIds(courseId, filters.orgUnit),
     courseRepository.findCourseCompletionsForLearnerReport(courseId, filters),
     courseRepository.findLearnerSubmissionsForModules(moduleIds, filters),
-    courseRepository.findLearnerSectionReadersForCourse(courseId, filters),
+    findSectionReadCredit(prisma, { courseIds: [courseId], items: "all", filters }).then((credit) => credit.readerIds(courseId)),
   ]);
 
   const participantIds = new Set(audienceUserIds);
   for (const completion of completions) participantIds.add(completion.userId);
   for (const submission of submissions) participantIds.add(submission.userId);
-  for (const reader of readers) participantIds.add(reader.userId);
+  for (const reader of readers) participantIds.add(reader);
 
   return { participantIds, completions, submissions };
 }
@@ -150,7 +176,11 @@ export async function getCourseReport(
         filters,
       );
       const enrolled = participantIds.size;
-      const completed = completions.length;
+      // #934: fullført = har bevis for kursets NÅVÆRENDE hovedversjon, telt én gang per person. Et bevis
+      // for en eldre hovedversjon står, men kurset er ikke fullført i den nye (produkteier 2026-11-01).
+      // Før 2.128.0 var beviset unikt per (bruker, kurs), og radantallet var antall personer; det er det
+      // ikke lenger.
+      const completed = new Set(completions.filter((c) => c.versionMajor === course.versionMajor).map((c) => c.userId)).size;
 
       // ⚠️ #969/#996: modulraden hadde nøyaktig samme feil som kursraden, én etasje ned — telleren
       // var sertifiseringer i vinduet, nevneren innleveringer i vinduet, og de to målte ULIKE
@@ -164,23 +194,26 @@ export async function getCourseReport(
       // var uenige. Nå er telleren en delmengde av nevneren per konstruksjon.
       // #966: arkiverte moduler utelates også her. En arkivert modul med egen pass-rate i lista,
       // ved siden av rader som sier «4/4», er det samme to-tall-problemet én etasje ned.
-      const moduleBreakdown = await Promise.all(
-        activeModules.map(async (cm) => {
-          const passedIds = await courseRepository.findPassedUserIdsForModule(cm.moduleId, filters);
-          const passedUsers = passedIds.filter((id) => participantIds.has(id)).length;
-          const enrolledUsers = participantIds.size;
-          return {
-            moduleId: cm.moduleId,
-            moduleTitle: localizeContentText(locale, cm.module.title) ?? cm.module.title,
-            sortOrder: cm.sortOrder,
-            passedUsers,
-            enrolledUsers,
-            passRate: enrolledUsers > 0
-              ? Math.round((passedUsers / enrolledUsers) * 100) / 100
-              : null,
-          };
-        }),
-      );
+      // #934 skive 5a-3: hvem som har bestått, per kurs, fra den ene veien til fremdrift i kurs.
+      const moduleProgress = await courseRepository.findModuleProgress({
+        courses: [{ courseId: course.id, moduleIds: activeModules.map((cm) => cm.moduleId) }],
+        filters,
+      });
+      const moduleBreakdown = activeModules.map((cm) => {
+        const passedIds = [...moduleProgress.passedUserIds(course.id, cm.moduleId)];
+        const passedUsers = passedIds.filter((id) => participantIds.has(id)).length;
+        const enrolledUsers = participantIds.size;
+        return {
+          moduleId: cm.moduleId,
+          moduleTitle: localizeContentText(locale, cm.module.title) ?? cm.module.title,
+          sortOrder: cm.sortOrder,
+          passedUsers,
+          enrolledUsers,
+          passRate: enrolledUsers > 0
+            ? Math.round((passedUsers / enrolledUsers) * 100) / 100
+            : null,
+        };
+      });
 
       return {
         courseId: course.id,
@@ -209,6 +242,7 @@ export async function getCourseLearnerReport(
     learners: number;
     completed: number;
     inProgress: number;
+    needsNewVersion: number;
   };
 }> {
   // #1058: utenfor kallerens kurs → samme svar som for et kurs som ikke finnes.
@@ -223,6 +257,7 @@ export async function getCourseLearnerReport(
         learners: 0,
         completed: 0,
         inProgress: 0,
+        needsNewVersion: 0,
       },
     };
   }
@@ -250,11 +285,8 @@ export async function getCourseLearnerReport(
     filters,
   );
   // #1116: hvem som har bestått hver modul, med samme spørring og filtre som kursraden.
-  const passedByModule = new Map(
-    await Promise.all(
-      moduleIds.map(async (moduleId) => [moduleId, new Set(await courseRepository.findPassedUserIdsForModule(moduleId, filters))] as const),
-    ),
-  );
+  // #934 skive 5a-3: per kurs, fra den ene veien til fremdrift i kurs.
+  const moduleProgress = await courseRepository.findModuleProgress({ courses: [{ courseId: course.id, moduleIds }], filters });
 
   // #966: seksjonskravet hentes fra SAMME dør som bevisporten bruker — deltakerdøra. Den utelater
   // seksjoner deltakeren ikke kan åpne, så et krav som aldri kan oppfylles kan ikke oppstå her.
@@ -264,11 +296,15 @@ export async function getCourseLearnerReport(
     .map((item) => item.sectionId as string);
   const requiredSectionIdSet = new Set(requiredSectionIds);
 
-  const sectionReadRows = await courseRepository.findReadSectionIdsForCourseParticipants(
-    course.id,
-    Array.from(participantIds),
-    filters,
-  );
+  // #1156: lesinger fra alle kurs med seksjonen, etter samme regel som porten for kursbevis. Vinduet gjelder den seneste lesingen.
+  const sectionReadRows = participantIds.size === 0
+    ? []
+    : (await findSectionReadCredit(prisma, {
+        userIds: Array.from(participantIds),
+        courseIds: [course.id],
+        items: "participant",
+        filters: { dateFrom: filters.dateFrom, dateTo: filters.dateTo },
+      })).rows.filter((row) => row.counts);
   const readSectionsByUser = new Map<string, Set<string>>();
   // #966: lesing er AKTIVITET. `hasStarted` teller den nå, så «Siste aktivitet» må gjøre det samme
   // — ellers sier raden «Pågår» ved siden av «Siste aktivitet: —» for en deltaker som bare har
@@ -289,6 +325,8 @@ export async function getCourseLearnerReport(
     participantEmail: string;
     participantDepartment: string | null;
     completion: (typeof completions)[number] | null;
+    // #934: nyeste bevis for en ELDRE hovedversjon, når det ikke finnes et for den nåværende.
+    earlier?: (typeof completions)[number] | null;
     latestActivityAt: Date | null;
     latestByModule: Map<string, (typeof submissions)[number]>;
   }>();
@@ -328,8 +366,15 @@ export async function getCourseLearnerReport(
       latestActivityAt: null,
       latestByModule: new Map<string, (typeof submissions)[number]>(),
     };
-    current.completion = completion;
-    if (!current.latestActivityAt || completion.completedAt > current.latestActivityAt) {
+    // #934: bare et bevis for kursets nåværende hovedversjon gjør deltakeren fullført. Et eldre bevis
+    // huskes for seg — det nyeste av dem — så raden kan si «må ta ny versjon» og hvilken hen har.
+    if (completion.versionMajor === course.versionMajor) {
+      current.completion = completion;
+    } else if (!current.earlier || completion.versionMajor > current.earlier.versionMajor) {
+      current.earlier = completion;
+    }
+    // #1145: et registrert bevis (tatt utenfor plattformen) er ingen aktivitet og har ingen kjent dato.
+    if (completion.source !== "external" && (!current.latestActivityAt || completion.completedAt > current.latestActivityAt)) {
       current.latestActivityAt = completion.completedAt;
     }
     learners.set(completion.userId, current);
@@ -363,7 +408,7 @@ export async function getCourseLearnerReport(
     const scores: number[] = [];
 
     // #1116: «bestått» er sertifiseringsstatusen, samme svar som kursbeviset og kursraden over
-    // (findPassedUserIdsForModule). Før leste raden vedtaket på siste forsøk, med en svarteliste
+    // (`findModuleProgress`). Før leste raden vedtaket på siste forsøk, med en svarteliste
     // (`=== "UNDER_REVIEW"`): etter en revisjon (#997) står vedtaket fortsatt som bestått, mens
     // statusen sier at modulen må tas på nytt — og detaljen viste «Fullført» der beviset nektet.
     // Det som ikke er bestått, er under vurdering så lenge siste forsøk ikke er avgjort
@@ -374,7 +419,7 @@ export async function getCourseLearnerReport(
       if (typeof latestDecision?.totalScore === "number") {
         scores.push(latestDecision.totalScore);
       }
-      if (passedByModule.get(moduleId)?.has(learner.participantId)) {
+      if (moduleProgress.passedUserIds(course.id, moduleId).has(learner.participantId)) {
         passedModules += 1;
       } else if (!latest) {
         continue;
@@ -395,15 +440,23 @@ export async function getCourseLearnerReport(
     // #966: kravet er moduler OG seksjoner, samme regnestykke som bevisporten og kurslista.
     // `hasStarted` teller nå også lesing: en deltaker som bare har lest, men ikke levert, er i gang
     // — ikke «ikke startet».
-    const hasStarted = learner.latestByModule.size > 0 || readSections > 0 || Boolean(learner.completion);
-    const completedModules = learner.completion ? moduleIds.length : passedModules;
-    const status = learner.completion
+    const hasStarted = learner.latestByModule.size > 0 || readSections > 0 || Boolean(learner.completion) || Boolean(learner.earlier);
+    // #1145: et bevis fra plattformen betyr at alt var oppfylt. Et registrert bevis (tatt utenfor) måler ingenting: raden viser
+    // det som faktisk er bestått og lest.
+    const measuredCompletion = Boolean(learner.completion) && learner.completion!.source !== "external";
+    const completedModules = measuredCompletion ? moduleIds.length : passedModules;
+    const computed = computeCourseStatus(
+      passedModules + readSections,
+      moduleIds.length + requiredSectionIds.length,
+      hasStarted,
+    );
+    // #934: et bevis for en eldre hovedversjon gir «må ta ny versjon» — med mindre kravet i den nåværende
+    // faktisk er oppfylt (beviset er da bare ikke utstedt ennå).
+    const status: CourseLearnerRow["status"] = learner.completion
       ? "COMPLETED"
-      : computeCourseStatus(
-          passedModules + readSections,
-          moduleIds.length + requiredSectionIds.length,
-          hasStarted,
-        );
+      : learner.earlier && computed !== "COMPLETED"
+        ? "NEEDS_NEW_VERSION"
+        : computed;
 
     return {
       participantId: learner.participantId,
@@ -420,14 +473,17 @@ export async function getCourseLearnerReport(
       totalModules: moduleIds.length,
       // #966: seksjonene vises fordi de nå AVGJØR statusen. Uten dem ville raden kunne si
       // «4/4 moduler» ved siden av «Pågår», og rapportleseren hadde ingen måte å se hvorfor.
-      readSections: learner.completion ? requiredSectionIds.length : readSections,
+      readSections: measuredCompletion ? requiredSectionIds.length : readSections,
       totalSections: requiredSectionIds.length,
       score: scores.length > 0 ? round2(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
       latestActivityAt: latestActivityAt?.toISOString() ?? null,
-      completedAt: learner.completion?.completedAt.toISOString() ?? null,
+      completedAt: measuredCompletion ? learner.completion!.completedAt.toISOString() : null,
+      // #1145: `external` = registrert av administrator for et kurs tatt utenfor plattformen (ingen dato); null uten bevis.
+      completionSource: (learner.completion ? (learner.completion.source === "external" ? "external" : "platform") : null) as CourseLearnerRow["completionSource"],
       certificateId: learner.completion?.certificateId ?? null,
+      earlierCertificateVersion: learner.completion ? null : (learner.earlier?.versionMajor ?? null),
     };
-  });
+  }).sort(compareLearnerRows);
 
   return {
     selectedCourseId: course.id,
@@ -436,6 +492,7 @@ export async function getCourseLearnerReport(
       learners: rows.length,
       completed: rows.filter((row) => row.status === "COMPLETED").length,
       inProgress: rows.filter((row) => row.status === "IN_PROGRESS").length,
+      needsNewVersion: rows.filter((row) => row.status === "NEEDS_NEW_VERSION").length,
     },
   };
 }

@@ -93,13 +93,14 @@ describe("module-owned read models", () => {
       llmEvaluations: [
         {
           id: "llm-1",
-          practicalScoreScaled: 40,
+          // 2.140.0: KI-ens eget delpoeng skiller seg fra vedtakets, så testen viser hvilket som vises.
+          practicalScoreScaled: 0,
           confidenceNote: "Low confidence",
           responseJson: JSON.stringify({
             module_id: "module-1",
             rubric_scores: { evidence: 2 },
             pass_fail_practical: false,
-            practical_score_scaled: 40,
+            practical_score_scaled: 0,
             rubric_total: 2,
             red_flags: [],
             manual_review_recommended: true,
@@ -117,6 +118,7 @@ describe("module-owned read models", () => {
     expect(result.status).toBe("UNDER_REVIEW");
     expect(result.statusExplanation).toContain("manual review");
     expect(result.scoreComponents.totalScore).toBe(65);
+    expect(result.scoreComponents.practicalScaledScore).toBe(40);
     expect(result.participantGuidance.improvementAdvice).toEqual(["Add more evidence"]);
     expect(result.participantGuidance.decisionMetadata).toEqual({
       evidenceSufficiency: "insufficient",

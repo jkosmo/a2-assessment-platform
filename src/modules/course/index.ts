@@ -6,11 +6,13 @@
 // ApplicationService) is a large, risky refactor not worth a dedicated pass for a p4 concern. **Address
 // opportunistically:** when you next touch these modules, prefer a narrow import over the wide barrel and
 // nudge toward a shared kernel. See doc/design/ARCHITECTURE_REVIEW_2026-07-19.md.
-export { checkAndIssueCourseCompletions, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "./courseCompletionService.js";
+export { checkAndIssueCourseCompletions, checkAndIssueCourseCompletionsForSection, recordSectionRead, reconcileCourseCompletionsForUser } from "./courseCompletionService.js";
 export { getCourseReport, getCourseLearnerReport } from "./courseReport.js";
-export { createCourse, updateCourse, publishCourse, unpublishCourse, archiveCourse, restoreCourse, setCourseModules, setCourseItems, deleteCourse } from "./courseCommands.js";
+export { createCourse, updateCourse, publishCourse, unpublishCourse, setCourseModules, setCourseItems, deleteCourse } from "./courseCommands.js";
+export { archiveCourse, restoreCourse } from "./courseArchive.js";
 export type { CourseItemInput } from "./courseCommands.js";
-export { getCoursePublishPreview, publishCourseCascade, getCoursePendingVersions, publishCoursePendingVersions } from "./coursePublishService.js";
+export { courseFormOutdatedError, assertCourseItemsUsable } from "./courseCommands.js";
+export { getCoursePublishPreview, publishCourseCascade, publishCourseChecked, getCoursePendingVersions, publishCoursePendingVersions } from "./coursePublishService.js";
 export { getCourseCascadeDeletePreview, cascadeDeleteCourse } from "./courseCascadeDeleteService.js";
 export {
   listCourseThemes,
@@ -20,6 +22,8 @@ export {
   findThemeIdsForCourse,
   findLocalizedThemesForCourses,
   sortThemesByName,
+  assertCourseThemesExist,
+  findExistingThemeIds,
 } from "./courseThemeService.js";
 export type { CourseThemeRow, LocalizedTheme } from "./courseThemeService.js";
 export type {
@@ -38,7 +42,7 @@ export {
   createSectionWithAssets,
   remapAssetRefs,
   updateSectionTitle,
-  updateSectionContent,
+  saveSection,
   getSection,
   listSections,
   publishSection,
@@ -48,12 +52,12 @@ export {
   deleteSection,
   SECTION_CREATE_BODY_LIMIT_BYTES,
   type SectionAssetImportInput,
+  type SectionRevisionCheck,
 } from "./sectionCommands.js";
 export {
   createSectionAsset,
   listSectionAssets,
   getSectionAssetContent,
-  localizeSectionAssets,
   loadSectionAssetsForExport,
   ALLOWED_ASSET_MIME_TYPES,
   MAX_ASSET_BYTES,
@@ -97,6 +101,7 @@ export {
   isModuleInAccessibleCourse,
   canParticipantReadSection,
   deriveStatus,
+  deriveStatuses,
 } from "./enrollmentService.js";
 export type {
   AssignEnrollmentsInput,
@@ -105,6 +110,9 @@ export type {
   CourseEnrollmentView,
 } from "./enrollmentService.js";
 export { computeCourseStatus } from "./courseQueries.js";
+// #1139 skive 0: framdriften i «Mine kurs», felles for ruta og den ukentlige e-posten.
+export { getMyCoursesProgress } from "./myCoursesProgress.js";
+export type { MyCoursesProgress, MyCoursesProgressInput } from "./myCoursesProgress.js";
 export type {
   CourseStatus,
   CourseListItem,

@@ -2,7 +2,8 @@ import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "./html-escape.js";
 import { createListPage } from "./list-page.js";
-import { lifecycleBadge, lifecycleOf } from "./content-status-badge.js";
+import { lifecycleBadge, lifecycleOf, retentionLineHtml } from "./content-status-badge.js";
+import { moduleVersionLabel } from "./version-label.js";
 import {
   supportedLocales,
   localeLabels,
@@ -22,10 +23,13 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { describeImportError } from "/static/import-error.js";
+import { describeCueWarnings, describeRubricWarnings } from "/static/mcq-cue-warnings.js";
 import { describeApiError } from "/static/api-error.js";
-import { showToast } from "/static/toast.js";
+import { queueToast, showToast } from "/static/toast.js";
+import { runWithBusyButton } from "/static/busy-button.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
+import { confirmModuleArchive, confirmModuleDelete } from "./module-lifecycle-dialogs.js";
 import {
   manglendeSpraak,
   medHullAv,
@@ -174,6 +178,12 @@ function resolveActiveWorkspaceRoles() {
 // Lista (den felles listesida)
 // ---------------------------------------------------------------------------
 
+// #934 skive 5b: versjonen som er ute, i samme merke som i kurslista. En modul uten aktiv versjon har ikke noe å vise.
+function moduleVersionChipHtml(m) {
+  const label = moduleVersionLabel({ versionMajor: m.activeVersionMajor, versionMinor: m.activeVersionMinor, versionNo: m.activeVersionNo });
+  return label ? ` <span class="status-chip module-version-chip" title="${escapeHtml(t("library.versionChipTitle"))}">${escapeHtml(label)}</span>` : "";
+}
+
 function getListPage() {
   if (listPage) return listPage;
   listPage = createListPage({
@@ -213,10 +223,10 @@ function getListPage() {
       // #894: hvilke språk tittelen MANGLER. Står ved siden av navnet fordi det er navnet det
       // gjelder — ikke modulens tilstand.
       { key: "lang", label: t("ui.lang.col"), className: "col-lang", sortValue: (m) => manglendeSpraak(m).length, render: (m) => spraakMerkeHtml(m, tf) },
-      { key: "status", label: t("ui.status"), className: "col-status", render: (m) => lifecycleBadge(m, t) },
+      { key: "status", label: t("ui.status"), className: "col-status", render: (m, ctx) => lifecycleBadge(m, t) + moduleVersionChipHtml(m) + (ctx.filter === "archived" ? retentionLineHtml(m, "module", t, currentLocale) : "") },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (m) => certBadge(m.certificationLevel) },
       { key: "courses", label: t("library.col.usedInCourses"), className: "col-courses", sortValue: (m) => m.courseCount ?? 0, render: (m) => (m.courseCount > 0
-        ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${m.courseCount} kurs">${m.courseCount}</button>`
+        ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${escapeHtml(tf("library.courseCountAria", { count: m.courseCount }))}">${m.courseCount}</button>`
         : `<span class="course-count-zero">0</span>`) },
       { key: "updatedAt", label: t("ui.lastChanged"), className: "col-updated", sortValue: (m) => m.updatedAt ?? "", render: (m) => formatDate(m.updatedAt) },
     ],
@@ -227,6 +237,8 @@ function getListPage() {
       const isArchived = lifecycle === "archived";
       // #787 slice 5: eier/admin styrer om redigerings-/livssyklus-handlingene vises (speiler eierskaps-
       // vakta). Dupliser/Eksporter beholdes — de er lese-/kopi-handlinger som ikke vaktes av eierskap.
+      // #1165: før svarte eksporten 403 for en annens modul, og «Dupliser» ga en rød melding. Nå er lesingen åpen (doc/DECISIONS.md),
+      // og kopien eies av den som kopierer.
       const canManage = m.canManage !== false;
       const id = escapeHtml(m.id);
       const title = escapeHtml(m.title ?? m.id);
@@ -234,17 +246,21 @@ function getListPage() {
       const isPublished = lifecycle === "published" || lifecycle === "published_with_draft";
       return [
         // #896 S3c: knappen sier hva den gjør — åpner modulen.
-        canManage ? `<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>` : "",
+        // #1165 (produkteier 14.11.2026): også for den som ikke eier modulen. Modulsida viser den skrivebeskyttet.
+        `<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`,
         // #894: omdøping er en langt vanligere handling enn innholdsredigering, og krever ingen av
         // trinnene rundt. Egen knapp, ikke klikk på navnet — et klikk i raden åpner elementet.
-        canManage ? `<button class="row-action-btn" data-action="rename" data-module-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
-        `<button class="row-action-btn" data-action="duplicate" data-module-id="${id}">${escapeHtml(t("ui.action.duplicate"))}</button>`,
+        // #1151 skive 3c: ikke på en arkivert modul. Tjeneren avviser omdøpingen (`module_archived`), og «Dupliser» er
+        // ikke lov på et arkivert element (produkteier 13.11) — tjeneren kan ikke skille en kopi fra en import, så sperren
+        // er her. «Åpne» står: modulsida viser den arkiverte modulen skrivebeskyttet.
+        canManage && !isArchived ? `<button class="row-action-btn" data-action="rename" data-module-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
+        isArchived ? "" : `<button class="row-action-btn" data-action="duplicate" data-module-id="${id}">${escapeHtml(t("ui.action.duplicate"))}</button>`,
         `<button class="row-action-btn" data-action="export" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.export"))}</button>`,
         canManage && isPublished ? `<button class="row-action-btn" data-action="unpublish" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.unpublish"))}</button>` : "",
         // #705-UX: Slett vises kun for arkiverte moduler (terminal steg etter arkivering).
         canManage ? (isArchived
-          ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}">${escapeHtml(t("ui.action.restore"))}</button>`
-          : `<button class="row-action-btn" data-action="archive" data-module-id="${id}">${escapeHtml(t("ui.action.archive"))}</button>`) : "",
+          ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.restore"))}</button>`
+          : `<button class="row-action-btn" data-action="archive" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.archive"))}</button>`) : "",
         canManage && isArchived ? `<button class="row-action-btn destructive" data-action="delete" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
         canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("library.ownerOnlyHint"))}">${escapeHtml(t("ui.ownerOnly"))}</span>`,
       ];
@@ -259,6 +275,12 @@ function getListPage() {
       const data = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
       allModules = data.modules ?? [];
       return allModules;
+    },
+    // #1152 skive 4b-2: slettedatoen regnes bare når «Arkiverte» er valgt (produkteier 14.11.2026, etter stage 2.162.0).
+    lazyFields: {
+      filter: "archived",
+      fields: ["retention"],
+      load: async () => (await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}&includeRetention=1`, getHeaders)).modules ?? [],
     },
     onClick: (event) => {
       const btn = event.target.closest(".course-count-btn[data-module-id]");
@@ -370,8 +392,8 @@ function handleTableClick(btn) {
   if (!btn) return;
   const moduleId = btn.dataset.moduleId;
   const action = btn.dataset.action;
-  if (action === "archive") archiveModule(moduleId, btn);
-  else if (action === "restore") restoreModule(moduleId, btn);
+  if (action === "archive") archiveModule(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
+  else if (action === "restore") restoreModule(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
   else if (action === "delete") deleteModuleFromRow(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
   else if (action === "duplicate") duplicateModule(moduleId, btn);
   else if (action === "export") exportModulePackage(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
@@ -379,9 +401,11 @@ function handleTableClick(btn) {
 }
 
 // #705-UX: slett en arkivert modul (terminal). Vaktet i backend — blokkeres med forklarende
-// melding hvis modulen har avhengigheter eller brukes i et kurs.
+// melding hvis modulen brukes i et kurs eller et lagret kursutkast, eller har innleveringer eller
+// sertifiseringer (#1152: hver grunn har sin kode, og teksten slås opp i `errors.api.*`).
 async function deleteModuleFromRow(moduleId, moduleTitle, btn) {
-  if (!window.confirm(`Slette modulen «${moduleTitle}» permanent? Dette kan ikke angres.`)) return;
+  // #1168: sidas egen dialog, som kursets, i stedet for nettleserens spørreboks.
+  if (!(await confirmModuleDelete({ title: moduleTitle, t, tf, returnFocusTo: btn }))) return;
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}`, getHeaders, { method: "DELETE" });
@@ -397,8 +421,11 @@ async function deleteModuleFromRow(moduleId, moduleTitle, btn) {
 // and downloads the envelope as JSON. Mirrors the course-list "Eksporter"
 // behavior so authors have a consistent surface for both module + course
 // portability without having to enter the advanced editor.
-async function exportModulePackage(moduleId, moduleTitle, btn) {
-  btn.disabled = true;
+function exportModulePackage(moduleId, moduleTitle, btn) {
+  return runWithBusyButton(btn, () => downloadModulePackage(moduleId, moduleTitle));
+}
+
+async function downloadModulePackage(moduleId, moduleTitle) {
   try {
     const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`, getHeaders);
     const envelope = body?.envelope ?? null;
@@ -414,12 +441,10 @@ async function exportModulePackage(moduleId, moduleTitle, btn) {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    showToast(`Modul «${moduleTitle}» er eksportert.`);
+    showToast(tf("library.exported", { title: moduleTitle }));
   } catch (err) {
     const msg = apiErrorText(err);
     showToast(tf("adminContent.library.exportFailed", { reason: msg }), "error");
-  } finally {
-    btn.disabled = false;
   }
 }
 
@@ -427,23 +452,33 @@ async function exportModulePackage(moduleId, moduleTitle, btn) {
 // Archive / Restore
 // ---------------------------------------------------------------------------
 
-async function archiveModule(moduleId, btn) {
+async function archiveModule(moduleId, moduleTitle, btn) {
+  // #1168: sjekk først (kursene som holder modulen igjen), vis hva som skjer, og arkiver bare etter ja. Knappen er opptatt
+  // mens forhåndsvisningen hentes (se confirmModuleArchive) og mens arkiveringen sendes.
+  const answer = await confirmModuleArchive({ moduleId, title: moduleTitle, t, tf, apiFetch, getHeaders, returnFocusTo: btn });
+  if (answer.error) {
+    apiErrorToast(answer.error);
+    return;
+  }
+  if (!answer.confirmed) return;
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/archive`, getHeaders, { method: "POST" });
     showToast(t("library.archived"), "success");
     await loadModules();
   } catch (err) {
+    // Noen kan ha lagt modulen inn i et kurs etter forhåndsvisningen: tjenerens grunn, oversatt, som før.
     apiErrorToast(err);
     btn.disabled = false;
   }
 }
 
-async function restoreModule(moduleId, btn) {
+/** Gjenoppretting spør ikke, men sier hva som kom tilbake: modulen er et utkast og må publiseres igjen (#1168, som kurset). */
+async function restoreModule(moduleId, moduleTitle, btn) {
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/restore`, getHeaders, { method: "POST" });
-    showToast(t("library.restored"), "success");
+    showToast(tf("library.restoredAsDraft", { title: moduleTitle }), "success");
     await loadModules();
   } catch (err) {
     apiErrorToast(err);
@@ -454,16 +489,11 @@ async function restoreModule(moduleId, btn) {
 // #459: Avpubliser fra bibliotek-rad. Krever bekreftelse via window.confirm. POSTer til
 // /unpublish-endepunktet.
 async function unpublishModuleFromRow(moduleId, moduleTitle, btn) {
-  const confirmed = window.confirm(
-    `Avpubliser «${moduleTitle}»?\n\n` +
-    `Modulen blir utilgjengelig for nye innleveringer. Eksisterende innleveringer ` +
-    `går videre uforandret. Du kan publisere en versjon på nytt fra modulens Innstillinger.`
-  );
-  if (!confirmed) return;
+  if (!window.confirm(tf("library.unpublishConfirm", { title: moduleTitle }))) return;
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/unpublish`, getHeaders, { method: "POST" });
-    showToast(`«${moduleTitle}» avpublisert.`, "success");
+    showToast(tf("library.unpublishedToast", { title: moduleTitle }), "success");
     await loadModules();
   } catch (err) {
     apiErrorToast(err);
@@ -513,7 +543,7 @@ async function duplicateModule(moduleId, btn) {
     }));
     if (!importResult?.moduleId) throw new Error(t("library.importNoId"));
 
-    showToast(`Full kopi av «${sourceTitle}» opprettet.`, "success");
+    showToast(tf("library.duplicatedToast", { title: sourceTitle }), "success");
     await loadModules();
   } catch (err) {
     apiErrorToast(err);
@@ -530,6 +560,10 @@ function showCoursesPopover(anchor, moduleId) {
   const module = allModules.find(m => m.id === moduleId);
   if (!module) return;
 
+  // #1173: tittelen og navnet sto på bokmål i HTML-en; de settes på sidens språk når lista åpnes.
+  coursesPopover.setAttribute("aria-label", t("library.coursesPopoverAria"));
+  const popoverTitle = coursesPopover.querySelector(".courses-popover-title");
+  if (popoverTitle) popoverTitle.textContent = t("library.col.usedInCourses");
   coursesPopoverList.innerHTML = (module.courses ?? [])
     .map(c => `<li>${escapeHtml(c.title ?? c.id)}</li>`)
     .join("") || `<li><em>${escapeHtml(t("library.noCourses"))}</em></li>`;
@@ -558,9 +592,19 @@ function openCreateDialog() {
   window.location.href = "/admin-content/module/new/conversation";
 }
 
+// #1152 (QA-porten 4a): modulene forhåndsvisningen viste som «slettes». Sendes med ved bekreftelsen, og tjeneren sletter bare dem
+// (og bare hvis de fortsatt er kandidater). En modul som ble laget mens dialogen sto åpen, er ikke vist, og slettes ikke.
+let purgeShownModuleIds = null;
+
 // Åpne purge-dialogen, hent kandidat-forhåndsvisning fra backend og tegn listene.
 async function openPurgeDialog() {
   if (!purgeUnpublishedDialog) return;
+  // #1173: dialogens faste tekst står i HTML-en; den oversettes her, på språket som gjelder når den åpnes.
+  for (const node of purgeUnpublishedDialog.querySelectorAll("[data-i18n]")) {
+    const key = node.getAttribute("data-i18n");
+    if (key) node.textContent = t(key);
+  }
+  purgeShownModuleIds = null;
   purgePreviewLoading.hidden = false;
   purgePreviewBody.hidden = true;
   purgeError.hidden = true;
@@ -572,6 +616,7 @@ async function openPurgeDialog() {
     const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
     const toDelete = candidates.filter((c) => !c.reasonSkipped);
     const toSkip = candidates.filter((c) => c.reasonSkipped);
+    purgeShownModuleIds = toDelete.map((c) => c.id);
 
     purgeDeleteCount.textContent = String(toDelete.length);
     purgeDeleteList.innerHTML = toDelete.length === 0
@@ -598,7 +643,7 @@ async function openPurgeDialog() {
   } catch (error) {
     purgePreviewLoading.hidden = true;
     purgeError.hidden = false;
-    purgeError.textContent = `Klarte ikke hente forhåndsvisning: ${apiErrorText(error)}`;
+    purgeError.textContent = tf("library.purge.previewFailed", { reason: apiErrorText(error) });
   }
 }
 
@@ -610,20 +655,20 @@ async function runPurge() {
   try {
     const result = await apiFetch("/api/admin/content/modules/purge-unpublished", getHeaders, {
       method: "POST",
-      body: JSON.stringify({ confirmation: "SLETT" }),
+      body: JSON.stringify({ confirmation: "SLETT", expectedModuleIds: purgeShownModuleIds ?? [] }),
     });
     const deleted = Array.isArray(result?.deleted) ? result.deleted.length : 0;
     const failed = Array.isArray(result?.failed) ? result.failed.length : 0;
     purgeUnpublishedDialog.close();
     if (failed > 0) {
-      showToast(`Slettet ${deleted}, ${failed} feilet. Sjekk audit-loggen.`, "error");
+      showToast(tf("library.purge.doneWithFailures", { deleted, failed }), "error");
     } else {
-      showToast(`Slettet ${deleted} upubliserte moduler.`);
+      showToast(tf("library.purge.done", { deleted }));
     }
     await loadModules();
   } catch (error) {
     purgeError.hidden = false;
-    purgeError.textContent = `Sletting feilet: ${apiErrorText(error)}`;
+    purgeError.textContent = tf("library.purge.failed", { reason: apiErrorText(error) });
     purgeConfirmBtn.disabled = false;
   } finally {
     purgeConfirmBtn.textContent = originalLabel;
@@ -680,8 +725,14 @@ function buildLocaleSelector() {
     if (_headerValues && typeof _headerValues === "object") {
       _headerValues["x-locale"] = currentLocale;
     }
+    translatePurgeButton();
     loadModules();
   });
+}
+
+// #1173 (QA 2.176.0): knappen som åpner «Rydd upubliserte», sto på bokmål på alle språk. Dialogen selv oversettes når den åpnes.
+function translatePurgeButton() {
+  if (purgeUnpublishedBtn) purgeUnpublishedBtn.textContent = t("library.purge.open");
 }
 
 // ---------------------------------------------------------------------------
@@ -732,6 +783,7 @@ async function init() {
   if (purgeUnpublishedBtn) {
     const isAdmin = resolveActiveWorkspaceRoles().includes("ADMINISTRATOR");
     purgeUnpublishedBtn.hidden = !isAdmin;
+    translatePurgeButton();
     purgeUnpublishedBtn.addEventListener("click", openPurgeDialog);
   }
   purgeCancelBtn?.addEventListener("click", () => purgeUnpublishedDialog?.close());
@@ -776,7 +828,15 @@ async function init() {
         body: JSON.stringify({ payload, mode: "createNew", autoPublish: false }),
       }), { detail: t("adminContent.work.detail") });
       if (!result?.moduleId) throw new Error(t("library.importNoId"));
-      showToast(t("library.imported"));
+      // #1119: i kø, ikke vist — siden byttes i neste linje, og en vist melding forsvant med den.
+      // Spørsmål der svaret kan røpe seg, og kriterier uten beskrevet skala (#1122), følger med.
+      const cue = describeCueWarnings(result.cueWarnings, t, tf);
+      const rubric = describeRubricWarnings(result.rubricWarnings, t, tf);
+      const detail = [
+        cue.length > 0 ? `${t("mcqCue.heading")} ${cue.join(" ")}` : "",
+        rubric.length > 0 ? `${t("rubricCheck.heading")} ${rubric.join(" ")}` : "",
+      ].filter(Boolean).join(" ");
+      queueToast(t("library.imported"), detail ? "warning" : "info", detail);
       // Land i arbeidsrommet: der er publiseringsgaten med «Oversett det som mangler» (#896).
       window.location.href = `/admin-content/module/${encodeURIComponent(result.moduleId)}/conversation`;
     } catch (error) {

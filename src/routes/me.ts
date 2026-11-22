@@ -10,6 +10,7 @@ import {
 } from "../modules/user/pseudonymizationService.js";
 import { AppError } from "../errors/AppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
+import { getMyStats } from "../modules/reporting/myStats.js";
 
 const meRouter = Router();
 
@@ -25,12 +26,14 @@ meRouter.get("/", async (request, response, next) => {
   }
 
   try {
-    const [consentVersion, pendingDeletion] = await Promise.all([
+    const [consentVersion, pendingDeletion, preferences] = await Promise.all([
       getActiveConsentVersion(),
       prisma.deletionRequest.findFirst({
         where: { userId, status: "PENDING" },
         select: { effectiveAt: true, trigger: true },
       }),
+      // #1139: bryteren på profilen. Slått opp i databasen hver gang, ikke fra innloggingen.
+      prisma.user.findUnique({ where: { id: userId }, select: { weeklyEmailEnabled: true } }),
     ]);
 
     const consent = await prisma.userConsent.findUnique({
@@ -55,8 +58,38 @@ meRouter.get("/", async (request, response, next) => {
       pendingDeletion: pendingDeletion
         ? { effectiveAt: pendingDeletion.effectiveAt, trigger: pendingDeletion.trigger }
         : null,
+      // #1139: mangler feltet (en eldre tjener), skjuler profilen bryteren.
+      preferences: { weeklyEmail: preferences?.weeklyEmailEnabled ?? true },
       supportedLocales: SUPPORTED_LOCALES,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── PUT /api/me/preferences ──────────────────────────────────────────────────
+// #1139 (doc/design/PLAN_1139.md, punkt 5): bryteren «Ukentlig e-post fra båten». Det ENESTE stedet som skriver
+// `User.weeklyEmailEnabled`, og alltid for den innloggede: ingen bruker-id fra forespørselen. Unntatt fra samtykkesperren (12.7).
+const preferencesSchema = z.object({ weeklyEmail: z.boolean() }).strict();
+
+meRouter.put("/preferences", async (request, response, next) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const parsed = preferencesSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "invalid_request", message: "Expected { weeklyEmail: boolean }." });
+    return;
+  }
+  try {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { weeklyEmailEnabled: parsed.data.weeklyEmail },
+      select: { weeklyEmailEnabled: true },
+    });
+    response.json({ preferences: { weeklyEmail: user.weeklyEmailEnabled } });
   } catch (error) {
     next(error);
   }
@@ -130,6 +163,9 @@ meRouter.get("/data", async (request, response, next) => {
         select: {
           id: true, name: true, email: true, department: true, manager: true,
           activeStatus: true, lastLoginAt: true, createdAt: true, isAnonymized: true,
+          // #1139: bryteren for den ukentlige e-posten, og ukene den er sendt, hoppet over eller feilet (12.10).
+          weeklyEmailEnabled: true,
+          weeklyDigests: { orderBy: { weekKey: "desc" }, select: { weekKey: true, status: true, reason: true, sentAt: true } },
           roleAssignments: {
             select: { appRole: true, validFrom: true, validTo: true, createdAt: true, createdBy: true },
           },
@@ -138,6 +174,18 @@ meRouter.get("/data", async (request, response, next) => {
           // personen, så feltet blir med — det er historikk, ikke en gjeldende utløpsdato.
           certifications: {
             select: { moduleId: true, status: true, passedAt: true, expiryDate: true, updatedAt: true },
+          },
+          // #934 skive 5a-2: det som er lagret om hvilke innleveringer som har bestått. Ingen leser fremdrift herfra ennå.
+          modulePasses: {
+            select: { moduleId: true, moduleVersionId: true, submissionId: true, passedAt: true, invalidatedAt: true },
+          },
+          // #1145: kursbevisene, også de registrert av administrator for kurs tatt utenfor plattformen (ny kilde for
+          // opplysninger om personen). For `external` er `completedAt` tidspunktet for registreringen, ikke for kurset.
+          courseCompletions: {
+            select: {
+              courseId: true, certificateId: true, versionMajor: true, versionMinor: true,
+              completedAt: true, source: true, externalReference: true,
+            },
           },
         },
       }),
@@ -188,15 +236,44 @@ meRouter.get("/data", async (request, response, next) => {
       }),
     ]);
 
+    // #1145: som i de andre rutene: et bevis for et kurs tatt utenfor plattformen har ingen fullføringsdato. Tidspunktet som er
+    // lagret, er registreringen, og står som det.
+    const profile = user
+      ? {
+          ...user,
+          courseCompletions: user.courseCompletions.map(({ completedAt, ...completion }) =>
+            completion.source === "external"
+              ? { ...completion, completedAt: null, registeredAt: completedAt }
+              : { ...completion, completedAt }),
+        }
+      : user;
+
     response.json({
       exportedAt: new Date().toISOString(),
-      profile: user,
+      profile,
       submissions,
       appeals,
       consentHistory: consents,
       deletionHistory: deletionRequests,
       accessLog,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── GET /api/me/stats ────────────────────────────────────────────────────────
+// #1138: «Min statistikk» på profilen. ⚠️ Leser ALLTID den innloggede brukeren. Ruta tar ikke imot
+// en bruker-ID i adressen, spørrestrengen eller kroppen, og ingen rolle gir tilgang til en annens
+// statistikk (produkteier 2026-11-01: arbeidsgiver ser bare resultat).
+meRouter.get("/stats", async (request, response, next) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    response.json(await getMyStats(userId, requestLocale(request)));
   } catch (error) {
     next(error);
   }

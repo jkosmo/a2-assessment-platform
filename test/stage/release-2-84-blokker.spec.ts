@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.84.x mot UTRULLET stage: innholdsblokkene (#1079) — uthevet boks, prompt-boks med «Kopier»,
 // kort med ikon, og en tabell med kolonnenavn på telefon — hele kjeden med den ekte tjeneren:
@@ -105,7 +106,7 @@ const behold = process.env.STAGE_BEHOLD === "1";
 
 async function slettKurs(id: string) {
   await api("POST", `/api/admin/content/courses/${id}/unpublish`);
-  await api("POST", `/api/admin/content/courses/${id}/archive`);
+  await arkiverKurs(api, id);
   return api("DELETE", `/api/admin/content/courses/${id}`);
 }
 async function slettSeksjon(id: string) {
@@ -228,7 +229,7 @@ test.describe("2.84 — innholdsblokkene på stage", () => {
   test("seksjonen publiseres og legges i et publisert testkurs", async () => {
     const publisert = await api("POST", `/api/admin/content/sections/${sectionId}/publish`);
     expect(publisert.status, publisert.tekst.slice(0, 300)).toBe(200);
-    const kurs = await api("POST", "/api/admin/content/courses", { title: three(TITTEL) });
+    const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: three(TITTEL) });
     expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
     courseId = (kurs.json.course as { id: string }).id;
     const innhold = await api("PUT", `/api/admin/content/courses/${courseId}/items`, { items: [{ type: "SECTION", sectionId }] });

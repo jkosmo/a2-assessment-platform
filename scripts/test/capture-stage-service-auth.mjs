@@ -12,16 +12,22 @@
 //
 // Kjør:  npm run stage:auth:service
 //
+// 2.154.1: det samme tokenet kan også opptre som DELTAKER. Skriptet endrer ingenting for det: testen setter hodet
+// `x-stage-test-role: PARTICIPANT` selv, og da er tokenet en egen bruker med bare deltakerrollen (src/auth/stageTestService.ts).
+// Skriptet sjekker og godtar personvernerklæringen bare for fagansvarlig-identiteten; deltakerbrukeren godtar den første gang
+// testen bruker den (test/stage/release-2-154-1-deltakerkonto.spec.ts). Det holder skriptet virkende mot en stage uten 2.154.1.
+//
 // ⚠️ Verken hemmeligheten eller tokenet skal logges, deles eller committes.
 
 import fs from "node:fs";
 import path from "node:path";
+import { requireStageBaseUrl } from "./stage-base-url.mjs";
 
-const BASE = process.env.STAGE_BASE_URL ?? "https://a2-assessment-platform-stg-app-x6eyx4.azurewebsites.net";
 const SECRET_FILE = path.resolve(process.cwd(), ".stage-service.json");
 const OUT = path.resolve(process.cwd(), ".stage-service-auth.json");
 
 const log = (message) => console.log(`[stage-auth:service] ${message}`);
+const BASE = requireStageBaseUrl(log);
 
 if (!fs.existsSync(SECRET_FILE)) {
   log("fant ikke .stage-service.json — se kommentaren øverst i dette skriptet");
@@ -54,6 +60,20 @@ const meBody = await me.json().catch(() => ({}));
 if (!me.ok) {
   log(`stage avviste tokenet (${me.status}). Er DEPLOY_ENVIRONMENT=staging og STAGE_TEST_SERVICE_APP_ID satt på stage?`);
   process.exit(1);
+}
+
+// Testkontoen er en ny bruker på stage, og alt utenom /api/me krever at personvernerklæringen er
+// godtatt (consentMiddleware). Kontoen er ikke en person; den godtar gjeldende versjon slik en ny
+// bruker gjør ved første innlogging — og bare når den ikke alt har gjort det.
+if (meBody?.consent && meBody.consent.accepted === false) {
+  const consentVersion = meBody.consent.currentVersion;
+  const accepted = await fetch(`${BASE}/api/me/consent`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${body.access_token}`, "content-type": "application/json" },
+    body: JSON.stringify({ consentVersion }),
+  });
+  log(accepted.ok ? `godtok personvernerklæringen (versjon ${consentVersion}) for testkontoen` : `kunne ikke godta personvernerklæringen (${accepted.status})`);
+  if (!accepted.ok) process.exit(1);
 }
 
 const expiresOn = Date.now() + Number(body.expires_in ?? 3600) * 1000;

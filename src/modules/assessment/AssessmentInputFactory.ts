@@ -2,6 +2,7 @@ import { preprocessSensitiveDataForLlm, type SensitiveDataPreprocessResult } fro
 import { pickLocalizedValue } from "../../i18n/content.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { describedSteps, stepTexts } from "#rubric-check";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 
 // Each rubric criterion is scored on a 0–4 scale (decisionService clamps every score to [0,4]).
@@ -11,6 +12,8 @@ const RUBRIC_MAX_SCORE_PER_CRITERION = 4;
 export type AssessmentInputContext = {
   /** Rubric criterion IDs extracted from the module rubric configuration. */
   rubricCriteriaIds: string[];
+  /** #1135: what each criterion means — label, description with its steps, and its own scale — for the LLM prompt. */
+  rubricCriteria: RubricCriterionForPrompt[];
   /** Maximum possible rubric total score from the scaling rule. */
   rubricMaxTotal: number;
   /** Human-readable field labels from the submission schema, used in LLM prompt. */
@@ -99,6 +102,7 @@ export function buildAssessmentInputContext(
 
   return {
     rubricCriteriaIds,
+    rubricCriteria: parseRubricCriteriaForPrompt(rubricVersion.criteriaJson, submissionLocale),
     rubricMaxTotal,
     submissionFieldLabels,
     assessmentPolicy,
@@ -106,10 +110,79 @@ export function buildAssessmentInputContext(
     sensitiveDataPreprocess,
     moduleTaskText,
     moduleGuidanceText,
-    promptTemplateSystem: promptTemplateVersion.systemPrompt,
-    promptTemplateUserTemplate: promptTemplateVersion.userPromptTemplate,
+    // #1135: malene lagres som språkkart ({"en-GB": …, "nb": …}); uten oppslag fikk vurdereren hele
+    // kartet som tekst, og poengene ble ustabile (vedtak «ikke plassert først» når det sto først).
+    promptTemplateSystem: localizeContentText(submissionLocale, promptTemplateVersion.systemPrompt) ?? promptTemplateVersion.systemPrompt,
+    promptTemplateUserTemplate: localizeContentText(submissionLocale, promptTemplateVersion.userPromptTemplate) ?? promptTemplateVersion.userPromptTemplate,
     promptTemplateExamplesJson: promptTemplateVersion.examplesJson,
   };
+}
+
+/**
+ * #1135: KI-vurdereren fikk bare kriterienes ID-er («konkrete_regler») — ikke etiketten eller
+ * beskrivelsen med trinnene («0 = …; 2 = …; 4 = …»). Poengene ble satt ut fra et ID-navn og forventet
+ * innhold, og kriteriet deltakeren leser (#1124) var ikke det vurdereren brukte.
+ *
+ * Her leses det kriteriet SIER, på deltakerens språk. Formene i criteriaJson: en streng
+ * («0–4: …»), et objekt (`label`, `description`, `maxScore`), eller bare en vekt (`{ weight }`,
+ * standardrubrikken) — den siste har ingenting å si, og vurderes som før. Skalaen leses av samme
+ * kode som skillets kriteriekontroll (`describedSteps` i rubric-check.mjs).
+ */
+export type RubricCriterionForPrompt = {
+  id: string;
+  label: string | null;
+  description: string | null;
+  /** Kriteriets egen skala, når den er en annen enn 0–4 (for eksempel 0–2). */
+  scaleMax: number | null;
+  /** Trinnene slik beskrivelsen nevner dem («1 = står der, men blandet …»); tom når den ikke gjør det. */
+  steps?: Array<{ step: number; text: string }>;
+};
+
+function localizedField(value: unknown, locale: SupportedLocale): string | null {
+  if (typeof value === "string") return value.trim() ? (localizeContentText(locale, value) ?? value).trim() : null;
+  if (value && typeof value === "object") {
+    const map = value as Record<string, unknown>;
+    const picked = [locale, "nb", "nn", "en-GB"].map((key) => map[key]).find((v) => typeof v === "string" && v.trim());
+    return typeof picked === "string" ? picked.trim() : null;
+  }
+  return null;
+}
+
+/** Kriteriene som [id, rått kriterium], i lagret rekkefølge — listeform (med `id`) eller objektform. */
+export function parseRubricCriteriaEntries(criteriaJson: string): Array<[string, unknown]> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(criteriaJson);
+  } catch {
+    return [];
+  }
+  return Array.isArray(parsed)
+    ? parsed.filter((c) => typeof (c as { id?: unknown })?.id === "string").map((c) => [(c as { id: string }).id, c])
+    : parsed && typeof parsed === "object"
+      ? Object.entries(parsed as Record<string, unknown>)
+      : [];
+}
+
+/** Et kriterium som objekt (ikke en streng, og ikke bare et språkkart over en streng). */
+export function isCriterionObject(criterion: unknown): criterion is Record<string, unknown> {
+  return criterion !== null && typeof criterion === "object" && !isLocalizedMap(criterion);
+}
+
+export function parseRubricCriteriaForPrompt(criteriaJson: string, locale: SupportedLocale): RubricCriterionForPrompt[] {
+  return parseRubricCriteriaEntries(criteriaJson).map(([id, criterion]) => {
+    const isObject = isCriterionObject(criterion);
+    const label = isObject ? localizedField((criterion as { label?: unknown }).label, locale) : null;
+    const description = isObject ? localizedField((criterion as { description?: unknown }).description, locale) : localizedField(criterion, locale);
+    const forStep = isObject ? { ...(criterion as object), description } : description;
+    const steps = describedSteps(forStep);
+    const scaleMax = steps.max !== null && steps.max !== RUBRIC_MAX_SCORE_PER_CRITERION && steps.min === 0 ? steps.max : null;
+    return { id, label, description, scaleMax, steps: stepTexts(forStep, undefined, { defaultMax: RUBRIC_MAX_SCORE_PER_CRITERION }).steps };
+  });
+}
+
+function isLocalizedMap(value: object): boolean {
+  const keys = Object.keys(value);
+  return keys.length > 0 && keys.every((key) => key === "nb" || key === "nn" || key === "en-GB");
 }
 
 export function parseRubricCriteriaIds(criteriaJson: string): string[] {

@@ -217,6 +217,18 @@ param appealSlaMonitorIntervalMs int = 600000
 ])
 param participantNotificationChannel string = 'log'
 
+@description('#934 skive 4b: e-post ved ny hovedversjon av et kurs. Leses bare av workeren. Av som standard.')
+param courseMajorEmailEnabled bool = false
+
+@description('#1139: den ukentlige e-posten fra båten. Leses bare av workeren. Av som standard; slås på når app og worker viser samme versjon.')
+param weeklyEmailEnabled bool = false
+
+@description('#1139: hvem som får den ukentlige e-posten: adresser skilt med komma, «*» for alle. Tom = ingen. Stage beholder lista.')
+param weeklyEmailRecipients string = ''
+
+@description('Lenkene i e-post: adressen til plattformen. Tom: e-postene går uten lenke. Leses av både appen og workeren.')
+param publicAppBaseUrl string = ''
+
 @description('Optional webhook endpoint for participant notifications.')
 @secure()
 param participantNotificationWebhookUrl string = ''
@@ -885,6 +897,10 @@ resource webAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
           value: acsEmailSenderDisplayName
         }
         {
+          name: 'PUBLIC_APP_BASE_URL'
+          value: publicAppBaseUrl
+        }
+        {
           name: 'BOOTSTRAP_SEED'
           value: environmentName == 'production' ? 'false' : 'true'
         }
@@ -979,6 +995,18 @@ resource workerAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         {
           name: 'PROCESS_ROLE'
           value: 'worker'
+        }
+        {
+          name: 'COURSE_MAJOR_EMAIL_ENABLED'
+          value: string(courseMajorEmailEnabled)
+        }
+        {
+          name: 'WEEKLY_EMAIL_ENABLED'
+          value: string(weeklyEmailEnabled)
+        }
+        {
+          name: 'WEEKLY_EMAIL_RECIPIENTS'
+          value: weeklyEmailRecipients
         }
         {
           name: 'SKIP_MIGRATE'
@@ -1122,6 +1150,10 @@ resource workerAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         {
           name: 'ACS_EMAIL_SENDER_DISPLAY_NAME'
           value: acsEmailSenderDisplayName
+        }
+        {
+          name: 'PUBLIC_APP_BASE_URL'
+          value: publicAppBaseUrl
         }
         {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'

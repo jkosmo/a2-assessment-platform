@@ -12,6 +12,9 @@ export const moduleSummarySelect = {
     select: {
       id: true,
       versionNo: true,
+      // #934 skive 5b: modullista viser «v2.1». `versionNo` står som før.
+      versionMajor: true,
+      versionMinor: true,
       taskText: true,
       assessorExpectedContent: true,
       candidateTaskConstraints: true,
@@ -22,6 +25,9 @@ export const moduleSummarySelect = {
       rubricVersionId: true,
       promptTemplateVersionId: true,
       mcqSetVersionId: true,
+      // #1124: kriteriene deltakeren skal se før levering. Råteksten (med skjulte kriterier) forlater
+      // aldri tjenesten — moduleService bygger `assessmentCriteria` av den og fjerner feltet.
+      rubricVersion: { select: { criteriaJson: true } },
     },
   },
 } satisfies Prisma.ModuleSelect;

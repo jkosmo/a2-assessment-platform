@@ -34,8 +34,8 @@ import { describe, expect, it } from "vitest";
 // ─────────────────────────────────────────────────────────────────────────────
 // RATSJ, IKKE FORBUDSLISTE
 //
-// Baselinen er 2, ikke 0 — gjelden finnes (#1038 og admin-content-courses). Nye forekomster
-// feiler, og FJERNER man en, feiler den også, med beskjed om å sette tallet ned.
+// Baselinen er tom i dag (se BASELINE). Nye forekomster feiler. Får en fil en baseline igjen, og
+// man FJERNER en forekomst, feiler den også, med beskjed om å sette tallet ned.
 //
 // Et tall som bare kan stå stille er ikke en ratsj. Da låser man gjelden fast i stedet for å
 // presse den ned.
@@ -43,29 +43,21 @@ import { describe, expect, it } from "vitest";
 
 const PUBLIC = fileURLToPath(new URL("../public", import.meta.url));
 
-// Fil -> antall kjente språkvalg på klienten.
-// ⚠️ GULVET er NULL, med vilje. De to i forhåndsvisningen har et reelt behov — å vise forfatteren
-// hva en deltaker ser på et valgt språk — men rekkefølgen er deres egen, og det er nettopp det som
-// gir drift mot serverens. Fiksen er kjent (ruta lokaliserer først, som for #1038), så dette er
-// GJELD, ikke gulv, og rapporten skal fortsette å trekke for den.
-const GULV = 0;
+// Fil -> antall kjente språkvalg på klienten. Tom: all gjeld er nedbetalt. Historikken:
+//   - #1038 (fjernet 2026-09-11): klasseskjermen fikk tittelen ferdig valgt fra serveren.
+//   - #1046 (2026-09-12): kurs og seksjoner leser gjennom pickLocalizedText (i18n-locale.js).
+//   - #1043: `localizeValueForLocale` og `pickFirstNonEmpty` i admin-content-preview.js — kjeden [locale, "nb", "en-GB"],
+//     skrevet som en ordnet LISTE til en hjelper, og derfor USYNLIG for vakta fram til 2026-09-06. 2 → 0 (19.09): den spør
+//     nå `pickLocalizedText`, som speiler tjenerens rekkefølge.
+//
+// ⚠️ Testgjennomgangen 2026-11 (avsnitt 5.1): oppføringen `"static/admin-content-preview.js": 0` sto igjen, og testen
+// «ingen FÆRRE enn baselinen» kunne da aldri bli rød (0 < 0 er aldri sant). Oppføringen er fjernet. En ny oppføring må være
+// over 0; en på 0 er nedbetalt og skal ut (se testen under).
+const BASELINE = {};
 
-const BASELINE = {
-  // #1038 (fjernet 2026-09-11): klasseskjermen fikk tittelen ferdig valgt fra serveren.
-  // #1046 (2026-09-12): kurs og seksjoner leser gjennom pickLocalizedText (i18n-locale.js) — 0 igjen.
-  // #1043: `localizeValueForLocale` og `pickFirstNonEmpty` — kjeden [locale, "nb", "en-GB"] og så
-  // «første ikke-tomme». Gjelden er ikke ny; den var USYNLIG for vakta fram til 2026-09-06, fordi
-  // kjeden er skrevet som en ordnet LISTE til en hjelper og ikke som en `??`-kjede.
-  //
-  // ⚠️ Forhåndsvisningen har et reelt behov — den skal vise forfatteren hva en deltaker ser på et
-  // valgt språk. Men rekkefølgen er dens egen, og det er nettopp det som gir drift mot serverens.
-  // Fjernes den, må ruta lokalisere først, som for #1038. Egen endring, ikke en opprydding her.
-  //
-  // 2 → 0 (19.09): kjeden er borte. `localizeValueForLocale` spør nå `pickLocalizedText`
-  // (i18n-locale.js), som speiler tjenerens rekkefølge — endres organisasjonens standardspråk,
-  // følger forhåndsvisningen med av seg selv.
-  "static/admin-content-preview.js": 0,
-};
+// GULVET er NULL, med vilje: ingen språkvalg på klienten er lovlige. Testen bruker det ikke, men
+// kompleksitetsrapporten leser det (`lesGulv` i scripts/complexity/report.ts) — ikke fjern det.
+const GULV = 0;
 // 5 til sammen, per 2026-09-11 (6 den 2026-09-06).
 //
 // ⚠️ Mitt eget håndsveip før denne vakta sa 2. Det var halvparten. Grep med noen linjers kontekst
@@ -79,11 +71,12 @@ const BASELINE = {
 //   localizeTitle (results.js), localizeContentValue (profile.js),
 //   humanizeApiError (participant.js, #983), klientside tittelvalg (review.js, #1022).
 
-// Vendorkode er ikke vår. `localizedTextCodec`-speilet på klienten er den ENE delte
-// implementasjonen, på samme måte som `api-error.js` er det for feilmeldinger.
+// Vendorkode er ikke vår.
+//
+// Testgjennomgangen 2026-11 (avsnitt 5.2): unntaket for `static/localized-text.js` er fjernet. Fila finnes ikke, så
+// unntaket dekket ingenting, men ville sluppet gjennom en ny fil med det navnet.
 const EXEMPT = [
   "static/vendor/",
-  "static/localized-text.js",
 ];
 
 function walk(dir) {
@@ -183,6 +176,10 @@ describe("klienten velger ikke språk for lagret innhold (#1027)", () => {
   it("ingen FÆRRE enn baselinen — sett tallet ned når du har ryddet", () => {
     const ryddet = [];
     for (const [rel, forventet] of Object.entries(BASELINE)) {
+      if (forventet <= 0) {
+        ryddet.push(`${rel}: baseline ${forventet} er nedbetalt gjeld — fjern linja`);
+        continue;
+      }
       const fil = files.find((f) => f.rel === rel);
       // Forsvinner fila helt, er det også en rydding — da skal linja ut av baselinen.
       const faktisk = fil ? localeChoices(fil.src).length : 0;

@@ -48,9 +48,6 @@ async function mockProfile(page: Page, roles: string[]) {
   await page.route("**/api/queue-counts", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ counts: {} }) }),
   );
-  await page.route("**/api/modules/completed**", (route: Route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ modules: [] }) }),
-  );
   await page.route("**/api/courses/completions", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ completions: [] }) }),
   );

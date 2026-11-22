@@ -1,9 +1,12 @@
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
-import { notifyAppealStatusTransition, notifyAssessmentResult, sendModuleRevisedNotification } from "../certification/index.js";
+import { notifyAppealStatusTransition, notifyAssessmentResult, notifyAssessmentUnderReview, sendModuleRevisedNotification } from "../certification/index.js";
 import type { AppealNotificationInput, NotificationResult } from "../certification/participantNotificationService.js";
-import { checkAndIssueCourseCompletions } from "../course/index.js";
+import { checkAndIssueCourseCompletions, checkAndIssueCourseCompletionsForSection } from "../course/index.js";
+import { deliverCourseMajorVersionNotice } from "../course/courseMajorVersionEmail.js";
+import { deliverCourseAssignmentDigest } from "../course/courseAssignmentNotice.js";
+import { deliverWeeklyDigest } from "../weeklyDigest/weeklyDigestJob.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 
 // #795-followup: race a delivery against a wall-clock deadline so a hung handler (e.g. an ACS email call
@@ -36,6 +39,25 @@ export const OUTBOX_EVENT_TYPES = {
   // retter seg aldri (lærdommen fra #1007), og publiseringen skal ikke rulles tilbake fordi en
   // e-post feilet: raden ligger igjen og prøves på nytt.
   moduleRevisedNotification: "module_revised_notification",
+  // #934 skive 4b: «kurset har fått en ny hovedversjon». Én hendelse per rad i `CourseVersionNotice`; bare jobben i
+  // workeren legger dem inn (courseMajorVersionEmail.ts), og bare når COURSE_MAJOR_EMAIL_ENABLED er på — så en
+  // gammel worker uten behandleren møter aldri typen.
+  courseMajorVersionNotification: "course_major_version_notification",
+  // «Svaret ditt har gått til en sensor». Egen type med vilje: en gammel worker under utrulling ville lest
+  // `assessment_notification` uten `passFailTotal` og sendt «ikke bestått». Den kjenner ikke denne, og lar raden stå.
+  assessmentUnderReviewNotification: "assessment_under_review_notification",
+  // #1142: «du har fått nye kurs», én e-post per samling i `CourseAssignmentNotice` (courseAssignmentNotice.ts). Bare jobben i
+  // workeren legger dem inn, og ved første utrulling tidligst 15 minutter etter jobbens første runde (vinduet): da er den
+  // gamle workeren borte (doc/design/PLAN_1142.md, punkt 7).
+  courseAssignmentDigest: "course_assignment_digest",
+  // #1139: den ukentlige e-posten, én hendelse per rad i `WeeklyDigest` (weeklyDigestJob.ts). Bare jobben i workeren legger dem
+  // inn, og bare med WEEKLY_EMAIL_ENABLED=true, som slås på når app og worker viser samme versjon: en gammel worker møter aldri
+  // typen. Tilbakerulling: den gamle workeren kjenner den ikke, utboksen gir opp, ingen dobbel e-post (PLAN_1139 punkt 9).
+  weeklyDigest: "weekly_digest",
+  // #1156: «sjekk kursbevisene i de andre kursene med seksjonen» etter en lesing (`recordSectionRead`). Egen type, ikke
+  // `course_completion_check` med `sectionId`: der ville `moduleId` vært udefinert og matchet alle publiserte kurs. En gammel worker
+  // under utrullingen kjenner den ikke og gir opp etter fem forsøk; avstemmingen når «Mine kurs» åpnes, tar beviset da.
+  sectionReadCompletionCheck: "section_read_completion_check",
 } as const;
 
 type AssessmentNotificationPayload = {
@@ -49,9 +71,18 @@ type AssessmentNotificationPayload = {
   locale: SupportedLocale;
 };
 
+export type AssessmentUnderReviewNotificationPayload = Omit<AssessmentNotificationPayload, "passFailTotal">;
+
 type CourseCompletionCheckPayload = {
   userId: string;
   moduleId: string;
+};
+
+/** #1156: deltakeren, seksjonen og kurset lesingen ble gjort i (det er alt sjekket, i lesingens egen transaksjon). */
+export type SectionReadCompletionCheckPayload = {
+  userId: string;
+  sectionId: string;
+  readInCourseId?: string;
 };
 
 export type ModuleRevisedNotificationPayload = {
@@ -69,11 +100,30 @@ export type ModuleRevisedNotificationPayload = {
 // Samme felt som `notifyAppealStatusTransition` tar — statusene er strenger og kan lagres som de er.
 export type AppealNotificationPayload = AppealNotificationInput;
 
-export type OutboxEnqueueInput =
+/** #934 skive 4b: bare radens id. Behandleren leser resten (og sjekker det på nytt) når den sender. */
+export type CourseMajorVersionNotificationPayload = { noticeId: string };
+
+/** #1142: samlingens id. Behandleren finner radene på den og sjekker hvert kurs på nytt. `userId` står med for sporing. */
+export type CourseAssignmentDigestPayload = { batchId: string; userId: string };
+
+/** #1139: radens id i `WeeklyDigest`. Behandleren leser resten og sjekker alt på nytt rett før sending. */
+export type WeeklyDigestPayload = { digestId: string };
+
+export type OutboxEnqueueInput = (
   | { type: typeof OUTBOX_EVENT_TYPES.assessmentNotification; payload: AssessmentNotificationPayload }
+  | { type: typeof OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification; payload: AssessmentUnderReviewNotificationPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.courseCompletionCheck; payload: CourseCompletionCheckPayload }
+  | { type: typeof OUTBOX_EVENT_TYPES.sectionReadCompletionCheck; payload: SectionReadCompletionCheckPayload }
   | { type: typeof OUTBOX_EVENT_TYPES.appealNotification; payload: AppealNotificationPayload }
-  | { type: typeof OUTBOX_EVENT_TYPES.moduleRevisedNotification; payload: ModuleRevisedNotificationPayload };
+  | { type: typeof OUTBOX_EVENT_TYPES.moduleRevisedNotification; payload: ModuleRevisedNotificationPayload }
+  | { type: typeof OUTBOX_EVENT_TYPES.courseMajorVersionNotification; payload: CourseMajorVersionNotificationPayload }
+  | { type: typeof OUTBOX_EVENT_TYPES.courseAssignmentDigest; payload: CourseAssignmentDigestPayload }
+  | { type: typeof OUTBOX_EVENT_TYPES.weeklyDigest; payload: WeeklyDigestPayload }
+) & {
+  // #934 skive 4b: når hendelsen tidligst kan leveres. Utelatt: med én gang. E-postene om ny hovedversjon spres
+  // utover med denne (om lag 20 i minuttet).
+  availableAt?: Date;
+};
 
 // Retry backoff: 30s, 60s, 120s, … capped at 15 min. Small enough that a transient failure recovers
 // quickly, large enough that a persistently-failing handler doesn't hot-loop.
@@ -89,7 +139,7 @@ export function enqueueOutboxEvents(events: OutboxEnqueueInput[], tx?: DbTransac
   if (events.length === 0) return Promise.resolve({ count: 0 });
   const client = tx ?? prisma;
   return client.outboxEvent.createMany({
-    data: events.map((e) => ({ type: e.type, payloadJson: JSON.stringify(e.payload) })),
+    data: events.map((e) => ({ type: e.type, payloadJson: JSON.stringify(e.payload), ...(e.availableAt ? { availableAt: e.availableAt } : {}) })),
   });
 }
 
@@ -156,16 +206,26 @@ function settleNotification(result: NotificationResult | null, what: string): vo
   throw new Error(reason);
 }
 
-/** The event types that send something to a person: a re-run after a cut-off could send it twice. */
-const SENDS_TO_A_PERSON = new Set<string>([
+/**
+ * The event types that send something to a person: a re-run after a cut-off could send it twice. #1142: also read by the
+ * prod → stage copy (`neutralizeEmailStateAfterProdCopy`), which fails the undelivered ones so stage never sends what prod
+ * has sent or will send. A new type that e-mails a person belongs here.
+ */
+export const SENDS_TO_A_PERSON: ReadonlySet<string> = new Set<string>([
   OUTBOX_EVENT_TYPES.assessmentNotification,
+  OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification,
   OUTBOX_EVENT_TYPES.appealNotification,
   OUTBOX_EVENT_TYPES.moduleRevisedNotification,
+  OUTBOX_EVENT_TYPES.courseMajorVersionNotification,
+  OUTBOX_EVENT_TYPES.courseAssignmentDigest,
+  OUTBOX_EVENT_TYPES.weeklyDigest,
 ]);
 
 // Deliver one event by dispatching on its type. Both handlers are idempotent (completion checks whether
 // the certificate already exists; the notification pipeline dedupes on its own audit trail).
-export async function deliverOutboxEvent(event: { type: string; payloadJson: string }): Promise<void> {
+// #934 skive 4b: `attempts`/`maxAttempts` (fra leasingen) sier om dette er siste forsøk — behandleren for ny
+// hovedversjon markerer da raden sin `failed`, så den ikke står som `queued` etter at outboxen har gitt opp.
+export async function deliverOutboxEvent(event: { type: string; payloadJson: string; attempts?: number; maxAttempts?: number }): Promise<void> {
   if (event.type === OUTBOX_EVENT_TYPES.assessmentNotification) {
     const p = JSON.parse(event.payloadJson) as AssessmentNotificationPayload;
     const result = await notifyAssessmentResult({
@@ -181,9 +241,35 @@ export async function deliverOutboxEvent(event: { type: string; payloadJson: str
     settleNotification(result, "assessment result notification");
     return;
   }
+  if (event.type === OUTBOX_EVENT_TYPES.assessmentUnderReviewNotification) {
+    const p = JSON.parse(event.payloadJson) as AssessmentUnderReviewNotificationPayload;
+    // Raden venter fem minutter. Har sensor rukket å bli ferdig, har deltakeren alt fått resultatet, og denne ville kommet etterpå.
+    // Saken hos sensor avgjør, ikke innleveringens status: en anke setter den samme innleveringen tilbake til UNDER_REVIEW.
+    const openReview = await prisma.manualReview.findFirst({
+      where: { submissionId: p.submissionId, reviewStatus: { in: ["OPEN", "IN_REVIEW"] } },
+      select: { id: true },
+    });
+    if (!openReview) return;
+    const result = await notifyAssessmentUnderReview({
+      submissionId: p.submissionId,
+      submittedAt: new Date(p.submittedAt),
+      recipientEmail: p.recipientEmail,
+      recipientName: p.recipientName,
+      moduleTitle: p.moduleTitle,
+      moduleId: p.moduleId,
+      locale: p.locale,
+    });
+    settleNotification(result, "assessment under review notification");
+    return;
+  }
   if (event.type === OUTBOX_EVENT_TYPES.courseCompletionCheck) {
     const p = JSON.parse(event.payloadJson) as CourseCompletionCheckPayload;
     await checkAndIssueCourseCompletions({ userId: p.userId, moduleId: p.moduleId });
+    return;
+  }
+  if (event.type === OUTBOX_EVENT_TYPES.sectionReadCompletionCheck) {
+    const p = JSON.parse(event.payloadJson) as SectionReadCompletionCheckPayload;
+    await checkAndIssueCourseCompletionsForSection({ userId: p.userId, sectionId: p.sectionId, readInCourseId: p.readInCourseId });
     return;
   }
   if (event.type === OUTBOX_EVENT_TYPES.appealNotification) {
@@ -203,6 +289,28 @@ export async function deliverOutboxEvent(event: { type: string; payloadJson: str
       locale: p.locale,
     });
     settleNotification(result, "module revised notification");
+    return;
+  }
+  if (event.type === OUTBOX_EVENT_TYPES.courseMajorVersionNotification) {
+    const p = JSON.parse(event.payloadJson) as CourseMajorVersionNotificationPayload;
+    // Behandleren eier radens tilstand: den kaster ved en sikker feil (prøv igjen) og gir opp av seg selv ved en
+    // som kan ha gått (`uncertain`). Siste forsøk: raden blir `failed` før outboxen gir opp.
+    const lastAttempt = event.attempts !== undefined && event.maxAttempts !== undefined && event.attempts + 1 >= event.maxAttempts;
+    await deliverCourseMajorVersionNotice(p.noticeId, { lastAttempt });
+    return;
+  }
+  if (event.type === OUTBOX_EVENT_TYPES.courseAssignmentDigest) {
+    const p = JSON.parse(event.payloadJson) as CourseAssignmentDigestPayload;
+    // Som 4b: behandleren eier radenes tilstand, kaster ved en sikker feil og gir opp av seg selv ved en som kan ha gått.
+    const lastAttempt = event.attempts !== undefined && event.maxAttempts !== undefined && event.attempts + 1 >= event.maxAttempts;
+    await deliverCourseAssignmentDigest(p.batchId, { lastAttempt });
+    return;
+  }
+  if (event.type === OUTBOX_EVENT_TYPES.weeklyDigest) {
+    const p = JSON.parse(event.payloadJson) as WeeklyDigestPayload;
+    // Som #1142: behandleren eier radens tilstand, kaster ved en sikker feil og gir opp av seg selv ved en som kan ha gått.
+    const lastAttempt = event.attempts !== undefined && event.maxAttempts !== undefined && event.attempts + 1 >= event.maxAttempts;
+    await deliverWeeklyDigest(p.digestId, { lastAttempt });
     return;
   }
   throw new Error(`Unknown outbox event type: ${event.type}`);

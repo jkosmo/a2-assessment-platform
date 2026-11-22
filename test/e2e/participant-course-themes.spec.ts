@@ -88,6 +88,13 @@ test("etter tema: hvert tema har sine kurs, fullførte under en grense i temaet,
     "# Andre kurs", "Personvern",
   ]);
   await expect(page.locator('.course-view-btn[data-view="theme"]')).toHaveAttribute("aria-pressed", "true");
+  // Produkteier valgte variant A: temanavnet i messing (--color-link-active, #6e4b0c) og større enn
+  // kurstitlene — ellers skiller ikke temaene seg ut.
+  const heading = page.locator(".course-theme-heading").first();
+  await expect(heading).toHaveCSS("color", "rgb(110, 75, 12)");
+  const headingSize = parseFloat(await heading.evaluate((el) => getComputedStyle(el).fontSize));
+  const titleSize = parseFloat(await page.locator(".course-accordion-title").first().evaluate((el) => getComputedStyle(el).fontSize));
+  expect(headingSize).toBeGreaterThan(titleSize);
 });
 
 test("alfabetisk: én liste uten temaoverskrifter, hvert kurs én gang — og valget huskes", async ({ page }) => {

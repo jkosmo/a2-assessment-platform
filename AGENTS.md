@@ -69,7 +69,7 @@ These rules exist because their violation caused or worsened the May 2026 produc
 7. **Never** treat successful ARM validation or a green deploy step as proof of runtime correctness — the MSI sidecar and KV reference resolution can still fail at runtime.
 8. **Never** run prod-destructive scripts without asserting the correct subscription and resource group first.
 9. **Always** include rollback notes for infra changes in the PR description.
-10. **Always** confirm staging `/healthz` is healthy before a production deploy.
+10. **Always** confirm staging `/healthz` is healthy before a production deploy. Stage is self-hosted since 2026-11-22, so it cannot prove Azure-only behaviour (MSI, KV references, Bicep); for those, see «Stage is not in Azure» below.
 11. **Always** propose `az deployment group what-if` output for staging (and prod) before implementing non-trivial Bicep changes. ARM what-if is the only check that catches schema drift before deploy.
 12. **Always** apply credential changes atomically: a KV secret and the underlying resource (PostgreSQL server, Storage account, etc.) must be updated in the same deploy, or one must explicitly re-read the existing value. Drift between KV and the underlying resource is silent until the next app restart.
 13. **Always** keep DB migrations expand/contract-safe (#811). Both web and worker run `prisma migrate deploy` on startup (`SKIP_MIGRATE=false`), so during a rollout old containers run against the new schema and new code runs briefly against the old schema. **Expand within a deploy** (additive only); **contract in a follow-up deploy** (drop/rename only after all code using the object is gone). Never combine an additive and a destructive change to the same object in one deploy. See `doc/OPERATIONS_RUNBOOK.md` → "Migrations and Schema Changes".
@@ -155,15 +155,17 @@ fiksturen seks. En stående ordre man LESER er ikke det samme som en sjekk man K
   oppdage stedet ingen tenkte på; la testen finne kallerne. **(4) tre testlag** — mocket e2e,
   `npm run test:stage` (utrullet artefakt), og autentisert mot reelle data; **en mocket e2e kan
   aldri fange at mocken er feil**, så manuell test hører hjemme nøyaktig der.
-- **Cross-model QA gate before every stage deploy (standing order, 2026-08-13):** a stage deploy
-  costs 16–22 min plus a manual test round, and the bugs that survive the automated suites are the
+- **Cross-model QA gate before every stage deploy (standing order, 2026-08-13):** a stage round
+  costs a deploy plus a manual test round, and the bugs that survive the automated suites are the
   ones they were not written for. After the suites are green and **before** the stage deploy, run
   `.\scripts\ai-qa.ps1 [-Issue <n>] [-Uncommitted] [-SkipTests]`. It runs `lint` + `test:unit` +
   `test:dom`, refuses to review red code, then runs `codex exec review` with the repo's standing
   orders as the checklist, adds a second pass for the verdict + manual-test list, and writes both
   to `.ai-qa/qa-<timestamp>.md` (gitignored). Exit codes: `0` GO, `1` could not review, `2` review
   incomplete (not a pass), `3` NO-GO. NO-GO
-  means fix before deploying; a GO is a review verdict, **not** a substitute for the e2e. The
+  means fix before deploying, and is reserved for what is likely in normal use and does real harm,
+  or rare but serious and hard to repair; the rest is listed as known gaps (2026-11-06). A GO is a
+  review verdict, **not** a substitute for the e2e. The
   review's closing "Ikke verifiserbart statisk" list is the manual test plan for that stage round.
 - **Map the full UI surface before building/fixing (standing order):** most of our deploy→bug→deploy
   churn is *"correct fix, incomplete surface"* — fixing the one path in the screenshot while sibling
@@ -234,6 +236,14 @@ annen modell leser diffen) og mutasjonstesting (reverser fiksen, krev at testen 
 ble bygget fanget de to til sammen seks feil jeg selv hadde lest over flere ganger — deriblant en
 knapp som ikke kunne virke, og tre tester som var grønne uten å måle noe. Foretrekk å legge en ny
 lærdom inn som en sjekk som kjører, framfor som en setning som skal huskes.
+
+### Stage is not in Azure (since 2026-11-22)
+
+The Azure stage app layer (App Services, plan, PostgreSQL, alerts, availability tests) was removed to save cost; Blob,
+OpenAI, ACS and Key Vault remain and the self-hosted stage uses them. Stage runs on a self-hosted server and is deployed
+with `srv utrull` over SSH. Its address and access are ONLY in `doc/ENVIRONMENTS.local.md`, never in tracked files
+(`test/environment-identifier-guard.test.js` checks it). Every prod deploy uses `skip_staging=true`: without it
+`deploy-app.yml` fails in the stage job, and `deploy-azure.yml` would recreate the Azure stage.
 
 ### Promoting a verified version to prod while `main` advances
 
@@ -311,9 +321,9 @@ der den er» vil fortsette å feile.
 Kuren som har holdt i dette repoet er #958-formen: flytt avgjørelsen til skriveren, slik at leserne
 ikke *kan* avvike. Kuren som har feilet tre ganger er å rette utregningen på stedet som feilet.
 
-Porten klassifiserer nå hvert funn — `[REGRESJON]`, `[UFULLSTENDIG]`, `[EKSISTERENDE]`,
-`[DOKUMENTASJON]` — nettopp for at man skal kunne stoppe løkka rasjonelt: en regresjon stopper en
-deploy, en eksisterende feil blir en sak.
+Porten merker hvert funn etter hvor det kommer fra (`[REGRESJON]`, `[UFULLSTENDIG]`, `[EKSISTERENDE]`,
+`[DOKUMENTASJON]`) og vurderer sannsynlighet og konsekvens. Bare de to siste avgjør om en utrulling
+stopper. Regelen står i `scripts/ai-qa.ps1`. Alt annet føres som kjent mangel eller blir en sak.
 
 ## Kompleksitetsskanning — MÅNEDLIG (standing order, 2026-08-21)
 

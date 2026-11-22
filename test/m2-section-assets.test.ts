@@ -77,6 +77,20 @@ describe("Section asset upload + serve", () => {
     await deleteSectionFully(sectionId);
   }
 
+  // 2.168.0: figurene oversettes når teksten som viser dem, lagres (`PUT …/:id` med `sourceLocale`); den gamle «Oversett»
+  // (`POST …/assets/localize`) er borte. Lagrer et utkast som viser figurene, skrevet på bokmål.
+  async function saveReferencing(sectionId: string, assetIds: string[]) {
+    const tab = (await request(app).get(`/api/admin/content/sections/${sectionId}`).set(adminHeaders)).body.section;
+    const refs = assetIds.map((id) => `![Figur](asset:${id})`).join("\n\n");
+    return request(app).put(`/api/admin/content/sections/${sectionId}`).set(adminHeaders).send({
+      title: JSON.parse(tab.title),
+      bodyMarkdown: { nb: `# Hei nb\n\n${refs}`, nn: `# Hei nn\n\n${refs}`, "en-GB": `# Hei en\n\n${refs}` },
+      expectedVersionNo: tab.versionNo,
+      expectedTitle: tab.title,
+      sourceLocale: "nb",
+    });
+  }
+
   it("uploads an image, lists it, and serves it back to a participant in an accessible course", async () => {
     const sectionId = await createSection();
     const courseId = await linkSectionToOpenCourse(sectionId);
@@ -167,7 +181,7 @@ describe("Section asset upload + serve", () => {
     await deleteSectionFully(sectionId);
   });
 
-  // #657: the explicit localize action generates a translated SVG variant per other locale; the
+  // #657: saving text that shows the figure generates a translated SVG variant per other locale; the
   // serve endpoint returns the variant for `?locale=`. LLM stub mode tags text as `[<locale>] …`.
   it("localises SVG text and serves the per-locale variant", async () => {
     const sectionId = await createSection();
@@ -182,21 +196,14 @@ describe("Section asset upload + serve", () => {
       .attach("file", svg, { filename: "d.svg", contentType: "image/svg+xml" });
     const assetId = upload.body.asset.id as string;
 
-    const localize = await request(app)
-      .post(`/api/admin/content/sections/${sectionId}/assets/localize`)
-      .set(adminHeaders)
-      .send({ sourceLocale: "nb" });
-    expect(localize.status).toBe(200);
-    expect(localize.body.localizedAssetCount).toBe(1);
+    const localize = await saveReferencing(sectionId, [assetId]);
+    expect(localize.status, JSON.stringify(localize.body).slice(0, 300)).toBe(200);
+    expect(localize.body.figureTranslation).toEqual({ translated: 1, failed: 0 });
 
-    // #663: re-running with the same source locale must NOT re-translate the unchanged drawing.
-    const localizeAgain = await request(app)
-      .post(`/api/admin/content/sections/${sectionId}/assets/localize`)
-      .set(adminHeaders)
-      .send({ sourceLocale: "nb" });
+    // #663: saving again from the same locale must NOT re-translate the unchanged drawing.
+    const localizeAgain = await saveReferencing(sectionId, [assetId]);
     expect(localizeAgain.status).toBe(200);
-    expect(localizeAgain.body.localizedAssetCount).toBe(0);
-    expect(localizeAgain.body.skippedAssetCount).toBe(1);
+    expect(localizeAgain.body.figureTranslation).toEqual({ translated: 0, failed: 0 });
 
     // Source locale → original text; another locale → stub-translated text.
     const original = await request(app).get(`/api/content-assets/${assetId}?locale=nb`).set(participantHeaders);
@@ -240,11 +247,8 @@ describe("Section asset upload + serve", () => {
     expect(servert).not.toContain("&nbsp;");
 
     // Varianten lages av applySvgTextTranslations, som renser på nytt: samme vei, samme krav.
-    const localize = await request(app)
-      .post(`/api/admin/content/sections/${sectionId}/assets/localize`)
-      .set(adminHeaders)
-      .send({ sourceLocale: "nb" });
-    expect(localize.body.localizedAssetCount).toBe(1);
+    const localize = await saveReferencing(sectionId, [assetId]);
+    expect(localize.body.figureTranslation).toEqual({ translated: 1, failed: 0 });
     const engelsk = hentet(await request(app).get(`/api/content-assets/${assetId}?locale=en-GB`).set(participantHeaders));
     expect(lesesSomSvg(engelsk)).toBe(true);
     expect(engelsk).toContain(" 12");
@@ -337,15 +341,12 @@ describe("Section asset upload + serve", () => {
       `<svg xmlns="http://www.w3.org/2000/svg" width="50" height="20"><text x="2" y="12">Start</text></svg>`,
       "utf8",
     );
-    await request(app)
+    const svgUpload = await request(app)
       .post(`/api/admin/content/sections/${sectionId}/assets`)
       .set(adminHeaders)
       .attach("file", svg, { filename: "d.svg", contentType: "image/svg+xml" });
-    // Localize the SVG so at least one variant blob also exists.
-    await request(app)
-      .post(`/api/admin/content/sections/${sectionId}/assets/localize`)
-      .set(adminHeaders)
-      .send({ sourceLocale: "nb" });
+    // Localize the SVG (by saving text that shows it) so at least one variant blob also exists.
+    expect((await saveReferencing(sectionId, [svgUpload.body.asset.id as string])).body.figureTranslation).toEqual({ translated: 1, failed: 0 });
 
     // Every stored blob path (base blobs + localized variants) — captured before deletion.
     const rows = await prisma.sectionAsset.findMany({ where: { sectionId }, select: { blobPath: true, localizedBlobPaths: true } });
@@ -356,8 +357,9 @@ describe("Section asset upload + serve", () => {
     expect(blobPaths.length).toBeGreaterThanOrEqual(3); // png + svg base + ≥1 variant
     for (const p of blobPaths) await expect(getAsset(p)).resolves.toBeInstanceOf(Buffer);
 
-    // Delete via the real route (deleteSection → reclaimAssetBlobs).
-    const del = await request(app).delete(`/api/admin/content/sections/${sectionId}`).set(adminHeaders);
+    // Delete via the real route (deleteSection → reclaimAssetBlobs). #1151: archive first — only archived content is deleted.
+    expect((await request(app).post(`/api/admin/content/sections/${sectionId}/archive`).set(adminHeaders)).status).toBe(200);
+    const del =await request(app).delete(`/api/admin/content/sections/${sectionId}`).set(adminHeaders);
     expect(del.status).toBe(204);
 
     // Rows cascaded AND blobs physically reclaimed.

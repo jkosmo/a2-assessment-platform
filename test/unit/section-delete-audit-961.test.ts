@@ -14,7 +14,7 @@ import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const recordAuditEvent = vi.fn();
 const sectionFindUnique = vi.fn();
-const assertSectionNotInAnyCourse = vi.fn();
+const findAllCoursesContainingSection = vi.fn();
 const assertSectionNotInIssuedCertificate = vi.fn();
 const collectSectionAssetBlobPaths = vi.fn();
 const reclaimAssetBlobs = vi.fn();
@@ -32,9 +32,12 @@ vi.mock("../../src/db/prisma.js", () => ({
 
 vi.mock("../../src/db/transaction.js", () => ({
   runInTransaction: (cb: (tx: unknown) => unknown) => {
+    // #934 skive 4a: seksjonen leses i den låste transaksjonen, og låsen tas med rå SQL først.
     lastTx = {
-      courseSection: { update: txSectionUpdate, delete: txSectionDelete },
+      courseSection: { update: txSectionUpdate, delete: txSectionDelete, findUnique: sectionFindUnique },
       courseSectionVersion: { deleteMany: txVersionDeleteMany },
+      $executeRaw: async () => 0,
+      $executeRawUnsafe: async () => 0,
     };
     return cb(lastTx);
   },
@@ -43,8 +46,15 @@ vi.mock("../../src/db/transaction.js", () => ({
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
 
 vi.mock("../../src/modules/course/contentLifecycle.js", () => ({
-  assertSectionNotInAnyCourse,
+  // #1149: avpubliser og arkiver bruker denne; slettingen (som testes her) bruker den under.
+  assertSectionNotInActiveCourse: vi.fn(),
+  // #1152 skive 4b: kursene leses, og regelen for «ligger i et kurs» er en ren funksjon (lista over arkiverte trenger kursene).
+  findAllCoursesContainingSection,
+  findAllCoursesContainingItems: vi.fn(async () => ({ modules: new Map(), sections: new Map() })),
+  courseDeleteHold: vi.fn(() => null),
   assertSectionNotInIssuedCertificate,
+  // #1152: et lagret kursutkast stopper også slettingen.
+  findCourseDraftDeleteBlocks: vi.fn(async () => ({ modules: new Map(), sections: new Map() })),
 }));
 
 vi.mock("../../src/modules/course/assetCommands.js", () => ({
@@ -53,7 +63,8 @@ vi.mock("../../src/modules/course/assetCommands.js", () => ({
   stageSectionAssets: vi.fn(),
 }));
 
-vi.mock("../../src/modules/content/contentOwnershipService.js", () => ({ addContentOwner: vi.fn() }));
+// #1152: eierradene slettes med seksjonen.
+vi.mock("../../src/modules/content/contentOwnershipService.js", () => ({ addContentOwner: vi.fn(), deleteContentOwnersOf: vi.fn() }));
 
 // #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
 warmModuleGraph(async () => {
@@ -64,8 +75,9 @@ warmModuleGraph(async () => {
 describe("#961 deleteSection leaves an audit trail", () => {
   beforeEach(() => {
     recordAuditEvent.mockReset().mockResolvedValue(undefined);
-    sectionFindUnique.mockReset().mockResolvedValue({ id: "section-1", title: "Arbeidsmiljøloven" });
-    assertSectionNotInAnyCourse.mockReset().mockResolvedValue(undefined);
+    // #1151: bare en arkivert seksjon kan slettes.
+    sectionFindUnique.mockReset().mockResolvedValue({ id: "section-1", title: "Arbeidsmiljøloven", archivedAt: new Date("2026-11-01T00:00:00Z") });
+    findAllCoursesContainingSection.mockReset().mockResolvedValue([]);
     assertSectionNotInIssuedCertificate.mockReset().mockResolvedValue(undefined);
     collectSectionAssetBlobPaths.mockReset().mockResolvedValue([]);
     reclaimAssetBlobs.mockReset().mockResolvedValue(undefined);
@@ -88,7 +100,8 @@ describe("#961 deleteSection leaves an audit trail", () => {
       action: auditActions.section.deleted,
       actorId: "actor-9",
       // Tittelen finnes ingen andre steder etter slettingen.
-      metadata: { sectionId: "section-1", title: "Arbeidsmiljøloven" },
+      // #1152 4c: og når den ble arkivert (hvilken frist som slettet den, når jobben sletter).
+      metadata: { sectionId: "section-1", title: "Arbeidsmiljøloven", archivedAt: "2026-11-01T00:00:00.000Z" },
     });
   });
 

@@ -128,7 +128,7 @@ test("#922: et åpnet kurs får flaten alene, og lista viker helt", async ({ pag
 
   // Veien tilbake står øverst til venstre. «Oppdater kurslista» hører til lista, ikke til lesingen.
   await expect(page.locator("#courseBackBar")).toBeVisible();
-  await expect(page.locator("#courseBackBtn")).toHaveText("← Alle kurs");
+  await expect(page.locator("#courseBackBtn")).toHaveText("← Tilbake til Mine kurs");
 });
 
 test("#922: tilbake-lenka fører til kurslista igjen", async ({ page }) => {

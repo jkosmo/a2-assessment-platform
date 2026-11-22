@@ -1,7 +1,32 @@
 import { prisma } from "../../db/prisma.js";
 import type { AssessmentMode } from "@prisma/client";
+import type { ContentWriteTx } from "../../db/contentLock.js";
+import { AppError } from "../../errors/AppError.js";
+import { resolvePublishNumber, type ModuleVersionKind } from "./moduleVersioning.js";
+import { deliveredSubmissionWhere, openedOnlySubmissionWhere } from "../content/openedOnlySubmission.js";
 
 type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseItem" | "contentOwner">;
+
+/** Det «Slett» for en modul trenger å vite om den (`checkModuleDelete`, `checkModuleDeletes`, kaskaden). */
+const moduleDeleteSummarySelect = {
+  id: true,
+  title: true,
+  activeVersionId: true,
+  // #1151: «slett krever arkivert» (`deleteModule`).
+  archivedAt: true,
+  _count: {
+    select: {
+      versions: true,
+      // #1176: bare LEVERTE innleveringer er deltakerhistorikk. En som bare er åpnet, holder ikke modulen igjen; den slettes med
+      // den (`deleteModule` i skriveren under). Samme definisjon begge steder: content/openedOnlySubmission.ts.
+      submissions: { where: deliveredSubmissionWhere },
+      mcqSetVersions: true,
+      certificationStatuses: true,
+      rubricVersions: true,
+      promptTemplateVersions: true,
+    },
+  },
+} as const;
 
 export function createAdminContentRepository(client: AdminContentRepositoryClient = prisma) {
   return {
@@ -33,6 +58,8 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    // #1149: «Brukt i kurs» hentes IKKE her. Lista spør `findActiveCoursesForModules` (contentLifecycle.ts),
+    // som bare teller aktive kurs — en telling på relasjonen her ville tatt med arkiverte kurs.
     listLibraryModules() {
       return client.module.findMany({
         orderBy: { title: "asc" },
@@ -44,22 +71,12 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           updatedAt: true,
           activeVersionId: true,
           activeVersion: {
-            select: { id: true, versionNo: true },
+            select: { id: true, versionNo: true, versionMajor: true, versionMinor: true },
           },
           versions: {
             orderBy: { versionNo: "desc" },
             take: 1,
             select: { id: true, versionNo: true, publishedAt: true },
-          },
-          _count: {
-            select: { courseItems: true },
-          },
-          courseItems: {
-            select: {
-              course: {
-                select: { id: true, title: true },
-              },
-            },
           },
         },
       });
@@ -89,67 +106,14 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
-    archiveModule(moduleId: string, now: Date) {
-      // I3: arkivering auto-avpubliserer (activeVersionId nullstilles) så «arkivert men
-      // publisert» aldri oppstår. Gjenopprett (restoreModule) lander dermed i Utkast.
-      return client.module.update({
-        where: { id: moduleId },
-        data: { archivedAt: now, activeVersionId: null },
-        select: { id: true, title: true, archivedAt: true },
-      });
-    },
-
-    restoreModule(moduleId: string) {
-      return client.module.update({
-        where: { id: moduleId },
-        data: { archivedAt: null },
-        select: { id: true, title: true },
-      });
-    },
-
     findModuleDeleteSummary(moduleId: string) {
-      return client.module.findUnique({
-        where: { id: moduleId },
-        select: {
-          id: true,
-          title: true,
-          activeVersionId: true,
-          _count: {
-            select: {
-              versions: true,
-              submissions: true,
-              mcqSetVersions: true,
-              certificationStatuses: true,
-              rubricVersions: true,
-              promptTemplateVersions: true,
-            },
-          },
-        },
-      });
+      return client.module.findUnique({ where: { id: moduleId }, select: moduleDeleteSummarySelect });
     },
 
-    createModule(data: {
-      title: string;
-      description?: string;
-      certificationLevel?: string;
-      // #1049: forfatterens forventede svarlengde. Utelatt = nivåets standard.
-      scopeMinWords?: number | null;
-      scopeMaxWords?: number | null;
-      validFrom?: Date;
-      validTo?: Date;
-    }) {
-      return client.module.create({
-        data,
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          certificationLevel: true,
-          validFrom: true,
-          validTo: true,
-          createdAt: true,
-        },
-      });
+    /** #1152 skive 4b: det samme for mange moduler i én spørring (lista over arkiverte, `checkModuleDeletes`). */
+    findModuleDeleteSummaries(moduleIds: readonly string[]) {
+      if (moduleIds.length === 0) return Promise.resolve([]);
+      return client.module.findMany({ where: { id: { in: [...moduleIds] } }, select: moduleDeleteSummarySelect });
     },
 
     findModuleTitle(moduleId: string) {
@@ -157,17 +121,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
         where: { id: moduleId },
         select: { id: true, title: true },
       });
-    },
-
-    // 2.101.0: revisjonsvarselet navngir kurset beståtten gjaldt. Bare kurs deltakeren kan se
-    // (publisert, ikke arkivert); lagret tittel, lokaliseres per mottaker av kalleren.
-    async findLiveCourseTitlesContainingModule(moduleId: string): Promise<string[]> {
-      const rows = await client.courseItem.findMany({
-        where: { moduleId, course: { publishedAt: { not: null }, archivedAt: null } },
-        orderBy: { course: { createdAt: "asc" } },
-        select: { course: { select: { title: true } } },
-      });
-      return [...new Set(rows.map((row) => row.course.title))];
     },
 
     // #896 S3b: the stored values a partial update has to merge onto. Without reading them
@@ -179,52 +132,21 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
-    async countModuleCourses(moduleId: string) {
-      return client.courseItem.count({ where: { moduleId } });
-    },
-
-    updateModuleTitle(moduleId: string, title: string) {
-      return client.module.update({
-        where: { id: moduleId },
-        data: { title },
-        select: { id: true, title: true },
+    /** #1124 del 2: eksempelsvaret i modulens nyeste versjon — det en lagring uten feltet skal beholde. */
+    async findLatestModelAnswer(moduleId: string) {
+      const latest = await client.moduleVersion.findFirst({
+        where: { moduleId },
+        orderBy: { versionNo: "desc" },
+        select: { modelAnswer: true },
       });
-    },
-
-    // #896 S3b: the module-level fields an author edits after creation. Until now these were
-    // create-only — the only update path on a module was the title — so «beskrivelse»,
-    // «sertifiseringsnivå» and validity could be set once and never corrected.
-    updateModuleDetails(
-      moduleId: string,
-      data: {
-        description?: string | null;
-        certificationLevel?: string;
-        scopeMinWords?: number | null;
-        scopeMaxWords?: number | null;
-        validFrom?: Date | null;
-        validTo?: Date | null;
-      },
-    ) {
-      return client.module.update({
-        where: { id: moduleId },
-        data,
-        select: { id: true, description: true, certificationLevel: true, scopeMinWords: true, scopeMaxWords: true, validFrom: true, validTo: true },
-      });
-    },
-
-    deleteModule(moduleId: string) {
-      return client.module.delete({
-        where: { id: moduleId },
-        select: {
-          id: true,
-          title: true,
-        },
-      });
+      return latest?.modelAnswer ?? null;
     },
 
     // v1.2.11: list purge candidates — moduler som aldri har vært publisert nå (activeVersionId
     // null), ikke arkivert, ingen submissions, ikke i noe kurs. Returnerer både id og title
     // pluss avhengighet-tellinger så caller kan vise en preview-liste til brukeren før purge.
+    // #1149: `_count.courseItems` teller ALLE kurs, også arkiverte, med vilje. Ryddingen sletter, og
+    // `CourseItem` → modul er `onDelete: Restrict`: en modul i et arkivert kurs kan ikke slettes.
     listPurgeCandidates() {
       return client.module.findMany({
         where: {
@@ -276,8 +198,11 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
             select: {
               id: true,
               versionNo: true,
+              versionMajor: true,
+              versionMinor: true,
               taskText: true,
               assessorExpectedContent: true,
+              modelAnswer: true,
               candidateTaskConstraints: true,
               assessmentBlueprint: true,
               submissionSchemaJson: true,
@@ -399,24 +324,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
-    createRubricVersion(data: {
-      moduleId: string;
-      versionNo: number;
-      criteriaJson: string;
-      scalingRuleJson: string;
-      active: boolean;
-    }) {
-      return client.rubricVersion.create({
-        data,
-        select: {
-          id: true,
-          moduleId: true,
-          versionNo: true,
-          active: true,
-          createdAt: true,
-        },
-      });
-    },
+    // #1151: skriverne av kriterier, ledetekst og flervalgssett står i `createAdminContentWriter` under (innholdslåsen).
 
     // #915: «Behold kriteriene» lager en NY rubrikkversjon (se syncActiveRubricBlueprintHash). Det
     // som sto her — `updateRubricVersionScalingRule`, en patch på stedet uten versionNo-bump — var
@@ -432,6 +340,129 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           criteriaJson: true,
           scalingRuleJson: true,
           active: true,
+        },
+      });
+    },
+
+    findVersionDependencies(input: {
+      rubricVersionId: string;
+      promptTemplateVersionId: string;
+      mcqSetVersionId: string;
+    }) {
+      return Promise.all([
+        client.rubricVersion.findUnique({
+          where: { id: input.rubricVersionId },
+          select: { id: true, moduleId: true },
+        }),
+        client.promptTemplateVersion.findUnique({
+          where: { id: input.promptTemplateVersionId },
+          select: { id: true, moduleId: true },
+        }),
+        client.mCQSetVersion.findUnique({
+          where: { id: input.mcqSetVersionId },
+          select: { id: true, moduleId: true },
+        }),
+      ]);
+    },
+
+    // #1062: modulens aktive versjon (hele raden), til påfylling av banken.
+    findModuleActiveVersion(moduleId: string) {
+      return client.module.findUnique({ where: { id: moduleId }, select: { id: true, activeVersion: true } });
+    },
+    // #1062: siste versjon som hel rad — kilden når modulen ikke er publisert ennå.
+    findLatestModuleVersionRow(moduleId: string) {
+      return client.moduleVersion.findFirst({ where: { moduleId }, orderBy: { versionNo: "desc" } });
+    },
+
+    // #1062: settet med spørsmålene, til påfylling.
+    findMcqSetVersionWithQuestions(mcqSetVersionId: string) {
+      return client.mCQSetVersion.findUnique({
+        where: { id: mcqSetVersionId },
+        // Samme createdAt for spørsmål skrevet i ett kall: id holder skriverekkefølgen.
+        include: { questions: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
+      });
+    },
+
+    // #525: MCQ_ONLY module versions only depend on an MCQ set (no rubric/prompt).
+    findMcqSetSummary(mcqSetVersionId: string) {
+      return client.mCQSetVersion.findUnique({
+        where: { id: mcqSetVersionId },
+        select: { id: true, moduleId: true },
+      });
+    },
+
+    findPromptTemplateSummary(promptTemplateVersionId: string) {
+      return client.promptTemplateVersion.findUnique({
+        where: { id: promptTemplateVersionId },
+        select: {
+          id: true,
+          moduleId: true,
+          systemPrompt: true,
+          userPromptTemplate: true,
+        },
+      });
+    },
+
+    findModuleVersionSummary(moduleVersionId: string) {
+      return client.moduleVersion.findUnique({
+        where: { id: moduleVersionId },
+        select: { id: true, moduleId: true },
+      });
+    },
+
+    findActiveModuleVersionForClone(moduleVersionId: string) {
+      return client.moduleVersion.findUnique({
+        where: { id: moduleVersionId },
+        select: {
+          id: true,
+          moduleId: true,
+          // #896 S5: the mode has to travel with a clone. It did not, and `assessmentMode` defaults
+          // to FREETEXT_PLUS_MCQ in the schema — so calibrating thresholds on an MCQ_ONLY module
+          // silently republished it as a free-text-plus-MCQ one. Restoring a version would have
+          // inherited the same bug.
+          assessmentMode: true,
+          versionNo: true,
+          taskText: true,
+          assessorExpectedContent: true,
+          modelAnswer: true,
+          candidateTaskConstraints: true,
+          assessmentBlueprint: true,
+          rubricVersionId: true,
+          promptTemplateVersionId: true,
+          mcqSetVersionId: true,
+          submissionSchemaJson: true,
+          assessmentPolicyJson: true,
+        },
+      });
+    },
+  };
+}
+
+export const adminContentRepository = createAdminContentRepository();
+
+/**
+ * #934 skive 4a: det som SKRIVER moduler og modulversjoner, står for seg og tar bare imot en transaksjon som holder
+ * innholdslåsen (`runContentWrite`). Leserne over kan brukes med hvilken klient som helst; skriverne kan ikke
+ * kalles uten låsen — da kompilerer det ikke. `test/content-lock-write-guard.test.js` nekter skrivinger andre steder.
+ */
+export function createAdminContentWriter(client: ContentWriteTx) {
+  return {
+    // #1151: kriterier, ledetekst og flervalgssett skrives under innholdslåsen, som resten av modulen (flyttet fra leserne over).
+    createRubricVersion(data: {
+      moduleId: string;
+      versionNo: number;
+      criteriaJson: string;
+      scalingRuleJson: string;
+      active: boolean;
+    }) {
+      return client.rubricVersion.create({
+        data,
+        select: {
+          id: true,
+          moduleId: true,
+          versionNo: true,
+          active: true,
+          createdAt: true,
         },
       });
     },
@@ -501,50 +532,155 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
-    findVersionDependencies(input: {
-      rubricVersionId: string;
-      promptTemplateVersionId: string;
-      mcqSetVersionId: string;
-    }) {
-      return Promise.all([
-        client.rubricVersion.findUnique({
-          where: { id: input.rubricVersionId },
-          select: { id: true, moduleId: true },
-        }),
-        client.promptTemplateVersion.findUnique({
-          where: { id: input.promptTemplateVersionId },
-          select: { id: true, moduleId: true },
-        }),
-        client.mCQSetVersion.findUnique({
-          where: { id: input.mcqSetVersionId },
-          select: { id: true, moduleId: true },
-        }),
-      ]);
-    },
-
-    // #1062: modulens aktive versjon (hele raden), til påfylling av banken.
-    findModuleActiveVersion(moduleId: string) {
-      return client.module.findUnique({ where: { id: moduleId }, select: { id: true, activeVersion: true } });
-    },
-    // #1062: siste versjon som hel rad — kilden når modulen ikke er publisert ennå.
-    findLatestModuleVersionRow(moduleId: string) {
-      return client.moduleVersion.findFirst({ where: { moduleId }, orderBy: { versionNo: "desc" } });
-    },
-
-    // #1062: settet med spørsmålene, til påfylling.
-    findMcqSetVersionWithQuestions(mcqSetVersionId: string) {
-      return client.mCQSetVersion.findUnique({
-        where: { id: mcqSetVersionId },
-        // Samme createdAt for spørsmål skrevet i ett kall: id holder skriverekkefølgen.
-        include: { questions: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
+    archiveModule(moduleId: string, now: Date) {
+      // I3: arkivering auto-avpubliserer (activeVersionId nullstilles) så «arkivert men
+      // publisert» aldri oppstår. Gjenopprett (restoreModule) lander dermed i Utkast.
+      // #1150 skive 2a-2: arkivering for hånd og importens arkivering setter IKKE merket fra kursarkiveringen. Det nullstilles
+      // her: et merke som gammel kode lot stå etter en gjenoppretting, skal ikke få kurset til å ta modulen tilbake.
+      return client.module.update({
+        where: { id: moduleId },
+        data: { archivedAt: now, activeVersionId: null, archivedWithCourseId: null, activeVersionIdBeforeArchive: null },
+        select: { id: true, title: true, archivedAt: true },
       });
     },
 
-    // #525: MCQ_ONLY module versions only depend on an MCQ set (no rubric/prompt).
-    findMcqSetSummary(mcqSetVersionId: string) {
-      return client.mCQSetVersion.findUnique({
-        where: { id: mcqSetVersionId },
-        select: { id: true, moduleId: true },
+    // #1150 skive 2a-2: gjenopprettet alene lander modulen som utkast (I3), og merkene nullstilles.
+    restoreModule(moduleId: string) {
+      return client.module.update({
+        where: { id: moduleId },
+        data: { archivedAt: null, archivedWithCourseId: null, activeVersionIdBeforeArchive: null },
+        select: { id: true, title: true },
+      });
+    },
+
+    /**
+     * #1150 skive 2a-2: modulen følger kurset inn i arkivet. Som `archiveModule` (I3: ingen aktiv versjon), men kurset og
+     * versjonen som var publisert, huskes, så gjenopprettingen av kurset kan sette den tilbake. Den ENE skriveren som setter
+     * merkene til noe annet enn null (test/content-in-use-guard.test.js); kalles bare fra `archiveModuleWithCourse` i
+     * adminContentCommands.ts.
+     */
+    async archiveModuleWithCourse(moduleId: string, courseId: string, now: Date) {
+      const current = await client.module.findUniqueOrThrow({ where: { id: moduleId }, select: { activeVersionId: true } });
+      return client.module.update({
+        where: { id: moduleId },
+        data: { archivedAt: now, archivedWithCourseId: courseId, activeVersionIdBeforeArchive: current.activeVersionId, activeVersionId: null },
+        select: { id: true, title: true, archivedAt: true, activeVersionIdBeforeArchive: true },
+      });
+    },
+
+    /**
+     * #1150 skive 2a-2: modulen kommer tilbake med kurset den fulgte inn i arkivet, PUBLISERT med samme versjon og samme nummer
+     * (produkteier 13.11.2026, unntak fra I3 bare for elementer som fulgte et kurs). Merkene nullstilles alltid.
+     *
+     * Versjonen settes live gjennom `publishModuleVersion` (det ene stedet en modulversjon settes live, og der den får nummer):
+     * med «mindre» får en versjon som alt har nummer, beholde det. Avviser den (versjonen tilhører en eldre hovedversjon enn den
+     * høyeste), eller finnes ikke versjonen lenger, lander modulen som utkast, og svaret sier hvorfor.
+     */
+    async restoreModuleWithCourse(moduleId: string, actorId: string, now: Date): Promise<{ activeVersionId: string | null; asDraft?: "was_unpublished" | "version_missing" }> {
+      const current = await client.module.findUniqueOrThrow({ where: { id: moduleId }, select: { activeVersionIdBeforeArchive: true } });
+      await client.module.update({
+        where: { id: moduleId },
+        data: { archivedAt: null, archivedWithCourseId: null, activeVersionIdBeforeArchive: null },
+      });
+      const versionId = current.activeVersionIdBeforeArchive;
+      if (versionId === null) return { activeVersionId: null, asDraft: "was_unpublished" };
+      const version = await client.moduleVersion.findUnique({ where: { id: versionId }, select: { moduleId: true } });
+      if (!version || version.moduleId !== moduleId) return { activeVersionId: null, asDraft: "version_missing" };
+      try {
+        await createAdminContentWriter(client).publishModuleVersion(moduleId, versionId, actorId, now, "minor");
+      } catch (error) {
+        if (error instanceof AppError && (error.code === "module_version_outdated" || error.code === "module_version_number_fixed")) {
+          return { activeVersionId: null, asDraft: "version_missing" };
+        }
+        throw error;
+      }
+      return { activeVersionId: versionId };
+    },
+
+    createModule(data: {
+      title: string;
+      description?: string;
+      certificationLevel?: string;
+      // #1049: forfatterens forventede svarlengde. Utelatt = nivåets standard.
+      scopeMinWords?: number | null;
+      scopeMaxWords?: number | null;
+      validFrom?: Date;
+      validTo?: Date;
+    }) {
+      return client.module.create({
+        data,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          certificationLevel: true,
+          validFrom: true,
+          validTo: true,
+          createdAt: true,
+        },
+      });
+    },
+
+    updateModuleTitle(moduleId: string, title: string) {
+      return client.module.update({
+        where: { id: moduleId },
+        data: { title },
+        select: { id: true, title: true },
+      });
+    },
+
+    // #896 S3b: the module-level fields an author edits after creation. Until now these were
+    // create-only — the only update path on a module was the title — so «beskrivelse»,
+    // «sertifiseringsnivå» and validity could be set once and never corrected.
+    updateModuleDetails(
+      moduleId: string,
+      data: {
+        description?: string | null;
+        certificationLevel?: string;
+        scopeMinWords?: number | null;
+        scopeMaxWords?: number | null;
+        validFrom?: Date | null;
+        validTo?: Date | null;
+      },
+    ) {
+      return client.module.update({
+        where: { id: moduleId },
+        data,
+        select: { id: true, description: true, certificationLevel: true, scopeMinWords: true, scopeMaxWords: true, validFrom: true, validTo: true },
+      });
+    },
+
+    /**
+     * #1152: modulen slettes med alt som bare hører til den: versjonene, flervalgsspørsmålene og -settene, kriteriene og
+     * ledetekstene. Før nektet slettingen alt som hadde versjoner. Kalles bare av `deleteModule` (adminContentCommands.ts), etter
+     * vaktene: uten innleveringer og sertifiseringer peker ingenting annet på versjonene (vurderinger og flervalgsforsøk henger på
+     * en innlevering). Rekkefølgen følger fremmednøklene, som i kaskaden og masseryddingen: den aktive pekeren nullstilles,
+     * modulversjonene (de peker på kriterier, ledetekst og flervalgssett) går først, så spørsmålene (de peker på settet), så resten.
+     * Bestått (`ModulePass`) og kurskrav (`CourseModuleRequirement`) går av seg selv (`onDelete: Cascade`).
+     */
+    async deleteModule(moduleId: string) {
+      // #1176: innleveringer som bare er åpnet (og flervalgsforsøkene deres, uten svar), FØR versjonene: de peker på modulversjonen
+      // med `onDelete: Restrict`. Bare de som fortsatt er tomme nå, slettes (samme `where` i slettingen); er en blitt levert siden
+      // vakta målte, blir den stående, og `moduleVersion.deleteMany` under feiler på fremmednøkkelen, så hele transaksjonen rulles
+      // tilbake (kjent mangel: svaret er da en 500, ikke en egen melding; krever et kappløp med en modul som har stått arkivert).
+      const opened = await client.submission.findMany({ where: { moduleId, ...openedOnlySubmissionWhere }, select: { id: true } });
+      if (opened.length > 0) {
+        const ids = opened.map((row) => row.id);
+        await client.mCQAttempt.deleteMany({ where: { submissionId: { in: ids }, completedAt: null, responses: { none: {} } } });
+        await client.submission.deleteMany({ where: { id: { in: ids }, ...openedOnlySubmissionWhere } });
+      }
+      await client.module.update({ where: { id: moduleId }, data: { activeVersionId: null } });
+      await client.moduleVersion.deleteMany({ where: { moduleId } });
+      await client.mCQQuestion.deleteMany({ where: { moduleId } });
+      await client.mCQSetVersion.deleteMany({ where: { moduleId } });
+      await client.rubricVersion.deleteMany({ where: { moduleId } });
+      await client.promptTemplateVersion.deleteMany({ where: { moduleId } });
+      return client.module.delete({
+        where: { id: moduleId },
+        select: {
+          id: true,
+          title: true,
+        },
       });
     },
 
@@ -554,6 +690,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       // taskText / rubricVersionId / promptTemplateVersionId are null for MCQ_ONLY modules (#525).
       taskText?: string | null;
       assessorExpectedContent?: string | null;
+      modelAnswer?: string | null;
       candidateTaskConstraints?: string | null;
       assessmentBlueprint?: string | null;
       rubricVersionId?: string | null;
@@ -571,6 +708,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           versionNo: true,
           taskText: true,
           assessorExpectedContent: true,
+          modelAnswer: true,
           candidateTaskConstraints: true,
           assessmentBlueprint: true,
           submissionSchemaJson: true,
@@ -582,50 +720,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           publishedBy: true,
           publishedAt: true,
           createdAt: true,
-        },
-      });
-    },
-
-    findPromptTemplateSummary(promptTemplateVersionId: string) {
-      return client.promptTemplateVersion.findUnique({
-        where: { id: promptTemplateVersionId },
-        select: {
-          id: true,
-          moduleId: true,
-          systemPrompt: true,
-          userPromptTemplate: true,
-        },
-      });
-    },
-
-    findModuleVersionSummary(moduleVersionId: string) {
-      return client.moduleVersion.findUnique({
-        where: { id: moduleVersionId },
-        select: { id: true, moduleId: true },
-      });
-    },
-
-    findActiveModuleVersionForClone(moduleVersionId: string) {
-      return client.moduleVersion.findUnique({
-        where: { id: moduleVersionId },
-        select: {
-          id: true,
-          moduleId: true,
-          // #896 S5: the mode has to travel with a clone. It did not, and `assessmentMode` defaults
-          // to FREETEXT_PLUS_MCQ in the schema — so calibrating thresholds on an MCQ_ONLY module
-          // silently republished it as a free-text-plus-MCQ one. Restoring a version would have
-          // inherited the same bug.
-          assessmentMode: true,
-          versionNo: true,
-          taskText: true,
-          assessorExpectedContent: true,
-          candidateTaskConstraints: true,
-          assessmentBlueprint: true,
-          rubricVersionId: true,
-          promptTemplateVersionId: true,
-          mcqSetVersionId: true,
-          submissionSchemaJson: true,
-          assessmentPolicyJson: true,
         },
       });
     },
@@ -654,7 +748,17 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       return { moduleId, previousActiveVersionId };
     },
 
-    async publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string, now: Date) {
+    // #934 skive 5a-2: det ene stedet en modulversjon settes live, og det ene stedet den får versjonsnummer. `versionKind` er
+    // påkrevd, så en ny vei må si hva den er. Nummeret regnes ut før noe skrives; en avvist publisering endrer ingenting.
+    // #934 skive 5a-3: en hovedversjon hever kravet bare i kursene som fikk hovedversjon. Det gjør kalleren (`applyCourseVersionChange`).
+    // Den globale hevingen fra #997 (`all_courses`) kunne bare nås med bryteren av, og er fjernet (2026-11-08).
+    async publishModuleVersion(
+      moduleId: string,
+      moduleVersionId: string,
+      actorId: string,
+      now: Date,
+      versionKind: ModuleVersionKind,
+    ) {
       const moduleVersion = await client.moduleVersion.findUnique({
         where: { id: moduleVersionId },
         select: {
@@ -670,18 +774,21 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
         throw new Error("Module version not found for module.");
       }
 
+      const number = await resolvePublishNumber(client, moduleId, moduleVersionId, versionKind);
+
       const publishedVersion = await client.moduleVersion.update({
         where: { id: moduleVersionId },
-        data: moduleVersion.publishedAt
-          ? {}
-          : {
-              publishedAt: now,
-              publishedBy: actorId,
-            },
+        data: {
+          ...(moduleVersion.publishedAt ? {} : { publishedAt: now, publishedBy: actorId }),
+          versionMajor: number.major,
+          versionMinor: number.minor,
+        },
         select: {
           id: true,
           moduleId: true,
           versionNo: true,
+          versionMajor: true,
+          versionMinor: true,
           publishedAt: true,
           publishedBy: true,
         },
@@ -696,5 +803,3 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
     },
   };
 }
-
-export const adminContentRepository = createAdminContentRepository();

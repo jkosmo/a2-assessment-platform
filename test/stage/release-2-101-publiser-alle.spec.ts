@@ -2,7 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.101.0 mot UTRULLET stage, med ekte API og ekte klient:
 //   - etter «Oppdater dette kurset» ligger den nye versjonen klar, kurssiden spør straks, og «Publiser
@@ -65,7 +67,7 @@ const seksjonIder: string[] = [];
 test.afterAll(async () => {
   for (const id of kursIder) {
     await api("POST", `/api/admin/content/courses/${id}/unpublish`);
-    await api("POST", `/api/admin/content/courses/${id}/archive`);
+    await arkiverKurs(api, id);
     const slettet = await api("DELETE", `/api/admin/content/courses/${id}`);
     noter("slett testkurs", slettet.status);
   }
@@ -83,7 +85,7 @@ async function kursMedJustertFil(navn: string) {
   const sectionId = seksjon.json.section.id as string;
   seksjonIder.push(sectionId);
   expect((await api("POST", `/api/admin/content/sections/${sectionId}/publish`)).status).toBe(200);
-  const kurs = await api("POST", "/api/admin/content/courses", { title: tre(`Stage-test 2.101 kurs ${navn} ${stempel}`) });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: tre(`Stage-test 2.101 kurs ${navn} ${stempel}`) });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   const courseId = kurs.json.course.id as string;
   kursIder.push(courseId);
@@ -102,10 +104,8 @@ async function levendeTekst(courseId: string) {
   return { publishedAt: item.section.audit.publishedAt as string | null, nb: item.section.bodyMarkdown.nb as string };
 }
 
-test("versjonen er 2.105.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.105.0");
+test("versjonen er minst 2.107.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.107.0"));
 });
 
 test("API: oppdateringen legger ny versjon klar; pending-versions viser den; publish-pending publiserer", async () => {

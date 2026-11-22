@@ -1,4 +1,4 @@
-import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
+import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { mcqQuestionTypeFields } from "./adminContentSchemas.js";
 import type { McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import {
@@ -10,7 +10,7 @@ import {
 } from "./adminContentCommands.js";
 import type { LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { localizedTextCodec } from "../../codecs/localizedTextCodec.js";
-import { createAdminContentRepository } from "./adminContentRepository.js";
+import { createAdminContentRepository, createAdminContentWriter } from "./adminContentRepository.js";
 
 /**
  * #906: compose a complete module version in ONE transaction.
@@ -49,6 +49,9 @@ export interface ComposeModuleVersionInput {
   assessmentMode?: "FREETEXT_PLUS_MCQ" | "MCQ_ONLY" | "FREETEXT_ONLY";
   taskText?: LocalizedText;
   assessorExpectedContent?: LocalizedText;
+  /** #1124 del 2: eksempelsvaret, vist deltakeren etter vurderingen når modulen slår det på. Utelatt =
+   *  som forrige versjon (en eldre fane kjenner ikke feltet og skal ikke slette det); `null` = tøm det. */
+  modelAnswer?: LocalizedText | null;
   candidateTaskConstraints?: LocalizedText;
   assessmentBlueprint?: string;
   /** Creates a new RubricVersion. Omit to reuse the module's active rubric. */
@@ -89,8 +92,10 @@ function mergeLocalized(storedRaw: string | null, patch: LocalizedText): Localiz
   return { ...stored, ...patch };
 }
 
-export async function composeModuleVersion(input: ComposeModuleVersionInput, existingTx?: DbTransactionClient) {
-  const run = async (tx: DbTransactionClient) => {
+export async function composeModuleVersion(input: ComposeModuleVersionInput, existingTx?: ContentWriteTx) {
+  const run = async (tx: ContentWriteTx) => {
+    // #1151: en arkivert modul lagres ikke. Vakta står i det som skrives (navnet, komponentene, og `createModuleVersion`, som hver
+    // lagring ender i); detaljene under skrives i samme transaksjon og rulles tilbake når versjonen avvises.
     // The rename belongs to the same commitment. Saving it separately is how a failed version
     // used to leave a module renamed with nothing else to show for it.
     if (input.title !== undefined) {
@@ -148,7 +153,7 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
         throw new Error("validTo must be on or after validFrom.");
       }
 
-      await repo.updateModuleDetails(input.moduleId, detailPatch);
+      await createAdminContentWriter(tx).updateModuleDetails(input.moduleId, detailPatch);
     }
 
     const isMcqOnly = input.assessmentMode === "MCQ_ONLY";
@@ -207,11 +212,20 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
         }, tx)
       : null;
 
+    // #1124 del 2: utelatt = som forrige versjon. `null` (tøm) går gjennom `serialize`, som gir ingen
+    // verdi — den nye versjonen lagres da uten eksempelsvar.
+    const modelAnswer = isMcqOnly
+      ? undefined
+      : input.modelAnswer !== undefined
+        ? serialize(input.modelAnswer ?? undefined)
+        : (await createAdminContentRepository(tx).findLatestModelAnswer(input.moduleId)) ?? undefined;
+
     const moduleVersion = await createModuleVersion({
       moduleId: input.moduleId,
       assessmentMode: input.assessmentMode,
       taskText: isMcqOnly ? undefined : serialize(input.taskText),
       assessorExpectedContent: isMcqOnly ? undefined : serialize(input.assessorExpectedContent),
+      modelAnswer,
       candidateTaskConstraints: isMcqOnly ? undefined : serialize(input.candidateTaskConstraints),
       assessmentBlueprint: input.assessmentBlueprint,
       // A freshly created component wins over an id the caller passed for the same slot.
@@ -231,5 +245,5 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
   };
 
   // Callers already inside a transaction (import) compose into it rather than nesting.
-  return existingTx ? run(existingTx) : runInTransaction(run);
+  return existingTx ? run(existingTx) : runContentWrite(run);
 }

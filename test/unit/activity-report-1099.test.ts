@@ -182,6 +182,7 @@ describe("buildActivityReport", () => {
 describe("bestått og leste seksjoner (QA-porten, #1099)", () => {
   const t1 = new Date("2026-10-10T10:00:00Z");
   const t2 = new Date("2026-10-11T10:00:00Z");
+  const t3 = new Date("2026-10-12T10:00:00Z");
 
   it("bestått = avgjort innlevering der det SISTE vedtaket er bestått, på det vedtakets tidspunkt", () => {
     expect(passedAt({ submissionStatus: "COMPLETED", decisions: [{ passFailTotal: true, finalisedAt: t2 }] })).toEqual(t2);
@@ -202,5 +203,17 @@ describe("bestått og leste seksjoner (QA-porten, #1099)", () => {
       { userId: "a", courseId: "annet-kurs", sectionId: "gammel", readAt: t1 },
     ];
     expect(distinctReads(reads).map((r) => r.sectionId)).toEqual(["gammel", "annen", "gammel", "gammel"]);
+  });
+
+  it("#1156: en kopi av en lesing gjort i et annet kurs (eller et slettet) beholder kurset og er én lesing; KONTROLL: et annet kurs samme øyeblikk står", () => {
+    const reads = [
+      { userId: "a", courseId: "annet-kurs", sectionId: "gammel", readAt: t1 },
+      { userId: "a", courseId: "annet-kurs", sectionId: "ny", readAt: t1 },
+      { userId: "a", courseId: null, sectionId: "tredje", readAt: t2 },
+      { userId: "a", courseId: null, sectionId: "ny-2", readAt: t2 },
+      { userId: "a", courseId: "k", sectionId: "fjerde", readAt: t2 },
+      { userId: "a", courseId: "k", sectionId: "gammel", readAt: t3 },
+    ];
+    expect(distinctReads(reads).map((r) => r.sectionId)).toEqual(["gammel", "tredje", "fjerde", "gammel"]);
   });
 });

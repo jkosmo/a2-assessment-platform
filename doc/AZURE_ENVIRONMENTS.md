@@ -27,6 +27,21 @@ Automated provisioning and deployment for:
 
 Each environment must use a dedicated resource group and be deployable via CI/CD.
 
+## Staging is passive in Azure (since 2026-11-22)
+
+The staging **app layer** was removed to save cost: the three App Services, the B1 plan, the PostgreSQL server, the
+log and metric alerts and the two availability tests. Before that, staging cost about 570 kr a month: availability
+tests 208, PostgreSQL 174, plan 121, log alerts 54, OpenAI ~10. What remains in the staging resource group is used by
+the self-hosted stage and costs about 10 kr a month: Blob Storage (`course-assets`, through an app registration with
+Storage Blob Data Contributor on that container only), Azure OpenAI, ACS e-mail, Key Vault, Log Analytics and the
+action group.
+
+- Stage itself runs on a self-hosted server. Its address and access are only in `doc/ENVIRONMENTS.local.md`.
+- **Every prod deploy passes `skip_staging=true`** to `deploy-app.yml` or `deploy-azure.yml`. Without it,
+  `deploy-app.yml` fails in the stage job and skips prod, and `deploy-azure.yml` recreates the Azure stage.
+- The staging Bicep what-if on PRs still runs against the resource group; it now shows the app layer as new resources.
+- To bring the Azure stage back: `activate-staging-app-layer` (not tried since; the database starts empty).
+
 ## Artifacts
 - Infrastructure template: `infra/azure/main.bicep`
 - Deployment script: `scripts/azure/deploy-environment.ps1`
@@ -136,11 +151,30 @@ For each environment, define variables/secrets used by workflow:
 - `PARTICIPANT_NOTIFICATION_CHANNEL` (optional, `disabled` | `log` | `webhook` | `acs_email`, default `log`)
 - `PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS` (optional, default `5000`)
 - `ACS_EMAIL_SENDER_DISPLAY_NAME` (optional, default `A-2 læringsplattform`; used when `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email`)
+- `PUBLIC_APP_BASE_URL` (optional, default empty; the platform's own https address. Turns on the link in e-mails, and empty means e-mails go without one. Set it as a GitHub Actions variable for the environment: an infra deploy writes it to both the app and the worker, and overwrites a value set by hand)
 - `PARTICIPANT_CONSOLE_CONFIG_FILE` (optional, default `config/participant-console.json`)
 - `PARTICIPANT_CONSOLE_DEBUG_MODE` (optional, `auto` | `true` | `false`, default `auto`)
 - `PARTICIPANT_COURSE_ONLY` (optional, `true` | `false`, default `true`) — når `true` når deltakere moduler KUN gjennom kurs; den frittstående modul-lista og -innleveringen er gated av (SMO/ADMIN unntatt). Sett `false` for å gjenåpne frittstående modul-tilgang for deltakere.
 - `BUDGET_CONTACT_EMAIL`
 - `MONTHLY_BUDGET_AMOUNT`
+
+Worker-only settings that are **not** in the Bicep template yet (set by hand on the worker App Service; an infra
+deploy rewrites the worker's app settings and removes them):
+- `COURSE_MAJOR_EMAIL_ENABLED` (#934 slice 4b, `true` | `false`, default `false`) — the job that e-mails participants
+  when a course gets a new major version. The rows are created regardless; while it is off they wait, and nothing of
+  type `course_major_version_notification` is put in the outbox. Turn it on only after the web app AND the worker both
+  report the new version on `/version`. Needs `PARTICIPANT_NOTIFICATION_CHANNEL` to be on.
+- `COURSE_MAJOR_EMAIL_INTERVAL_MS` (optional, default `60000`) — how often the job runs; each run queues at most 20
+  e-mails, three seconds apart.
+
+Worker settings for the weekly e-mail from the boat (#1139, `doc/design/PLAN_1139.md`). They ARE in the Bicep template and come
+from the GitHub Environment variables of the same name, so an infra deploy keeps them:
+- `WEEKLY_EMAIL_ENABLED` (`true` | `false`, default `false`) — the job (Monday 07:00–12:00 Oslo) and the outbox handler. Turn it on
+  only after the web app AND the worker both report the new version on `/version`. Turning it off is the emergency stop: the
+  handler skips what is queued (`disabled`). Needs `PARTICIPANT_NOTIFICATION_CHANNEL` to be on.
+- `WEEKLY_EMAIL_RECIPIENTS` (default empty) — who gets it: e-mail addresses separated by commas, or `*` for everyone. Empty
+  means NOBODY. Matched without case against `User.email`. Stage keeps a list for good; prod starts with the product owner only.
+  The pace is at most 5 e-mails an hour (the ACS quota on the Azure-managed domain is 10 an hour for the whole subscription).
 
 Do not set these manually in GitHub Environment variables:
 - `PROCESS_ROLE` - injected separately for web and worker apps
@@ -175,7 +209,7 @@ Without this bootstrap step, the deploy fails with `AuthorizationFailed` partway
 
 ## Deployment flow
 
-Both staging and production require **manual `workflow_dispatch`** — push to `main` does *not* auto-deploy. See `CLAUDE.md` → "Which deploy workflow to use" for the choice between `deploy-app.yml` (code-only, ~16 min) and `deploy-azure.yml` (full Bicep + app, ~22 min).
+Both staging and production require **manual `workflow_dispatch`** — push to `main` does *not* auto-deploy. See `.claude/skills/deploy-runbook/SKILL.md` → "Which deploy workflow to use" for the choice between `deploy-app.yml` (code-only, ~16 min) and `deploy-azure.yml` (full Bicep + app, ~22 min).
 
 1. **Staging only:** dispatch `deploy-azure.yml` (or `deploy-app.yml`) with defaults. Verify staging `/healthz` green before considering prod.
 2. **Production:** dispatch `deploy-azure.yml` with `deploy_production=true`. If staging is already verified green on the same `main` HEAD, also set `skip_staging=true` to bypass the redundant staging redeploy. The production GitHub environment has the approval gate.
@@ -354,7 +388,10 @@ When `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email` is set, the Bicep template aut
 No manual resource creation is required. To activate:
 1. Set GitHub Actions variable `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email` for the target environment.
 2. Optionally set `ACS_EMAIL_SENDER_DISPLAY_NAME` (default: `A-2 læringsplattform`).
-3. Trigger a deploy. ACS resources will be provisioned on the first run.
+3. Set `PUBLIC_APP_BASE_URL` to the environment's https address, or the e-mails go without a link.
+4. Trigger a deploy. ACS resources will be provisioned on the first run.
+
+**A new setting or package is not live until the worker process has restarted, and on B1 that takes ~15 minutes or may not happen at all** (measured 2026-11-07; the old process keeps answering health checks meanwhile). Compare `startedAt` on `https://<worker>/version` before and after; if it is still unchanged after ~20 minutes, run `az webapp restart` on the worker, and on the web app if the setting is read there. `deploy-environment.ps1` does this for the worker on every deploy (`Assert-WorkerRestarted`: waits 20 min, restarts, waits 20 more, then fails the run).
 
 Note: AzureManagedDomain uses an auto-generated `azurecomm.net` sender address. To use a custom verified domain, replace the domain resource in `infra/azure/main.bicep`.
 

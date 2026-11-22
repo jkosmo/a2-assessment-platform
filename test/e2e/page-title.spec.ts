@@ -1,9 +1,14 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { forventUndermenyMedOrd } from "../support/deltakereSubnav.js";
 
 // Sidetittelen: «A-2 læringsplattform – Mine kurs», på brukerens språk, uten versjonsnummer.
 // Før: «A2 Participant Test Console v2.90.0» — engelsk uansett språk, og med versjonen i lenker og bokmerker.
+//
+// Testgjennomgangen 2026-11 (4.1-2): på sidene under Deltakere sjekkes også undermenyen (#1096), som før sto i
+// deltakere-subnav-keys-1096.spec.ts og lastet de samme sidene en gang til. APPEAL_HANDLER er lagt til rollene for det.
 
-const ROLLER = ["PARTICIPANT", "ADMINISTRATOR", "SUBJECT_MATTER_OWNER", "REVIEWER", "REPORT_READER"];
+const ROLLER = ["PARTICIPANT", "ADMINISTRATOR", "SUBJECT_MATTER_OWNER", "REVIEWER", "APPEAL_HANDLER", "REPORT_READER"];
+const MED_UNDERMENY = new Set(["/review", "/results", "/deltakere/aktivitet"]);
 
 async function mock(page: Page, locale: string) {
   await page.route("**/api/**", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
@@ -28,7 +33,6 @@ async function mock(page: Page, locale: string) {
 
 const SIDER: Array<[string, Record<string, string>]> = [
   ["/participant", { nb: "Mine kurs", nn: "Kursa mine", "en-GB": "My courses" }],
-  ["/participant/completed", { nb: "Fullførte moduler", nn: "Fullførte modular", "en-GB": "Completed modules" }],
   ["/profile", { nb: "Profil", nn: "Profil", "en-GB": "Profile" }],
   ["/review", { nb: "Manuell behandling", nn: "Manuell handsaming", "en-GB": "Manual review" }],
   ["/results", { nb: "Resultater", nn: "Resultat", "en-GB": "Results" }],
@@ -40,13 +44,15 @@ const MERKE: Record<string, string> = { nb: "A-2 læringsplattform", nn: "A-2 l�
 
 for (const [rute, navn] of SIDER) {
   for (const locale of ["nb", "nn", "en-GB"]) {
-    test(`${rute} (${locale}): tittelen er merket og sidens navn, uten versjon`, async ({ page }) => {
+    const ogUndermeny = MED_UNDERMENY.has(rute) ? ", og undermenyen under Deltakere viser ord, ikke nøkler" : "";
+    test(`${rute} (${locale}): tittelen er merket og sidens navn, uten versjon${ogUndermeny}`, async ({ page }) => {
       await mock(page, locale);
       await page.goto(rute);
       await expect(page).toHaveTitle(`${MERKE[locale]} – ${navn[locale]}`);
       // Versjonen er hentet (9.9.9) og skal ikke ha havnet i tittelen.
       await page.waitForLoadState("networkidle");
       await expect(page).toHaveTitle(`${MERKE[locale]} – ${navn[locale]}`);
+      if (MED_UNDERMENY.has(rute)) await forventUndermenyMedOrd(page, locale);
     });
   }
 }

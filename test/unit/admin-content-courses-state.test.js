@@ -21,9 +21,10 @@ describe("admin content courses state helpers", () => {
     });
   });
 
-  it("builds stable delete dialog copy", () => {
-    expect(buildCourseDeleteDialogText("Arbeidsliv")).toContain("Arbeidsliv");
-    expect(buildCourseDeleteDialogText("Arbeidsliv")).toContain("Modulene forblir i biblioteket uendret.");
+  // #1173: teksten kommer fra sidens oversetter, ikke fra en hardkodet bokmålsstreng.
+  it("builds the delete dialog copy through the page's translator", () => {
+    const tf = (key, vars) => `${key}|${vars.title}`;
+    expect(buildCourseDeleteDialogText("Arbeidsliv", tf)).toBe("courses.deleteDialog.text|Arbeidsliv");
   });
 
   it("derives course-list rows with localized titles and updated labels", () => {

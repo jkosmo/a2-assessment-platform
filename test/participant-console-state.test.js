@@ -3,6 +3,7 @@ import {
   buildModuleCardViewModels,
   deriveParticipantFlowGateState,
   findMatchingPreset,
+  orphanedDraftTexts,
   parseDraftEnvelope,
   pruneExpiredModuleDrafts,
   resolveRoleSwitchState,
@@ -12,9 +13,80 @@ import {
   sanitizeAppealStatuses,
   sanitizeMockRolePresets,
   upsertModuleDraft,
+  markCourseModuleStarted,
+  aiReviewRoutingLive,
+  courseStillRequiresRetake,
 } from "../public/participant-console-state.js";
 
+describe("#934 5a-3: krever kurset et nytt forsøk i modulen?", () => {
+  const course = { items: [{ type: "MODULE", moduleId: "m1", retakeRequired: true }, { type: "MODULE", moduleId: "m2" }, { type: "SECTION", moduleId: "m3", retakeRequired: true }] };
+  it("et svar fra serveren uten feltet betyr at kravet er dekket", () => {
+    expect(courseStillRequiresRetake(course, "m1")).toBe(true);
+    expect(courseStillRequiresRetake(course, "m2")).toBe(false);
+    expect(courseStillRequiresRetake(course, "m3")).toBe(false);
+    expect(courseStillRequiresRetake({ items: [{ type: "MODULE", moduleId: "m1", retakeRequired: false }] }, "m1")).toBe(false);
+    expect(courseStillRequiresRetake(undefined, "m1")).toBe(false);
+  });
+});
+
+describe("2.134.1: går «KI skrev det meste» til sensor?", () => {
+  const live = { enabled: true, shadowMode: false };
+  it("samme regel som serveren: modulens egen innstilling først, så den globale", () => {
+    expect(aiReviewRoutingLive(live, { assessmentPolicy: null })).toBe(true);
+    expect(aiReviewRoutingLive(live, null)).toBe(true);
+    expect(aiReviewRoutingLive({ enabled: true, shadowMode: true }, null)).toBe(false);
+    expect(aiReviewRoutingLive({ enabled: false, shadowMode: false }, null)).toBe(false);
+    expect(aiReviewRoutingLive(live, { assessmentPolicy: { aiInfluence: { shadowMode: true } } })).toBe(false);
+    expect(aiReviewRoutingLive(live, { assessmentPolicy: { aiInfluence: { enabled: false } } })).toBe(false);
+    expect(aiReviewRoutingLive({ enabled: false, shadowMode: true }, { assessmentPolicy: { aiInfluence: { enabled: true, shadowMode: false } } })).toBe(true);
+    expect(aiReviewRoutingLive(undefined, null)).toBe(false);
+  });
+});
+
+describe("2.134.1: kursdetaljene i minnet etter en innlevering", () => {
+  it("«ikke startet» blir «påbegynt» for modulen, i alle kurs; andre moduler og andre statuser står", () => {
+    const details = {
+      a: {
+        items: [
+          { type: "MODULE", moduleId: "m1", moduleStatus: "NOT_STARTED" },
+          { type: "MODULE", moduleId: "m2", moduleStatus: "NOT_STARTED" },
+          { type: "SECTION", sectionId: "s1" },
+        ],
+        modules: [{ moduleId: "m1", moduleStatus: "NOT_STARTED" }],
+      },
+      b: { items: [{ type: "MODULE", moduleId: "m1", moduleStatus: "PASSED" }] },
+      c: { items: [{ type: "MODULE", moduleId: "m1", moduleStatus: "REVISED_RETAKE_REQUIRED" }] },
+      d: null,
+    };
+    expect(markCourseModuleStarted(details, "m1")).toEqual(["a"]);
+    expect(details.a.items[0].moduleStatus).toBe("IN_PROGRESS");
+    expect(details.a.modules[0].moduleStatus).toBe("IN_PROGRESS");
+    expect(details.a.items[1].moduleStatus).toBe("NOT_STARTED");
+    expect(details.b.items[0].moduleStatus).toBe("PASSED");
+    expect(details.c.items[0].moduleStatus).toBe("REVISED_RETAKE_REQUIRED");
+    expect(markCourseModuleStarted(details, "m1")).toEqual([]);
+  });
+});
+
 describe("participant console state helpers", () => {
+  it("#934 5a-1: finner teksten i kladden som ikke har noe felt på siden", () => {
+    const draft = { gammeltFelt: "Svaret mitt", tomtFelt: "  ", nyttFelt: "Nytt", mcq: { questions: [] }, updatedAt: "2026-11-04T00:00:00Z" };
+    expect(orphanedDraftTexts(draft, ["nyttFelt"])).toEqual([{ id: "gammeltFelt", text: "Svaret mitt" }]);
+    expect(orphanedDraftTexts(draft, ["nyttFelt", "gammeltFelt"])).toEqual([]);
+  });
+
+  it("2.136.1: svaret om KI i kladden regnes ikke som tekst uten felt", () => {
+    expect(orphanedDraftTexts({ __aiDeclaration: { value: "autonomous", text: "Forklaring" } }, [])).toEqual([]);
+    expect(orphanedDraftTexts({ __aiDeclaration: "gammel form" }, [])).toEqual([]);
+    // 2.136.5: et felt som tilfeldigvis heter det samme som det gamle navnet, er vanlig tekst.
+    expect(orphanedDraftTexts({ aiDeclaration: "Svaret mitt" }, [])).toEqual([{ id: "aiDeclaration", text: "Svaret mitt" }]);
+  });
+
+  it("#934 5a-1: et svar som er levert, trenger ikke reddes, og uten kladd er det ingenting", () => {
+    expect(orphanedDraftTexts({ gammeltFelt: "Svaret mitt", submittedAs: "s1" }, [])).toEqual([]);
+    expect(orphanedDraftTexts(undefined, [])).toEqual([]);
+  });
+
   it("sanitizes and de-duplicates configured presets", () => {
     const presets = sanitizeMockRolePresets([
       "participant",

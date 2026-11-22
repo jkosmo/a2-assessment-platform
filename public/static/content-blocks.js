@@ -8,6 +8,8 @@
 // tillegg å gjøres klare når de dukker opp (enhanceContentBlocks): det gjør en MutationObserver,
 // av samme grunn.
 
+import { setHidden } from "./dom-visibility.js";
+
 const SHOWN_MS = 2000;
 
 async function copyText(text) {
@@ -515,6 +517,71 @@ export function enhanceContentBlocks(root) {
   }
 }
 
+// #1123 «Finn feilene»: deltakeren trykker på setningene hun mener er feil (aria-pressed), og «Sjekk» viser
+// per setning om hun fant feilen, overså den, eller markerte en som stemmer — med forfatterens forklaring.
+// Fasiten (`data-error`) står i siden: blokken finnes bare i seksjoner, uten poeng (produkteier 2026-10-31).
+const ERRORS = "[data-content-errors]";
+
+function toggleErrorSentence(button) {
+  const block = button.closest(ERRORS);
+  if (!block || block.dataset.checked === "true") return;
+  button.setAttribute("aria-pressed", button.getAttribute("aria-pressed") === "true" ? "false" : "true");
+}
+
+function checkErrors(block) {
+  const items = [...block.querySelectorAll("[data-errors-item]")];
+  let found = 0;
+  let total = 0;
+  for (const item of items) {
+    const error = item.dataset.error === "true";
+    const marked = item.getAttribute("aria-pressed") === "true";
+    if (error) total += 1;
+    if (error && marked) found += 1;
+    // Etter «Sjekk» kan markeringene ikke endres; «Prøv igjen» åpner dem.
+    item.setAttribute("aria-disabled", "true");
+    const kind = error ? (marked ? "found" : "missed") : (marked ? "false" : "");
+    if (kind) item.classList.add(`is-${kind}`);
+    const feedback = item.parentElement?.querySelector("[data-errors-feedback]");
+    if (!feedback) continue;
+    const verdict = feedback.querySelector(".content-errors-verdict");
+    if (verdict) verdict.textContent = kind ? (block.dataset[kind] ?? "") : "";
+    // Forklaringen vises der det er noe å lære: en feil (funnet eller oversett), eller en setning som var riktig
+    // men ble markert. En riktig setning som ikke ble markert, får ingen tilbakemelding.
+    setHidden(feedback, !kind);
+    feedback.dataset.kind = kind;
+  }
+  block.dataset.checked = "true";
+  const status = block.querySelector(".content-errors-status");
+  if (status) status.textContent = (block.dataset.status ?? "").replace("{found}", String(found)).replace("{total}", String(total));
+  const check = block.querySelector("[data-errors-check]");
+  const reset = block.querySelector("[data-errors-reset]");
+  setHidden(check, true);
+  if (reset) {
+    setHidden(reset, false);
+    reset.focus();
+  }
+}
+
+function resetErrors(block) {
+  for (const item of block.querySelectorAll("[data-errors-item]")) {
+    item.setAttribute("aria-pressed", "false");
+    item.removeAttribute("aria-disabled");
+    item.classList.remove("is-found", "is-missed", "is-false");
+    const feedback = item.parentElement?.querySelector("[data-errors-feedback]");
+    setHidden(feedback, true);
+  }
+  delete block.dataset.checked;
+  const status = block.querySelector(".content-errors-status");
+  if (status) status.textContent = "";
+  const check = block.querySelector("[data-errors-check]");
+  const reset = block.querySelector("[data-errors-reset]");
+  setHidden(reset, true);
+  if (check) {
+    setHidden(check, false);
+    block.querySelector("[data-errors-item]")?.focus();
+  }
+}
+
 const FLASH_ACTIONS = [
   ["[data-flash-card]", "flip"],
   ["[data-flash-known]", "known"],
@@ -542,7 +609,26 @@ if (typeof document !== "undefined") {
       }
     }
     const pairButton = target.closest("[data-pair-item]");
-    if (pairButton) pickPair(pairButton);
+    if (pairButton) {
+      pickPair(pairButton);
+      return;
+    }
+    const errorSentence = target.closest("[data-errors-item]");
+    if (errorSentence) {
+      toggleErrorSentence(errorSentence);
+      return;
+    }
+    const errorsCheck = target.closest("[data-errors-check]");
+    if (errorsCheck) {
+      const block = errorsCheck.closest(ERRORS);
+      if (block) checkErrors(block);
+      return;
+    }
+    const errorsReset = target.closest("[data-errors-reset]");
+    if (errorsReset) {
+      const block = errorsReset.closest(ERRORS);
+      if (block) resetErrors(block);
+    }
   });
 
   // Piltastene blar når fokus er i en gjennomgang — men ikke mens deltakeren skriver i et felt.

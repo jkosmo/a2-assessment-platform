@@ -442,3 +442,91 @@ test("classes admin: importen sier hvem som ble hoppet over fordi e-posten tilh�
   await expect(toast).toContainText("1 hoppet over: pseudonymisert.");
   await expect(toast).toContainText("kari@a-2.no");
 });
+
+// Produkteier 2026-11-08: ingen nye deltakere eller kurs i en arkivert klasse. Siden viser ikke feltene for det, bare hvorfor,
+// og etter «Gjenopprett» er de tilbake. Serveren nekter uansett (`class_archived`, test/m2-classes-archived.test.ts), og den
+// meldingen vises lesbart på alle tre språk når en side som sto åpen, prøver likevel.
+async function mockOneClass(page: Page, state: { archivedAt: string | null }, onMemberPost?: (route: Route) => Promise<void>) {
+  await mockBaseApis(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ classes: [{ id: "cls-1", name: "Kull 2025", kind: "MANUAL", isSystem: false, archivedAt: state.archivedAt, canManage: true, _count: { members: 1, courseAssignments: 1 } }] }),
+    }),
+  );
+  await page.route("**/api/admin/content/classes/*", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ class: { id: "cls-1", name: "Kull 2025", kind: "MANUAL", isSystem: false, archivedAt: state.archivedAt, lifecycle: state.archivedAt ? "archived" : "active" } }) }),
+  );
+  await page.route("**/api/admin/content/classes/*/members", (route: Route) => {
+    if (route.request().method() === "POST" && onMemberPost) return onMemberPost(route);
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ members: [{ userId: "u1", name: "Kari Nordmann", email: "kari@x.no", addedAt: new Date(0).toISOString() }] }) });
+  });
+  await page.route("**/api/admin/content/classes/*/courses", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: [{ courseId: "course-1", title: "Arbeidsmiljø", dueAt: null, coursePublished: true, courseArchived: false }] }) }),
+  );
+  await page.route("**/api/admin/content/classes/*/restore", (route: Route) => {
+    state.archivedAt = null;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.route("**/api/admin/content/users/search**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ users: [{ id: "u2", name: "Ola Nordmann", email: "ola@x.no" }] }) }),
+  );
+  await page.route("**/api/admin/content/courses", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: [{ id: "course-2", title: JSON.stringify({ nb: "Nytt kurs" }), displayTitle: "Nytt kurs", archivedAt: null }] }) }),
+  );
+}
+
+test("arkivert klasse: ingen felt for å legge til deltakere eller tildele kurs, en forklaring, og feltene er tilbake etter «Gjenopprett»", async ({ page }) => {
+  const state = { archivedAt: "2026-11-01T00:00:00.000Z" as string | null };
+  await mockOneClass(page, state);
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser?id=cls-1");
+
+  // Det som står, vises fortsatt, og kan fjernes.
+  await expect(page.locator("#memberChips")).toContainText("Kari Nordmann");
+  await expect(page.locator("#courseChips")).toContainText("Arbeidsmiljø");
+  await expect(page.locator('[data-remove-member="u1"]')).toBeVisible();
+  // Ingen vei til å legge til.
+  await expect(page.locator("#studentSearch")).toHaveCount(0);
+  await expect(page.locator("#courseSelect")).toHaveCount(0);
+  await expect(page.locator("#assignCourseBtn")).toHaveCount(0);
+  const notes = page.locator("[data-class-archived-note]");
+  await expect(notes).toHaveCount(2);
+  await expect(notes.first()).toHaveText("Klassen er arkivert. Gjenopprett den for å legge til deltakere eller tildele kurs.");
+  await expect(notes.first()).toBeVisible();
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('.form-page-actions [data-action="restore"]').click();
+  await expect(page.locator("#studentSearch")).toBeVisible();
+  await expect(page.locator("#assignCourseBtn")).toBeVisible();
+  await expect(page.locator("[data-class-archived-note]")).toHaveCount(0);
+});
+
+test("aktiv klasse: ingen forklaring om arkivering, og feltene står (kontroll)", async ({ page }) => {
+  await mockOneClass(page, { archivedAt: null });
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser?id=cls-1");
+  await expect(page.locator("#studentSearch")).toBeVisible();
+  await expect(page.locator("#courseSelect")).toBeVisible();
+  await expect(page.locator("[data-class-archived-note]")).toHaveCount(0);
+});
+
+for (const [locale, text] of [
+  ["nb", "Klassen er arkivert. Gjenopprett den før du legger til deltakere eller tildeler kurs."],
+  ["nn", "Klassen er arkivert. Gjenopprett han før du legg til deltakarar eller tildeler kurs."],
+  ["en-GB", "The class is archived. Restore it before adding participants or assigning courses."],
+] as const) {
+  test(`klassen ble arkivert mens siden sto åpen: serverens class_archived vises lesbart (${locale})`, async ({ page }) => {
+    await mockOneClass(page, { archivedAt: null }, (route) =>
+      route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "class_archived", message: "The class is archived. Restore it before adding participants.", details: { action: "add_member", classId: "cls-1" } }) }),
+    );
+    await page.addInitScript((value) => { try { localStorage.setItem("participant.locale", value); } catch { /* ignore */ } }, locale);
+    await page.goto("/deltakere/klasser?id=cls-1");
+    await page.locator("#studentSearch").fill("ola");
+    await page.locator('[data-add-user="u2"]').click();
+    const toast = page.locator(".toast").last();
+    await expect(toast).toContainText(text);
+    await expect(toast).not.toContainText("class_archived");
+  });
+}

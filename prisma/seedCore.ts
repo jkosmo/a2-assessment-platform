@@ -187,6 +187,14 @@ export async function runSeed(prisma: any) {
     mcqQuestionIds: firstModule.mcqQuestionIds,
   });
 
+  // #934: regelen om beståtte per kurs er på i prod og på stage siden 2026-11-06, og slås aldri av igjen. Testene og den lokale
+  // databasen skal måle den samme regelen. Raden er den `npm run module-credit:switch-on` skriver.
+  await prisma.platformConfig.upsert({
+    where: { key: "module_pass_per_course" },
+    create: { key: "module_pass_per_course", value: "on", updatedBy: "seed" },
+    update: { value: "on" },
+  });
+
   console.log("Seed completed", {
     adminEmail: admin.email,
     participantEmail: participant.email,

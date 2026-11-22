@@ -22,6 +22,11 @@ export type McqReviewQuestion = {
   /** #1077, «multiple»: alternativene deltakeren valgte og de riktige, på leserens språk. */
   selectedAnswers?: string[];
   correctAnswers?: string[];
+  /** «order»: elementene i riktig rekkefølge, og slik deltakeren satte dem (på leserens språk). */
+  correctOrder?: string[];
+  selectedOrder?: string[];
+  /** «fill»: de godkjente svarene på leserens språk (alternativene ER de godkjente svarene). */
+  acceptedAnswers?: string[];
   isCorrect: boolean;
   rationale: string | null;
 };
@@ -68,11 +73,23 @@ export async function getOwnedMcqReview(
               .map((i) => options[i]!),
           }
         : {};
+      // «order»: `options` ER den riktige rekkefølgen; svaret er posisjonene i den, i deltakerens rekkefølge.
+      const order = questionType === "order"
+        ? {
+            correctOrder: options,
+            selectedOrder: ((response?.answerJson ? (JSON.parse(response.answerJson) as { order?: number[] }).order : []) ?? [])
+              .filter((i) => Number.isInteger(i) && i >= 0 && i < options.length)
+              .map((i) => options[i]!),
+          }
+        : {};
       return {
         id: question.id,
         questionType,
+        ...order,
+        // «fill»: alternativene er de godkjente svarene — vist som det, ikke som valg deltakeren hadde.
+        ...(questionType === "fill" ? { acceptedAnswers: options } : {}),
         stem: localizeContentText(locale, question.stem) ?? question.stem,
-        options,
+        options: questionType === "fill" ? [] : options,
         ...multiple,
         // Svaret slik deltakeren ga det — på språket forsøket ble tatt på.
         selectedAnswer: response?.selectedAnswer ?? null,

@@ -5,13 +5,14 @@ import {
   getCourseReminderNotificationMessage,
   type CourseReminderKind,
 } from "../../i18n/notificationMessages.js";
-import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
-import { operationalEvents } from "../../observability/operationalEvents.js";
 import { auditRepository } from "../../repositories/auditRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import { sendViaAcs } from "../certification/participantNotificationService.js";
-import { deriveStatus } from "./enrollmentService.js";
+import { buildNotificationEmail, deliverIllustratedEmail } from "../certification/participantNotificationService.js";
+import { buildEmailLink } from "../certification/emailLinks.js";
+import { EMAIL_ILLUSTRATIONS } from "../certification/illustratedEmail.js";
+import { deriveStatuses } from "./enrollmentService.js";
+import { pairKey } from "./learnerVisibility.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
 import { classRepository } from "./classRepository.js";
 import { findActiveParticipants } from "../../repositories/userRepository.js";
@@ -26,7 +27,7 @@ import { buildSentReminderKeySet, reminderDedupKey } from "./courseReminderDedup
 //   2. KLASSE-tildelte CourseGroupAssignment.dueAt (fase 2), ekspandert til medlemmer — MANUAL-
 //      klasser (ClassMember-rader) + system-klassen «Alle deltakere» (alle aktive deltakere).
 //      ENTRA-klasser kan ikke oppløses i en bakgrunnsjobb (ingen token/lagrede medlemskanter) og
-//      hoppes over, på samme måte som tildelings-e-posten (classService).
+//      hoppes over, på samme måte som e-posten om nye kurs (courseAssignmentNotice.ts, #1142).
 // ⚠️ #989 fjernet resertifisering av moduler. DETTE er ikke det: en kursfrist er en frist for å bli
 // FERDIG med et kurs, ikke en utløpsdato på kunnskap. Kursfrister er uendret og skal forbli det.
 // Per (bruker, kurs) beregnes ÉN effektiv frist: individuell frist vinner over klasse; ved flere
@@ -87,89 +88,33 @@ type ReminderCandidate = {
   source: "individual" | "class";
 };
 
-async function defaultSendCourseReminder(input: CourseReminderSendInput): Promise<CourseReminderSendResult> {
-  const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
+export async function defaultSendCourseReminder(input: CourseReminderSendInput): Promise<CourseReminderSendResult> {
   const message = getCourseReminderNotificationMessage(input.locale, input.kind, {
     courseTitle: input.courseTitle,
     dueAt: input.dueAt,
     daysBefore: input.daysBefore,
   });
-  const logPayload = {
-    notificationType: NOTIFICATION_TYPE,
-    courseId: input.courseId,
-    userId: input.userId,
+  const result = await deliverIllustratedEmail({
     recipientEmail: input.recipientEmail,
-    kind: input.kind,
-    dueAt: input.dueAt.toISOString(),
-    daysBefore: input.daysBefore ?? null,
-    emittedAt: new Date().toISOString(),
-  };
-
-  if (channel === "disabled") {
-    return { delivered: false, channel, failureReason: "channel_disabled" };
-  }
-
-  if (channel === "log") {
-    logOperationalEvent(operationalEvents.certification.participantNotificationSent, {
-      channel,
-      ...logPayload,
-    });
-    return { delivered: true, channel };
-  }
-
-  if (channel === "acs_email") {
-    const result = await sendViaAcs({
+    recipientName: input.recipientName,
+    email: buildNotificationEmail({
+      locale: input.locale,
+      message,
+      reason: "reminder",
+      illustration: input.kind === "overdue" ? EMAIL_ILLUSTRATIONS.overdue : EMAIL_ILLUSTRATIONS.dueSoon,
+      link: buildEmailLink(input.locale, "course", { courseId: input.courseId }),
+    }),
+    logPayload: {
+      notificationType: NOTIFICATION_TYPE,
+      courseId: input.courseId,
+      userId: input.userId,
       recipientEmail: input.recipientEmail,
-      recipientName: input.recipientName ?? undefined,
-      subject: message.subject,
-      body: message.nextStepGuidance,
-      logPayload: { channel, ...logPayload },
-    });
-    return { delivered: result.delivered, channel, failureReason: result.failureReason };
-  }
-
-  // webhook
-  const webhookUrl = env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL;
-  if (!webhookUrl) {
-    logOperationalEvent(
-      operationalEvents.certification.participantNotificationFailed,
-      { channel, ...logPayload, failureReason: "missing_webhook_url" },
-      "error",
-    );
-    return { delivered: false, channel, failureReason: "missing_webhook_url" };
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), env.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS);
-  try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...logPayload, subject: message.subject, body: message.nextStepGuidance }),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      const failureReason = `webhook_non_2xx_${response.status}`;
-      logOperationalEvent(
-        operationalEvents.certification.participantNotificationFailed,
-        { channel, ...logPayload, failureReason },
-        "error",
-      );
-      return { delivered: false, channel, failureReason };
-    }
-    logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...logPayload });
-    return { delivered: true, channel };
-  } catch (error) {
-    const failureReason = error instanceof Error ? error.message : "webhook_send_failed";
-    logOperationalEvent(
-      operationalEvents.certification.participantNotificationFailed,
-      { channel, ...logPayload, failureReason },
-      "error",
-    );
-    return { delivered: false, channel, failureReason };
-  } finally {
-    clearTimeout(timeout);
-  }
+      kind: input.kind,
+      dueAt: input.dueAt.toISOString(),
+      daysBefore: input.daysBefore ?? null,
+    },
+  });
+  return { delivered: result.delivered, channel: result.channel, failureReason: result.failureReason };
 }
 
 // Audit-basert dedup: en påminnelse er allerede sendt hvis det finnes en `course_reminder_sent`-rad
@@ -349,6 +294,11 @@ export async function runCourseReminderSchedule(input?: {
   // far-future-dated enrolments/assignments are pruned at the DB.
   const upperBound = addDays(asOf, (reminderDaysBefore[0] ?? 0) + 1);
   const candidates = await gatherCandidates(summary, upperBound);
+  // #1156 (QA-porten): statusene for alle kandidatene i ett kall (`deriveStatuses`, et fast antall spørringer), ikke én om gangen.
+  const statuses = await deriveStatuses(
+    candidates.filter((candidate) => isReachableParticipant(candidate)).map((c) => ({ userId: c.userId, courseId: c.courseId, dueAt: c.dueAt })),
+    asOf,
+  );
 
   for (const candidate of candidates) {
     if (!isReachableParticipant(candidate)) {
@@ -356,7 +306,7 @@ export async function runCourseReminderSchedule(input?: {
       continue;
     }
 
-    const status = await deriveStatus(candidate.userId, candidate.courseId, candidate.dueAt, asOf);
+    const status = statuses.get(pairKey(candidate.userId, candidate.courseId));
 
     if (status === "COMPLETED") {
       summary.skippedCompleted += 1;

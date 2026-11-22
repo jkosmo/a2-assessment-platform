@@ -43,16 +43,20 @@ export function listContentOwnerUserIds(
  * assertContentOwnership would NOT throw. Same rule as decideOwnershipAccess: an ADMINISTRATOR manages
  * all; a non-admin manages only the ids they own (unowned → not manageable). Lets a list endpoint annotate
  * each row with `canManage`, so the UI can hide the action buttons the server would otherwise 403 on save.
+ *
+ * #934: `reader` er transaksjonen når kalleren holder innholdslåsen. Et oppslag utenfor den trenger en egen tilkobling,
+ * og den får det ikke hvis resten står i kø bak låsen (QA-porten 2.131.0, runde 3).
  */
 export async function listManageableContentIds(input: {
   contentType: ContentOwnerType;
   contentIds: string[];
   actorUserId: string;
   roles: string[];
+  reader?: DbTransactionClient | typeof prisma;
 }): Promise<Set<string>> {
   if (hasAnyRole(input.roles, ADMIN_ONLY)) return new Set(input.contentIds);
   if (input.contentIds.length === 0 || !input.actorUserId) return new Set();
-  const rows = await prisma.contentOwner.findMany({
+  const rows = await (input.reader ?? prisma).contentOwner.findMany({
     where: { contentType: input.contentType, contentId: { in: input.contentIds }, userId: input.actorUserId },
     select: { contentId: true },
   });
@@ -176,6 +180,22 @@ export async function addContentOwner(
     );
   };
   await (tx ? run(tx) : runInTransaction(run));
+}
+
+/**
+ * #1152: eierradene til innhold som slettes. `ContentOwner` peker på innholdet uten fremmednøkkel (fire typer i én tabell), så
+ * databasen rydder dem ikke; før ble de liggende etter hver sletting av kurs, modul og seksjon. Kalles i slettingens egen
+ * transaksjon, etter at innholdet er slettet, så radene forsvinner sammen med det eller ikke i det hele tatt. Ingen egen hendelse i
+ * revisjonsloggen: slettingen av innholdet er hendelsen. Vakt: test/unit/content-owner-cleanup-1152-guard.test.js.
+ */
+export async function deleteContentOwnersOf(
+  tx: Pick<DbTransactionClient, "contentOwner">,
+  contentType: ContentOwnerType,
+  contentIds: readonly string[],
+): Promise<number> {
+  if (contentIds.length === 0) return 0;
+  const { count } = await tx.contentOwner.deleteMany({ where: { contentType, contentId: { in: [...contentIds] } } });
+  return count;
 }
 
 // Last-owner protection: a non-admin cannot remove the final owner (would orphan the content). An

@@ -242,6 +242,35 @@ async function removeCertBackground() {
 certBgUpload?.addEventListener("click", uploadCertBackground);
 certBgRemove?.addEventListener("click", removeCertBackground);
 
+// #1139: ukens e-post til meg selv, med en gang.
+const weeklyEmailSendToMe = document.getElementById("weeklyEmailSendToMe");
+const weeklyEmailFeedback = document.getElementById("weeklyEmailFeedback");
+
+function showWeeklyEmailFeedback(message, isError) {
+  weeklyEmailFeedback.textContent = message;
+  weeklyEmailFeedback.style.color = isError ? "var(--color-error, red)" : "var(--color-meta)";
+  weeklyEmailFeedback.style.display = "";
+}
+
+async function sendWeeklyEmailToMe() {
+  weeklyEmailSendToMe.disabled = true;
+  showWeeklyEmailFeedback(t("adminPlatform.weeklyEmail.sending"), false);
+  try {
+    const result = await apiFetch("/api/admin/platform/weekly-email/send-to-me", headers, { method: "POST" });
+    if (result?.sent) showWeeklyEmailFeedback(t("adminPlatform.weeklyEmail.sent"), false);
+    else if (result?.reason === "nothing_outstanding") showWeeklyEmailFeedback(t("adminPlatform.weeklyEmail.nothingOutstanding"), false);
+    else if (result?.reason === "uncertain") showWeeklyEmailFeedback(t("adminPlatform.weeklyEmail.uncertain"), true);
+    // Bare administratorer ser siden: årsaken fra sendingen (kvoten brukt opp, kanalen av) står med.
+    else showWeeklyEmailFeedback(result?.detail ? `${t("adminPlatform.weeklyEmail.notSent")} (${result.detail})` : t("adminPlatform.weeklyEmail.notSent"), true);
+  } catch (err) {
+    showWeeklyEmailFeedback(describeApiError(err, t).headline, true);
+  } finally {
+    weeklyEmailSendToMe.disabled = false;
+  }
+}
+
+weeklyEmailSendToMe?.addEventListener("click", sendWeeklyEmailToMe);
+
 async function saveSettings() {
   saveBtn.disabled = true;
   saveFeedback.style.display = "none";

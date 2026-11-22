@@ -40,25 +40,41 @@ describe("Admin course-section management", () => {
     expect(listResponse.status).toBe(200);
     expect((listResponse.body.sections as Array<{ id: string }>).some((s) => s.id === sectionId)).toBe(true);
 
-    // Editing content publishes a new immutable version (latest-wins).
+    // #1163: a save stores a new immutable version as a DRAFT — the published one stays active until «Publiser».
+    const v1Active = createResponse.body.section.activeVersionId as string;
     const updateResponse = await request(app)
-      .put(`/api/admin/content/sections/${sectionId}/content`)
+      .put(`/api/admin/content/sections/${sectionId}`)
       .set(adminHeaders)
-      .send({ bodyMarkdown: { "en-GB": "# Hello\n\nSecond body.", nb: "# Hei 2", nn: "# Hei 2" } });
+      .send({
+        title: { "en-GB": detailResponse.body.section.title ? JSON.parse(detailResponse.body.section.title)["en-GB"] : "x", nb: "Seksjon", nn: "Seksjon" },
+        bodyMarkdown: { "en-GB": "# Hello\n\nSecond body.", nb: "# Hei 2", nn: "# Hei 2" },
+        expectedVersionNo: detailResponse.body.section.versionNo,
+        expectedTitle: detailResponse.body.section.title,
+      });
     expect(updateResponse.status).toBe(200);
     expect(updateResponse.body.section.versionNo).toBe(2);
     expect(updateResponse.body.section.bodyMarkdown).toContain("Second body.");
+    expect(updateResponse.body.section.activeVersionId).toBe(v1Active);
+    expect(updateResponse.body.section.hasUnpublishedChanges).toBe(true);
 
     const versionCount = await prisma.courseSectionVersion.count({ where: { sectionId } });
     expect(versionCount).toBe(2);
 
+    // 2.168.0: «Døp om» uten versjonen lista så, avvises og skriver ingenting (faner fra før #1163 er ute av bruk).
+    const nyttNavn = { "en-GB": "Renamed section", nb: "Omdøpt", nn: "Omdøpt" };
+    const utenVersjon = await request(app).patch(`/api/admin/content/sections/${sectionId}/title`).set(adminHeaders).send({ title: nyttNavn });
+    expect(utenVersjon.status).toBe(400);
+    expect(await prisma.courseSectionVersion.count({ where: { sectionId } })).toBe(2);
+
     const titleResponse = await request(app)
       .patch(`/api/admin/content/sections/${sectionId}/title`)
       .set(adminHeaders)
-      .send({ title: { "en-GB": "Renamed section", nb: "Omdøpt", nn: "Omdøpt" } });
+      .send({ title: nyttNavn, expectedVersionNo: 2 });
     expect(titleResponse.status).toBe(200);
     expect(titleResponse.body.section.title).toContain("Renamed section");
 
+    // #1151: bare en arkivert seksjon kan slettes.
+    expect((await request(app).post(`/api/admin/content/sections/${sectionId}/archive`).set(adminHeaders)).status).toBe(200);
     const deleteResponse = await request(app)
       .delete(`/api/admin/content/sections/${sectionId}`)
       .set(adminHeaders);
@@ -125,11 +141,15 @@ describe("Admin course-section management", () => {
     await prisma.courseItem.create({
       data: { courseId: course.id, itemType: "SECTION", sectionId, sortOrder: 0 },
     });
+    // #1151: slett krever arkivert, så seksjonen arkiveres for at «ligger i et kurs» skal kunne måles. Et arkivert element i et
+    // aktivt kurs oppstår når et kurs gjenopprettes med et element som ble arkivert for seg; tilstanden skrives direkte.
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { archivedAt: new Date(), activeVersionId: null } });
 
     const blocked = await request(app)
       .delete(`/api/admin/content/sections/${sectionId}`)
       .set(adminHeaders);
     expect(blocked.status).toBe(400);
+    expect(blocked.body.error).toBe("content_in_use");
 
     // cleanup (course cascade removes the CourseItem, then section is deletable)
     await prisma.course.delete({ where: { id: course.id } });

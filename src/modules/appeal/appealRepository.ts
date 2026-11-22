@@ -2,10 +2,40 @@ import type {
   AppealStatus as AppealStatusType,
   SubmissionStatus as SubmissionStatusType,
 } from "@prisma/client";
-import type { CreateAssessmentDecisionInput } from "../../repositories/decisionRepository.js";
 import { prisma } from "../../db/prisma.js";
+import type { LearnerTx } from "../../db/contentLock.js";
+import { findAllCoursesContainingModule, type LifecycleReader } from "../course/contentLifecycle.js";
 
 type AppealRepositoryClient = Pick<typeof prisma, "appeal" | "submission" | "user" | "assessmentDecision">;
+
+/**
+ * 2.170.0: om modulen er arkivert, og om kursene den står i, er arkivert (se `assertAppealAllowed`, appealService.ts). «Hvilke kurs»
+ * besvares av contentLifecycle.ts (`findAllCoursesContainingModule`), som overalt ellers (test/content-in-use-guard.test.js).
+ */
+export async function findModuleAppealScope(client: LifecycleReader, moduleId: string) {
+  const module = await client.module.findUnique({ where: { id: moduleId }, select: { archivedAt: true } });
+  if (!module) return null;
+  return { archivedAt: module.archivedAt, courses: await findAllCoursesContainingModule(moduleId, client) };
+}
+
+/**
+ * #1152 (Codex leste byggenotatet for 4c, 18.11.2026): en ny anke opprettes under deltakerlåsen. Kursslettingen
+ * (`lockCourseDeleteLearners`, courseDeleteGuard.ts) tar deltakerlåsene og måler «ingenting venter på vurdering eller anke»;
+ * en anke opprettet uten låsen kunne kommet mellom målingen og slettingen. Klienten MÅ være en `LearnerTx`, så typesjekkeren og
+ * vakta (test/content-lock-write-guard.test.js, `appeal`) ser låsen.
+ */
+export function createAppealWriter(tx: LearnerTx) {
+  return {
+    createAppeal(data: {
+      submissionId: string;
+      appealedById: string;
+      appealReason: string;
+      appealStatus: AppealStatusType;
+    }) {
+      return tx.appeal.create({ data });
+    },
+  };
+}
 
 export function createAppealRepository(client: AppealRepositoryClient = prisma) {
   return {
@@ -56,15 +86,6 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
         },
         select: { id: true },
       });
-    },
-
-    createAppeal(data: {
-      submissionId: string;
-      appealedById: string;
-      appealReason: string;
-      appealStatus: AppealStatusType;
-    }) {
-      return client.appeal.create({ data });
     },
 
     updateSubmissionStatus(submissionId: string, submissionStatus: SubmissionStatusType) {
@@ -247,6 +268,7 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
           submission: {
             select: {
               locale: true,
+              moduleId: true,
               module: {
                 select: { title: true },
               },
@@ -297,10 +319,6 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
           },
         },
       });
-    },
-
-    createResolutionDecision(data: CreateAssessmentDecisionInput) {
-      return client.assessmentDecision.create({ data });
     },
 
     // #790: plain row re-read after a guarded transition (the guarded updateMany can't return the row).

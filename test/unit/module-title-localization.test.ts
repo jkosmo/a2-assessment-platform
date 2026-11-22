@@ -12,11 +12,16 @@ const findModuleTitle = vi.fn();
 const updateModuleTitleRepo = vi.fn();
 const recordAuditEvent = vi.fn();
 
+// #934 skive 4a: tittelen leses i den låste transaksjonen (createAdminContentRepository(tx)), og skrives med
+// skriveren (createAdminContentWriter(tx)).
 vi.mock("../../src/modules/adminContent/adminContentRepository.js", () => ({
   adminContentRepository: {
     findModuleTitle: (...args: unknown[]) => findModuleTitle(...args),
   },
   createAdminContentRepository: () => ({
+    findModuleTitle: (...args: unknown[]) => findModuleTitle(...args),
+  }),
+  createAdminContentWriter: () => ({
     updateModuleTitle: (...args: unknown[]) => updateModuleTitleRepo(...args),
   }),
 }));
@@ -26,7 +31,8 @@ vi.mock("../../src/services/auditService.js", () => ({
 }));
 
 vi.mock("../../src/db/transaction.js", () => ({
-  runInTransaction: (fn: (tx: unknown) => unknown) => fn({}),
+  // #1151: vakta mot arkivert leser modulen på transaksjonen.
+  runInTransaction: (fn: (tx: unknown) => unknown) => fn({ module: { findUnique: async () => ({ archivedAt: null }) }, $executeRaw: async () => 0, $executeRawUnsafe: async () => 0 }),
 }));
 
 async function rename(existingTitle: string | null, patch: unknown) {

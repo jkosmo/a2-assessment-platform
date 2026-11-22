@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/static/favicon-16.png" type="image/png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon-180.png" sizes="180x180" />
     <title>A-2 læringsplattform – Modul</title>
     <link rel="stylesheet" href="/static/shared.css" />
     <link rel="stylesheet" href="/static/loading.css" />
@@ -44,8 +48,12 @@
       #dialogGenerate .chat-form-col { gap: 8px; }
       #dialogGeneratePlan .chat-textarea { padding: 6px 10px; font-size: 13px; }
       /* #1062: avkryssing i Innstillinger — etikett og boks på én linje, ikke shared.css sin fulle bredde. */
-      .settings-check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-text); }
+      /* #1173: etiketten ER klikkflaten for avkrysningsboksen (den omslutter den). Med 13–18 px boks og 18–19 px
+         linjehøyde var flaten under 24 px (WCAG 2.5.8); min-height gir 24 px uten å endre boksen. */
+      .settings-check { display: inline-flex; align-items: center; gap: 8px; min-height: 24px; font-size: 14px; color: var(--color-text); }
       .settings-check input[type="checkbox"] { width: auto; min-height: 0; margin: 0; }
+      /* #934 skive 5b: bredden fra shared.css kommer i tillegg til utfyllingen, og det flyter over på en telefon. */
+      #modulePublishDialog { box-sizing: border-box; width: min(620px, calc(100vw - 24px)); max-width: none; }
       .dialog-choice-body { font-size: 14px; line-height: 1.5; }
       .dialog-choice-body ul { margin: 8px 0 0; padding-left: 20px; }
       /* .row er et to-kolonners rutenett (skjema); knapperaden i dialogene er en flex-rad til høyre. */
@@ -121,7 +129,7 @@
       .preview-edit-mcq-item[open] > .preview-edit-mcq-summary .preview-edit-mcq-summary-stem { display: none; }
       .preview-edit-mcq-option { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: center; }
       .save-error-issues { margin-top: 8px; font-size: 12px; color: var(--color-meta); font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
-      .preview-edit-mcq-multiple { display: inline-flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: 13px; color: var(--color-meta); cursor: pointer; }
+      .preview-edit-mcq-multiple { display: inline-flex; align-items: center; gap: 8px; min-height: 24px; margin: 6px 0 0; font-size: 13px; color: var(--color-meta); cursor: pointer; }
       .preview-edit-mcq-multiple input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; flex-shrink: 0; }
       .preview-edit-mcq-help { font-size: 12px; color: var(--color-meta); }
       .preview-edit-actions {
@@ -456,14 +464,14 @@
         <nav id="workspaceNav" class="workspace-nav"></nav>
         <div class="locale-picker">
           <span id="appVersion" class="version-badge">…</span>
-          <label for="localeSelect" class="sr-only">Language</label>
+          <label for="localeSelect" class="sr-only" data-i18n="locale.label">Language</label>
           <select id="localeSelect" class="locale-select-compact"></select>
         </div>
       </div>
 
       <!-- QA r5 #2/#3: back-link + page title first, mirroring the Kurs page. Header markup moved up
            from below the GDPR notice; the old position left the H1 stranded mid-page. -->
-      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon">
+      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon" data-i18n-aria-label="area.contentNavAria">
         <a href="/admin-content/themes" class="content-area-nav-link" id="navTema" data-i18n="area.themes">Tema</a>
         <a href="/admin-content/courses" class="content-area-nav-link" id="navKurs" data-i18n="area.courses">Kurs</a>
         <a href="/admin-content" class="content-area-nav-link active" id="navModuler" data-i18n="area.modules">Moduler</a>
@@ -486,11 +494,16 @@
       <div class="workspace-shell" id="tabPanelModule" role="tabpanel" aria-labelledby="tabEdit">
 
         <!-- Preview pane -->
-        <section class="card preview-pane" aria-label="Modulforhåndsvisning">
+        <section class="card preview-pane" aria-label="Module preview" data-i18n-aria-label="shell.preview.paneAria">
           <div id="previewShows" class="small preview-shows" hidden style="display:none"></div>
-          <div id="previewContent">
-            <p class="preview-empty">Ingen modul valgt.</p>
-          </div>
+          <!-- #1151 skive 3c: en arkivert modul kan ikke endres. Sperren ligger RUNDT innholdet, ikke i det: skjemaet,
+               spørsmålene og kriteriene tegnes på nytt mange steder, og alt som tegnes inn her, arver `disabled`
+               (admin-content-shell.js, `applyModuleArchivedLock`). Samme sperre som det arkiverte kurset. -->
+          <fieldset class="archived-lock" data-module-archived-lock data-lock-shared-with-preview>
+            <div id="previewContent">
+              <p class="preview-empty">Ingen modul valgt.</p>
+            </div>
+          </fieldset>
         </section>
 
         <div id="shellStatusAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -509,7 +522,10 @@
       <div id="moduleOwnerPanelHost" class="card" hidden style="margin-bottom:var(--space-2)" data-settings-panel></div>
       <section class="card" id="tabPanelSettings" role="tabpanel" aria-labelledby="tabSettings" style="display:none">
         <h2 style="margin-top:0;font-size:16px" data-i18n="shell.settings.title">Innstillinger</h2>
-        <div id="settingsSummary"></div>
+        <!-- #1151 skive 3c: samme sperre som over. Eierpanelet (moduleOwnerPanelHost) står utenfor og lagrer for seg. -->
+        <fieldset class="archived-lock" data-module-archived-lock>
+          <div id="settingsSummary"></div>
+        </fieldset>
       </section>
 
       <!-- Produkteier 13.09: samtalen erstattes av to dialoger. «Generer innhold» tar kildemateriale
@@ -548,6 +564,22 @@
       <dialog id="dialogChoice" aria-labelledby="dialogChoiceBody">
         <div id="dialogChoiceBody" class="dialog-choice-body"></div>
         <div id="dialogChoiceActions" class="dialog-actions"></div>
+      </dialog>
+
+      <!-- #934 skive 5b: hoved eller mindre for modulen, og ved hoved ett valg per kurs med kursbevis. Vises bare når
+           bryteren er på; ellers spør siden som før. Lytterne står på dialogen, tekstene settes når den åpnes. -->
+      <dialog id="modulePublishDialog" aria-labelledby="modulePublishTitle">
+        <h2 id="modulePublishTitle" class="dialog-title"></h2>
+        <div id="modulePublishNoticeHost"></div>
+        <div id="modulePublishKind"></div>
+        <div id="modulePublishCoursesBlock" hidden>
+          <p id="modulePublishCoursesIntro" class="small"></p>
+          <div id="modulePublishCourses"></div>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" id="modulePublishCancel" class="btn-secondary"></button>
+          <button type="button" id="modulePublishConfirm" class="btn-primary"></button>
+        </div>
       </dialog>
 
       <dialog id="dialogRevise" aria-labelledby="dialogReviseTitle">

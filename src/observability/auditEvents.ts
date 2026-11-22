@@ -32,6 +32,8 @@ export const auditEntityTypes = {
   user: "user",
   contentOwner: "content_owner",
   audit: "audit",
+  // #1152 4c: nødstoppen for slettejobben er en rad i PlatformConfig.
+  platformConfig: "platform_config",
 } as const;
 
 export type AuditEntityType = NestedValue<typeof auditEntityTypes>;
@@ -114,6 +116,15 @@ export const auditActions = {
     // #762: destruktiv opprydding — slett kurs + dets eksklusivt-eide moduler/seksjoner.
     cascadeDeleted: "course_cascade_deleted",
     completionIssued: "course_completion_issued",
+    // #1145: administrator registrerte et kurs tatt utenfor plattformen som fullført.
+    completionRegisteredExternal: "course_completion_registered_external",
+    // #934 skive 3: kursets versjon økte (mindre eller hoved), med fra/til og hva forfatteren ba om.
+    versionChanged: "course_version_changed",
+    // #1140 etappe 2: utkastet til et publisert kurs ble lagret, forkastet eller publisert. Det publiseringen skrev til
+    // kurset, spores i tillegg som `updated` (og `itemsUpdated`, `versionChanged`), i samme transaksjon.
+    draftSaved: "course_draft_saved",
+    draftDiscarded: "course_draft_discarded",
+    draftPublished: "course_draft_published",
     // #497: automatiske frist-påminnelser (frist nærmer seg / forfalt) fra bakgrunnsjobben.
     reminderSent: "course_reminder_sent",
     reminderFailed: "course_reminder_failed",
@@ -185,6 +196,12 @@ export const auditActions = {
     resolved: "manual_review_resolved",
     superseded: "review_superseded",
   },
+  // #1152 4c: slettejobben for arkivert innhold (content/archivedRetentionJob.ts). Slettingene selv skrives som `course_deleted`,
+  // `module_deleted` og `section_deleted` med `source: "retention"`. «Beholdes» skrives én gang per element etter siste arkivering.
+  retention: {
+    kept: "retention_kept",
+    purgeToggled: "archived_content_purge_toggled",
+  },
   orgSync: {
     recordFailed: "org_sync_record_failed",
     completed: "org_sync_completed",
@@ -235,6 +252,9 @@ export type AuditMetadataByAction = {
   [auditActions.adminContent.moduleVersionPublished]: EventMetadata<{
     moduleId: string;
     moduleVersionId: string;
+    // #934 skive 5a-2: versjonsnummeret. Eldre rader har det ikke.
+    versionMajor?: number | null;
+    versionMinor?: number | null;
   }>;
   [auditActions.adminContent.modulePassesSuperseded]: EventMetadata<{
     moduleId: string;
@@ -392,11 +412,15 @@ export type AuditMetadataByAction = {
   [auditActions.course.created]: EventMetadata<{ courseId: string }>;
   [auditActions.course.updated]: EventMetadata<{ courseId: string; changedFields: string[] }>;
   [auditActions.course.itemsUpdated]: EventMetadata<{ courseId: string; itemCount: number }>;
+  [auditActions.course.draftSaved]: EventMetadata<{ courseId: string; draftId: string; revision: number; created: boolean }>;
+  [auditActions.course.draftDiscarded]: EventMetadata<{ courseId: string; draftId: string; revision: number }>;
+  [auditActions.course.draftPublished]: EventMetadata<{ courseId: string; draftId: string; revision: number }>;
   [auditActions.course.published]: EventMetadata<{ courseId: string }>;
   [auditActions.course.unpublished]: EventMetadata<{ courseId: string }>;
   [auditActions.course.archived]: EventMetadata<{ courseId: string }>;
   [auditActions.course.restored]: EventMetadata<{ courseId: string }>;
-  [auditActions.course.deleted]: EventMetadata<{ courseId: string }>;
+  // #1152 4c: navnet og arkiveringen følger med; `source: "retention"` når slettejobben slettet.
+  [auditActions.course.deleted]: EventMetadata<{ courseId: string; title?: string | null; archivedAt?: string; source?: string }>;
   [auditActions.courseTheme.created]: EventMetadata<{ themeId: string }>;
   [auditActions.courseTheme.updated]: EventMetadata<{ themeId: string }>;
   [auditActions.courseTheme.deleted]: EventMetadata<{ themeId: string; detachedCourseCount: number }>;
@@ -426,6 +450,22 @@ export type AuditMetadataByAction = {
     userId: string;
     courseId: string;
     certificateId: string;
+    // #1145: satt når et registrert bevis (tatt utenfor plattformen) ble et vanlig; samme `certificateId` har da to hendelser.
+    upgradedFrom?: "external";
+  }>;
+  [auditActions.course.completionRegisteredExternal]: EventMetadata<{
+    userId: string;
+    courseId: string;
+    certificateId: string;
+    versionMajor: number;
+    reference: string;
+  }>;
+  [auditActions.course.versionChanged]: EventMetadata<{
+    courseId: string;
+    kind: "major" | "minor";
+    requested: "major" | "minor";
+    from: string;
+    to: string;
   }>;
   // #497: frist-påminnelse sendt/feilet. `daysBefore` er kun satt for kind="due_soon".
   [auditActions.course.reminderSent]: EventMetadata<{
@@ -550,6 +590,9 @@ export type AuditMetadataByAction = {
     source: string;
     externalId: string;
   }>;
+  // #1152 4c: slettejobben. `code` er vaktens kode (som i lista over arkiverte); `archivedAt` er arkiveringen hendelsen gjelder.
+  [auditActions.retention.kept]: EventMetadata<{ kind: "COURSE" | "MODULE" | "SECTION"; code: string; archivedAt: string; source: "retention" }>;
+  [auditActions.retention.purgeToggled]: EventMetadata<{ enabled: boolean }>;
   [auditActions.orgSync.completed]: EventMetadata<{
     createdCount: number;
     updatedCount: number;

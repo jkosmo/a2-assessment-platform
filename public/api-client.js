@@ -114,10 +114,17 @@ async function initMsal(entraConfig) {
 
   // If no account is present, save destination and trigger login
   if (msalInstance.getAllAccounts().length === 0) {
-    sessionStorage.setItem("auth_intended_url", window.location.href);
+    rememberIntendedUrl();
     await msalInstance.loginRedirect(loginRequestFor(msalScopes));
     // Page will redirect — execution stops here
   }
+}
+
+// Innloggingen kommer alltid tilbake til /admin-content (adressen som er registrert i Entra), og siden
+// sender brukeren videre hit. 2.120.0: bare den første innloggingen lagret adressen — en fornyet
+// innlogging midt i økta (`getAccessToken`) gjorde det ikke, og en deltaker ble stående på forfattersiden.
+function rememberIntendedUrl() {
+  try { sessionStorage.setItem("auth_intended_url", window.location.href); } catch {/* uten lagring: forsiden */}
 }
 
 export async function getAccessToken() {
@@ -125,6 +132,7 @@ export async function getAccessToken() {
 
   const accounts = msalInstance.getAllAccounts();
   if (accounts.length === 0) {
+    rememberIntendedUrl();
     await msalInstance.loginRedirect(loginRequestFor(msalScopes));
     return null;
   }
@@ -136,9 +144,37 @@ export async function getAccessToken() {
     });
     return result.accessToken;
   } catch {
+    rememberIntendedUrl();
     await msalInstance.acquireTokenRedirect({ scopes: msalScopes, account: accounts[0] });
     return null;
   }
+}
+
+/**
+ * 2.120.0: forfattersidene (/admin-content…) er ikke for deltakere. En deltaker kom dit fra deltakerlenka
+ * (innloggingen lander på /admin-content, og adressen hun kom fra var borte i Teams-nettleseren) og fikk
+ * «Du har ikke tilgang» uten vei videre. Veiene inn er flere — innlogging, utlogging, fornyet innlogging,
+ * en tilsendt lenke — så sperren står på siden, ikke på hver vei.
+ *
+ * Bare den som ikke har noen annen rolle enn PARTICIPANT sendes til «Mine kurs». En ansattrolle beholder
+ * siden, så sperren kan aldri låse noen ute fra noe de har tilgang til. Feiler oppslaget, skjer ingenting.
+ */
+export async function sendParticipantsHome({ pathname, getToken, fetchImpl = fetch, replace = (url) => window.location.replace(url) }) {
+  if (!pathname.startsWith("/admin-content")) return false;
+  let roles;
+  try {
+    const token = await getToken();
+    if (!token) return false;
+    const response = await fetchImpl("/api/me", { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) return false;
+    const body = await response.json();
+    roles = Array.isArray(body?.user?.roles) ? body.user.roles : null;
+  } catch {
+    return false;
+  }
+  if (!roles || roles.some((role) => role !== "PARTICIPANT")) return false;
+  replace("/participant");
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +206,17 @@ async function parseResponseBody(response) {
   }
 }
 
+// #934 skive 5a-1: `503 content_busy` fra en deltaker- eller behandlerrute betyr at en lås ikke ble ledig innen 3 sekunder,
+// og at transaksjonen ikke skrev noe. Da er det trygt å prøve igjen, også for en innlevering. Står her fordi alle sider
+// går gjennom `apiFetch`, så ingen ny side kan glemme det. Gir den opp, får kalleren feilen som før, og siden sier «prøv
+// igjen om et øyeblikk».
+//
+// ⚠️ IKKE dem som skriver innhold (`/api/admin/`, og kalibreringens publisering under `/api/calibration/`): de har
+// allerede ventet i 15 sekunder bak låsen, og noen av rutene gjør flere transaksjoner etter hverandre, så der betyr
+// svaret ikke alltid at ingenting er skrevet. Der avgjør forfatteren selv.
+export const CONTENT_BUSY_RETRY_DELAYS_MS = [1000, 2000, 4000];
+const retriesWhenBusy = (url) => !/^\/api\/(admin|calibration)\//.test(String(url));
+
 export async function apiFetch(url, getHeadersOrOptions = {}, maybeOptions = {}) {
   const getHeaders = typeof getHeadersOrOptions === "function" ? getHeadersOrOptions : null;
   const options = getHeaders ? maybeOptions : (getHeadersOrOptions ?? {});
@@ -189,12 +236,18 @@ export async function apiFetch(url, getHeadersOrOptions = {}, maybeOptions = {})
     delete headers["content-type"];
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  let response;
+  let body;
+  for (let attempt = 0; ; attempt += 1) {
+    response = await fetch(url, {
+      ...options,
+      headers,
+    });
+    body = await parseResponseBody(response);
+    if (response.status !== 503 || body?.error !== "content_busy" || !retriesWhenBusy(url) || attempt >= CONTENT_BUSY_RETRY_DELAYS_MS.length) break;
+    await new Promise((resolve) => setTimeout(resolve, CONTENT_BUSY_RETRY_DELAYS_MS[attempt]));
+  }
 
-  const body = await parseResponseBody(response);
   if (!response.ok) {
     // The message keeps its exact old shape — several call sites and tests match on it. The
     // parsed body rides along as properties so a caller that wants to act on structured error
@@ -522,6 +575,10 @@ export async function getConsoleConfig() {
 
       if (config.authMode === "entra" && config.entra) {
         await initMsal(config.entra);
+        if (await sendParticipantsHome({ pathname: window.location.pathname, getToken: getAccessToken })) {
+          // Siden byttes ut; resten av forfattersiden skal ikke starte og vise «ingen tilgang» imens.
+          return new Promise(() => {});
+        }
       }
 
       return config;

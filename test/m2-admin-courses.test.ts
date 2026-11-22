@@ -1,4 +1,6 @@
 import request from "supertest";
+import { withRevision } from "./support/courseRevision.js";
+import { archiveCourseConfirmed } from "./support/courseArchive.js";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { auditActions, auditEntityTypes } from "../src/observability/auditEvents.js";
@@ -83,25 +85,25 @@ describe("Admin course management", () => {
     const updateCourseResponse = await request(app)
       .put(`/api/admin/content/courses/${courseId}`)
       .set(adminHeaders)
-      .send({
+      .send(await withRevision(courseId, {
         title: {
           "en-GB": "Updated managed course",
         },
         description: {
           "en-GB": "Updated description from the admin UI.",
         },
-      });
+      }));
     expect(updateCourseResponse.status).toBe(200);
 
     const setModulesResponse = await request(app)
       .put(`/api/admin/content/courses/${courseId}/modules`)
       .set(adminHeaders)
-      .send({
+      .send(await withRevision(courseId, {
         modules: [
           { moduleId: moduleA.id, sortOrder: 2 },
           { moduleId: moduleB.id, sortOrder: 1 },
         ],
-      });
+      }));
     expect(setModulesResponse.status).toBe(204);
 
     const detailResponse = await request(app)
@@ -128,9 +130,8 @@ describe("Admin course management", () => {
     expect(publishResponse.status).toBe(200);
     expect(publishResponse.body.course.publishedAt).toBeTruthy();
 
-    const archiveResponse = await request(app)
-      .post(`/api/admin/content/courses/${courseId}/archive`)
-      .set(adminHeaders);
+    // #1150 skive 2a-2: modulene ligger bare i dette kurset og følger det inn i arkivet, så lista må bekreftes.
+    const { response: archiveResponse } = await archiveCourseConfirmed(courseId, adminHeaders);
     expect(archiveResponse.status).toBe(200);
     expect(archiveResponse.body.course.archivedAt).toBeTruthy();
 
@@ -191,6 +192,8 @@ describe("Admin course management", () => {
     await prisma.courseCompletion.create({
       data: { userId: learner.id, courseId: completedCourseId, moduleSnapshotJson: "[]" },
     });
+    // #1151: bare et arkivert kurs kan slettes. (Arkiveringen gjennom ruta er målt andre steder; her gjelder slettevernet.)
+    await prisma.course.update({ where: { id: completedCourseId }, data: { archivedAt: new Date() } });
 
     const blocked = await request(app)
       .delete(`/api/admin/content/courses/${completedCourseId}`)
@@ -206,6 +209,7 @@ describe("Admin course management", () => {
       .set(adminHeaders)
       .send({ title: { "en-GB": `Deletable Course ${stamp}`, nb: "x", nn: "x" } });
     const deletableId = deletable.body.course.id as string;
+    expect((await request(app).post(`/api/admin/content/courses/${deletableId}/archive`).set(adminHeaders)).status).toBe(200);
     const ok = await request(app).delete(`/api/admin/content/courses/${deletableId}`).set(adminHeaders);
     expect(ok.status).toBe(204);
     expect(await prisma.course.findUnique({ where: { id: deletableId } })).toBeNull();

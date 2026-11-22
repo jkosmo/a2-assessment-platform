@@ -6,15 +6,15 @@ This map covers all admin-content entry points and their status for pilot. Use i
 
 | Route | Workspace | HTML file | Status |
 |---|---|---|---|
-| `/admin-content` | Module library (the «Moduler» tab) | `admin-content-library.html` | **Canonical** |
+| `/admin-content` | Module library (the «Moduler» tab). Archived rows show «Slettes <dato>» / «Beholdes: <grunn>» (#1152, 2.162.0) | `admin-content-library.html` | **Canonical** |
 | `/admin-content/courses` (nav entry) | «Innholdsforvaltning» lander her by default (#705-UX/E) | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/module/:moduleId/conversation` | Module — conversational editor | `admin-content.html` | **Canonical** |
 | `/admin-content/module/:moduleId/advanced` | **Retired (#896 S3c, v2.19.0)** — 301-redirects to `…/conversation`. The advanced editor is deleted; the workspace tabs replaced it | — | Legacy redirect |
-| `/admin-content/courses` | Course list (incl. ADMINISTRATOR-only «Slett kurs og ubrukt innhold» cascade delete, #762) | `admin-content-courses.html` | **Canonical** |
+| `/admin-content/courses` | Course list (incl. ADMINISTRATOR-only «Slett kurs og ubrukt innhold» cascade delete, #762). Archived rows show «Slettes <dato>» / «Beholdes: <grunn>» (#1152, 2.162.0) | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/courses/new` | New course (conversational flow) | `admin-content-courses.html` | **Canonical** |
-| `/admin-content/courses/:courseId` | Course detail (builder: mixed modules + sections) | `admin-content-courses.html` | **Canonical** |
-| `/admin-content/sections` | Learning sections library + editor (#476) | `admin-content-sections.html` | **Canonical** |
-| `/admin-content/sections?id=<id>` or `?new` | Section editor (open existing / new) | `admin-content-sections.html` | **Canonical** |
+| `/admin-content/courses/:courseId` | Course detail (builder: mixed modules + sections). #934 (2.129.0): shows the version («v3.2»), and asks «Hva slags endring er dette?» (minor or major version) when content changes in a course someone has a certificate for. #934 (2.131.0): an existing course is always saved in one `PUT …/content` call with `expectedRevision` — see `FEATURE_SURFACE_MAP` §6b | `admin-content-courses.html` | **Canonical** |
+| `/admin-content/sections` | Learning sections library + editor (#476). Archived rows show «Slettes <dato>» / «Beholdes: <grunn>» (#1152, 2.162.0) | `admin-content-sections.html` | **Canonical** |
+| `/admin-content/sections?id=<id>` or `?new` | Section editor (open existing / new). #1163: «Lagre» is one `PUT /api/admin/content/sections/:id` with `expectedVersionNo` (a draft; figures translated with `sourceLocale`); «Døp om» in the list is `PATCH …/:id/title` with a required `expectedVersionNo` (2.168.0). The old `PUT …/:id/content` and `POST …/:id/assets/localize` were removed in 2.168.0 — see `API_REFERENCE` | `admin-content-sections.html` | **Canonical** |
 | `/admin-content/classes` | **Moved (#765)** — 301-redirects to `/deltakere/klasser` (now under the «Deltakere» area) | — | Legacy redirect |
 | `/admin-content/calibration` | «Vurderingskvalitet» workspace (rebranded from Calibration, #836) | `admin-content-calibration.html` | **Canonical** |
 
@@ -47,6 +47,19 @@ fills only the gaps. Same gate on the course cascade (`/admin-content/courses`) 
 auto-publish. No new route; the behaviour is on
 `POST .../module-versions/:id/publish`. See `doc/API_REFERENCE.md` → "Publish translation gate".
 
+**#1140 etappe 2, skive 2c — the course builder saves a published course to a draft (2.157.0).** No new page. On `/admin-content/courses/:courseId` «Lagre» on a published course writes the draft; «Publiser utkastet» and «Forkast utkast» are new buttons; the course list shows «Publisert» + «Nyere utkast». Author guide: `doc/COURSE_DRAFTS_GUIDE.md`.
+
+**#1140 etappe 2, skive 2b — publish the draft (2.156.0).** No new page. New route `POST /api/admin/content/courses/:courseId/draft/publish`; `DELETE …/draft` now takes `?draftId=…&revision=…`.
+
+**#1140 etappe 2, skive 2a — course drafts (2.155.0).** No new page; the course builder is unchanged until slice 2c. New routes: `GET|PUT|DELETE /api/admin/content/courses/:courseId/draft`. Saving (`PUT`) needs the switch `course_drafts` (off); reading and discarding always work. See `doc/API_REFERENCE.md` and `doc/FEATURE_SURFACE_MAP.md` §32.
+
+**#934 slice 5b — the dialogs (2.136.0).** No new page or route. The module page and the course page use the routes below when the switch is on, and the old ones when it is off. See `doc/FEATURE_SURFACE_MAP.md`.
+
+**#934 slice 5a-3 — versioned publishing (2.135.0).** No new page; the dialogs come in 5b. New routes behind the switch `module_pass_per_course`, `409 module_versioning_not_active` until it is on:
+`GET /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish-preview-versioned`,
+`POST /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish-versioned` and
+`POST /api/admin/content/courses/:courseId/publish-pending-versioned`. See `doc/API_REFERENCE.md`.
+
 **#896 S5 — version history.** **Innstillinger** lists the module's saved versions with a
 «Gjenopprett» action on each one that is not currently loaded. Restoring copies that version
 forward as a new **draft** — history is append-only — and the workspace switches to **Rediger** so
@@ -77,16 +90,27 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 
 | Route | Workspace |
 |---|---|
-| `/participant` | «Mine kurs» → **Pågående**-fane: deltakerens kurs + innleveringsflyt (#767) |
-| `/participant/completed` | «Mine kurs» → **Fullførte**-fane: kursbevis + fullførte moduler (#767) |
-| `/certificate?id=<certificateId>` | Printable course certificate view (#550) |
+| `/participant` | «Mine kurs»: deltakerens kurs, kursbevis og innleveringsflyt; siste resultat og anke i modulen (#767, 2.126.0) |
+| `/participant?courseId=<id>` | Opens the course. With `&threadId=<id>` also the discussion and the thread (link in discussion e-mails, 2.138.0) |
+| `/participant?courseId=<id>&sectionId=<id>` | #1158: the course with that section open in the reader. Written by the page when the participant opens a section; a reload or bookmark opens it again. A section that is not in the course, or not available, gives the course with «Vi fant ikke denne seksjonen i kurset» and drops the parameter |
+| `/participant?courseId=<id>&moduleId=<id>` | #1158: the course with that module's workspace open. Same rules as the section form (unavailable → «Vi fant ikke denne modulen …»). Back (browser or the app's «← Tilbake til kurset») returns to `?courseId=<id>`: the history holds at most one item entry above the course entry, opening another item replaces it, and «Lukk» steps back. A direct link or bookmark places the course entry under the item |
+| `/participant?moduleId=<id>` | Finds the course the module is in, preferring one that requires a retake, opens the module and rewrites the address to `?courseId=<course>&moduleId=<id>` (link in result and appeal e-mails, 2.138.0; the module part kept since #1158, so a reload keeps it open) |
+| `/participant/completed` | 301 → `/participant` (2.126.0: «Fullførte» fjernet; kursbevis står på kurskortet, anke i modulen) |
+| `/certificate?id=<certificateId>` | Printable course certificate view (#550). Opened in the same tab (#1162); the page's link back says «← Tilbake til Mine kurs» (`/participant`) |
+| `/certificate?id=<certificateId>&fra=profil` | Same, opened from the profile: the link back says «← Tilbake til profilen» (`/profile`) (#1162) |
 | `/deltakere/klasser` | Classes (cohorts) admin — list, create, members, course assignment (#645/CL-3; moved here in #765) |
 | `/deltakere/status` | Teacher/SMO cohort-status dashboard — enrollment status counts per course (#498) |
-| `/deltakere/aktivitet` | Admin / report reader: activity across all courses over time, and who is active (#1099) |
+| `/deltakere/aktivitet` | Administrator only (from 2.128.0): activity across all courses over time, and who is active (#1099) |
 | `/review` | Manual review queue and workspace (a «Deltakere» sub-tab) |
 | `/calibration` | **Retired (#836)** — 301-redirects to `/admin-content/calibration` |
-| `/results` | Results / history view (a «Deltakere» sub-tab) |
-| `/profile` | User profile |
+| `/results` | Results / history view (a «Deltakere» sub-tab). A course row opens its participants, sorted on status with Completed first and then latest activity. «Eksporter denne listen (CSV)» downloads that table, made in the browser for Excel (2.139.0) |
+| `/profile` | User profile. 2.141.0 (#1138): account first, then three tabs — «Statistikk» (the boat, last four weeks, 12 weeks as bars with a screen-reader table, totals; only for the user, from `GET /api/me/stats`), «Beståtte kurs» (link «Vis kursbevis», no certificate id) and «Beståtte moduler» (passed only) — then rights and agent access |
+| `/static/mascot/<pack>/<file>` | Files in the selected mascot pack (`mascots/<pack>/`, chosen in `mascot.config.json`): the images from the e-mails and the profile, the progress-bar figure, the favicon (doc/design/MASKOTPAKKE.md) |
+| `/static/boat/<file>.jpg` | Alias for `/static/mascot/<pack>/images/<file>.jpg` (slice 1), so an open, old tab keeps its images |
+| `/static/mascot/moods.json` | Made from the pack: per mood, the image address and the line in nb/nn/en-GB, read by the profile. `Cache-Control: no-cache` |
+| `/static/mascot/figure.js` | Made from the pack: the progress-bar figure as a JS module (SVG per state, measures), imported by `course-progress-boat.js`. `Cache-Control: no-cache` |
+| `/static/mascot/figure.css` | The figure's stylesheet from the pack, linked by `participant.html` |
+| `/static/favicon.svg`, `/static/favicon-32.png`, `/static/favicon-16.png`, `/static/apple-touch-icon-180.png` | Fixed addresses every page links to; the files come from the mascot pack |
 | `/admin-platform` | Platform administration |
 
 ## API base paths
@@ -97,7 +121,7 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 | `/api/assessments` | Participant | Trigger assessment, poll job status |
 | `/api/modules` | Participant | Browse available modules, run MCQ |
 | `/api/courses` | Participant | Browse courses; read learning sections + mark read (#476); discussion/Q&A threads + replies (#495) |
-| `/api/me` | All | Current user identity and roles |
+| `/api/me` | All | Current user identity and roles. `GET /api/me/stats` (2.141.0, #1138): the caller's own statistics; never takes a user id |
 | `/api/reviews` | Reviewer / Admin | Manual review queue and override |
 | `/api/cohort-status` | SMO / Admin / Report reader | Cohort enrollment-status aggregate per course (#498) |
 | `/api/appeals` | Appeal Handler / Admin | Appeal queue and resolution |

@@ -161,20 +161,22 @@ test.describe("#894 — omdøping i lista", () => {
 
 const SEKSJONER = [
   // Skrevet på ett språk, lagret som ren streng.
-  { id: "sec-ett", title: "Kvalitetssikring", titleLocales: ["nb"], versionNo: 2, activeVersionId: "v1", courseCount: 0, updatedAt: "2026-09-01T08:00:00.000Z" },
+  { id: "sec-ett", title: "Kvalitetssikring", titleLocales: ["nb"], versionNo: 2, latestVersionNo: 3, activeVersionId: "v1", courseCount: 0, updatedAt: "2026-09-01T08:00:00.000Z" },
   // Har bokmål og nynorsk, mangler engelsk.
   {
     id: "sec-to",
     title: JSON.stringify({ nb: "Avvikshåndtering", nn: "Avvikshandtering" }),
     titleLocales: ["nb", "nn"],
     versionNo: 1,
+    // #1163: det «Døp om» og masseoversettingen sender som `expectedVersionNo` (påkrevd fra 2.168.0).
+    latestVersionNo: 1,
     activeVersionId: "v2",
     courseCount: 0,
     updatedAt: "2026-09-02T08:00:00.000Z",
   },
   // Arkivert, og med hull. Ligger her for å skille «synlige» fra «alle innlastede»: lista står på
   // «Aktive», og en samlet oversetting som også tok denne ville gjort mer enn knappen sier.
-  { id: "sec-arkiv", title: "Gammel rutine", titleLocales: ["nb"], versionNo: 5, activeVersionId: null, archivedAt: "2026-05-01T08:00:00.000Z", courseCount: 0, updatedAt: "2026-05-01T08:00:00.000Z" },
+  { id: "sec-arkiv", title: "Gammel rutine", titleLocales: ["nb"], versionNo: 5, latestVersionNo: 5, activeVersionId: null, archivedAt: "2026-05-01T08:00:00.000Z", courseCount: 0, updatedAt: "2026-05-01T08:00:00.000Z" },
 ];
 
 async function åpneSeksjonslista(page: Page) {
@@ -224,8 +226,14 @@ test.describe("#894 — omdøping i seksjonslista", () => {
 
     // ⚠️ Et filterklikk tegner BARE tabellen. Uten kroken som oppdaterer hodet ville tallet stått
     // igjen på 2, og knappen ville oversatt et annet sett enn det den sier.
+    // #1151 skive 3c: en arkivert rad oversettes ikke (tjeneren avviser tittelen, `section_archived`), så under
+    // «Arkiverte» er tallet 0 og knappen av. Før sto det 1 her. At tallet fortsatt følger filteret, måles nå med to bytter:
+    // til «Arkiverte» (2 → 0) og til «Alle» (0 → 2, den arkiverte telles ikke der heller).
     await page.getByRole("button", { name: "Arkiverte" }).click();
-    await expect(knapp).toHaveText("Oversett det som mangler (1)");
+    await expect(knapp).toHaveText("Oversett det som mangler (0)");
+    await expect(knapp).toBeDisabled();
+    await page.getByRole("button", { name: "Alle", exact: true }).click();
+    await expect(knapp).toHaveText("Oversett det som mangler (2)");
   });
 
   test("⚠️ samlet oversetting bærer de lagrede språkene videre — ellers ville de blitt slettet", async ({ page }) => {
@@ -268,7 +276,7 @@ test.describe("#894 — omdøping i seksjonslista", () => {
 
   test("⚠️ omdøping sender HELE språkkartet — seksjonenes patch erstatter, den slår ikke sammen", async ({ page }) => {
     await åpneSeksjonslista(page);
-    const sendt: { body: { title?: Record<string, string> } | null } = { body: null };
+    const sendt: { body: { title?: Record<string, string>; expectedVersionNo?: number; expectedTitle?: string } | null } = { body: null };
     await page.route("**/api/admin/content/sections/*/title", (route: Route) => {
       sendt.body = JSON.parse(route.request().postData() ?? "{}");
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-to" } }) });
@@ -286,6 +294,9 @@ test.describe("#894 — omdøping i seksjonslista", () => {
       nb: "Avvik og korrigering",
       nn: "Avvikshandtering",
     });
+    // #1163: med versjonen og tittelen raden viste (påkrevd fra 2.168.0; uten den svarer tjeneren 400).
+    expect(sendt.body?.expectedVersionNo).toBe(1);
+    expect(sendt.body?.expectedTitle).toBe(SEKSJONER[1]!.title);
   });
 
   test("en tittel lagret som ren streng leses som bokmål — ikke som språket lista står i", async ({ page }) => {

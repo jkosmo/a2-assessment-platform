@@ -8,6 +8,8 @@ import {
 } from "../modules/submission/index.js";
 import { createSubmissionAppeal } from "../modules/appeal/index.js";
 import { getOwnedMcqReview } from "../modules/submission/mcqReviewService.js";
+import { getOwnedModelAnswer } from "../modules/submission/modelAnswerService.js";
+import { toOwnedSubmissionView } from "../modules/submission/submissionReadModels.js";
 import { isModuleInAccessibleCourse } from "../modules/course/index.js";
 import { env } from "../config/env.js";
 import { hasAnyRole, CONTENT_AUTHORS } from "../auth/roleSets.js";
@@ -24,6 +26,12 @@ const processSignalsSchema = z.object({
 
 const createSubmissionSchema = z.object({
   moduleId: z.string().min(1),
+  // #934 skive 5a-1: valgfri i skjemaet, så en fane fra før utrullingen får `409 client_outdated` med en forklaring,
+  // ikke en valideringsfeil. Se `createSubmission`.
+  moduleVersionId: z.string().optional(),
+  // #1140 etappe 1: kurset modulen ble åpnet fra. Det bestemmer hvilken versjon som er «den deltakeren skal ha», når deltakeren
+  // har modulen i det kurset. Valgfri: en eldre klient, en lenke i e-post og frittstående modus sender den ikke.
+  courseId: z.string().trim().min(1).max(64).optional(),
   deliveryType: z.enum(["text", "file", "hybrid"]).default("text"),
   responseJson: z.record(z.string(), z.unknown()).default({}),
   attachmentUri: z.string().trim().optional(),
@@ -79,6 +87,9 @@ submissionsRouter.post("/", submissionCreateLimiter, async (request, response, n
   try {
     const submission = await createSubmission({
       userId,
+      // #1140: for kursene deltakeren har modulen i, og dermed hvilken versjon hen skal levere på.
+      roles,
+      groupIds: request.context?.principal?.groupIds,
       locale: requestLocale(request),
       ...parsed.data,
     });
@@ -147,7 +158,9 @@ submissionsRouter.get("/:submissionId", async (request, response) => {
     return;
   }
 
-  response.json({ submission });
+  // #1136: deltakerens visning, ikke raden — raden bar fasiten (moduleVersion.assessorExpectedContent)
+  // og de rå KI-vurderingene.
+  response.json({ submission: toOwnedSubmissionView(submission) });
 });
 
 submissionsRouter.get("/:submissionId/result", async (request, response) => {
@@ -157,7 +170,7 @@ submissionsRouter.get("/:submissionId/result", async (request, response) => {
     return;
   }
 
-  const result = await getOwnedSubmissionResultView(request.params.submissionId, userId);
+  const result = await getOwnedSubmissionResultView(request.params.submissionId, userId, requestLocale(request));
   if (!result) {
     response.status(404).json({ error: "not_found", message: "Submission not found." });
     return;
@@ -179,6 +192,23 @@ submissionsRouter.get("/:submissionId/mcq-review", async (request, response) => 
     return;
   }
   response.json(review);
+});
+
+// #1124 del 2: eksempelsvaret etter fritekstvurderingen — dets ene dør. Tomt (modelAnswer: null) når
+// modulversjonen ikke har slått det på eller vurderingen ikke er ferdig; 404 når innleveringen ikke er
+// deltakerens egen.
+submissionsRouter.get("/:submissionId/model-answer", async (request, response) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const view = await getOwnedModelAnswer(request.params.submissionId, userId, requestLocale(request));
+  if (!view) {
+    response.status(404).json({ error: "not_found", message: "Submission not found." });
+    return;
+  }
+  response.json(view);
 });
 
 export { submissionsRouter };

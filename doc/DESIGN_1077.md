@@ -117,3 +117,58 @@ Hver leveranse går gjennom stage og QA-porten før neste begynner.
 3. «Fyll inn»: er normaliseringen over riktig nivå (store/små bokstaver og mellomrom likt, ellers
    eksakt)?
 4. Rekkefølgen på leveransene: `multiple` → `order` → `fill`?
+
+## Leveranse 2 — «sett i riktig rekkefølge» (produkteier 2026-10-25: anbefalingen på alle tre)
+
+1. **KI lager høyst ett per test, og bare der kilden beskriver steg i en bestemt rekkefølge** (en
+   prosess, en prosedyre, et forløp). Finner KI ingen slik rekkefølge, lager den ingen og sier fra, så
+   forfatteren ser hvorfor. Ingen tilfeldig plan som for «velg alle»: en rekkefølge plattformen tvinger
+   fram, blir kunstig. Forfatteren kan alltid gjøre et spørsmål om til typen selv.
+2. **3–6 elementer.** Med to er det å gjette; med sju eller flere blir flyttingen tung på telefon.
+3. **Revisjon som for «velg alle»:** typen beholdes, med mindre forfatteren ber om det generelt.
+
+Fasit og utlevering:
+
+- Alternativene lagres i riktig rekkefølge (`optionsJson`); `answerKeyJson` er null.
+- **Utleveres alltid stokket**, også når modulen har slått av stokking (#1032) — ellers er fasiten
+  rekkefølgen deltakeren ser. Stokkingen gir aldri den riktige rekkefølgen.
+- Riktig når hele rekkefølgen stemmer; `answerJson = {"order":[posisjoner]}`, `selectedAnswer` er
+  elementene skilt med « → ».
+
+
+## Leveranse 3 — «fyll inn ordet som mangler» (produkteier 2026-10-31)
+
+Avgjørelser:
+
+1. **Godkjente svar som liste**, uten KI. Store og små bokstaver, mellomrom og tegnsetting på slutten
+   teller ikke, **og ett feil tegn godtas i svar på sju tegn eller mer** («samtyke» for «samtykke»). I
+   kortere svar er ett tegn et annet ord («tro» er ikke «tre»).
+2. **Én lukke** (`___`) per spørsmål, på hvert språk.
+3. **Rett eller galt**, som de andre typene.
+
+Lagring (avvik fra forslaget over): de godkjente svarene lagres som **alternativene** (`optionsJson`),
+hvert med sine språk, ikke som en egen liste per språk i `answerKeyJson`. Da virker oversettelsen,
+publiseringskontrollen, eksport/import, spørsmålsbanken og skillets språkkontroll uendret. Prisen er at
+hvert språk har like mange godkjente svar — «tre» og «3» blir «three» og «3». Svaret godtas på et
+hvilket som helst av spørsmålets språk.
+
+- `answerKeyJson` er null; `correctAnswer` er det første godkjente svaret, for lesere som ikke kjenner typen.
+- **Alternativene sendes aldri til deltakeren** (`mcq/start` gir `options: []`) — de er fasiten.
+- Svaret sendes som `textAnswer`; `answerJson = {"text": …}`, `selectedAnswer` er det som ble skrevet.
+- Gjennomgangen (#1061) viser `acceptedAnswers`; kvalitetsrapporten teller ingen feilalternativer.
+- KI: revisjon og oversettelse **bevarer** typen og lukka. KI **lager** ikke typen ennå — det er
+  leveranse 3b, som for «sett i rekkefølge» (2b).
+
+## Leveranse 3b — KI lager «fyll inn» (produkteier 2026-10-31: anbefalingen på begge)
+
+1. **Høyst ett per test, og bare der kilden har et entydig ord** — et begrep, et tall, en frist, et navn
+   som bare ett ord kan fylle under stammen. Finner KI ingen, lager den ingen og sier fra
+   (`noFillReason`), som for rekkefølge. Aldri på en planlagt «velg alle»-plass.
+2. **De godkjente svarene er alle vanlige skrivemåter av det samme svaret** — tallord og siffer, forkortelse
+   og fullt navn; aldri et annet ord med annen mening. Skrivefeil og store/små bokstaver lister KI ikke:
+   rettingen tar dem.
+3. **Revisjon som for rekkefølge:** typen beholdes; KI gjør om et spørsmål til «fyll inn» bare når
+   forfatteren ber om det (ved navn eller generelt), høyst ett — eller så mange forfatteren alt hadde.
+
+Lengdesignalet (#551) regnes nå bare på spørsmål med ett riktig svar: i «fyll inn» og «sett i rekkefølge»
+er alternativene ikke gale svar, og «three» mot «3» ville talt som et signal.

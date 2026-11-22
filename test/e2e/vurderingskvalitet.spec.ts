@@ -161,3 +161,19 @@ test("vurderingskvalitet: MCQ-only module shows the MCQ rule instead of the tota
   expect(publishBody.totalMin).toBe(60);
   expect(publishBody.mcqMinPercent).toBe(80);
 });
+
+// #1173 (rest): tre skjermlesernavn i malen (eierfilteret og de to tabellene) sto på bokmål på alle språk.
+for (const [locale, owner, declarations, answers] of [
+  ["en-GB", "Owner filter", "Distribution per AI declaration", "Individual answers"],
+  ["nb", "Eierfilter", "Fordeling per KI-erklæring", "Enkeltsvar"],
+] as const) {
+  test(`vurderingskvalitet: skjermlesernavnene følger språket (${locale})`, async ({ page }) => {
+    await mockBase(page, ["SUBJECT_MATTER_OWNER"]);
+    // Etter mockBase, som setter nb: init-skriptene kjøres i rekkefølge.
+    await page.addInitScript((value) => { try { localStorage.setItem("participant.locale", value); } catch { /* ignore */ } }, locale);
+    await page.goto("/admin-content/calibration");
+    await expect(page.locator("#qOwnerSeg")).toHaveAttribute("aria-label", owner);
+    await expect(page.locator(`[role="region"][aria-label="${declarations}"]`)).toHaveCount(1);
+    await expect(page.locator(`[role="region"][aria-label="${answers}"]`)).toHaveCount(1);
+  });
+}

@@ -13,11 +13,13 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { activeCourseWhere } from "./contentLifecycle.js";
 
 export interface CourseThemeRow {
   id: string;
   /** lagret lokalisert JSON, som kurstitler */
   name: string;
+  /** Aktive kurs med temaet. Arkiverte kurs telles ikke (#1149). */
   courseCount: number;
   updatedAt: string;
 }
@@ -47,9 +49,11 @@ export function sortThemesByName<T extends { name: string }>(themes: readonly T[
   return [...themes].sort((a, b) => collator.compare(a.name, b.name));
 }
 
+// #1149: tallet i temalista teller bare AKTIVE kurs — samme regel som «Brukt i kurs» for moduler og seksjoner.
+// Slettingen under (`deleteCourseTheme`) teller fortsatt alle: også et arkivert kurs mister koblingen.
 export async function listCourseThemes(): Promise<CourseThemeRow[]> {
   const rows = await prisma.courseTheme.findMany({
-    select: { id: true, name: true, updatedAt: true, _count: { select: { courses: true } } },
+    select: { id: true, name: true, updatedAt: true, _count: { select: { courses: { where: { course: activeCourseWhere } } } } },
   });
   return rows.map((row) => ({
     id: row.id,
@@ -118,6 +122,23 @@ export async function deleteCourseTheme(themeId: string, actorId?: string) {
   });
 }
 
+/** Et tema som ikke finnes, avvises (`400 course_theme_not_found`). Også brukt når utkastet til et kurs lagres (#1140). */
+export async function assertCourseThemesExist(tx: DbTransactionClient, themeIds: readonly string[]) {
+  const wanted = [...new Set(themeIds)];
+  if (wanted.length === 0) return;
+  if ((await findExistingThemeIds(tx, wanted)).length !== wanted.length) {
+    throw new DomainRuleError("course_theme_not_found", "One or more course themes do not exist.");
+  }
+}
+
+/** Temaene i lista som finnes. Publiseringen av et kursutkast tar bort dem som er slettet siden utkastet ble lagret. */
+export async function findExistingThemeIds(tx: DbTransactionClient, themeIds: readonly string[]): Promise<string[]> {
+  if (themeIds.length === 0) return [];
+  const rows = await tx.courseTheme.findMany({ where: { id: { in: [...themeIds] } }, select: { id: true } });
+  const existing = new Set(rows.map((row) => row.id));
+  return themeIds.filter((id) => existing.has(id));
+}
+
 /**
  * Setter kursets tema til nøyaktig `themeIds`. Kjøres i kallerens transaksjon, så kursets felter og
  * temaene lagres sammen eller ikke i det hele tatt. Et tema som ikke finnes (slettet i mellomtiden),
@@ -125,12 +146,7 @@ export async function deleteCourseTheme(themeId: string, actorId?: string) {
  */
 export async function setCourseThemes(tx: DbTransactionClient, courseId: string, themeIds: readonly string[]) {
   const wanted = [...new Set(themeIds)];
-  if (wanted.length > 0) {
-    const found = await tx.courseTheme.count({ where: { id: { in: wanted } } });
-    if (found !== wanted.length) {
-      throw new DomainRuleError("course_theme_not_found", "One or more course themes do not exist.");
-    }
-  }
+  await assertCourseThemesExist(tx, wanted);
   await tx.courseThemeAssignment.deleteMany({ where: { courseId, themeId: { notIn: wanted } } });
   if (wanted.length > 0) {
     await tx.courseThemeAssignment.createMany({

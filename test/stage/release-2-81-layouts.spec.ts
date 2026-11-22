@@ -3,6 +3,8 @@ import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { lagreSeksjon } from "./seksjonLagring.js";
+import { arkiverKurs } from "./arkiver.js";
 import { drawFlowFigure } from "../../skills/a2-authoring-api/scripts/draw-flow-figure.mjs";
 
 // #1079 mot UTRULLET stage: en figur i bredt og smalt oppsett, hele kjeden med den ekte klienten
@@ -102,7 +104,7 @@ const TITTEL_START = "Stage-test figur i to oppsett ";
 async function slettKurs(id: string) {
   // Kurset først: en seksjon som står i et kurs, kan ikke slettes.
   await api("POST", `/api/admin/content/courses/${id}/unpublish`);
-  await api("POST", `/api/admin/content/courses/${id}/archive`);
+  await arkiverKurs(api, id);
   return api("DELETE", `/api/admin/content/courses/${id}`);
 }
 async function slettSeksjon(id: string) {
@@ -223,9 +225,11 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
 
   test("oversettelsen oversetter begge oppsettene, med de samme etikettene", async () => {
     test.setTimeout(180000);
-    const oversatt = await api("POST", `/api/admin/content/sections/${sectionId}/assets/localize`, { sourceLocale: "nb" });
+    // 2.168.0: figurene oversettes når teksten lagres (den gamle «Oversett» er borte). Seksjonen er et importert utkast, så figuren
+    // teksten viser, regnes som ny.
+    const { lagret: oversatt } = await lagreSeksjon(api, sectionId, { sourceLocale: "nb" });
     expect(oversatt.status, oversatt.tekst.slice(0, 300)).toBe(200);
-    expect(oversatt.json.localizedAssetCount).toBe(1);
+    expect(oversatt.json.figureTranslation).toEqual({ translated: 1, failed: 0 });
 
     const norsk = await hentFigur(assetId, "?locale=nb");
     for (const språk of ["en-GB", "nn"]) {
@@ -264,7 +268,7 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
   test("seksjonen publiseres og legges i et publisert testkurs", async () => {
     const publisert = await api("POST", `/api/admin/content/sections/${sectionId}/publish`);
     expect(publisert.status, publisert.tekst.slice(0, 300)).toBe(200);
-    const kurs = await api("POST", "/api/admin/content/courses", { title: three(TITTEL) });
+    const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: three(TITTEL) });
     expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
     courseId = (kurs.json.course as { id: string }).id;
     const del2 = await api("POST", "/api/admin/content/sections", { title: three(TITTEL_2), bodyMarkdown: three(`# ${TITTEL_2}\n\nLaget av den automatiske stage-testen. Kan slettes.`), draft: true, clientRef: "stage-test-del-2" });

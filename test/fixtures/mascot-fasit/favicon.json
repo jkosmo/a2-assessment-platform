@@ -1,0 +1,22 @@
+{
+  "/static/favicon.svg": {
+    "contentType": "image/svg+xml",
+    "bytes": 716,
+    "sha256": "3933fc9bf80199889c35b95a87a2767bec34f6476c8658dffb89ce07a59819e2"
+  },
+  "/static/favicon-32.png": {
+    "contentType": "image/png",
+    "bytes": 1187,
+    "sha256": "3b74d2fedbd08d7ab23b8656a1cbd872bcd878e66a913fb67ace3796256560c7"
+  },
+  "/static/favicon-16.png": {
+    "contentType": "image/png",
+    "bytes": 578,
+    "sha256": "351007561cebdb6611b0b92c6320fa682d8c397d9cfbc167493711a693855216"
+  },
+  "/static/apple-touch-icon-180.png": {
+    "contentType": "image/png",
+    "bytes": 2528,
+    "sha256": "6ccee4bf232c8c66968648dbb372aabf2147e51bd53c9c501e21f278fc503cca"
+  }
+}

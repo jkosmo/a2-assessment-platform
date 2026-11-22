@@ -4,6 +4,7 @@ import { prisma } from "../src/db/prisma.js";
 import { findModuleIdByTitle } from "./support/participantFlow.js";
 import { countCourseCompletionChecks, submissionOwner } from "./support/outboxProbe.js";
 import { processNextOutboxEvent } from "../src/modules/outbox/outboxService.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -31,6 +32,7 @@ describe("MVP appeal flow", () => {
       .set(participantHeaders)
       .send({
         moduleId,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, moduleId),
         deliveryType: "text",
         responseJson: {
           response: "A practical submission with analysis and responsible use notes.",
@@ -203,7 +205,9 @@ describe("MVP appeal flow", () => {
     // en utrulling kunne tape dem for godt.
     const ankeRaderFør = await prisma.outboxEvent.count({ where: { type: "appeal_notification", status: "pending" } });
     expect(ankeRaderFør).toBeGreaterThanOrEqual(3);
-    for (let i = 0; i < 50; i += 1) {
+    // Køen er delt med andre tester i samme database, og den eldste går først. Antallet er det som faktisk ligger der.
+    const iKø = await prisma.outboxEvent.count({ where: { status: "pending" } });
+    for (let i = 0; i < iKø + 5; i += 1) {
       if (!(await processNextOutboxEvent(`appeal-flow-test-${Date.now()}`, 30_000))) break;
     }
 

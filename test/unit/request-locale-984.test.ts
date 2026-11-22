@@ -40,7 +40,15 @@ function walk(dir: string): string[] {
   });
 }
 
+const FALLBACK = /context\??\.locale\s*\?\?/;
 describe("#984 — vakt: ingen rute har sin egen reserve lenger", () => {
+  // Testgjennomgangen 2026-11 (avsnitt 5.3): kontrollen. Skrives reserven om i hjelperen, kan mønsteret slutte å treffe
+  // noe, og vakta under blir grønn uten å se. Da skal denne bli rød.
+  it("kontroll: mønsteret treffer reserven i hjelperen selv", () => {
+    const helper = readFileSync(join(SRC, "i18n", "requestLocale.ts"), "utf8");
+    expect(helper.split("\n").filter((line) => FALLBACK.test(line))).toHaveLength(1);
+  });
+
   it("⚠️ `context?.locale ?? <noe>` finnes bare i hjelperen", () => {
     const treff: string[] = [];
     for (const file of walk(SRC)) {
@@ -48,7 +56,7 @@ describe("#984 — vakt: ingen rute har sin egen reserve lenger", () => {
       const src = readFileSync(file, "utf8");
       src.split("\n").forEach((line, i) => {
         if (line.trim().startsWith("//") || line.trim().startsWith("*")) return;
-        if (/context\??\.locale\s*\?\?/.test(line)) treff.push(`${file.slice(SRC.length + 1)}:${i + 1}: ${line.trim()}`);
+        if (FALLBACK.test(line)) treff.push(`${file.slice(SRC.length + 1)}:${i + 1}: ${line.trim()}`);
       });
     }
     expect(treff.join("\n"), "bruk requestLocale(request) fra src/i18n/requestLocale.ts").toBe("");

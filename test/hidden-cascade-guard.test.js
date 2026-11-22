@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -33,6 +33,18 @@ import { describe, expect, it } from "vitest";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PUBLIC = fileURLToPath(new URL("../public", import.meta.url));
+const MASCOTS = fileURLToPath(new URL("../mascots", import.meta.url));
+
+// ⚠️ Testgjennomgangen 2026-11 (avsnitt 5.1): `/static/mascot/figure.css` (participant.html, fra 2.142.0) ligger ikke i
+// public/. Appen serverer den fra den valgte maskotpakken, `mascots/<pakke>/figure.css` (src/modules/mascot/mascotPack.ts).
+// Vakta så den ikke: lenke-regexen tok bare filer rett under /static/, og CSS-søket gikk bare i public/. Alle pakkene leses,
+// siden hver av dem kan bli valgt i mascot.config.json.
+const MASCOT_FIGURE_CSS = "mascot/figure.css";
+const mascotFigureSheets = () =>
+  readdirSync(MASCOTS)
+    .map((pack) => join(MASCOTS, pack, "figure.css"))
+    .filter((file) => existsSync(file));
+const mascotRelOf = (file) => `mascots/${file.slice(MASCOTS.length + 1).replace(/\\/g, "/")}`;
 
 // Kjente tilfeller. Hver MÅ ha en grunn — og hver av dem er en ekte feil som venter, ikke en
 // godkjenning.
@@ -115,8 +127,12 @@ const beats = (a, b) => (a.specificity[0] !== b.specificity[0]
 const sheetCache = new Map();
 function sheetRules(name) {
   if (!sheetCache.has(name)) {
-    const path = join(PUBLIC, "static", name);
-    sheetCache.set(name, parseDisplayRules(read(path), `static/${name}`));
+    if (name === MASCOT_FIGURE_CSS) {
+      sheetCache.set(name, mascotFigureSheets().flatMap((file) => parseDisplayRules(read(file), mascotRelOf(file))));
+    } else {
+      const path = join(PUBLIC, "static", name);
+      sheetCache.set(name, parseDisplayRules(read(path), `static/${name}`));
+    }
   }
   return sheetCache.get(name);
 }
@@ -125,9 +141,11 @@ function buildPages() {
   return walk(PUBLIC, ".html").map((file) => {
     const src = read(file);
     let rules = [];
-    for (const link of src.matchAll(/<link[^>]+href="\/static\/([\w.-]+\.css)"/g)) {
+    const sheets = [];
+    for (const link of src.matchAll(/<link[^>]+href="\/static\/([\w./-]+\.css)"/g)) {
       try {
         rules = rules.concat(sheetRules(link[1]));
+        sheets.push(link[1]);
       } catch {
         // En side kan peke på et ark som ikke finnes lokalt; da har vi bare mindre å måle på.
       }
@@ -140,6 +158,7 @@ function buildPages() {
     return {
       file: relOf(file),
       src,
+      sheets,
       rules: rules.map((rule, order) => ({ ...rule, order })),
       elements: parseElements(src, relOf(file)),
     };
@@ -305,6 +324,14 @@ describe("skjuling som faktisk skjuler (#975)", () => {
     }
   });
 
+  it("kontroll: maskotens figure.css er med i modellen for siden som lenker til den", () => {
+    expect(mascotFigureSheets().length, "fant ingen mascots/*/figure.css").toBeGreaterThan(0);
+    const linking = pages.filter((page) => page.src.includes(`/static/${MASCOT_FIGURE_CSS}`));
+    expect(linking.map((page) => page.file), "ingen side lenker til /static/mascot/figure.css lenger — er kontrollen utdatert?")
+      .toContain("participant.html");
+    for (const page of linking) expect(page.sheets, `${page.file} leste ikke maskotens figure.css`).toContain(MASCOT_FIGURE_CSS);
+  });
+
   it("kontroll: modellen dømmer et konstruert kollisjonstilfelle som ødelagt", () => {
     // Motprøven til testene under: hvis modellen sier «skjules» om ALT, sier den ingenting. Her er
     // et element som HELT SIKKERT ikke skjules — samme form som participant.html:446 hadde før
@@ -360,6 +387,8 @@ describe("skjuling som faktisk skjuler (#975)", () => {
     // også at fella finnes, så neste element med samme klasse får feilen på nytt.
     const sources = [
       ...walk(PUBLIC, ".css").map((f) => ({ file: relOf(f), text: read(f) })),
+      // Maskotpakkene serveres under /static/mascot/, men ligger utenfor public/ (se toppen av fila).
+      ...walk(MASCOTS, ".css").map((f) => ({ file: mascotRelOf(f), text: read(f) })),
       ...walk(PUBLIC, ".html").flatMap((f) => {
         const src = read(f);
         return [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => ({ file: relOf(f), text: m[1] }));
@@ -368,6 +397,7 @@ describe("skjuling som faktisk skjuler (#975)", () => {
 
     // Kontroll: uten CSS å lese blir denne testen grønn av ingenting.
     expect(sources.length, "fant ingen CSS-kilder å lese").toBeGreaterThan(3);
+    expect(sources.some((s) => s.file.startsWith("mascots/")), "leste ingen CSS fra maskotpakkene").toBe(true);
 
     const patches = [];
     for (const { file, text } of sources) {

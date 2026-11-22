@@ -36,10 +36,11 @@ describe("participant translation resources", () => {
 
   it("includes localized keys for UI labels, result display, and improvement advice", () => {
     // Core UI and behavioral keys — these should always be present
+    // Testgjennomgangen 2026-11 (avsnitt 5.2): `submission.assessorExpectedContent` er tatt ut av lista. Ingen klientfil
+    // leser nøkkelen; den står bare i oversettelsesfila.
     const requiredKeys = [
       "assessment.auto.elapsedLabel",
       "submission.taskText",
-      "submission.assessorExpectedContent",
       "preview.title",
       "preview.description",
       "preview.assessmentUnavailable",

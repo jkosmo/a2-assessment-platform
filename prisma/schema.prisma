@@ -88,6 +88,10 @@ model User {
   department                    String?
   manager                       String?
   activeStatus                  Boolean                  @default(true)
+  // #1139: den ukentlige e-posten fra båten. På som standard; slås av med bryteren på profilen (`PUT /api/me/preferences`, det
+  // ENESTE stedet som skriver feltet). Arbeidsgiver ser det ikke: ingen admin-rute eller rapport leser det.
+  weeklyEmailEnabled            Boolean                  @default(true)
+  weeklyDigests                 WeeklyDigest[]
   lastLoginAt                   DateTime?
   isAnonymized                  Boolean                  @default(false)
   anonymizedAt                  DateTime?
@@ -117,6 +121,11 @@ model User {
   discussionSubscriptions       DiscussionSubscription[]
   agentAuthoringTokens          AgentAuthoringToken[]    @relation("AgentAuthoringTokens")
   contentOwnerships             ContentOwner[]           @relation("ContentOwnerships")
+  courseVersionNotices          CourseVersionNotice[]
+  // #1142: e-posten om nye kurs, én rad per person og kurs.
+  courseAssignmentNotices       CourseAssignmentNotice[]
+  // #934 skive 5a-2: beståtte per innlevering.
+  modulePasses                  ModulePass[]
 }
 
 // AA-3 (#651): kortlivet, scopet token for agent-orkestrerte draft-operasjoner.
@@ -248,6 +257,11 @@ model Module {
   validTo                DateTime?
   activeVersionId        String?
   archivedAt             DateTime?
+  // #1150 skive 2a-2: satt BARE når modulen fulgte et kurs inn i arkivet (`archiveCourse`, courseArchive.ts): kurset, og
+  // versjonen som var publisert. Gjenopprettingen av kurset setter den tilbake. Alle gjenopprettinger nullstiller begge.
+  // Ingen fremmednøkkel: merket er et merke, ikke et eierskap (vakt: test/content-in-use-guard.test.js).
+  archivedWithCourseId          String?
+  activeVersionIdBeforeArchive  String?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
   versions               ModuleVersion[]         @relation("ModuleVersions")
@@ -259,6 +273,13 @@ model Module {
   rubricVersions         RubricVersion[]
   promptTemplateVersions PromptTemplateVersion[]
   courseItems            CourseItem[]
+  // #934 skive 5a-2: beståtte per innlevering, og den laveste hovedversjonen som teller per kurs.
+  modulePasses           ModulePass[]
+  courseRequirements     CourseModuleRequirement[]
+
+  @@index([archivedWithCourseId])
+  // #1152 skive 4b: listene over arkiverte og slettejobben spør etter det som er arkivert.
+  @@index([archivedAt])
 }
 
 // Whether a module bundles a free-text submission (LLM-graded) plus MCQ, or is MCQ-only
@@ -274,11 +295,19 @@ model ModuleVersion {
   id                       String                 @id @default(cuid())
   moduleId                 String
   versionNo                Int
+  // #934 skive 5a-2: versjonsnummeret, hoved.mindre. Tomt for utkast. Settes én gang, første gang versjonen
+  // publiseres, under den eksklusive innholdslåsen, og endres aldri etterpå. `versionNo` står som løpenummer.
+  versionMajor             Int?
+  versionMinor             Int?
   // taskText / rubricVersionId / promptTemplateVersionId are free-text-assessment specific and
   // are null for MCQ_ONLY modules (#525). They remain set for FREETEXT_PLUS_MCQ and FREETEXT_ONLY.
   taskText                 String?
   assessorExpectedContent  String?
   candidateTaskConstraints String?
+  // #1124 del 2: et sterkt eksempelsvar på fritekstoppgaven (språkkart). Vises deltakeren bare ETTER
+  // vurderingen, og bare når modulen slår det på (`assessmentPolicy.practical.modelAnswerAfterAssessment`),
+  // gjennom én egen rute. Deltakerens moduloppslag henter det aldri.
+  modelAnswer              String?
   assessmentBlueprint      String?
   rubricVersionId          String?
   promptTemplateVersionId  String?
@@ -301,8 +330,12 @@ model ModuleVersion {
   llmEvaluations           LLMEvaluation[]
   // #997: sertifiseringer denne versjonen gjorde foreldet (revisjon merket ved publisering).
   supersededCertifications CertificationStatus[]  @relation("SupersededCertifications")
+  modulePasses             ModulePass[]
 
   @@unique([moduleId, versionNo])
+  // #934 skive 5a-2: to publiseringer kan ikke få samme nummer. PostgreSQL regner tomme verdier som ulike, så utkast
+  // treffer ikke nøkkelen.
+  @@unique([moduleId, versionMajor, versionMinor])
   @@index([moduleId, publishedAt])
 }
 
@@ -331,6 +364,7 @@ model Submission {
   appeals            Appeal[]
   manualReviews      ManualReview[]
   assessmentJobs     AssessmentJob[]
+  modulePass         ModulePass?
 
   @@index([userId, submittedAt])
   @@index([moduleId, submittedAt])
@@ -506,6 +540,7 @@ model AssessmentDecision {
   parentDecision          AssessmentDecision?    @relation("DecisionLineage", fields: [parentDecisionId], references: [id], onDelete: SetNull)
   childDecisions          AssessmentDecision[]   @relation("DecisionLineage")
   certifications          CertificationStatus[]
+  modulePasses            ModulePass[]
 
   @@index([submissionId, finalisedAt])
 }
@@ -586,6 +621,58 @@ model CertificationStatus {
   @@index([moduleId, status])
 }
 
+// #934 skive 5a-2 (doc/DESIGN_934.md, «5a»): én rad per bestått innlevering. Skrives der alle vedtak går gjennom
+// (`upsertCertificationStatusFromDecision`), under deltakerlåsen. Et senere stryk på SAMME innlevering sletter raden; et
+// stryk på en annen rører den ikke (produkteier 2026-11-03, svar f). Ingen leser fremdrift herfra før 5a-3.
+//
+// Radene kan bygges på nytt fra vedtakene (tilbakefyllingen), så de følger det de er regnet ut fra: sletting
+// av innlevering, vedtak, versjon, modul eller bruker tar raden med seg, og ingen gammel kode blir stoppet av dem.
+model ModulePass {
+  id              String             @id @default(cuid())
+  userId          String
+  moduleId        String
+  submissionId    String             @unique
+  decisionId      String
+  moduleVersionId String
+  // Når vedtaket ble fattet. Regelen ser ikke på tidspunktet (doc/DESIGN_934.md, «Hvorfor dagens #997 ikke holder»).
+  passedAt        DateTime
+  // Settes bare av tilbakefyllingen, for beståtte som #997 tok bort. En slik rad teller aldri.
+  invalidatedAt   DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module          Module             @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  submission      Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  decision        AssessmentDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  moduleVersion   ModuleVersion      @relation(fields: [moduleVersionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, moduleId])
+  @@index([moduleId])
+  @@index([moduleVersionId])
+  @@index([decisionId])
+}
+
+// #934 skive 5a-2: for hvert kurs og hver modul i det, den laveste hovedversjonen av modulen som teller der. Heves bare av
+// en hovedversjon, senkes aldri, og raden slettes når modulen tas ut av kurset. Skrives under innholdslåsen.
+model CourseModuleRequirement {
+  id             String   @id @default(cuid())
+  courseId       String
+  moduleId       String
+  minModuleMajor Int
+  // #1140 etappe 1 (doc/DESIGN_1140.md): hovedversjonen av modulen dette kurset VISER. Tomt = kurset følger modulens nyeste, som
+  // før #1140. `minModuleMajor` over er hvilke beståtte som teller; dette er hva en deltaker får når hen åpner modulen. Leses
+  // bare gjennom `findShownModuleMajors` (moduleVersioning.ts), og INGEN skriver feltet før etappe 3 gir det sin ene skriver.
+  // DB-CHECK i migreringen: tomt, eller minst `minModuleMajor` (ellers kunne kravet aldri oppfylles av det deltakeren får).
+  shownModuleMajor Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module         Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, moduleId])
+  @@index([moduleId])
+}
+
 model AuditEvent {
   id           String   @id @default(cuid())
   // #804: tamper-evidence. chainSeq gives a deterministic total order for the hash chain (timestamps can
@@ -643,26 +730,81 @@ model Course {
   certificationLevel String?
   // #496/EN-1: OPEN = visible to everyone (current behavior, default for existing courses);
   // RESTRICTED = visible/available only to enrolled users.
-  enrollmentPolicy   CourseEnrollmentPolicy  @default(OPEN)
+  // #1164: nye kurs fra appen er RESTRICTED (`NEW_COURSE_ENROLLMENT_POLICY`, courseCommands.ts). Standardverdien her er
+  // med vilje latt stå, og gjelder bare rader opprettet utenom `createCourse` (testfiksturer).
+  enrollmentPolicy  CourseEnrollmentPolicy  @default(OPEN)
   // #495/T-QA-1: kurs-master av/på for diskusjon. Default true => eksisterende publiserte
   // kurs får diskusjon på når feature lander (besluttet 2026-06-27). Effektiv regel for et
   // item: Course.discussionsEnabled && CourseItem.discussionsEnabled.
   discussionsEnabled Boolean                 @default(true)
+  // 2.119.0: e-post til kursets eiere når en deltaker stiller et nytt spørsmål. Kursets eiere slår
+  // den av og på; den gjelder alle eierne. Svar går fortsatt bare til trådens abonnenter.
+  discussionOwnerNotifications Boolean       @default(true)
+  // 2.121.0: kursets navn i delingslenka (/kurs/<slug>). Settes første gang kurset publiseres, fra
+  // tittelen på bokmål, og endres aldri etterpå — en utsendt lenke skal virke også etter et navnebytte.
+  // Null før første publisering: forfatteren kan bytte tittel fritt til da.
+  slug                         String?       @unique
   // #1093: valgfri plassering i «Mine kurs». Satt: først, stigende. Tomt (det vanlige): alfabetisk
   // på tittelen i deltakerens språk. Regelen bor i courseOrdering.ts.
   sortOrder          Int?
+  // #934: hovedversjon og mindre versjon (3.0 → 3.1 mindre, 3.x → 4.0 hoved). Innholdsansvarlig velger
+  // ved publisering. Et kursbevis gjelder sin hovedversjon; mindre versjon har ingen konsekvens for
+  // utstedte bevis. Eksisterende kurs er 1.0. Se doc/DESIGN_934.md.
+  versionMajor       Int                     @default(1)
+  versionMinor       Int                     @default(0)
+  // #934 skive 4a: øker hver gang kursets innhold eller innstillinger lagres (`claimCourseRevision`). Kursskjemaet
+  // sender tallet det lastet; er det endret siden, har noen andre lagret, og lagringen avvises (409). Ingen lås:
+  // den gjelder en fane som har stått åpen, ikke to som skriver samtidig.
+  contentRevision    Int                     @default(0)
   publishedAt        DateTime?
   archivedAt         DateTime?
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
   items              CourseItem[]
   completions        CourseCompletion[]
+  // #934 skive 3: én rad per hovedversjon, for regelen om endrede seksjoner.
+  versions           CourseVersion[]
+  // #934 skive 4b: e-posten om ny hovedversjon, én rad per person og versjon.
+  versionNotices     CourseVersionNotice[]
+  // #1142: e-posten om nye kurs, én rad per person og kurs.
+  assignmentNotices  CourseAssignmentNotice[]
   sectionReads       CourseSectionRead[]
   enrollments        CourseEnrollment[]
   groupAssignments   CourseGroupAssignment[]
   discussionThreads  DiscussionThread[]
   // 2.102.0: tema samler kursene i «Mine kurs». Et kurs kan ha flere, eller ingen.
   themes             CourseThemeAssignment[]
+  // #934 skive 5a-2: den laveste hovedversjonen av hver modul som teller i dette kurset.
+  moduleRequirements CourseModuleRequirement[]
+  // #1140 etappe 2: utkastet til neste utgave av kurset. Høyst ett. Navnet er med vilje ikke `draft`: vakta
+  // (test/course-draft-guard.test.js) finner enhver bruk av ordet `courseDraft` utenfor fila som eier tabellen, også
+  // `include: { courseDraft: true }`. `draft` brukes til annet i koden og kunne ikke vært søkt etter.
+  courseDraft        CourseDraft?
+
+  // #1152 skive 4b: listene over arkiverte og slettejobben spør etter det som er arkivert.
+  @@index([archivedAt])
+}
+
+// #1140 etappe 2 (doc/design/PLAN_1140_E2.md): utkastet til et PUBLISERT kurs. «Lagre» i kursbyggeren skriver hit, og ingenting
+// deltakerne ser, endres før utkastet publiseres. Bare kursbyggerens ruter leser tabellen (src/modules/course/courseDraft.ts,
+// vakt: test/course-draft-guard.test.js). Alt deltakerne leser, står i `Course` og `CourseItem`, som før.
+//
+// `payloadText` er det `PUT …/content` tar imot, etter validering: felt som er utelatt, betyr «som publisert». TEKST, ikke Json:
+// publiseringen leser den gjennom samme skjema som lagringen. `baseRevision` er kursets `contentRevision` slik skjemaet lastet
+// den; publiseringen avvises hvis kurset er endret siden. `revision` er utkastets egen teller, og gjelder sammen med `id`:
+// en forkastet og ny rad starter på nytt.
+model CourseDraft {
+  id           String   @id @default(cuid())
+  courseId     String   @unique
+  payloadText  String
+  baseRevision Int
+  revision     Int      @default(1)
+  // Hvor siste skriving kom fra: `form` (kursbyggeren). `import` kommer i etappe 4 (kursfil og skillet).
+  source       String   @default("form")
+  updatedById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
 }
 
 // 2.102.0: et tema i «Mine kurs» (produkteier 2026-10-25: «det blir relativt mange kurs som er
@@ -703,11 +845,112 @@ model CourseCompletion {
   // seksjoner». Å bakfylle med `[]` ville påstått at gamle kurs var seksjonsfrie.
   // Additivt felt — expand/contract-trygt, gamle containere leser det aldri.
   sectionSnapshotJson String?
+  // #934: versjonen av kurset beviset ble utstedt for. Beviset gjelder hovedversjonen — én per
+  // hovedversjon per deltaker. Eksisterende bevis er 1.0, som kursene de ble utstedt for.
+  versionMajor        Int      @default(1)
+  versionMinor        Int      @default(0)
+  // #1145: `platform` = utstedt av plattformen (kravet målt); `external` = registrert av administrator for et kurs tatt utenfor
+  // plattformen (doc/design/PLAN_1145.md). Et `external`-bevis har ingen kjent dato: `completedAt` er registreringen og vises
+  // aldri som fullføringsdato, og det teller ikke som aktivitet. `source` er det ENESTE skillet — ikke `registeredById`, som
+  // står igjen når beviset senere oppgraderes til `platform`.
+  source              String   @default("platform")
+  // Administratoren som registrerte (ingen fremmednøkkel: revisjonen har aktøren, og raden skal stå om kontoen slettes).
+  registeredById      String?
+  // Hvor registreringen kom fra, uten personopplysninger (f.eks. «Kurs og sertifisering.xlsx, Modul 2»).
+  externalReference   String?
   user                User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   course              Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
 
-  @@unique([userId, courseId])
+  // #934: ett bevis per hovedversjon. Den gamle nøkkelen (bruker, kurs) sto i 2.127.0 og er fjernet i
+  // 2.128.0 (skive 2), i samme utrulling som leserne lærte å skille versjonene.
+  @@unique([userId, courseId, versionMajor])
   @@index([courseId, completedAt])
+}
+
+// #934 skive 3: én rad per hovedversjon av et kurs. Brukes bare til regelen om endrede seksjoner
+// (produkteier 2026-11-01): en seksjon som er endret siden forrige hovedversjon, leses på nytt.
+//
+// `sectionVersionsJson` er seksjon → aktiv seksjonsversjon (id, eller null). Når hovedversjon N lages,
+// skrives raden for N−1 med det som gjaldt RETT FØR endringen (slutten av N−1), og raden for N med det
+// som gjelder rett etter, i samme transaksjon som versjonen økes. En seksjon er endret i N når de to
+// radene sier ulik versjon; en lesing teller for N når seksjonen er uendret, eller lesingen er gjort
+// etter `publishedAt` for N. Kursets innhold lagres ikke her — det står i kursbevisets øyeblikksbilde.
+// Kurs uten rader (alle på 1.x) har ingen slik regel: alle lesinger teller, som før.
+model CourseVersion {
+  id                  String   @id @default(cuid())
+  courseId            String
+  versionMajor        Int
+  publishedAt         DateTime
+  sectionVersionsJson String
+  // #934 skive 4b: hvor mange elementer som er nye eller endret i denne hovedversjonen (seksjoner med ny versjon,
+  // elementer lagt til). Regnet ut når hovedversjonen lages, og står i e-posten til deltakerne. Null for rader
+  // fra før 4b, og for raden som avslutter forrige hovedversjon.
+  changedItemCount    Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  course              Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, versionMajor])
+}
+
+// #934 skive 4b: én rad per person og hovedversjon — e-posten om at kurset har fått en ny hovedversjon
+// (doc/DESIGN_934.md, «4b»). Radene lages i `applyCourseVersionChange`, i samme transaksjon som hovedversjonen,
+// også når e-posten er slått av, så ingen e-post går tapt. Workeren sender dem (`courseMajorVersionEmail.ts`).
+//
+// status: "waiting" (venter: kurset er avpublisert, eller jobben er av) | "queued" (lagt i outboxen) |
+//         "sending" | "sent" | "skipped" (ikke aktuell lenger: nyere hovedversjon, eller personen er borte) |
+//         "uncertain" (et forsøk ble avbrutt og kan ha gått; sendes ikke på nytt) | "failed"
+model CourseVersionNotice {
+  id           String    @id @default(cuid())
+  courseId     String
+  versionMajor Int
+  userId       String
+  status       String    @default("waiting")
+  // Hvorfor raden ble `skipped`, `uncertain` eller `failed`.
+  reason       String?
+  queuedAt     DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  course       Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, versionMajor, userId])
+  @@index([status, createdAt])
+}
+
+// #1142: én rad per person og kurs — e-posten om nye kurs fra en klasse (doc/design/PLAN_1142.md). Raden betyr
+// «denne personen er varslet, eller skal varsles, om dette kurset». Finnes raden, kommer det aldri en ny e-post om
+// samme kurs. Radene lages av en jobb i workeren fra regelen `eligibleAssignmentPairs`
+// (`src/modules/course/courseAssignmentNotice.ts`), aldri av handlingene, og skrives bare der (vakt:
+// test/course-assignment-notice-write-guard.test.js).
+//
+// status: "baseline" (hadde kurset da #1142 kom; sendes aldri) | "waiting" | "queued" (med i en samlet e-post,
+//         `batchId`) | "sending" | "sent" | "uncertain" (avbrutt underveis; sendes ikke på nytt) | "failed"
+model CourseAssignmentNotice {
+  id        String    @id @default(cuid())
+  userId    String
+  courseId  String
+  // baseline | waiting | queued | sending | sent | uncertain | failed
+  status    String    @default("waiting")
+  // Satt når raden er med i en samlet e-post (status queued og videre). Behandleren i outboxen finner radene på den.
+  batchId   String?
+  reason    String?
+  queuedAt  DateTime?
+  // Settes eksplisitt ved overgangen til `sending`. Ryddingen måler på denne, ikke på `updatedAt` (Codex runde 1 nr. 3).
+  sendingAt DateTime?
+  sentAt    DateTime?
+  // #1146: når personen sist ble varslet om kurset, eller regnet som varslet (`sending`, `baseline`). Kommer kurset tilbake
+  // etter dette (alle åpne veier er nyere), settes raden tilbake til `waiting`. Null mens raden venter eller er i kø.
+  settledAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([status, userId, createdAt])
+  @@index([batchId])
 }
 
 // #496/EN-1: assignment of a course to a participant (individual, department, or self-enrollment),
@@ -809,6 +1052,9 @@ model CourseSection {
   title           String // lokalisert JSON: {"en-GB":"...","nb":"...","nn":"..."}
   activeVersionId String?
   archivedAt      DateTime?
+  // #1150 skive 2a-2: som på `Module`. Satt bare når seksjonen fulgte et kurs inn i arkivet; nullstilt ved all gjenoppretting.
+  archivedWithCourseId         String?
+  activeVersionIdBeforeArchive String?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   versions        CourseSectionVersion[] @relation("CourseSectionVersions")
@@ -816,6 +1062,10 @@ model CourseSection {
   courseItems     CourseItem[]
   reads           CourseSectionRead[]
   assets          SectionAsset[]
+
+  @@index([archivedWithCourseId])
+  // #1152 skive 4b: listene over arkiverte og slettejobben spør etter det som er arkivert.
+  @@index([archivedAt])
 }
 
 // Media-asset (bilde) for en læringsseksjon (#483/F4). Binæren ligger i Azure Blob
@@ -847,18 +1097,21 @@ model SectionAsset {
 // Per-deltaker lese-markering av en læringsseksjon i et kurs (#487/#492). Moduler
 // "fullføres" via CertificationStatus; seksjoner markeres eksplisitt som lest. Begge
 // teller mot kurs-progresjon (alle elementer teller).
+// #1156: lesingen tilhører deltakeren og seksjonen, og teller i alle kurs med seksjonen (sectionReadCredit.ts). `courseId` er
+// kurset den ble gjort i («åpnet fra»), og blir tom når kurset slettes: lesingen står og teller videre i de andre kursene.
 model CourseSectionRead {
   id        String        @id @default(cuid())
   userId    String
-  courseId  String
+  courseId  String?
   sectionId String
   readAt    DateTime      @default(now())
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  course    Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course    Course?       @relation(fields: [courseId], references: [id], onDelete: SetNull)
   section   CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   @@unique([userId, courseId, sectionId])
   @@index([userId, courseId])
+  @@index([userId, sectionId])
 }
 
 enum CourseItemType {
@@ -897,6 +1150,10 @@ model CourseSectionVersion {
   sectionId         String
   versionNo         Int
   bodyMarkdown      String // lokalisert JSON av markdown-tekst, per locale
+  // #1163: tittelen er en del av versjonen (lokalisert JSON som `CourseSection.title`). Deltakerne leser den publiserte
+  // versjonens tittel; `CourseSection.title` er forfatterens arbeidstittel. Null bare for en versjon gammel kode laget under
+  // utrullingen: da gjelder seksjonens tittel (`sectionVersionTitle`, sectionTitle.ts).
+  title             String?
   publishedBy       String?
   publishedAt       DateTime?
   createdAt         DateTime        @default(now())
@@ -1008,4 +1265,29 @@ enum ContentOwnerType {
   SECTION
   CLASS
   MODULE
+}
+
+// #1139 skive 3 (doc/design/PLAN_1139.md, punkt 4, 6-8 og 12): én rad per person og uke for den ukentlige e-posten. Raden og
+// hendelsen i utboksen lages i samme transaksjon, betinget (`ON CONFLICT ("userId","weekKey") DO NOTHING RETURNING`), så det
+// aldri går to e-poster samme uke, heller ikke etter en omstart eller med to workere. Bare weeklyDigest-modulen og
+// nøytraliseringen av en prod-kopi skriver tabellen; ingen admin-rute eller rapport leser den (arbeidsgiver ser ikke hvem som
+// får, åpner eller melder seg av). Rader eldre enn 12 uker slettes av jobben.
+model WeeklyDigest {
+  id        String    @id @default(cuid())
+  userId    String
+  // Mandagen i uka e-posten gjelder, i Oslo: `YYYY-MM-DD`.
+  weekKey   String
+  // queued | sending | sent | skipped | uncertain | failed
+  status    String
+  reason    String?
+  // Tidspunktet raden er satt opp til å sendes (`availableAt` på hendelsen). Jobben regner neste ledige tid fra den siste.
+  queuedAt  DateTime?
+  sendingAt DateTime?
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekKey])
+  @@index([status, weekKey])
 }

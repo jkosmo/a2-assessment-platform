@@ -17,9 +17,11 @@ const createMcqSetVersion = vi.fn();
 const createModuleVersion = vi.fn();
 const findModuleDetails = vi.fn();
 const updateModuleDetails = vi.fn();
+const findLatestModelAnswer = vi.fn();
 
 // The transaction client the composer must thread through every write.
-const TX = { __tx: "the-one-transaction" };
+// #934 skive 4a: runContentWrite tar innholdslåsen med rå SQL først.
+const TX = { __tx: "the-one-transaction", $executeRaw: async () => 0, $executeRawUnsafe: async () => 0 };
 
 vi.mock("../../src/db/prisma.js", () => ({
   prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(TX)) },
@@ -36,6 +38,10 @@ vi.mock("../../src/modules/adminContent/adminContentCommands.js", () => ({
 vi.mock("../../src/modules/adminContent/adminContentRepository.js", () => ({
   createAdminContentRepository: () => ({
     findModuleDetails: (...args: unknown[]) => findModuleDetails(...args),
+    findLatestModelAnswer: (...args: unknown[]) => findLatestModelAnswer(...args),
+  }),
+  // #934 skive 4a: skriverne står for seg og tar en låst transaksjon.
+  createAdminContentWriter: () => ({
     updateModuleDetails: (...args: unknown[]) => updateModuleDetails(...args),
   }),
 }));

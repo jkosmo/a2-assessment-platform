@@ -28,7 +28,7 @@ test.describe("#1093 kursskjemaet — plassering i «Mine kurs»", () => {
     });
     await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
     const sendt: unknown[] = [];
-    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+    await page.route("**/api/admin/content/courses/course-1{,/content}", async (route: Route) => {
       if (route.request().method() !== "PUT") return route.fallback();
       sendt.push(route.request().postDataJSON());
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });
@@ -60,7 +60,7 @@ test.describe("#1093 kursskjemaet — plassering i «Mine kurs»", () => {
     });
     await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
     const sendt: unknown[] = [];
-    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+    await page.route("**/api/admin/content/courses/course-1{,/content}", async (route: Route) => {
       if (route.request().method() !== "PUT") return route.fallback();
       sendt.push(route.request().postDataJSON());
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });
@@ -97,7 +97,7 @@ test.describe("#1093 kursskjemaet — plassering i «Mine kurs»", () => {
     });
     await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
     const sendt: unknown[] = [];
-    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+    await page.route("**/api/admin/content/courses/course-1{,/content}", async (route: Route) => {
       if (route.request().method() !== "PUT") return route.fallback();
       sendt.push(route.request().postDataJSON());
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });
@@ -153,12 +153,20 @@ test.describe("#1093 kursskjemaet — plassering i «Mine kurs»", () => {
     await page.locator("#formSaveBtn").click();
     await expect(page.locator("#title-nb")).toBeFocused();
     // Hodet er tegnet på nytt: «Export» (synlig eller under «More») skal fortsatt virke.
-    page.once("dialog", (d) => d.accept());
+    // 2.126.0: nøyaktig ÉN dialog. Nedlastingslenka eksporten klikker på, trigget «forlat sida?» en
+    // gang til — forfatteren fikk spørsmålet to ganger, og den andre dialogen kolliderte med at testen
+    // lukket sida («session closed», bare under full last).
+    const dialoger: string[] = [];
+    page.on("dialog", (d) => { dialoger.push(d.type()); void d.accept().catch(() => {}); });
+    const dialog = page.waitForEvent("dialog");
     const knapp = page.locator('.form-page-actions [data-action="export"]');
     const meny = knapp.locator("xpath=ancestor::details[contains(@class, 'row-more')]");
     if ((await meny.count()) > 0) await meny.first().locator("summary").click();
     await knapp.click();
+    await dialog;
     await expect.poll(() => eksport).toEqual(["export"]);
+    await expect(page.locator("#toastRegion")).toContainText("exported");
+    expect(dialoger).toEqual(["confirm"]);
   });
 
   test("#1094: kurslista viser plasseringen som merke ved navnet, og ingenting for kurs uten plassering", async ({ page }) => {

@@ -1,7 +1,7 @@
 # Course design — objectives, structure, test form, level
 
 Contents: [Learning objectives](#learning-objectives) · [Structure](#structure) ·
-[Test form](#test-form) · [Level and scope](#level-and-scope)
+[Linking questions to objectives](#linking-questions-to-objectives) · [A revision course](#a-revision-course) · [Test form](#test-form) · [Level and scope](#level-and-scope)
 
 ## Learning objectives
 
@@ -13,12 +13,20 @@ Objectives are the backbone: the structure and the tests follow from them.
   there are more than six.
 - An objective the source cannot support is flagged `[Avklaring: …]`, not given invented support.
 - Confirm the course's language here (default: the language of the source).
+- Once approved, write them to the course state with an id each — `"learningObjectives": [{ "id":
+  "mal-1", "text": "Etter dette kan deltakeren …" }]` — so the questions can point at them
+  ([below](#linking-questions-to-objectives)).
 
 ## Structure
 
 - **Map each objective** to a section that teaches it and a module that tests it. Plain recall may
   need only a module; background may need only a section.
 - **Teaching comes before testing.** An introduction first; a summary last if the material needs one.
+  A revision course is the exception: it starts with questions ([below](#a-revision-course)).
+- **A reference is an appendix, not a section to read.** A catalogue of features, a set of template
+  prompts or a prompt pack goes in a section of its own at the end, «Vedlegg: …», that no module
+  tests; the section that teaches keeps the few the objective needs
+  ([section-content.md](section-content.md#teach-not-catalogue)). Show it in the outline.
 - **Few, well-formed modules** rather than many thin ones — roughly one per objective.
 - **Practice inside the sections**, where the source gives the material for it: a step-by-step
   walk-through for a process, a case (a situation with «sjekk deg selv» and feedback per option) where
@@ -27,8 +35,97 @@ Objectives are the backbone: the structure and the tests follow from them.
   source gives ([section-content.md](section-content.md#choosing-the-practice)). Name them in the
   outline, per section, so the author approves them with the structure. None of it counts; the
   modules test.
+- **At least one «finn feilene» per course** — a short piece of work with planted errors the
+  learner finds, in the section that teaches the check
+  ([section-content.md](section-content.md#find-the-errors)). It is in the outline by default; leave
+  it out only when the author says so.
+- **Terms before the process:** where a process or a method is built of several new terms, the
+  terms are explained briefly before it — in the same section or one before
+  ([section-content.md](section-content.md#choosing-the-practice)). Show it in the outline.
+- **A procedure or a calculation is learnt in three stages:** a worked example, then an example the
+  learner completes, then a whole task in another situation
+  ([section-content.md](section-content.md#complete-the-example)). Plan the three in the outline.
 - Present the outline as a table: element, order, test form (for a section: its exercise, or none),
-  the objective it serves, level.
+  the objective it serves, level. Under it, a second table: each objective, the section that teaches
+  it, and the questions (or the task) that test it — planned, not yet written:
+
+  | Objective | Taught in | Tested by |
+  |---|---|---|
+  | mal-1 følge de fire stegene | «Fra møte til referat» | spørsmål 1 |
+  | mal-2 velge kilder og be KI om et utkast | «Hva du gir KI» | spørsmål 2–4 |
+
+## Linking questions to objectives
+
+What a test asks is what the learner takes to be important. Each question and each free-text task
+is therefore tied to **one objective** it tests and to **the section that teaches it** — a section
+that comes **before** the test. Every objective is tested at least once.
+
+Record the link in the course state, in the module's element, when the questions are written at
+gate 4 — the question as it stands, in the course's language:
+
+```json
+"questions": [
+  { "question": "Møtet fulgte en fast plan, og du rakk ikke å notere. Hvilken kilde gir rekkefølgen i referatet?", "objective": "mal-2", "section": "sec-kilder" },
+  { "task": true, "objective": ["mal-1", "mal-2"], "section": ["sec-arbeidsgang", "sec-kilder"] }
+]
+```
+
+A free-text task may test several objectives and draw on several sections; a question tests one.
+Check the links before the author approves the module:
+`node scripts/objective-map-check.mjs work/course-state.json`. `produce-course.mjs` reads them again
+against the questions as written: a question or task without a link, a link to an objective or a
+section that is not in the course, or a section after the test stops production; an objective no
+question tests is a note — tell the author, and add a question unless they say it is taught and
+not tested.
+
+When the link is hard to write, the question is the problem: a question that tests no objective,
+or one only a later section answers, is replaced — not linked to the nearest thing.
+
+## A revision course
+
+A course that repeats one the learners have taken («Repetisjon …», a refresher before a hand-in)
+starts with questions, not with the material again. Reading the same text again is the weakest way
+to repeat; trying to remember first, and then reading what you missed, is what makes it stick.
+
+1. **Questions first.** The first section is 5–6 «sjekk deg selv» questions
+   ([section-content.md](section-content.md#check-yourself)) on what the course taught — the terms
+   first, then the process and the judgements built on them
+   ([terms before the process](section-content.md#choosing-the-practice)). A sentence before them
+   says why: try first, read after. This section is the exception to «none or one exercise».
+2. **Each explanation points to the section that explains it**, by its title: «Les mer i «Etter
+   møtet».» Never by a number; the order can change.
+3. **The sections after are shorter** than in the course they repeat: each opens with what learners
+   most often get wrong — the misconceptions behind the questions' wrong options — and leaves out
+   what the questions show is easy. Not the whole material again.
+4. **The test at the end uses new situations** — not the opening questions, and not the sections'
+   examples ([modules.md](modules.md#multiple-choice-questions)).
+
+A revision course says so in its title — «Repetisjon …» (en-GB «Revision …»). `produce-course.mjs`
+notes one whose first section has fewer than five «sjekk deg selv» questions.
+
+The platform has no test that lets a learner skip a section; everyone reads every section, which is
+one more reason to keep them short.
+
+An outline for «Repetisjon: møtereferat med KI»:
+
+| # | Element | What it holds | Exercise |
+|---|---|---|---|
+| 1 | Section «Hva husker du?» | six questions: two on terms (vedtak, oppfølgingspunkt), four on situations; each explanation names the section below | the six questions |
+| 2 | Section «Før møtet» | what is most often missed: the purpose of the minutes and who reads them | none |
+| 3 | Section «Etter møtet» | the checks against the notes — dates, names, decisions | find the errors |
+| 4 | Module «Test: møtereferat» | new meetings and new notes, other than the questions in 1 | multiple choice |
+
+One of the opening questions:
+
+```markdown
+:::sjekk Du har rånotater fra et styremøte og ber KI om et utkast til referat. Hva sjekker du først?
+- [ ] At språket er formelt nok
+- [x] At vedtak og frister stemmer med notatene
+- [ ] At utkastet er kortere enn notatene
+
+Vedtak og frister er det leserne handler på; en feil der får følger. Les mer i «Etter møtet».
+:::
+```
 
 ## Test form
 

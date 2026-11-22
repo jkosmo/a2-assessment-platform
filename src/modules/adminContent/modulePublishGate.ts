@@ -38,6 +38,8 @@ export type StoredVersionForGate = {
   taskText: string | null;
   candidateTaskConstraints: string | null;
   assessorExpectedContent: string | null;
+  /** #1124 del 2: valgfritt; finnes det, skal det være oversatt som de andre feltene. */
+  modelAnswer?: string | null;
   assessmentBlueprint: string | null;
 };
 
@@ -99,6 +101,7 @@ export function evaluateModulePublishGate(input: {
       ...(version.assessorExpectedContent
         ? [{ field: "assessorExpectedContent", raw: version.assessorExpectedContent }]
         : []),
+      ...(version.modelAnswer ? [{ field: "modelAnswer", raw: version.modelAnswer }] : []),
       ...(version.candidateTaskConstraints
         ? [{ field: "candidateTaskConstraints", raw: version.candidateTaskConstraints }]
         : []),

@@ -1,0 +1,45 @@
+/* Seilbåten på fremdriftslinja i «Mine kurs» (#1137). Lastes av participant.html fra /static/mascot/figure.css.
+   Linja fylles fra HØYRE — båten seiler mot venstre (2-tallet styrer fra høyre, som i logoen), og det fylte er
+   kjølvannet bak den. Båten er 27 px og står på linja, så en rad med båt er om lag 28 px høyere (godtatt av
+   produkteier). Fargene er portalens egne (variablene i shared.css).
+
+   Figuren er godkjent på skisse-lerretet (tavla «Fremdriftslinja»): lukket trekantseil med én tynn tverrstrek —
+   sammen A-en — og 2-tallets hode ved roret. Den er tegnet i egne enheter (100 × 84), skalert 0,32 til 27 px høy;
+   hekken (høyre ende av skroget, x = 96) står på grensa mellom tomt og fylt (`sternPx` i mascot.json). Flatt seil
+   har rett bakkant, og tverrstreken går fra masta ut til bakkanten ved y = 37; fullt seil bukter, og tverrstreken
+   ender der kurven krysser y = 37 (x ≈ 77,5). */
+.course-progress-bar { justify-content: flex-end; }
+.course-progress--boat, .course-progress--celebrating { height: 34px; overflow: hidden; }
+.course-progress--boat .course-progress-bar,
+.course-progress--celebrating .course-progress-bar { position: absolute; left: 0; right: 0; top: 25px; }
+.course-boat { position: absolute; top: 0; width: 60px; height: 34px; pointer-events: none; }
+.course-boat-svg { display: block; overflow: visible; }
+.course-boat .cb-sail { fill: var(--color-surface); stroke: var(--color-text); stroke-width: 5; stroke-linejoin: round; }
+.course-boat .cb-batten { stroke: var(--color-text); stroke-width: 4; }
+.course-boat .cb-mast, .course-boat .cb-boom { stroke: var(--color-text); stroke-width: 6; stroke-linecap: round; }
+.course-boat .cb-hull { fill: var(--color-primary); stroke: var(--color-text); stroke-width: 5; stroke-linejoin: round; }
+.course-boat .cb-head { fill: var(--color-surface); stroke: var(--color-text); stroke-width: 5; }
+.course-boat .cb-stripes { stroke: var(--color-meta); stroke-width: 2; stroke-linecap: round; fill: none; }
+.course-boat .cb-c1, .course-boat .cb-c4 { fill: var(--color-link-hover-border); }
+.course-boat .cb-c2 { fill: var(--color-success); }
+.course-boat .cb-c3 { fill: var(--color-primary); }
+/* Øyeblikket kurset fullføres: inn fra høyre, feirer, glir ut mot venstre og blekner. Varigheten står også som
+   `celebrationMs` i mascot.json (sikkerhetsnettet i course-progress-boat.js). */
+.course-boat--leaving { animation: course-boat-leave 4.2s ease-in-out forwards; }
+@keyframes course-boat-leave {
+  0% { transform: translateX(36px); opacity: 0; }
+  10% { transform: translateX(0); opacity: 1; }
+  62% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(-28px); opacity: 0; }
+}
+.course-boat .cb-c { transform-box: fill-box; transform-origin: center; animation: course-boat-burst 1.4s ease-out 3; }
+.course-boat .cb-c2 { animation-delay: .1s; } .course-boat .cb-c3 { animation-delay: .2s; } .course-boat .cb-c4 { animation-delay: .3s; }
+@keyframes course-boat-burst {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  15% { transform: translate(0, -6px) scale(1.5); opacity: 1; }
+  70% { transform: translate(0, 14px) rotate(200deg) scale(1); opacity: 0; }
+  100% { transform: translate(0, 0) scale(1); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .course-boat--leaving, .course-boat .cb-c { animation: none; }
+}

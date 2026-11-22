@@ -217,9 +217,15 @@ describe("Aktivitet under Deltakere (#1099)", () => {
     expect(total).toBe(8); // fire fra «aktiv», to leverte fra «anket», én fra «uten-rolle» og én fra «rolig»
   });
 
-  it("rapportleser får rapporten; fagansvarlig og deltaker får det ikke", async () => {
+  // 2.128.0 (produkteier 2026-11-01): bare administrator. Rapportleser fikk den før; nå er det innsats per
+  // person, og arbeidsgiverroller ser resultat, ikke innsats.
+  it("bare administrator får rapporten; rapportleser, fagansvarlig og deltaker får det ikke", async () => {
+    const admin = await request(app).get("/api/reports/activity").query({ department }).set(headersFor("ADMINISTRATOR"));
+    expect(admin.status).toBe(200);
     const reader = await request(app).get("/api/reports/activity").query({ department }).set(headersFor("REPORT_READER"));
-    expect(reader.status).toBe(200);
+    expect(reader.status).toBe(403);
+    const readerRecent = await request(app).get(`/api/reports/activity/users/${userIds.aktiv}/recent`).set(headersFor("REPORT_READER"));
+    expect(readerRecent.status).toBe(403);
     const smo = await request(app).get("/api/reports/activity").query({ department }).set(headersFor("SUBJECT_MATTER_OWNER"));
     expect(smo.status).toBe(403);
     const participant = await request(app).get("/api/reports/activity").query({ department }).set(headersFor("PARTICIPANT"));

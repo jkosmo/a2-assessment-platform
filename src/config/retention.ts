@@ -27,3 +27,40 @@ export const OFFBOARDING_GRACE_PERIOD_DAYS = 90;
  *  Expressed in years for readability; converted to days internally. */
 export const INACTIVITY_RETENTION_YEARS = 2;
 export const INACTIVITY_RETENTION_DAYS = INACTIVITY_RETENTION_YEARS * 365;
+
+/**
+ * #1152 (doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md, «Fristen»): archived content without participant
+ * history is deleted this many CALENDAR months after it was archived. Not days: the author reads the date in
+ * the list («Slettes 13.05.2027»), and «six months after 13 November» is 13 May. The arithmetic (Oslo calendar
+ * date, month end) lives in src/modules/content/retentionDeadline.ts.
+ */
+export const ARCHIVED_CONTENT_RETENTION_MONTHS = 6;
+
+/**
+ * #1185 (produkteier 21.11.2026: «Deltager får 7 dager så sletting», regnet «fra deltageren leverte»): in a module with free text
+ * and multiple choice, the submission is created when the text is delivered, and the assessment job only when the multiple choice is
+ * sent. A participant who has delivered the text but not finished holds an ARCHIVED course back from deletion for this many CALENDAR
+ * days (Oslo dates) after `submittedAt`, so they can still finish and earn the course certificate if the course is restored. Then the
+ * course can be deleted; the module and the text stay (a delivered submission holds the module back). See courseDeleteGuard.ts.
+ */
+export const UNFINISHED_SUBMISSION_GRACE_DAYS = 7;
+
+/**
+ * #1152 4c: the emergency stop for the nightly deletion job. A `PlatformConfig` row, read at the start of every round: value "false"
+ * stops the job, anything else (or no row) lets it run. A row, not an app setting: the worker's app settings are replaced wholesale
+ * by every infra deploy, so a hand-set stop would silently disappear (review of the build note, 21.11.2026, point G). Set through
+ * `PUT /api/admin/platform/archived-content-purge` (administrator); takes effect on the next round, no restart.
+ */
+export const ARCHIVED_CONTENT_PURGE_ENABLED_KEY = "archived_content_purge_enabled";
+
+/** #1152 4c: the job deletes only between these Oslo hours (02:00 inclusive to 05:00 exclusive). */
+export const ARCHIVED_CONTENT_PURGE_WINDOW_HOURS = { from: 2, to: 5 } as const;
+
+/**
+ * #1152: the `PlatformConfig` row that holds the transition floor — the moment the retention rule arrived in
+ * this environment (written once by the migration `20261114120000_archived_content_retention`, ISO 8601 UTC).
+ * The deadline counts from the LATER of `archivedAt` and this floor, so content archived before the rule
+ * existed gets its full six months. A missing or unparseable row means «unknown»: the lists show no date and
+ * the job (4c) deletes nothing.
+ */
+export const ARCHIVED_CONTENT_RETENTION_FLOOR_KEY = "archived_content_retention_floor";

@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Én variabel styrer både hvor Playwright venter og hvor testtjeneren lytter: tjeneren leser PORT, og får den her.
+// Uten det lyttet tjeneren på 4173 mens Playwright ventet på en annen port til tidsavbrudd.
 const port = Number.parseInt(process.env.ADMIN_CONTENT_E2E_PORT || "4173", 10);
 
 export default defineConfig({
@@ -14,6 +16,7 @@ export default defineConfig({
   },
   webServer: {
     command: `node scripts/test/admin-content-static-server.mjs`,
+    env: { PORT: String(port) },
     port,
     reuseExistingServer: true,
     timeout: 30000,

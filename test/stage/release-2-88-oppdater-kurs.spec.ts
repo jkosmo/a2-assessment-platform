@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // #1095 (2.88.x) mot stage, med ekte API og ekte klient: et kurs eksporteres med identiteter,
 // justeres i fila, og importeres som OPPDATERING av det samme kurset — ny upublisert versjon,
@@ -61,7 +62,7 @@ async function ryddKurs(courseId: string) {
     if (sid && !seksjonIder.includes(sid)) seksjonIder.push(sid);
   }
   await api("POST", `/api/admin/content/courses/${courseId}/unpublish`);
-  await api("POST", `/api/admin/content/courses/${courseId}/archive`);
+  await arkiverKurs(api, courseId);
   const slettet = await api("DELETE", `/api/admin/content/courses/${courseId}`);
   if (slettet.status >= 300) console.log(`rydding: kurs ${courseId} ikke slettet (${slettet.status}) — slett manuelt`);
 }
@@ -81,7 +82,7 @@ async function lagKurs(navn: string) {
   const sectionId = (seksjon.json.section as { id: string }).id;
   seksjonIder.push(sectionId);
   expect((await api("POST", `/api/admin/content/sections/${sectionId}/publish`)).status).toBe(200);
-  const kurs = await api("POST", "/api/admin/content/courses", { title: tre(`Stage-test 1095 kurs ${navn} ${stempel}`) });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: tre(`Stage-test 1095 kurs ${navn} ${stempel}`) });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   const courseId = (kurs.json.course as { id: string }).id;
   kursIder.push(courseId);

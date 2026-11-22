@@ -39,9 +39,9 @@ function eksport() {
             section: {
               title: tre("Innledning", "Innleiing", "Introduction"),
               bodyMarkdown: tre(
-                "Et møte trenger et mål.\n\n![Agenda](asset:bilde-agenda)\n\nSkriv målet øverst.",
-                "Eit møte treng eit mål.\n\n![Agenda](asset:bilde-agenda)\n\nSkriv målet øvst.",
-                "A meeting needs a goal.\n\n![Agenda](asset:bilde-agenda)\n\nWrite the goal at the top.",
+                "Et møte trenger et mål.\n\n![Agendaen med målet for møtet skrevet øverst](asset:bilde-agenda)\n\nSkriv målet øverst.",
+                "Eit møte treng eit mål.\n\n![Agendaen med målet for møtet skrive øvst](asset:bilde-agenda)\n\nSkriv målet øvst.",
+                "A meeting needs a goal.\n\n![The agenda with the goal of the meeting at the top](asset:bilde-agenda)\n\nWrite the goal at the top.",
               ),
               audit: { publishedAt: "2026-10-01T10:00:00.000Z", publishedBy: null, publishedByEmail: null, sourceVersionNo: 3 },
               assets: [{ sourceId: "bilde-agenda", filename: "Skjermbilde_2026-10-01.PNG", mimeType: "image/png", sizeBytes: Buffer.from(PNG, "base64").length, contentBase64: PNG }],
@@ -177,6 +177,8 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     // Den gamle delen — delvis tittel, ren streng, to like filnavn — er også ordrett, og stoppet ikke språkkontrollen.
     expect(comparable(items[2].section)).toEqual(comparable(baseline[2]!.section));
     expect(sjekk(produced, "languages").status).toBe("ok");
+    // #1120: en justering endrer bare det forfatteren ber om — ingen merknad om «finn feilene».
+    expect(sjekk(produced, "find errors").status).toBe("skipped");
     // Ingen publiseringshistorikk i fila: plattformen publiserer ingenting.
     expect(items[0].section.audit).toEqual({});
     expect(items[1].module.activeVersion.audit).toEqual({});
@@ -303,6 +305,33 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     expect(sjekk(sagt, "changes").summary).toContain("3 unchanged");
   });
 
+  // #1126: en uendret seksjon med «Formål», «Nøkkelpoeng» og «Kort oppsummering» er kurset slik det står —
+  // justeringen stopper ikke på den. Først når forfatteren ber om å endre seksjonen, gjelder regelen.
+  it("tre oppsummeringer i en uendret seksjon stopper ikke en justering; i en endret seksjon gjør de det (#1126)", async () => {
+    const work = path.join(dir, "oppsummeringer");
+    const tre3 = eksport();
+    const seksjon = tre3.course.course.items[0]!.section as unknown as { bodyMarkdown: { nb: string; nn: string; "en-GB": string } };
+    seksjon.bodyMarkdown = tre(
+      `## Formål\n\nA.\n\n${seksjon.bodyMarkdown.nb}\n\n## Nøkkelpoeng\n\n- B.\n\n## Kort oppsummering\n\nC.`,
+      `## Føremål\n\nA.\n\n${seksjon.bodyMarkdown.nn}\n\n## Nøkkelpoeng\n\n- B.\n\n## Kort oppsummering\n\nC.`,
+      `## Purpose\n\nA.\n\n${seksjon.bodyMarkdown["en-GB"]}\n\n## Key points\n\n- B.\n\n## Brief summary\n\nC.`,
+    );
+    expect(convertExport(tre3, { outDir: work }).ok).toBe(true);
+    const uendret = await produser(work, "uendret");
+    expect(uendret.ok, uendret.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
+    expect(sjekk(uendret, "summaries").status).toBe("ok");
+
+    const nbFil = path.join(work, "sections/sec-01-innledning.nb.md");
+    writeFileSync(nbFil, readFileSync(nbFil, "utf8").replace("Skriv målet øverst.", "Skriv målet øverst, med én setning."), "utf8");
+    const changesFil = path.join(work, "changes.json");
+    const changes = JSON.parse(readFileSync(changesFil, "utf8"));
+    changes.elements["sec-01-innledning"] = "changed";
+    writeFileSync(changesFil, JSON.stringify(changes), "utf8");
+    const endret = await produser(work, "endret");
+    expect(sjekk(endret, "summaries").status).toBe("fail");
+    expect(sjekk(endret, "summaries").details.join(" ")).toContain('"sec-01-innledning" (nb, nn, en-GB): 3 summaries');
+  });
+
   it("nytt element uten origin listes som «new»; et fjernet element listes som «removed»; et glemt element stopper", async () => {
     const work = path.join(dir, "nytt");
     expect(convertExport(eksport(), { outDir: work }).ok).toBe(true);
@@ -374,6 +403,56 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     writeFileSync(changesFil, JSON.stringify(changes), "utf8");
     const sagt = await produser(work, "sagt");
     expect(sagt.ok, sagt.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
+  });
+
+  // #1127: et repetisjonskurs som justeres, får ingen merknad om å starte med spørsmål — rekkefølgen er forfatterens.
+  it("et repetisjonskurs som justeres: repetisjonskontrollen kjøres ikke", async () => {
+    const work = path.join(dir, "repetisjon");
+    expect(convertExport(eksport(), { outDir: work }).ok).toBe(true);
+    const pkgFil = path.join(work, "package.json");
+    const pkg = JSON.parse(readFileSync(pkgFil, "utf8"));
+    pkg.objects.find((o: { type: string }) => o.type === "course").payload.course.title = tre("Repetisjon: møtearbeid", "Repetisjon: møtearbeid", "Revision: meeting work");
+    writeFileSync(pkgFil, JSON.stringify(pkg), "utf8");
+    const r = await produser(work, "repetisjon");
+    expect(sjekk(r, "revision").status).toBe("skipped");
+  });
+
+  // #1125: plattformen lagrer ingen læringsmål, så et kurs som justeres har ingen i tilstanden. Å gi kurset
+  // læringsmål er forfatterens valg, ikke en del av endringen: merknad. Har tilstanden mål, kobles de
+  // endrede testene som i et nytt kurs — de uendrede leses ikke.
+  it("koblingen til læringsmål: uendret test leses ikke; endret test uten mål i tilstanden gir merknad, med mål stopper en ukoblet test (#1125)", async () => {
+    const work = path.join(dir, "laeringsmal");
+    expect(convertExport(eksport(), { outDir: work }).ok).toBe(true);
+    const uendret = await produser(work, "uendret");
+    expect(sjekk(uendret, "objectives")).toMatchObject({ status: "ok", summary: "no changed or new test" });
+
+    const pkgFil = path.join(work, "package.json");
+    const pkg = JSON.parse(readFileSync(pkgFil, "utf8"));
+    const modul = pkg.objects.find((o: { clientRef: string }) => o.clientRef === "mod-02-test-moter");
+    modul.payload.activeVersion.mcqSet.questions[0].rationale = tre("Målet styrer møtet — alltid.", "Målet styrer møtet — alltid.", "The goal steers the meeting — always.");
+    writeFileSync(pkgFil, JSON.stringify(pkg), "utf8");
+    const changesFil = path.join(work, "changes.json");
+    const changes = JSON.parse(readFileSync(changesFil, "utf8"));
+    changes.elements["mod-02-test-moter"] = "changed";
+    writeFileSync(changesFil, JSON.stringify(changes), "utf8");
+    const utenMal = await produser(work, "utenmal");
+    expect(sjekk(utenMal, "objectives").status).toBe("note");
+    expect(sjekk(utenMal, "objectives").details.join(" ")).toContain('"mod-02-test-moter": ask the author whether the course should get objectives');
+    expect(utenMal.ok, utenMal.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
+
+    const tilstandFil = path.join(work, "course-state.json");
+    const tilstand = JSON.parse(readFileSync(tilstandFil, "utf8"));
+    // Et mål ingen test dekker: ingen merknad ved justering — de uendrede testene er ikke koblet, så tellingen ville lyve.
+    tilstand.learningObjectives = [{ id: "mal-1", text: "Etter dette kan deltakeren sette et mål for møtet" }, { id: "mal-2", text: "Etter dette kan deltakeren eie referatet" }];
+    writeFileSync(tilstandFil, JSON.stringify(tilstand), "utf8");
+    const ukoblet = await produser(work, "ukoblet");
+    expect(sjekk(ukoblet, "objectives").status).toBe("fail");
+    expect(sjekk(ukoblet, "objectives").details.join(" ")).toContain('"mod-02-test-moter": question 1 («Hva trenger et møte?») is not linked');
+
+    tilstand.elements.find((e: { clientRef: string }) => e.clientRef === "mod-02-test-moter").questions = ["Hva trenger et møte?", "Hvor står målet?", "Hvem eier referatet?"].map((question) => ({ question, objective: "mal-1", section: "sec-01-innledning" }));
+    writeFileSync(tilstandFil, JSON.stringify(tilstand), "utf8");
+    const koblet = await produser(work, "koblet");
+    expect(sjekk(koblet, "objectives")).toMatchObject({ status: "ok", details: [] });
   });
 
   it("et kurs med origin uten endringsliste produseres ikke — «uendret er uendret» må kjøres", async () => {

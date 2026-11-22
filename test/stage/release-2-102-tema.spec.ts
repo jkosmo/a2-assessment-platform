@@ -2,7 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
+import { arkiverKurs } from "./arkiver.js";
 
 // 2.102.0 mot UTRULLET stage, med ekte API, ekte klient og ekte oversetter:
 //   - administrator lager et tema på bokmål, og nynorsk og engelsk fylles inn av oversetteren;
@@ -71,7 +73,7 @@ test.afterAll(async () => {
   if (temaId) noter("slett testtema", (await api("DELETE", `/api/admin/content/themes/${temaId}`)).status);
   if (kursId) {
     await api("POST", `/api/admin/content/courses/${kursId}/unpublish`);
-    await api("POST", `/api/admin/content/courses/${kursId}/archive`);
+    await arkiverKurs(api, kursId);
     noter("slett testkurs", (await api("DELETE", `/api/admin/content/courses/${kursId}`)).status);
   }
   if (seksjonId) {
@@ -80,10 +82,8 @@ test.afterAll(async () => {
   }
 });
 
-test("versjonen er 2.105.0", async () => {
-  const json = await (await fetch(`${BASE}/version`)).json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.105.0");
+test("versjonen er minst 2.107.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.107.0"));
 });
 
 test("Tema-siden: administrator lager et tema på bokmål, og oversetteren fyller nynorsk og engelsk", async ({ page }) => {
@@ -115,7 +115,7 @@ test("kurset får temaet, og «Mine kurs» viser det under temaet — og alfabet
   expect(seksjon.status, seksjon.tekst.slice(0, 300)).toBe(201);
   seksjonId = seksjon.json.section.id;
   expect((await api("POST", `/api/admin/content/sections/${seksjonId}/publish`)).status).toBe(200);
-  const kurs = await api("POST", "/api/admin/content/courses", { title: tre(`Stage-test 2.102 kurs ${stempel}`), certificationLevel: "basic", themeIds: [temaId] });
+  const kurs = await api("POST", "/api/admin/content/courses", { enrollmentPolicy: "OPEN", title: tre(`Stage-test 2.102 kurs ${stempel}`), certificationLevel: "basic", themeIds: [temaId] });
   expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
   kursId = kurs.json.course.id;
   expect((await api("PUT", `/api/admin/content/courses/${kursId}/items`, { items: [{ type: "SECTION", sectionId: seksjonId }] })).status).toBe(204);

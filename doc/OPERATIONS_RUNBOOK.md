@@ -345,7 +345,9 @@ Deliberately does **not** touch genuine translations, partial translations (two 
 single-locale maps (`{"nb":"…"}` records *which* language the text is in), or values that are already plain
 strings. Covers `Module.title`, `CourseSection.title`, `Course.title`, `Course.description`.
 
-**Against staging** the resource group has no lock, so the firewall step is straightforward:
+**Against staging:** the Azure stage database was deleted 2026-11-22 (`doc/AZURE_ENVIRONMENTS.md`); stage now runs
+self-hosted, and the commands for its database are in `doc/ENVIRONMENTS.local.md`. The recipe below is kept for the
+day an Azure stage is brought back. That resource group has no lock, so the firewall step is straightforward:
 
 ```powershell
 az account set --subscription <STAGING_SUBSCRIPTION_ID>
@@ -429,6 +431,168 @@ Two caveats worth knowing before reading the output:
 
 Firewall access follows the same recipe as the cleanup script above — including the production
 lock dance.
+
+### Kursbevis for kurs tatt utenfor plattformen (#1145)
+
+Kilden er et Excel-ark med navn og kryss per kurs. Ingen database-tilgang trengs: alt går gjennom
+`POST /api/admin/platform/course-completions/external` med en ADMINISTRATOR-innlogging. Bakgrunn: `doc/DECISIONS.md`.
+
+1. **Lag inndata utenfor repoet** (navn er personopplysninger):
+   `{ "courses": [ { "courseTitle": "<tittel nøyaktig som på plattformen>", "relatedTitles": ["<gammel tittel>"], "reference": "<arket, kolonnen>", "names": [...] } ] }`.
+   `relatedTitles` er valgfri: gamle titler på samme kurs, f.eks. en arkivert kopi som beholdt navnet da kurset ble omdøpt. Et
+   kursbevis der regnes som at personen har tatt kurset. En gammel tittel som ikke finnes, avbryter kjøringen.
+   Referansen lagres på beviset og i revisjonen: bare bokstaver, tall og `.,:()_-`, ingen navn.
+2. **Logg inn** som administrator mot miljøet, til en fil utenfor repoet med `{ baseUrl, accessToken, expiresOn }` (tokenet utløper
+   etter ~1 time). Ikke skriv ut tokenet.
+3. **Prøvekjøring:** `node scripts/maintenance/registerExternalCompletions.mjs --auth <fil> --input <inndata> --report <rapport>`.
+   Rapporten har per kurs `people` (navn → e-post → utfall) og `unresolved` (navn uten eksakt treff, med kandidater). Skriptet
+   nekter filer inne i repoet.
+4. **Produkteier godkjenner** rapporten: e-postene i `people`, og hva som skal gjøres med `unresolved`. Rett navnet i inndata, eller
+   bytt det ut med personens e-postadresse (en verdi med `@` matches eksakt på e-post; brukes når to kontoer har samme navn), og kjør
+   prøvekjøringen på nytt.
+5. **Skriving, om kvelden og først når app og worker kjører 2.149.0 eller nyere:**
+   `node scripts/maintenance/registerExternalCompletions.mjs --auth <fil> --write --approved <godkjent rapport> --report <resultat>`.
+   Bare `would_create` sendes; plattformen sjekker alt på nytt. `busy`/`not_processed` → kjør samme kommando igjen (idempotent).
+   Skriptet nekter når den godkjente rapporten og innloggingen gjelder ulike miljøer (stage har prods id-er med andre navn). Avbrytes
+   det midt i, skrives rapporten over det som ble gjort (`incomplete`).
+6. Slett inndata og rapporter når jobben er ferdig.
+
+⚠️ Etter første registrering i prod: ikke rull tilbake til en versjon før 2.149.0. Gammel kode viser registrerte bevis med
+registreringsdagen som fullføringsdato. Rett framover.
+
+### Prod → stage-kopi: nøytraliser e-post som venter (#1142)
+
+En full kopi av prod tar med e-post som venter: rader i `CourseAssignmentNotice` (nye kurs) og `CourseVersionNotice` (ny
+hovedversjon), og hendelser i outboxen. Startes stage på kopien uten dette steget, kan stage sende samme e-post en gang
+til, til ekte mottakere. Tabellene skal være med i kopien (uten `CourseAssignmentNotice` ville alle i stage fått e-post om
+alle kurs).
+
+Rekkefølgen:
+
+1. Kopier og pseudonymiser databasen som før (tøm `OutboxEvent`, merk ventende `AssessmentJob` som `FAILED`).
+2. **Kjør migreringene mot KOPIEN** (`npx prisma migrate deploy` med `DATABASE_URL` mot kopien). Prod ligger ofte bak stage,
+   og skriptet bruker kolonner fra stage-versjonen (fra 2.151.0 `settledAt`). Uten migreringene krasjer det.
+3. **Før stage startes på kopien**, kjør skriptet mot KOPIEN. I én transaksjon setter det ventende rader om nye kurs og
+   par prod-jobben ennå ikke hadde sett, til `baseline`, ventende rader om ny hovedversjon til `skipped`, og outbox-hendelser
+   som sender e-post og ikke er levert, til `failed` (`reason`/`lastError` = `copied_from_prod`).
+4. Start stage.
+
+```powershell
+$env:DATABASE_URL = "<adressen til KOPIEN>"
+$env:CONFIRM_STAGE_COPY = "<databasenavnet i adressen over>"
+npm run stage-copy:neutralize-email
+```
+
+eller i Git Bash: `CONFIRM_STAGE_COPY=<databasenavnet> npx dotenv -e .env.<stage-kopi> -- npm run stage-copy:neutralize-email`.
+
+⚠️ **Skriptet skal aldri kjøres mot prod**: der ville det sette ekte e-post som venter, til `baseline`, `skipped` og
+`failed`, og den ville aldri bli sendt. Sperren (`scripts/maintenance/stageCopyGuard.ts`) kjører før noe skrives: den nekter
+alltid et vertsnavn som inneholder `-prd-` eller `prod`, også med bekreftelse, krever at vertsnavnet viser stage-serveren
+(`-stg-`), og krever at `CONFIRM_STAGE_COPY` er lik databasenavnet i `DATABASE_URL`. Kjør det derfor mot kopien på
+stage-serveren etter gjenopprettingen, ikke mot en lokal kopi: tunnel, IP-adresse og alias nektes, fordi de kunne pekt mot
+prod uten å vise det. Meldingen skriver aldri ut passordet eller adressen. Utskriften ved suksess er én linje
+`stage_copy_email_neutralized` med antallet i hvert steg. Kjørt to ganger gir andre runde 0 overalt, bortsett fra
+`settledNow` (#1146), som setter `settledAt` = nå på alle rader i sluttstatus hver gang.
+
+**Slettefristen for arkivert innhold følger med kopien (#1152).** `PlatformConfig` er med i kopien, og med den raden
+`archived_content_retention_floor`: dagen slettefristen kom i PROD. Migreringen i steg 2 rører den ikke (`ON CONFLICT DO NOTHING`).
+Stage regner da fristen fra prods dag, og sletter tidligst når prod ville gjort det, og kanskje med en gang etter kopien (prod
+kan ha hatt regelen lenger enn stage). Det er ufarlig: det er samme innhold, og prod ville slettet det samme. Vil man se lista
+over arkiverte uten slettinger på stage en stund, sett raden til kopieringstidspunktet (ISO 8601 i UTC, f.eks.
+`2026-12-01T09:00:00.000Z`) før stage startes. Slettes raden, sletter jobben ingenting og listene viser ingen dato.
+
+### Kurs lagt inn igjen: hvor mange får e-post (#1146)
+
+`npm run maint:count-readded-assignment-notices` teller hvor mange som får e-post om et kurs som er lagt inn igjen, første
+gang jobben går etter utrullingen av 2.151.0. Skriptet bruker samme spørring som jobben, bare leser (`READ ONLY`), og skriver
+ut kurs og antall, ingen navn. Før migreringen regner det `settledAt` som migreringen gjør det. Etter migreringen:
+`-- --after-migration`. Kjør det mot prod før utrulling, og vis tallet til produkteier (`doc/design/PLAN_1146.md`, punkt 6).
+
+### Lest seksjon på tvers av kurs: hvor mange kursbevis (#1156)
+
+`npm run maint:count-section-read-certificates` teller, per publisert kurs med seksjoner, hvor mange kursbevis som utstedes når
+lesinger begynner å telle i alle kurs med seksjonen (`doc/design/PLAN_1156_LEST_PA_TVERS.md`, «Utrulling»). Kjør det mot prod FØR
+utrulling og vis tallet til produkteier:
+
+```powershell
+# DATABASE_URL til prod i miljøet (samme som for de andre telleskriptene), så:
+npm run maint:count-section-read-certificates
+```
+
+Skriptet åpner tilkoblingen med `default_transaction_read_only=on` og stopper hvis den ikke er skrivebeskyttet. Det skriver kurs-id,
+tittel, tilgang og antall, ingen navn, e-postadresser eller bruker-id-er. Det virker før migreringen. Feltene: `today` (oppfyller
+kravet med dagens regel, får beviset uansett neste gang), `newRule` (med den nye regelen, bare i kurs deltakeren ser), `added`
+(forskjellen), `notVisible` (ville fått bevis om lesinger talte også i kurs deltakeren ikke ser; holdes tilbake), og
+`coursesGoingFromZeroHolders` (kurs som går fra null til flere bevisinnehavere for nåværende hovedversjon: de får e-post ved neste
+hovedversjon, og «kurs fullført» dateres utrullingsdagen i aktiviteten).
+
+**Tilbakerulling etter #1156:** migreringen gjør `CourseSectionRead.courseId` valgfri, og et kurs som slettes, lar lesingene stå uten
+kurs. Gammel kode leser feltet som påkrevd. Før koden rulles tilbake: slett radene uten kurs, eller gi dem et kurs
+(`DELETE FROM "CourseSectionRead" WHERE "courseId" IS NULL` mister lesingene i de andre kursene; tell dem først).
+
+### Den ukentlige e-posten fra båten (#1139)
+
+Planen: `doc/design/PLAN_1139.md`. To innstillinger på WORKEREN, i Bicep og i GitHub-miljøet (`doc/AZURE_ENVIRONMENTS.md`):
+`WEEKLY_EMAIL_ENABLED` (av som standard) og `WEEKLY_EMAIL_RECIPIENTS` (tom = ingen, `*` = alle, ellers adresser skilt med komma).
+
+**Slå den på:**
+1. Rull ut. Vent til appen OG workeren viser samme nye versjon på `/version` (sammenlign workerens `startedAt`).
+2. Sett `WEEKLY_EMAIL_RECIPIENTS` til produkteiers adresse og `WEEKLY_EMAIL_ENABLED=true` i GitHub-miljøet, og kjør en
+   infrastrukturutrulling (eller sett dem på workeren og start den på nytt). Første mandag: bare produkteier får den.
+3. Når produkteier har godkjent e-posten: `WEEKLY_EMAIL_RECIPIENTS=*`. **Stage beholder lista for godt.**
+
+**Se e-posten før mandag:** en administrator kan sende ukens e-post til seg selv med en gang: `/admin-platform`, kortet «Ukentlig
+e-post fra båten», «Send til meg nå» (2.153.0). Lager ingen rad, så mandagens utsending går som før.
+
+**Kontroll:** `weeklyDigestMonitor` i workerens helsesvar, med `lastSummary` (`weekKey`, `inWindow`, `queued`,
+`nothingOutstanding`, `notReached`). Første 15 minutter etter oppstart står det `startup_grace`. Jobben lager rader mandag
+07:00–12:00 Oslo; utsendingen spres med høyst 5 i timen (sendekvoten er 10 i timen for hele abonnementet), så 60 mottakere er
+ute i løpet av mandagen. En rad som ikke er sendt før tirsdag 17:00 Oslo, hoppes over (`too_late`).
+
+**Nødstopp:** `WEEKLY_EMAIL_ENABLED=false` på workeren. Behandleren hopper da over det som står i kø (`disabled`).
+`PARTICIPANT_NOTIFICATION_CHANNEL=disabled` stopper all e-post.
+
+**Prod → stage-kopi:** `npm run stage-copy:neutralize-email` gjør også ventende ukentlige e-poster `skipped` og lager
+`skipped`-rader for uka for alle nåbare (`weeklyDigestsPendingSkipped`, `weeklyDigestsWeekSkipped` i utskriften).
+
+### Slettejobben for arkivert innhold (#1152 4c)
+
+Planen: `doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md`, «Byggenotat for 4c». Workeren sletter arkiverte kurs, moduler og seksjoner
+når fristen er nådd: seks kalendermåneder etter det seneste av `archivedAt` og overgangstidspunktet (`PlatformConfig`-raden
+`archived_content_retention_floor`, skrevet 14.11.2026 i begge miljøer). **Ingenting kan slettes før 14.05.2027.** Den sletter bare
+mellom 02:00 og 05:00 norsk tid, ett element per transaksjon, kurs først, og bare det vaktene i «Slett» slipper gjennom. Datoen
+lista viser under «Arkiverte», er datoen jobben bruker.
+
+**Før 14.05.2027, mot stage og så prod: prøvekjøringen.** Bare lesing (tilkoblingen nekter skriving):
+
+```
+dotenv -e .env.<env> -- tsx scripts/maintenance/archived-retention-preview.ts --as-of 2027-05-20
+```
+
+Den lister hva jobben ville slettet natten `--as-of`, hva den beholder og hvorfor. Den vurderer dagens historikk. `--json` gir radene.
+
+**Kontroll:** `archivedContentRetentionMonitor` i workerens helsesvar, med `lastSummary`:
+- `skipped`: `startup_grace`, `outside_window`, `stopped` eller `floor_unavailable`;
+- ellers `candidates`, `deleted` per type, `kept`, `notDue`, `gone`, `failed` og `stoppedBy`.
+
+Revisjonsloggen har `course_deleted`, `module_deleted` og `section_deleted` med `source: "retention"`. «Beholdes» står som
+`retention_kept` én gang per element etter siste arkivering.
+
+Overvåkeren gjør aldri workeren usunn fordi en runde feilet. En runde som er ferdig, også med feil, teller som fremdrift. Feilen står i
+`lastError`.
+
+**Nødstopp, uten utrulling og uten omstart:** `PUT /api/admin/platform/archived-content-purge` med `{ "enabled": false }`
+(administrator). Raden leses før hvert element. En runde som pågår, stopper før neste sletting
+(`stoppedBy: "purge_disabled"`), og nye runder gjør ingenting (`skipped: "stopped"`). `{ "enabled": true }` slår jobben på igjen, og `GET` viser
+tilstanden. Begge skrives i revisjonsloggen (`archived_content_purge_toggled`). Stoppen er en rad i databasen, ikke en
+appinnstilling, så en infrastrukturutrulling skriver den ikke over. En prod → stage-kopi tar med prods rad.
+
+**«Beholdes» i revisjonsloggen** viser grunnen første gang. Endrer grunnen seg senere, for eksempel når kurset en modul lå i
+blir slettet og modulen så holdes av egne besvarelser, står den første grunnen der. Hendelsen er bare historikk. Dagens grunn står i
+lista under «Arkiverte».
+
+**Kjent:** bildefilene til en slettet seksjon ryddes mot workerens disk. Workeren har ikke blob-endepunktet, så filene i Azure blir
+liggende. Det er som før, og logges.
 
 ## Seed Behavior
 

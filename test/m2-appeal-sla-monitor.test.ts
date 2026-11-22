@@ -2,6 +2,7 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { collectAppealSlaMonitorSnapshot } from "../src/modules/appeal/appealSlaMonitorService.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 const participantAHeaders = {
   "x-user-id": "appeal-sla-participant-a",
@@ -121,6 +122,7 @@ async function createSubmissionAndAssessment(input: {
     .set(input.headers)
     .send({
       moduleId: input.moduleId,
+      moduleVersionId: await seenModuleVersionId(app, input.headers, input.moduleId),
       deliveryType: "text",
       responseJson: input.responseJson,
     });

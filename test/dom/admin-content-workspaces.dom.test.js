@@ -85,6 +85,8 @@ describe("admin content DOM accessibility contracts", () => {
     expect(body.querySelector("#privacyNotice")).toBeNull();
     const shellJs = fs.readFileSync(path.join(process.cwd(), "public/static/admin-content-shell.js"), "utf8");
     expect(shellJs).toContain('<details id="privacyNotice" class="privacy-notice"');
+    // Tittelen fra admin-content-ui-contracts.test.js (testgjennomgangen 2026-11, avsnitt 4.3).
+    expect(shellJs).toContain("adminContent.privacy.warning.title");
     expect(shellJs).toContain('t("adminContent.privacy.warning.body")');
   });
 

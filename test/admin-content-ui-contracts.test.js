@@ -33,13 +33,19 @@ describe("admin content workspace UI contracts", () => {
     // #1046 (14.09): hodet (navn, merker, Lagre/Avbryt, handlinger, språk, faner) tegnes av form-page.js
     // i #moduleFormHead — modulen har ikke lenger et eget hode i HTML-en.
     expect(shellHtml).toContain('id="moduleFormHead"');
-    for (const id of ["moduleWorkspaceTitle", "moduleLifecycleBadge", "moduleDirtyBadge", "workspaceActions", "previewLocaleBar", "tabEdit"]) {
+    // Testgjennomgangen 2026-11 (avsnitt 4.3): sr-plassene fra den gamle tilstandslinja er flyttet hit fra
+    // admin-content-state-rail.test.js, som hadde de samme sjekkene av hodet.
+    for (const id of [
+      "moduleWorkspaceTitle", "moduleLifecycleBadge", "moduleDirtyBadge", "workspaceActions", "previewLocaleBar", "tabEdit",
+      "srEditing", "srLive", "srChanges", "srPreview", "srModuleName",
+    ]) {
       expect(shellHtml).not.toContain(`id="${id}"`);
     }
     expect(shellHtml).toContain('id="previewShows"');
     const shellJs = readFile("public/static/admin-content-shell.js");
     expect(shellJs).toContain('import { createFormPage, formPageTexts } from "./form-page.js"');
-    expect(shellJs).toMatch(/formPage = createFormPage\(\{\s*\n\s*host: moduleFormHost/);
+    // Testgjennomgangen 2026-11 (avsnitt 5.3): krevde et linjeskift mellom `{` og `host:`. Formateringen er ikke det som måles.
+    expect(shellJs).toMatch(/formPage = createFormPage\(\{\s*host: moduleFormHost/);
     // Lagre/Avbryt, «ulagret» og fanelinja er form-page sine — skallet har ingen egne.
     for (const own of ["moduleSaveBtn", "moduleCancelBtn", "moduleDirtyBadge", "tabButtons", "renderPreviewLocaleBar"]) {
       expect(shellJs).not.toContain(own);
@@ -80,30 +86,20 @@ describe("admin content workspace UI contracts", () => {
   });
 
   it("keeps course page semantics for list and detail flows", () => {
-    const coursesHtml = readFile("public/admin-content-courses.html");
     const coursesJs = readFile("public/static/admin-content-courses.js");
 
-    // Static HTML: dialog and nav elements
-    expect(coursesHtml).toContain('id="deleteDialog"');
-    expect(coursesHtml).toContain('id="deleteConfirmBtn"');
-    expect(coursesHtml).toContain('id="deleteCancelBtn"');
-
+    // Testgjennomgangen 2026-11 (avsnitt 4.3): slettedialogen (deleteDialog, -ConfirmBtn, -CancelBtn) sjekkes i
+    // test/dom/admin-content-workspaces.dom.test.js, også teksten. `createListPage({` sjekkes i
+    // test/dom/list-page-1046.dom.test.js og test/unit/content-lifecycle-1046.test.ts.
     // Dynamic JS: the list is the shared list page (#1046, list-page.js); the detail view is the page's own.
-    expect(coursesJs).toContain('createListPage({');
     expect(coursesJs).toContain('tbody: "coursesTableBody"');
     // #1046 nivå to: hodet (tilbake-lenke, tittel) tegnes av den felles skjemasida (form-page.js).
     expect(coursesJs).toContain("createFormPage({");
   });
 
-  it("keeps the GDPR/privacy warning on the module workspace", () => {
-    // Produkteier 13.09: varselet tegnes av skallet UNDER oppgavefeltet (én linje som folder ut),
-    // ikke som fast boks i HTML-en. Det finnes bare der fritekst skrives — som er poenget.
-    const shellJs = readFile("public/static/admin-content-shell.js");
-    expect(shellJs).toContain('adminContent.privacy.warning.title');
-    expect(shellJs).toContain('adminContent.privacy.warning.body');
-    expect(shellJs).toContain('id="privacyNotice"');
-    expect(readFile("public/admin-content.html")).not.toContain('id="privacyNotice"');
-  });
+  // Testgjennomgangen 2026-11 (avsnitt 4.3): «keeps the GDPR/privacy warning on the module workspace» er slått sammen med
+  // «keeps the special-category warning on the authoring surface» i test/dom/admin-content-workspaces.dom.test.js, som
+  // sjekker det samme (og nå også tittelnøkkelen).
 });
 
 // ---------------------------------------------------------------------------

@@ -69,6 +69,11 @@ export function createFormPage(config) {
   const { host } = config;
   const state = { dirty: false, saving: false, busy: false, tab: config.tabs?.initial ?? null };
   let guardInstalled = false;
+  // #1155: forfatteren har nettopp svart OK på «forlate sida uten å lagre?» for en lenke. Nettleserens eget spørsmål
+  // kommer rett etterpå, når sida faktisk forlates, og er det samme spørsmålet en gang til. Svaret gjelder den ene
+  // navigeringen: blir det ikke noe av den, spør sida igjen etter et øyeblikk.
+  const LEAVE_ANSWER_MS = 2000;
+  let leaveAnsweredAt = 0;
 
   installRowMoreMenus();
 
@@ -184,12 +189,25 @@ export function createFormPage(config) {
     config.tabs?.onChange?.(id);
   }
 
+  // ⚠️ Skjemaet eier ikke `host` alene: på Seksjoner og Klasser tegner LISTA i samme element, og
+  // lytterne under blir stående der. «Ulagret» gjelder derfor bare mens skjemaets hode står i
+  // `host`. Uten dette merket et tastetrykk i listas søkefelt sida som ulagret, og «ulagret» fra et
+  // skjema man hadde forlatt levde videre — lista spurte «forlate uten å lagre?» uten noe å lagre
+  // (prod 2.154.2, 13.11.2026).
+  function isShown() { return host.querySelector(".form-page-head") !== null; }
+
+  /** Er noe ulagret NÅ? Det ene stedet spørsmålet før man forlater sida leser fra. */
+  function hasUnsaved() {
+    if (!isShown()) state.dirty = false;
+    else if (config.isDirty) state.dirty = !!config.isDirty();
+    return state.dirty;
+  }
+
   function markDirty() { if (!state.dirty) { state.dirty = true; reflectDirty(); } }
   function markClean() { state.dirty = false; reflectDirty(); }
 
   function confirmLeave() {
-    if (config.isDirty) state.dirty = !!config.isDirty();
-    if (!state.dirty) return true;
+    if (!hasUnsaved()) return true;
     return window.confirm(texts().leaveConfirm);
   }
 
@@ -210,15 +228,21 @@ export function createFormPage(config) {
     if (guardInstalled) return;
     guardInstalled = true;
     window.addEventListener("beforeunload", (event) => {
-      if (!state.dirty) return;
+      // Ikke `hasUnsaved()`: for sider med `isDirty` leste denne alltid det sist speilede svaret, og
+      // det skal den fortsette med. Bare «vises skjemaet?» er nytt.
+      if (!isShown() || !state.dirty) return;
+      if (Date.now() - leaveAnsweredAt < LEAVE_ANSWER_MS) return;
       event.preventDefault();
       event.returnValue = "";
     });
     // Lenker som forlater sida (toppmeny, nivå to, tilbake): spør først når noe er ulagret.
     document.addEventListener("click", (event) => {
       const a = event.target instanceof Element ? event.target.closest("a[href]") : null;
-      if (!a || a.target === "_blank" || a.getAttribute("href")?.startsWith("#")) return;
-      if (!confirmLeave()) { event.preventDefault(); event.stopPropagation(); }
+      // 2.126.0: en nedlastingslenke forlater ikke sida. Eksporten laster ned med en slik lenke, og
+      // forfatteren med ulagrede endringer fikk spørsmålet to ganger — avbrøt hen det andre, kom ingen fil.
+      if (!a || a.target === "_blank" || a.hasAttribute("download") || a.getAttribute("href")?.startsWith("#")) return;
+      if (!confirmLeave()) { event.preventDefault(); event.stopPropagation(); return; }
+      if (state.dirty) leaveAnsweredAt = Date.now();
     }, true);
   }
 
@@ -228,7 +252,12 @@ export function createFormPage(config) {
     const back = target.closest("#formBackLink");
     if (back && !config.backHref) {
       event.preventDefault();
-      if (confirmLeave()) config.onBack?.();
+      if (confirmLeave()) {
+        // «← Tilbake til kurset» forlater sida fra kode (`location.href`), ikke med en lenke: husk svaret her også,
+        // ellers spør nettleseren en gang til (QA-porten 2.158.1).
+        if (state.dirty) leaveAnsweredAt = Date.now();
+        config.onBack?.();
+      }
       return;
     }
     const cancel = target.closest("#formCancelLink");
@@ -312,6 +341,11 @@ export function createFormPage(config) {
     confirmLeave,
     save,
     installGuards,
+    /**
+     * Et ANNET element åpnes: start på første fane. Uten dette åpnet neste seksjon på «Innstillinger» fordi forrige
+     * ble forlatt der, med navnefeltet skjult (#1155). Kalles før `render()`; samme element tegnet på nytt beholder fanen.
+     */
+    resetTab() { state.tab = config.tabs?.initial ?? null; },
     /** Bytt fane fra sida (f.eks. fra en lenke). */
     showTab(id) { if (config.tabs) selectTab(id); },
     get tab() { return state.tab; },

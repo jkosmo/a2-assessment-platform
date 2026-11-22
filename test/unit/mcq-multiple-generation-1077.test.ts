@@ -122,7 +122,7 @@ describe("#1077 — generering: plattformen trekker planen, modellen følger den
 
   it("kontroll: en tom plan ber bare om ett svar", () => {
     const { userPrompt } = buildMcqGenerationPrompts(generationInput(10), []);
-    expect(userPrompt).toContain('Do not set "questionType"');
+    expect(userPrompt).toContain('leave out "questionType"');
     expect(userPrompt).not.toContain("the platform's plan");
   });
 
@@ -255,7 +255,7 @@ describe("#1077 — revisjon: typen beholdes, høyst halvparten", () => {
   it("over halvparten: ett forsøk til, og så avvist", async () => {
     const tooMany = source.map((q, i) => (i < 6 ? { ...multiple(i + 1) } : { ...q, rationale: `${q.rationale} Revised.` }));
     llm.replies.push({ questions: tooMany }, { questions: tooMany });
-    await expect(reviseMcqQuestions(revisionInput("Use more select-all questions"))).rejects.toThrow(/at most 5 are allowed/);
+    await expect(reviseMcqQuestions(revisionInput("Use more select-all questions"))).rejects.toThrow(/«select all that apply» \(at most 5\)/);
     expect(llm.prompts).toHaveLength(2);
     expect(llm.prompts[1]).toContain("your previous attempt had 6");
   });

@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/static/favicon-16.png" type="image/png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon-180.png" sizes="180x180" />
     <title>A-2 læringsplattform – Kursbevis</title>
     <link rel="stylesheet" href="/static/shared.css" />
     <style>
@@ -56,7 +60,7 @@
   <body>
     <main id="main-content" class="layout-container">
       <div class="cert-toolbar no-print">
-        <a href="/participant" class="workspace-nav-link" data-i18n="certificate.back">Back to courses</a>
+        <a href="/participant" id="certBackLink" class="workspace-nav-link" data-i18n="certificate.back">← Back to My courses</a>
         <span class="spacer"></span>
         <button id="printBtn" class="btn-primary" data-i18n="certificate.print">Print / save as PDF</button>
         <span id="appVersion" class="version-badge">…</span>
@@ -76,12 +80,17 @@
           <div class="cert-sublabel" id="certLevelWrap">
             <span data-i18n="certificate.certLevel">Certification level</span>: <span id="certLevel"></span>
           </div>
+          <!-- #934: kursets hovedversjon beviset gjelder. Vises fra versjon 2; versjon 1 er alle bevis utstedt før
+               kurs fikk versjoner, og en linje som sier «Versjon 1» på hvert eksisterende bevis ville bare vært støy. -->
+          <div class="cert-sublabel" id="certVersionWrap" hidden>
+            <span data-i18n="certificate.version">Version</span> <span id="certVersion"></span>
+          </div>
           <hr class="cert-rule" />
           <!-- #580: only edge items in the bottom band — the center is kept clear for the
                diploma seal/logo baked into the platform background image. -->
           <div class="cert-meta">
             <div>
-              <div class="cert-meta-label" data-i18n="certificate.completedAt">Completed</div>
+              <div class="cert-meta-label" id="certCompletedAtLabel" data-i18n="certificate.completedAt">Completed</div>
               <div id="certCompletedAt"></div>
             </div>
             <div id="certModulesWrap">

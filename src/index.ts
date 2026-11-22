@@ -8,9 +8,15 @@ import { PseudonymizationMonitor } from "./modules/user/PseudonymizationMonitor.
 import { AuditRetentionMonitor } from "./modules/retention/AuditRetentionMonitor.js";
 import { EntraUserSyncMonitor } from "./modules/orgSync/EntraUserSyncMonitor.js";
 import { CourseReminderMonitor } from "./modules/course/CourseReminderMonitor.js";
+import { CourseMajorEmailMonitor } from "./modules/course/CourseMajorEmailMonitor.js";
+import { CourseAssignmentEmailMonitor } from "./modules/course/CourseAssignmentEmailMonitor.js";
+import { WeeklyDigestMonitor } from "./modules/weeklyDigest/WeeklyDigestMonitor.js";
+import { ArchivedContentRetentionMonitor } from "./modules/content/ArchivedContentRetentionMonitor.js";
 import { OutboxDeliveryWorker } from "./modules/outbox/OutboxDeliveryWorker.js";
 import { evaluateWorkerHealth, drainInFlightTicks, type MonitorHealthSnapshot } from "./observability/workerHealth.js";
 import { prisma } from "./db/prisma.js";
+import { appVersion } from "./config/appMetadata.js";
+import { assertActiveMascotPack } from "./modules/mascot/mascotCheck.js";
 
 export function resolveProcessRoleFlags(role: string) {
   return {
@@ -30,6 +36,14 @@ const pseudonymizationMonitor = startWorkers ? new PseudonymizationMonitor() : n
 const auditRetentionMonitor = startWorkers ? new AuditRetentionMonitor() : null;
 const entraUserSyncMonitor = startWorkers ? new EntraUserSyncMonitor() : null;
 const courseReminderMonitor = startWorkers ? new CourseReminderMonitor() : null;
+// #934 skive 4b: e-post ved ny hovedversjon. Av med mindre COURSE_MAJOR_EMAIL_ENABLED=true.
+const courseMajorEmailMonitor = startWorkers ? new CourseMajorEmailMonitor() : null;
+// #1142: e-post når en deltaker får nye kurs. Går hvert minutt når varselkanalen er på; ingen egen bryter.
+const courseAssignmentEmailMonitor = startWorkers ? new CourseAssignmentEmailMonitor() : null;
+// #1139: den ukentlige e-posten. Av med mindre WEEKLY_EMAIL_ENABLED=true.
+const weeklyDigestMonitor = startWorkers ? new WeeklyDigestMonitor() : null;
+// #1152 4c: sletter arkivert innhold om natten (02–05) når seks måneder er gått. Nødstopp: PlatformConfig-raden, ingen omstart.
+const archivedContentRetentionMonitor = startWorkers ? new ArchivedContentRetentionMonitor() : null;
 const outboxDeliveryWorker = startWorkers ? new OutboxDeliveryWorker() : null;
 
 const backgroundMonitors = [
@@ -39,6 +53,10 @@ const backgroundMonitors = [
   auditRetentionMonitor,
   entraUserSyncMonitor,
   courseReminderMonitor,
+  courseMajorEmailMonitor,
+  courseAssignmentEmailMonitor,
+  weeklyDigestMonitor,
+  archivedContentRetentionMonitor,
   outboxDeliveryWorker,
 ];
 
@@ -102,6 +120,13 @@ void startServer().catch((error) => {
 });
 
 async function startServer() {
+  // Maskotpakken (doc/design/MASKOTPAKKE.md): lest og sjekket før noe starter, i web OG worker, så begge har sjekket
+  // den samme pakken. Er noe galt, stopper oppstarten her med listen over hva (via `.catch` over). CI har sjekket
+  // pakken før den ble rullet ut, så dette er et sikkerhetsnett.
+  const mascot = assertActiveMascotPack();
+  // eslint-disable-next-line no-console
+  console.log(`Maskotpakken «${mascot.id}» er lest og sjekket.`);
+
   if (startWeb) {
     server = app.listen(env.PORT, () => {
       // eslint-disable-next-line no-console
@@ -123,6 +148,8 @@ async function startServer() {
       res.end(JSON.stringify({
         status: report.healthy ? "ok" : "degraded",
         role: env.PROCESS_ROLE,
+        // Utrullingen sjekker at workeren kjører den nye pakken: ny `startedAt` alene kan være en omstart av den gamle.
+        version: appVersion,
         startedAt: startedAt.toISOString(),
         health: report,
       }));
@@ -146,6 +173,10 @@ async function startServer() {
       auditRetentionMonitor,
       entraUserSyncMonitor,
       courseReminderMonitor,
+      courseMajorEmailMonitor,
+      courseAssignmentEmailMonitor,
+      weeklyDigestMonitor,
+      archivedContentRetentionMonitor,
       outboxDeliveryWorker,
     ];
     staggeredWorkers.forEach((worker, index) => {

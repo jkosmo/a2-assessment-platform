@@ -40,7 +40,7 @@ vi.mock("../../src/modules/adminContent/adminContentCommands.js", () => ({
 vi.mock("../../src/modules/adminContent/adminContentRepository.js", () => {
   const repo = { findModuleTitle };
   // #796: the importer builds its graph on a tx client via createAdminContentRepository(tx).
-  return { adminContentRepository: repo, createAdminContentRepository: () => repo };
+  return { adminContentRepository: repo, createAdminContentRepository: () => repo, createAdminContentWriter: () => repo };
 });
 
 vi.mock("../../src/services/auditService.js", () => ({
@@ -50,7 +50,8 @@ vi.mock("../../src/services/auditService.js", () => ({
 // #796: importModuleFromEnvelope now wraps the import in runInTransaction. Run the callback inline with a
 // throwaway tx client so the unit test needs no database (the module commands are all mocked).
 vi.mock("../../src/db/transaction.js", () => ({
-  runInTransaction: (cb: (tx: unknown) => unknown) => cb({}),
+  // #934 skive 4a: runContentWrite tar innholdslåsen med rå SQL først.
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({ $executeRaw: async () => 0, $executeRawUnsafe: async () => 0 }),
 }));
 
 // Default stub return values so the SUT can chain .id off the results.

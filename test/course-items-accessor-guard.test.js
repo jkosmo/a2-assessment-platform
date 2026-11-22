@@ -47,6 +47,12 @@ const RAW_READ = /\.courseItem\s*\.\s*findMany\b/g;
  */
 const EXCEPTIONS = [
   {
+    file: "modules/adminContent/moduleVersioning.ts",
+    reason:
+      "#934 skive 5a-2: kravet per kurs og modul. Hvilke kurs modulen ligger i, og hvilke moduler kurset har, for å skrive "
+      + "kravet. Også arkiverte og avpubliserte teller, så en tilgjengelighetsregel ville gitt feil svar.",
+  },
+  {
     file: "modules/course/contentLifecycle.ts",
     reason:
       "findCoursesForSections — omvendt oppslag (seksjon → kurs) for «Brukt i kurs»-kolonnen i "
@@ -60,16 +66,12 @@ const EXCEPTIONS = [
       + "i setCourseItems — kjent hull, #992, og en annen sak enn tilgjengelighetsregelen.",
   },
   {
-    file: "modules/adminContent/adminContentRepository.ts",
-    reason:
-      "findLiveCourseTitlesContainingModule (2.101.0) — omvendt oppslag (modul → kurs) for kursnavnet "
-      + "i revisjonsvarselet. Leser bare kursets tittel, ikke kursets innhold.",
-  },
-  {
     file: "modules/course/enrollmentService.ts",
     reason:
       "isModuleInAccessibleCourse / canParticipantReadSection — omvendt oppslag (innhold → kurs) "
-      + "for objektnivå-authz. Svarer på «er brukeren privilegert nok», ikke «hva inneholder kurset».",
+      + "for objektnivå-authz. Svarer på «er brukeren privilegert nok», ikke «hva inneholder kurset». "
+      + "#1140 etappe 1: findAccessibleCoursesContainingModules (som isModuleInAccessibleCourse nå bruker) og "
+      + "filterPublishedCoursesContainingModule er samme omvendte oppslag (modul → kurs), for hvilken versjon deltakeren får.",
   },
 ];
 

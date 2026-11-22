@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { forventMinstVersjon } from "./versjon.js";
 import { vent } from "./pace.js";
 
 // 2.98.1–2.99.0 mot UTRULLET stage: det som bare kan måles når den ekte tjeneren, den ekte databasen
@@ -54,11 +55,8 @@ const flere = { questionType: "multiple", stem: L("What must the record state?",
 
 const tilstand: { moduleId?: string; moduleIdAlle?: string; versionId?: string; sectionId?: string } = {};
 
-test("versjonen er 2.105.0", async () => {
-  const svar = await fetch(`${BASE}/version`);
-  const json = await svar.json();
-  noter("versjon", json.version);
-  expect(json.version).toBe("2.105.0");
+test("versjonen er minst 2.107.0", async () => {
+  noter("versjon", await forventMinstVersjon(BASE, "2.107.0"));
 });
 
 test("#1077: et «velg alle» lagres med typen; feil form avvises", async () => {
@@ -93,7 +91,7 @@ test("#1077: deltakeren får typen uten fasit; rett eller galt; gjennomgangen vi
   expect([200, 201]).toContain(publisert.status);
 
   const forsøk = async (valg: string[]) => {
-    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, deliveryType: "text", responseJson: {} });
+    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleId, moduleVersionId: (await api("GET", `/api/modules/${tilstand.moduleId}`)).json.module?.activeVersion?.id, deliveryType: "text", responseJson: {} });
     expect(innlevering.status, innlevering.tekst).toBe(201);
     const submissionId = innlevering.json.submission.id as string;
     const start = await api("GET", `/api/modules/${tilstand.moduleId}/mcq/start?submissionId=${submissionId}&locale=nb`);
@@ -138,7 +136,7 @@ test("2.99.1: et «velg alle» der alle er riktige lagres; bare alle valgt gir r
   expect([200, 201]).toContain(publisert.status);
 
   const riktigSvar = async (valg: string[]) => {
-    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleIdAlle, deliveryType: "text", responseJson: {} });
+    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleIdAlle, moduleVersionId: (await api("GET", `/api/modules/${tilstand.moduleIdAlle}`)).json.module?.activeVersion?.id, deliveryType: "text", responseJson: {} });
     expect(innlevering.status, innlevering.tekst).toBe(201);
     const submissionId = innlevering.json.submission.id as string;
     const start = await api("GET", `/api/modules/${tilstand.moduleIdAlle}/mcq/start?submissionId=${submissionId}&locale=nb`);
@@ -215,5 +213,9 @@ test.afterAll(async () => {
     noter("slett testmodul", slettet.status);
     if (slettet.status !== 200) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${moduleId}/archive`, {})).status);
   }
-  if (tilstand.sectionId) noter("slett testseksjon", (await api("DELETE", `/api/admin/content/sections/${tilstand.sectionId}`)).status);
+  if (tilstand.sectionId) {
+    // #1151: bare arkivert innhold kan slettes.
+    await api("POST", `/api/admin/content/sections/${tilstand.sectionId}/archive`);
+    noter("slett testseksjon", (await api("DELETE", `/api/admin/content/sections/${tilstand.sectionId}`)).status);
+  }
 });

@@ -27,7 +27,10 @@ import {
 } from "/static/participant-console-state.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { setHidden } from "/static/dom-visibility.js";
-import { OUTCOME_FAILED, OUTCOME_PASSED, deriveOutcome, outcomeClass } from "/static/outcome.js";
+import { loadMascotMoods, renderStats } from "/static/profile-stats.js";
+// #1138: «Beståtte moduler» kommer fra /api/me/stats, der serveren alt har avgjort hva som er bestått
+// (`passedAt` i activityReport.ts: avgjort, og siste vedtak bestått). Flaten utleder ingenting selv, og
+// importerer derfor ikke lenger /static/outcome.js.
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
@@ -68,6 +71,10 @@ const agentTokenSecret = document.getElementById("agentTokenSecret");
 const copyAgentTokenBtn = document.getElementById("copyAgentTokenBtn");
 const agentTokenCopied = document.getElementById("agentTokenCopied");
 const agentTokensBody = document.getElementById("agentTokensBody");
+const profileTabs = document.getElementById("profileTabs");
+const statsBody = document.getElementById("statsBody");
+const tabButtons = Array.from(document.querySelectorAll("[data-profile-tab]"));
+const tabPanels = Array.from(document.querySelectorAll("[data-profile-panel]"));
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -94,8 +101,12 @@ let cachedDataExport = null;
 // #736: the completed-modules/courses tables are built dynamically via t(); a locale switch only
 // re-runs applyTranslations() on static [data-i18n] labels, so cache the last data and re-render
 // these on locale change — otherwise headers switch language while the values stay behind.
-let cachedModulesData = null;
+let cachedStatsData = null;
+let cachedStatsFailed = false;
+// Maskotpakkens humør (bilde og linje på alle tre språk), hentet sammen med statistikken første gang.
+let cachedMascotMoods = null;
 let cachedCoursesData = null;
+let selectedTab = "stats";
 
 // ── Locale ────────────────────────────────────────────────────────────────────
 
@@ -116,6 +127,8 @@ function applyTranslations() {
     const key = el.getAttribute("data-i18n");
     if (key) el.textContent = t(key);
   }
+  profileTabs?.setAttribute("aria-label", t("profile.tabs.label"));
+  renderTabCounts();
   renderRolePresetControl();
   renderWorkspaceNavigation();
 }
@@ -216,8 +229,13 @@ function renderProfile(meData) {
   profileName.textContent = user.name || "—";
   profileEmail.textContent = user.email || "—";
   profileDepartment.textContent = user.department || "—";
+  // Rollenavnet på brukerens språk, ikke nøkkelen («PARTICIPANT»). En rolle uten oversettelse står som nøkkelen.
   profileRoles.textContent = Array.isArray(user.roles) && user.roles.length > 0
-    ? user.roles.join(", ")
+    ? user.roles.map((role) => {
+        const key = `profile.role.${role}`;
+        const label = t(key);
+        return label && label !== key ? label : role;
+      }).join(", ")
     : "—";
 
   if (consent.accepted && consent.acceptedAt) {
@@ -228,52 +246,164 @@ function renderProfile(meData) {
     profileConsent.textContent = t("profile.field.notAccepted");
   }
 
+  renderWeeklyEmailPreference(meData?.preferences);
   profileContent.style.display = "";
 }
 
+// #1139: bryteren «Ukentlig e-post fra båten». Vises bare når tjeneren sender `preferences` (en eldre tjener har ikke feltet).
+// Lagres med en gang; feiler det, settes bryteren tilbake og meldingen sier det.
+const weeklyEmailSection = document.getElementById("profileEmailSection");
+const weeklyEmailToggle = document.getElementById("weeklyEmailToggle");
+const weeklyEmailStatus = document.getElementById("weeklyEmailStatus");
+
+function renderWeeklyEmailPreference(preferences) {
+  if (!weeklyEmailSection || !weeklyEmailToggle) return;
+  const known = preferences && typeof preferences.weeklyEmail === "boolean";
+  setHidden(weeklyEmailSection, !known);
+  if (known) weeklyEmailToggle.checked = preferences.weeklyEmail;
+}
+
+weeklyEmailToggle?.addEventListener("change", async () => {
+  const wanted = weeklyEmailToggle.checked;
+  weeklyEmailToggle.disabled = true;
+  weeklyEmailStatus.textContent = "";
+  try {
+    const body = await apiFetch("/api/me/preferences", headers, {
+      method: "PUT",
+      body: JSON.stringify({ weeklyEmail: wanted }),
+      headers: { "Content-Type": "application/json" },
+    });
+    weeklyEmailToggle.checked = body?.preferences?.weeklyEmail ?? wanted;
+    weeklyEmailStatus.textContent = t("profile.weeklyEmail.saved");
+  } catch {
+    weeklyEmailToggle.checked = !wanted;
+    weeklyEmailStatus.textContent = t("profile.weeklyEmail.failed");
+  } finally {
+    weeklyEmailToggle.disabled = false;
+  }
+});
+
 // ── Modules rendering ─────────────────────────────────────────────────────────
 
-function renderModules(body) {
-  const modules = Array.isArray(body?.modules) ? body.modules : [];
+// En celle med kolonnenavnet i `data-label`: under 600 px blir hver rad et kort (shared.css), og da står
+// navnet ved verdien.
+function cell(labelKey, text, className) {
+  const td = document.createElement("td");
+  td.dataset.label = t(labelKey);
+  if (text !== undefined) td.textContent = text;
+  if (className) td.className = className;
+  return td;
+}
+
+// #1138: «Beståtte moduler» viser bare beståtte (produkteier 2026-11-07). Lista kommer fra
+// /api/me/stats (`passedModules`), som teller etter samme regel som «Moduler bestått» i statistikken —
+// så fanen og tallet kan ikke være uenige. Et stryk eller en sak hos sensor står ikke her; en modul som
+// er bestått før, står selv om et senere forsøk strøk.
+function renderModules(stats) {
   modulesBody.innerHTML = "";
+  if (cachedStatsFailed && !stats) {
+    showEmpty(modulesBody, t("profile.stats.error"), { columns: 3 });
+    return;
+  }
+  const modules = Array.isArray(stats?.passedModules) ? stats.passedModules : [];
 
   if (modules.length === 0) {
-    // #1046: den delte tomtilstanden. Den håndlagde varianten her gjorde det samme, men uten
-    // `.empty-state`-stilen — så tomme tabeller så ulike ut fra flate til flate.
-    showEmpty(modulesBody, t("profile.modules.empty"), { columns: 4 });
+    // #1046: den delte tomtilstanden.
+    showEmpty(modulesBody, t("profile.modules.empty"), { columns: 3 });
     return;
   }
 
   for (const mod of modules) {
     const row = document.createElement("tr");
-    // #978: `latestStatus` lå i svaret fra /api/modules/completed hele tiden — denne fila leste
-    // det bare aldri, og viste derfor rød «Ikke bestått» på saker som fortsatt vurderes.
-    const outcome = deriveOutcome({
-      passFailTotal: mod?.latestDecision?.passFailTotal,
-      submissionStatus: mod?.latestStatus,
-    });
-    const passFailText = outcome === OUTCOME_PASSED
-      ? t("profile.modules.value.pass")
-      : outcome === OUTCOME_FAILED
-        ? t("profile.modules.value.fail")
-        : "—";
-    const passFailClass = outcomeClass(outcome);
-
-    const cells = [
-      { text: mod.moduleTitle ?? mod.moduleId ?? "—" },
-      { text: formatDateTime(mod.latestCompletedAt) },
-      { text: formatNumber(mod?.latestDecision?.totalScore) },
-      { text: passFailText, className: passFailClass },
-    ];
-
-    for (const { text, className } of cells) {
-      const td = document.createElement("td");
-      td.textContent = text;
-      if (className) td.className = className;
-      row.appendChild(td);
-    }
+    row.appendChild(cell("profile.modules.table.module", showValue(mod.moduleTitle ?? mod.moduleId)));
+    row.appendChild(cell("profile.modules.table.passedAt", formatDate(mod.passedAt), "profile-nowrap"));
+    row.appendChild(cell("profile.modules.table.score", formatNumber(mod.totalScore)));
     modulesBody.appendChild(row);
   }
+}
+
+function renderStatsPanel() {
+  if (cachedStatsData) {
+    renderStats(statsBody, cachedStatsData, { t, locale: currentLocale, mascot: cachedMascotMoods });
+  } else if (cachedStatsFailed) {
+    statsBody.innerHTML = "";
+    const p = document.createElement("p");
+    p.className = "stats-error";
+    p.setAttribute("role", "alert");
+    p.textContent = t("profile.stats.error");
+    statsBody.appendChild(p);
+  }
+}
+
+// Antallet står i fanen når lista er hentet og ikke tom: «Beståtte kurs (3)».
+// På smal skjerm vises det korte navnet («Kurs (3)»), så fanelinja får plass på én linje med antallet
+// (produkteier 2026-11-07: antallet skal vises, og linja brakk på mobil). CSS velger hvilket span som vises;
+// det skjulte er display:none og leses ikke av skjermleser.
+function renderTabCounts() {
+  const counts = {
+    courses: Array.isArray(cachedCoursesData?.completions) ? cachedCoursesData.completions.length : 0,
+    modules: Array.isArray(cachedStatsData?.passedModules) ? cachedStatsData.passedModules.length : 0,
+  };
+  const withCount = (label, n) => (n > 0 ? t("profile.tabs.count").replace("{label}", label).replace("{n}", formatNumber(n)) : label);
+  for (const button of tabButtons) {
+    const id = button.dataset.profileTab;
+    const n = counts[id] ?? 0;
+    const long = document.createElement("span");
+    long.className = "profile-tab-long";
+    long.textContent = withCount(t(`profile.tabs.${id}`), n);
+    const short = document.createElement("span");
+    short.className = "profile-tab-short";
+    short.textContent = withCount(t(`profile.tabs.${id}.short`), n);
+    button.replaceChildren(long, short);
+    // Det fulle navnet for skjermleser på alle skjermbredder, også når det korte vises.
+    button.setAttribute("aria-label", long.textContent);
+  }
+}
+
+// ── Fanene (#1138) ────────────────────────────────────────────────────────────
+// Samme mønster som skjemasidene (form-page.js): én tabstopp for fanelinja, piltaster, Home og End
+// flytter. Panelene skjules med setHidden — `hidden` alene taper mot en display-regel (#975).
+
+function selectTab(id, { focus = false } = {}) {
+  if (!tabButtons.some((b) => b.dataset.profileTab === id)) return;
+  selectedTab = id;
+  for (const button of tabButtons) {
+    const on = button.dataset.profileTab === id;
+    button.classList.toggle("active", on);
+    button.setAttribute("aria-selected", String(on));
+    button.tabIndex = on ? 0 : -1;
+    if (on && focus) button.focus();
+  }
+  for (const panel of tabPanels) setHidden(panel, panel.dataset.profilePanel !== id);
+  // #1162: fanen står i historikkoppføringen, så nettleserens tilbake fra kursbeviset (som nå åpnes i samme fane) lander på
+  // fanen deltakeren var på, og ikke på «Statistikk». Adressen endres ikke.
+  try { history.replaceState({ ...(history.state ?? {}), profileTab: id }, ""); } catch { /* historikken er stengt: standardfanen */ }
+}
+
+profileTabs?.addEventListener("click", (event) => {
+  const button = event.target.closest?.("[data-profile-tab]");
+  if (button) selectTab(button.dataset.profileTab);
+});
+
+profileTabs?.addEventListener("keydown", (event) => {
+  const i = tabButtons.findIndex((b) => b.dataset.profileTab === selectedTab);
+  let next = null;
+  if (event.key === "ArrowRight") next = tabButtons[(i + 1) % tabButtons.length];
+  else if (event.key === "ArrowLeft") next = tabButtons[(i - 1 + tabButtons.length) % tabButtons.length];
+  else if (event.key === "Home") next = tabButtons[0];
+  else if (event.key === "End") next = tabButtons[tabButtons.length - 1];
+  if (!next) return;
+  event.preventDefault();
+  selectTab(next.dataset.profileTab, { focus: true });
+});
+
+// #1162: tilbake fra kursbeviset (eller en oppfriskning) åpner fanen som sto i historikkoppføringen. Uten den åpner en fane i adressen
+// (`/profile#courses`, lenken «← Tilbake til profilen» på kursbeviset) den fanen. Ukjente navn ignoreres av `selectTab`.
+{
+  const remembered = history.state?.profileTab;
+  const fromAddress = window.location.hash.slice(1);
+  const wanted = typeof remembered === "string" ? remembered : fromAddress;
+  if (wanted && wanted !== selectedTab) selectTab(wanted);
 }
 
 function renderCourses(body) {
@@ -290,33 +420,31 @@ function renderCourses(body) {
   for (const course of courses) {
     const row = document.createElement("tr");
 
-    const titleTd = document.createElement("td");
+    const titleTd = cell("profile.courses.table.course");
     titleTd.textContent = showValue(course.courseTitle ?? course.courseId);
+    // #934: et kursbevis gjelder sin hovedversjon. Fra versjon 2 står versjonen ved navnet, så to bevis for
+    // samme kurs ikke ser like ut (versjon 1 er alle bevis fra før kurs fikk versjoner).
+    if (Number.isInteger(course.versionMajor) && course.versionMajor > 1) {
+      titleTd.textContent += t("profile.courses.versionSuffix").replace("{n}", String(course.versionMajor));
+    }
     row.appendChild(titleTd);
 
-    const dateTd = document.createElement("td");
-    dateTd.textContent = formatDateTime(course.completedAt);
-    row.appendChild(dateTd);
+    // #1145: et kurs tatt utenfor plattformen har ingen kjent dato; det står hvorfor, ikke en dato.
+    const completedText = course.source === "external" ? t("profile.courses.takenOutside") : formatDate(course.completedAt);
+    row.appendChild(cell("profile.courses.table.completedAt", completedText, "profile-nowrap"));
 
-    const levelTd = document.createElement("td");
     // #1045: nivået er en NØKKEL («basic»), ikke tekst. Profilen viste den rå. Delt hjelper,
     // så alle flatene sier det samme ordet for samme nivå.
-    levelTd.textContent = localizeCertLevel(course.certificationLevel, t);
-    row.appendChild(levelTd);
+    row.appendChild(cell("profile.courses.table.level", localizeCertLevel(course.certificationLevel, t)));
 
-    // #550: certificate ID + link to the printable certificate view (was ID text only).
-    const certTd = document.createElement("td");
+    // #550: lenke til kursbeviset som kan skrives ut. #1138: ID-en er fjernet (produkteier 2026-11-07);
+    // den står på selve kursbeviset.
+    const certTd = cell("profile.courses.table.certificate", undefined, "profile-nowrap");
     if (course.certificateId) {
-      const idSpan = document.createElement("span");
-      idSpan.textContent = course.certificateId;
-      idSpan.style.cssText = "font-family:monospace;font-size:12px";
       const link = document.createElement("a");
-      link.href = `/certificate?id=${encodeURIComponent(course.certificateId)}`;
-      link.target = "_blank";
-      link.rel = "noopener";
+      // #1162: samme fane, så nettleserens tilbake fører hit igjen. `fra=profil` gir beviset «← Tilbake til profilen».
+      link.href = `/certificate?id=${encodeURIComponent(course.certificateId)}&fra=profil`;
       link.textContent = t("profile.courses.view");
-      link.style.cssText = "margin-left:8px";
-      certTd.appendChild(idSpan);
       certTd.appendChild(link);
     } else {
       certTd.textContent = "—";
@@ -612,7 +740,8 @@ localeSelect.addEventListener("change", () => {
   // Renderingen beholdes — den gjør fortsatt jobben for det som formes på klienten (datoer, tall,
   // etiketter). Men det som kommer ferdig fra serveren må HENTES på nytt.
   if (cachedMeData) renderProfile(cachedMeData);
-  renderModules(cachedModulesData);
+  renderStatsPanel();
+  renderModules(cachedStatsData);
   renderCourses(cachedCoursesData);
   profillister.oppdaterVedSpråkbytte();
 });
@@ -625,25 +754,35 @@ const profillister = lagLokalisertRessurs({
   hent: () => {
     // #1046: flaten viste ingenting mens den lastet. De tre flatene som HAR lastetilstand fikk
     // den i mars; denne ble aldri rørt.
-    showLoading(modulesBody, { rows: 3, columns: 4 });
+    // #1138: «Beståtte moduler» kommer med statistikken. Lista ble hentet fra /api/modules/completed
+    // (siste forsøk per modul) og filtrert på klienten; nå avgjør serveren hva som er bestått.
+    if (!cachedStatsData) showLoading(statsBody, { rows: 4 });
+    showLoading(modulesBody, { rows: 3, columns: 3 });
     showLoading(coursesBody, { rows: 2, columns: 4 });
     return Promise.allSettled([
-      apiFetch("/api/modules/completed", headers),
+      // Statistikken tegnes med båten, så de hentes sammen: feiler en av dem, er det statistikken som ikke kunne hentes.
+      Promise.all([apiFetch("/api/me/stats", headers), loadMascotMoods()]),
       apiFetch("/api/courses/completions", headers),
     ]).finally(() => {
+      hideLoading(statsBody);
       hideLoading(modulesBody);
       hideLoading(coursesBody);
     });
   },
-  tegn: ([modulesResult, coursesResult]) => {
-    if (modulesResult.status === "fulfilled") {
-      cachedModulesData = modulesResult.value;
-      renderModules(cachedModulesData);
+  tegn: ([statsResult, coursesResult]) => {
+    if (statsResult.status === "fulfilled") {
+      [cachedStatsData, cachedMascotMoods] = statsResult.value;
+      cachedStatsFailed = false;
+    } else if (!cachedStatsData) {
+      cachedStatsFailed = true;
     }
+    renderStatsPanel();
+    renderModules(cachedStatsData);
     if (coursesResult.status === "fulfilled") {
       cachedCoursesData = coursesResult.value;
       renderCourses(cachedCoursesData);
     }
+    renderTabCounts();
   },
 });
 

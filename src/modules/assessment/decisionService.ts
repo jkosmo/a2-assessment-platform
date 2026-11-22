@@ -4,7 +4,7 @@ import { createDecisionRepository } from "../../repositories/decisionRepository.
 import { createAssessmentJobRepository } from "./assessmentJobRepository.js";
 import type { AssessmentRunFence } from "./AssessmentJobRunner.js";
 import { ConflictError } from "../../errors/AppError.js";
-import { runInTransaction } from "../../db/transaction.js";
+import { runLearnerWrite } from "../../db/contentLock.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -67,6 +67,12 @@ type BuildDecisionInput = {
 
 export type ResolvedAssessmentDecision = {
   totalScore: number;
+  /**
+   * Det praktiske delpoenget regnet fra kriteriepoengene vedtaket selv bruker (0–70, eller 0–100 for ren
+   * fritekst). Det er dette som lagres og vises, ikke modellens eget tall: plattformen retter kriteriepoengene
+   * (trinnvalg, skala), og modellens delpoeng fulgte ikke med. Målt 2026-11-07: «Praktisk 0» ved siden av total 100.
+   */
+  practicalScaledScore: number;
   practicalPercent: number | null;
   hasOpenRedFlag: boolean;
   passesThresholds: boolean;
@@ -287,6 +293,7 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
 
   return {
     totalScore,
+    practicalScaledScore: recomputedPracticalScoreScaled,
     practicalPercent,
     hasOpenRedFlag,
     passesThresholds,
@@ -376,9 +383,10 @@ export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
   const { passFailTotal, decisionReason, decisionReasonCode, decisionReasonParams } =
     resolveMcqOnlyDecision(input.mcqPercentScore, mcqMinPercent);
 
-  return runInTransaction(async (tx) => {
+  // #934 skive 5a-1: deltakerlåsen, som første setning. `input.userId` er den som leverte.
+  return runLearnerWrite(input.userId, async (tx) => {
     const repo = createDecisionRepository(tx);
-    // #953: gjerdet FØRST i transaksjonen. Er dette en forlatt kjøring (#856) som våknet etter at
+    // #953: gjerdet FØRST etter låsen. Er dette en forlatt kjøring (#856) som våknet etter at
     // et gjenforsøk overtok, eier den ikke lenger jobben — og da skal vedtaket ikke skrives. Kastes
     // her, ruller hele transaksjonen tilbake, så ingen halv dom blir liggende.
     const stillOurs = await createAssessmentJobRepository(tx).claimDecisionWrite(
@@ -394,7 +402,7 @@ export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
     }
 
 
-    const decision = await repo.createAssessmentDecision({
+    const decision = await repo.createAssessmentDecision(tx, {
       submissionId: input.submissionId,
       moduleVersionId: input.moduleVersionId,
       rubricVersionId: null,
@@ -437,12 +445,12 @@ export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
 }
 
 export async function createAssessmentDecision(input: BuildDecisionInput) {
-  const practicalScoreScaled = input.llmResult.practical_score_scaled;
   const resolved = resolveAssessmentDecision(input);
 
-  return runInTransaction(async (tx) => {
+  // #934 skive 5a-1: deltakerlåsen, som første setning. `input.userId` er den som leverte.
+  return runLearnerWrite(input.userId, async (tx) => {
     const repo = createDecisionRepository(tx);
-    // #953: gjerdet FØRST i transaksjonen. Er dette en forlatt kjøring (#856) som våknet etter at
+    // #953: gjerdet FØRST etter låsen. Er dette en forlatt kjøring (#856) som våknet etter at
     // et gjenforsøk overtok, eier den ikke lenger jobben — og da skal vedtaket ikke skrives. Kastes
     // her, ruller hele transaksjonen tilbake, så ingen halv dom blir liggende.
     const stillOurs = await createAssessmentJobRepository(tx).claimDecisionWrite(
@@ -458,13 +466,13 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     }
 
 
-    const decision = await repo.createAssessmentDecision({
+    const decision = await repo.createAssessmentDecision(tx, {
       submissionId: input.submissionId,
       moduleVersionId: input.moduleVersionId,
       rubricVersionId: input.rubricVersionId,
       promptTemplateVersionId: input.promptTemplateVersionId,
       mcqScaledScore: input.mcqScaledScore,
-      practicalScaledScore: practicalScoreScaled,
+      practicalScaledScore: resolved.practicalScaledScore,
       totalScore: resolved.totalScore,
       redFlagsJson: redFlagsCodec.serialize(input.llmResult.red_flags),
       aiInfluenceJson: input.aiInfluenceJson ?? null,

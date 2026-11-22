@@ -1,9 +1,10 @@
 # Section content — text, boxes, prompts, cards, pictures
 
-Contents: [Choosing the practice](#choosing-the-practice) · [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
+Contents: [Choosing the practice](#choosing-the-practice) · [Writing the text](#writing-the-text) ·
+[Teach, not catalogue](#teach-not-catalogue) · [Headings and lists](#headings-and-lists) ·
 [Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Think first](#think-first) ·
 [Check yourself](#check-yourself) · [A case](#a-case) · [Step by step](#step-by-step) ·
-[Write it yourself](#write-it-yourself) · [Flashcards](#flashcards) · [Match the pairs](#match-the-pairs) ·
+[Write it yourself](#write-it-yourself) · [Find the errors](#find-the-errors) · [Complete the example](#complete-the-example) · [Flashcards](#flashcards) · [Match the pairs](#match-the-pairs) ·
 [Icons](#icons) ·
 [Pictures from the source](#pictures-from-the-source) · [Figures](#figures) ·
 [A finished section](#a-finished-section)
@@ -25,12 +26,28 @@ what the source gives, not to use every kind:
 | a routine applied in a situation from the work | [A case](#a-case) | a quiz of separate facts |
 | a process in an order, each step changing something | [Step by step](#step-by-step) | a one-line-per-step list |
 | a formulation the module will assess (free text) | [Write it yourself](#write-it-yourself), in the section before the module | — |
+| a check or a rule for what good work looks like | [Find the errors](#find-the-errors) — at least one per course | a list of things to check, and nothing to check them on |
+| a procedure or a calculation in several steps, with a worked example | [Complete the example](#complete-the-example) before a whole task | a whole task straight after the worked example |
 | terms the section defines | [Flashcards](#flashcards) (4–10) or [Match the pairs](#match-the-pairs) (3–6) | both for the same terms |
 | nothing of these | no exercise — plain text with a box, a table or a figure | an exercise made up to have one |
 
 **Order in a section**, when there are two: from recognising to applying to formulating —
 think first → the text (or step by step) → check yourself or match the pairs → a case → write it
 yourself → flashcards at the end. The module that follows is what counts.
+
+**The terms before the process.** When a process, a method or an assessment uses three or more
+terms the learner meets for the first time, explain the terms briefly *before* it — a short table
+of term and meaning, or a section of its own before this one — so the learner does not learn the
+words and the process at once. Not as a definition list of everything in the course: only the
+terms the process is built of, each in one line. Flashcards at the end still repeat them; the
+first teaches the terms, the second makes them stick.
+
+**Not the example above it.** An exercise takes another situation than the example the text just
+worked through — related, not the same. A «skriv selv» whose example answer is the template five
+lines up, or «finn parene» that repeats the table right above, is copying, not practice: the learner
+who copies does as well as the one who understood. One running case is good for the examples; the
+exercise stands beside it, with other names, numbers or circumstances. `produce-course.mjs` fails on
+an answer key that stands word for word in the text above it.
 
 **Not the module's questions.** An exercise never uses a question, a case or the numbers the module
 asks about — the learner who did it has been handed the answer. Practise the same skill in another
@@ -42,16 +59,118 @@ Name the exercises in the outline, per section, so the author approves them with
 
 ## Writing the text
 
-- **Write from the source.** Keep to what it supports; mark a gap `[Avklaring: …]`.
+- **Write from the source.** Keep to what it supports; mark a gap `[Avklaring: …]` — and resolve
+  every one with the author before production. The learner must not read the author's notes:
+  `produce-course.mjs` fails on `[Avklaring`, «før kurset publiseres», «godkjent læringsseksjon»
+  and the like.
+- **Refer to another section by its title**, not its number («se *Fra møte til referat*», not «se
+  seksjon 3»): the learner sees titles, and a number breaks when the order changes. Number figures
+  only if the numbers run 1, 2, 3 in the order the figures stand — or leave the numbers out.
 - **Write it out.** Slides and notes hint; a learner reading alone needs the sentence. Say in full
   what a bullet point only names, using the speaker notes and any summary.
 - **Keep the source's own shape.** What the source sets side by side stays side by side; what it
   sets apart stays set apart; what it numbers stays numbered. The forms below are how.
 - **Summarise long source text**; do not copy pages of it.
+- **Talk to the learner.** Write to «du» about the learner's own work — «Når du vurderer en
+  restrisiko, …», not «Restrisiko vurderes …»; «Du starter med …», not «Prosessen starter med …».
+  The source's terms stay as they are; the tone is plain and factual, not chatty. A course written
+  as a report or a textbook is read as one. `produce-course.mjs` notes a section of 200 words or
+  more that hardly says «du» (en-GB: «you»). A reference list or an appendix may stay impersonal —
+  say so to the author.
 - **Level** governs how tangled a section may be
   ([course-design.md](course-design.md#level-and-scope)). Length is the author's call.
 - **One file per section and language:** `work/sections/<clientRef>.nb.md`. The package points at
   the files ([package-schema.md](package-schema.md#a-section)); do not type markdown into JSON.
+
+## Teach, not catalogue
+
+A section teaches what its objective needs. What only repeats, lists or stresses everything makes
+the learner skip — and material the objective does not need makes the learning worse, also when it
+is interesting. Cut it, or move it out; do not keep it «for completeness».
+
+- **One summary, at the end.** Not «Formål» first, «Nøkkelpoeng» in the middle and «Kort
+  oppsummering» last — that is the same thing three times. Best as a question with the answer
+  hidden ([think first](#think-first)): the learner recalls before reading. `produce-course.mjs`
+  fails on a section with more than one summary heading.
+- **Open with the point, not with what the section is for.** «Denne seksjonen viser hvordan …» is
+  a note to yourself; the learner wants the situation, the rule or the problem. `produce-course.mjs`
+  notes a section that describes itself.
+- **At most one box per 400 words** (one in a short section), for something with a concrete consequence — what goes wrong if
+  the learner misses it. «Husk», «Tips», «Neste steg» and «Sertifisering» in one section mean
+  nothing stands out; the rest is ordinary text. Say «du har ansvaret» once in a course at most, and
+  say instead what the learner checks. `produce-course.mjs` notes a section with more than one box.
+  From a presentation, a strip is still kept as the slide list says; propose at gate 3 which strips
+  become ordinary text.
+- **No catalogues in the reading.** Thirty feature cards, seventeen template prompts or a prompt
+  pack of a thousand lines are a reference, not teaching. Keep the few the objective needs, and turn
+  the rest into a choice — «Hvilken funksjon ville du brukt her, og hva sjekker du etterpå?», as a
+  [check yourself](#check-yourself) or a [case](#a-case). The full list goes in an appendix: a
+  section of its own at the end of the course, titled «Vedlegg: …», that no module tests. Plan it in
+  the outline at gate 3.
+- **A list of nine points or more is a catalogue too.** Give one example worked through, or a
+  decision («hvilke tre av disse gjelder i prosjektet ditt?»), or a [table](#table) when the points
+  share properties. A table of contents or the course's objectives may stay a list.
+  `produce-course.mjs` notes a list of nine points or more.
+- **Product details are dated, and never tested.** Prices, licence plans, file and usage limits,
+  menu paths and dates change with the product: two versions of one course on the platform already
+  give different right answers to the same question about a tool's usage limits. Put them in one
+  box per tool, labelled with the month — `> **Gjelder per oktober 2026:** …` (nn «Gjeld per», en-GB
+  «Current as of») — which does not count as the section's box. The module tests what the learner
+  does with the tool, never the number or the menu path ([modules.md](modules.md#multiple-choice-questions)).
+
+**Before** — three summaries, three boxes, a catalogue:
+
+```markdown
+## Formål
+
+Denne seksjonen viser hvordan Copilot hjelper deg i Excel.
+
+:::kort
+### Lag formler
+…
+### Finn mønstre
+…
+(ti kort til, ett per funksjon)
+:::
+
+> **Hovedpoenget:** Beskriv hva du vil gjøre.
+
+> **Husk:** Copilot kan ta feil.
+
+> **Tips:** Prøv flere formuleringer.
+
+## Nøkkelpoeng
+- Copilot lager formler, finner mønstre og lager diagrammer.
+
+## Kort oppsummering
+Copilot hjelper deg i Excel.
+```
+
+**After** — a situation, one box with a consequence, a choice instead of the catalogue, the product
+detail dated, one summary as a question:
+
+```markdown
+Du har salgstallene per måned i en arbeidsbok og vil vite hvilke måneder som skiller seg ut.
+Beskriv hva du vil vite, ikke hvilken formel du trenger: «Hvilke måneder ligger mer enn 20 % over
+snittet?»
+
+> **Viktig:** Copilot endrer arbeidsboka direkte, og alle med tilgang ser endringen med en gang.
+> Jobb på en kopi av en arbeidsbok andre bruker.
+
+:::sjekk Du vil vise utviklingen over året for ledergruppen. Hva ber du Copilot om?
+- [ ] En formel som summerer kolonnen
+- [x] Et linjediagram over månedene, med en setning om hva det viser
+- [ ] En pivottabell over alle radene
+
+Ledergruppen trenger utviklingen, ikke summen. Sjekk etterpå at diagrammet bruker alle månedene.
+:::
+
+> **Gjelder per oktober 2026:** Endringene Copilot gjør, lagres automatisk og kan rulles tilbake.
+
+:::tenk Hva sjekker du før du deler en arbeidsbok Copilot har endret?
+At tallene stemmer med kilden, og at ingen celler er endret uten at du ba om det.
+:::
+```
 
 ## Headings and lists
 
@@ -98,6 +217,8 @@ its label in bold:
   ```
 - Only what the source sets apart, or what the author asks to have stressed. Ordinary text in a
   box stresses nothing.
+- **At most one per 400 words** (one in a short section), for something with a concrete consequence
+  ([Teach, not catalogue](#teach-not-catalogue)).
 
 ## Prompt
 
@@ -331,6 +452,93 @@ Sekretariatet oppdaterer møteplanen og sender ny innkalling innen 25. oktober.
   task, the example answer and the points. `produce-course.mjs` fails on a frame without an example
   answer.
 
+## Find the errors
+
+**Every course has at least one.** Knowing that you should check a draft is not the same as
+spotting the wrong date, the invented name or the guess presented as fact. The learner gets a short
+piece of work with errors planted in it — a draft from AI, a note, a calculation, a plan — and
+finds them. It is a `:::feil` frame, in every language: the task on the opening line, then the piece
+of work **one sentence per line** — `- [ ]` for a sentence that is right, `- [x]` for one with an error,
+and under each error, indented two spaces, what is wrong and the check from the course that catches it.
+The learner taps the sentences she thinks are wrong and presses «Sjekk»; she then sees which errors she
+found, which she missed, and the explanation under each. The material to check against stays right above
+the frame:
+
+```markdown
+Notatene fra styremøtet sier: *Til stede: Kari, Ola, Siri. Vedtak: budsjettet godkjent.
+Ola sender budsjettet til revisor innen 1. november. Ikke avklart hvem som bestiller lokale.*
+
+:::feil Finn feilene i KI-utkastet før det sendes.
+- [ ] Vedtak: Budsjettet ble godkjent.
+- [x] Ola sender budsjettet til revisor innen 15. november.
+  Notatene sier 1. november. Du finner det når du sjekker hver frist mot notatene.
+- [x] Kari bestiller lokale.
+  Notatene sier at det ikke er avklart. Utkastet skulle sagt «uklart».
+- [ ] Til stede: Kari, Ola og Siri.
+- [x] Per ble valgt som ny kasserer.
+  Det står ikke i notatene. KI fyller inn det som høres rimelig ut — sjekk hvert navn.
+:::
+```
+
+The frame is drawn only when it has at least three sentences, at least one with an error and at least
+one that is right, and no other lines. Practice, not a test: it gives no points, and it is drawn in
+sections only.
+
+- **Where:** in the section that teaches the check — right after the rule or routine it practises.
+  Name it in the outline like any exercise ([course-design.md](course-design.md#structure)).
+- **The piece of work is from the course's own field**, as short as the errors allow: a few lines
+  of minutes, a scoring, a paragraph of a report, a prompt. When the material to check against
+  matters (the notes, the figures), give it above the frame.
+- **One sentence per line, each a whole statement** the learner can judge on its own. An error sits
+  in one sentence, not across two. Five to eight sentences.
+- **Three to five errors, of different kinds** — a wrong number or date, something added that the
+  material does not say, an assumption stated as fact, a step left out. Each is an error a
+  professional actually overlooks, not a typo or a joke; the rest of the piece is right.
+- **Every error breaks a rule the source gives.** The piece of work is built for the exercise; the
+  rules it breaks are the source's. The explanation under each error says what is wrong **and** the
+  check from the course that catches it.
+- **The same sentences are wrong in every language**, with an explanation under each — the platform
+  stops a translation where an error moved or lost its explanation.
+- **Not the module's questions** — another piece of work than any the module asks about.
+- `produce-course.mjs` notes a course without one; tell the author, and add one unless they say no.
+
+## Complete the example
+
+For a **procedure or a calculation in several steps**. A newcomer who goes straight from a worked
+example to a whole task on their own has too much to hold at once. In between, the learner gets
+an example with the first steps done and finishes the rest — then a whole task in another
+situation ([Not the example above it](#choosing-the-practice)). Three stages in the section:
+
+1. **The worked example** in the text, every step shown with why.
+2. **Complete the example:** a new case, the first steps done *in the text* (visible), then a
+   [write it yourself](#write-it-yourself) frame whose task names the steps left. The example answer
+   shows all the steps.
+3. **A whole task** — in the module, or a second «skriv selv» with nothing done.
+
+```markdown
+Post B har trippelanslaget lav 80, sannsynlig 100, høy 150 (millioner kroner). De to første
+stegene er gjort:
+
+1. **Forventet verdi:** (80 + 4 · 100 + 150) / 6 = **105**
+2. **Standardavvik:** (150 − 80) / 6 ≈ **11,7**
+
+:::skriv Fullfør beregningen: regn ut variansen for post B, og si hva den brukes til videre.
+3. **Varians:** standardavviket opphøyd i annen, (70 / 6)² ≈ **136**.
+   Variansene for postene legges sammen, så roten av summen gir standardavviket for hele prosjektet.
+
+- [ ] variansen som standardavviket i annen?
+- [ ] at variansene summeres, ikke standardavvikene?
+:::
+```
+
+- **The steps that are done stand in the text above the frame.** What is inside the frame is the
+  example answer, hidden until the learner opens it.
+- **Fade one step at a time** when the procedure is long: first only the last step is left, in a
+  later section two. Not a new example per step.
+- **Numbers and names from the source's own method**, in a case the worked example did not use.
+- Use it only for procedures and calculations. A judgement or a formulation is practised with a
+  [case](#a-case) or a [write it yourself](#write-it-yourself).
+
 ## Flashcards
 
 Cards the learner pages through: a term on the front, the explanation on the back. The learner turns
@@ -448,7 +656,9 @@ Språket i utkastet velger du på innstillingssiden, i feltet som er markert med
 ```
 
 - The **alt text** says what the picture shows and what is marked in it, for a reader who cannot
-  see it.
+  see it — a sentence, not a title: «Agentløkken: et mål går inn, LLM vurderer neste steg og
+  velger verktøy …», not «Agentløkken». `produce-course.mjs` fails on an alt text of fewer than six
+  words, in any language; the platform warns about the same when a section is saved or imported.
 - A **sentence before** the picture says what to look at.
 - The entry in `assets[]` points at the file: `{ "sourceId": "img-innstillinger", "file":
   "deck/images/slide-10-1.png" }`. Keep the file name the reader gave it; the slide list names

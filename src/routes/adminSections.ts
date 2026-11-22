@@ -8,7 +8,7 @@ import {
   createSection,
   createSectionWithAssets,
   updateSectionTitle,
-  updateSectionContent,
+  saveSection,
   getSection,
   listSections,
   publishSection,
@@ -18,10 +18,11 @@ import {
   deleteSection,
   createSectionAsset,
   listSectionAssets,
-  localizeSectionAssets,
   MAX_ASSET_BYTES,
 } from "../modules/course/index.js";
-import { findCoursesForSections } from "../modules/course/contentLifecycle.js";
+import { findActiveCoursesForSections } from "../modules/course/contentLifecycle.js";
+import { sectionVersionTitle } from "../modules/course/sectionTitle.js";
+import { createRetentionContext, evaluateArchivedItems, retentionRequested, type ArchivedRetention } from "../modules/content/archivedRetention.js";
 import {
   localizedTextPatchSchema,
   generationLocaleSchema,
@@ -43,6 +44,7 @@ import { generateLimiter } from "../middleware/rateLimiting.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { localesPresent } from "../i18n/content.js";
+import { altTextWarnings } from "../modules/adminContent/altTextWarnings.js";
 
 const adminSectionsRouter = Router();
 
@@ -95,8 +97,27 @@ const createSectionSchema = z.object({
   // and its `asset:<sourceId>` markdown refs are remapped to the new asset ids.
   assets: z.array(authoringSectionAssetSchema).optional(),
 });
-const titleSchema = z.object({ title: localizedTextPatchSchema });
-const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
+// #1163: det fanen så (prinsipp 6). `expectedTitle` er arbeidstittelen slik tjeneren sendte den (rå tekst).
+const revisionFields = {
+  expectedVersionNo: z.number().int().min(0),
+  expectedTitle: z.string(),
+};
+// «Døp om» og masseoversettingen sender det lista så. 2.168.0: versjonen er påkrevd (faner fra før #1163 er ute av bruk).
+const titleSchema = z.object({
+  title: localizedTextPatchSchema,
+  expectedVersionNo: revisionFields.expectedVersionNo,
+  expectedTitle: revisionFields.expectedTitle.optional(),
+});
+// #1163: redigererens ene lagring. Revisjonen er påkrevd: uten den kan tjeneren ikke vite om fanen er utdatert.
+// Skive 2: `sourceLocale` er språket forfatteren skrev på. Med det oversettes figurene utkastet har lagt til (prinsipp 3); uten
+// det (en fane fra 2.166.0, API-kallere) lagres teksten som før, uten figuroversetting.
+const saveSchema = z.object({
+  title: localizedTextPatchSchema,
+  bodyMarkdown: localizedTextPatchSchema,
+  ...revisionFields,
+  sourceLocale: generationLocaleSchema.optional(),
+});
+const publishSchema = z.object({ expectedVersionNo: z.number().int().min(1).optional() }).optional();
 // `variant: "moduleText"` (modularbeidsflatens forhåndsvisning, #1051): modulens tekst tegnes uten øvelsene
 // steg for steg, skriv selv og repetisjonskort, slik deltakeren får den (ContentBlockVariant).
 const previewSchema = z.object({
@@ -111,31 +132,43 @@ const localizeSchema = z.object({
   targetLocale: generationLocaleSchema,
 }).refine((v) => Boolean(v.title || v.bodyMarkdown), { message: "At least one field is required." });
 
+type SectionVersionRow = { id: string; bodyMarkdown: string; versionNo: number; title?: string | null; createdAt?: Date };
 type SectionWithActiveVersion = {
   id: string;
   title: string;
   activeVersionId: string | null;
   archivedAt: Date | null;
   updatedAt: Date;
-  activeVersion?: { id?: string; bodyMarkdown?: string; versionNo: number } | null;
+  activeVersion?: Partial<SectionVersionRow> & { versionNo: number } | null;
   // #916: the newest version, whether or not it is the active one. The editor must show what was
   // last SAVED — the translation gate can hold a save back from activation, and reading only the
   // active version would make the author's own text disappear on reload.
-  versions?: Array<{ id: string; bodyMarkdown: string; versionNo: number }>;
+  // #1163: lagring publiserer ikke lenger, så den nyeste er utkastet forfatteren arbeider i.
+  versions?: SectionVersionRow[];
 };
 
+/**
+ * #1163: detaljen bærer BEGGE versjonene. `versionNo`/`bodyMarkdown`/`title` er det redigerbare (den nyeste versjonen og
+ * arbeidstittelen); `publishedVersionNo`/`publishedTitle` er det deltakerne ser. Stripen «Deltakerne ser versjon X til utkastet
+ * er publisert» leser de to; uten dem ville den kalt utkastet «det deltakerne ser». `title` er den rå teksten redigereren sender
+ * tilbake som `expectedTitle`.
+ */
 function toDetail(section: SectionWithActiveVersion) {
   const latest = section.versions?.[0] ?? null;
   const editable = latest ?? section.activeVersion ?? null;
+  const hasUnpublishedChanges = Boolean(latest && section.activeVersionId && latest.id !== section.activeVersionId);
   return {
     id: section.id,
     title: section.title,
     activeVersionId: section.activeVersionId,
     versionNo: editable?.versionNo ?? null,
     bodyMarkdown: editable?.bodyMarkdown ?? null,
-    // True when the newest version is not the published one — i.e. a save was held back by the
-    // translation gate. The list/editor can say "lagret, ikke publisert" without guessing.
-    hasUnpublishedChanges: Boolean(latest && section.activeVersionId && latest.id !== section.activeVersionId),
+    // True when the newest version is not the published one — a saved draft waiting to be published.
+    hasUnpublishedChanges,
+    publishedVersionNo: section.activeVersionId ? section.activeVersion?.versionNo ?? null : null,
+    publishedTitle: section.activeVersionId && section.activeVersion ? sectionVersionTitle(section.activeVersion, section.title) : null,
+    // Når utkastet ble lagret (stripens tidspunkt). Bare når det finnes et utkast over den publiserte versjonen.
+    draftSavedAt: hasUnpublishedChanges && latest?.createdAt ? latest.createdAt.toISOString() : null,
     updatedAt: section.updatedAt.toISOString(),
     archivedAt: section.archivedAt?.toISOString() ?? null,
   };
@@ -192,6 +225,7 @@ adminSectionsRouter.post("/", idempotency("sections.create"), async (request, re
         links: sectionAdminLinks(section.id),
         assetMap,
         ...translationGatePayload(section),
+        altWarnings: altTextWarnings(parsed.data.bodyMarkdown),
         ...(parsed.data.clientRef !== undefined ? { clientRef: parsed.data.clientRef } : {}),
       });
       return;
@@ -208,6 +242,8 @@ adminSectionsRouter.post("/", idempotency("sections.create"), async (request, re
       section: toDetail(section),
       links: sectionAdminLinks(section.id),
       ...translationGatePayload(section),
+      // #1128: bilder med en tittel som alt-tekst — varsel, ikke stopp.
+      altWarnings: altTextWarnings(parsed.data.bodyMarkdown),
       ...(parsed.data.clientRef !== undefined ? { clientRef: parsed.data.clientRef } : {}),
     });
   } catch (error) {
@@ -345,8 +381,15 @@ adminSectionsRouter.post("/localize", generateLimiter, async (request, response,
 adminSectionsRouter.get("/", async (request, response, next) => {
   try {
     const sections = await listSections();
-    // #705-UX(G): «Brukt i kurs»-kolonne med popover (likt modul-biblioteket).
-    const coursesBySection = await findCoursesForSections(sections.map((s) => s.id));
+    // #705-UX(G): «Brukt i kurs»-kolonne med popover (likt modul-biblioteket). #1149: bare aktive kurs.
+    const coursesBySection = await findActiveCoursesForSections(sections.map((s) => s.id));
+    // #1152 skive 4b: «slettes <dato>» eller «beholdes» med grunnen, bare for de arkiverte (content/archivedRetention.ts).
+    // 4b-2: bare når klienten ber om det (`?includeRetention=1`, filteret «Arkiverte»).
+    const includeRetention = retentionRequested(request.query.includeRetention);
+    const archivedIds = includeRetention ? sections.filter((s) => s.archivedAt).map((s) => s.id) : [];
+    const retention = archivedIds.length > 0
+      ? await evaluateArchivedItems(await createRetentionContext(), "SECTION", archivedIds)
+      : new Map<string, ArchivedRetention>();
     // #787 slice 5: annotate each row with whether the viewer may manage it, so the list can hide the
     // edit/lifecycle actions the ownership guard would 403 on (mirrors requireContentOwnership exactly).
     const manageable = await listManageableContentIds({
@@ -367,6 +410,8 @@ adminSectionsRouter.get("/", async (request, response, next) => {
           // #705: status-merkelappen i lista trenger activeVersionId (Publisert vs Utkast).
           activeVersionId: s.activeVersionId,
           versionNo: s.activeVersion?.versionNo ?? null,
+          // #1163: nummeret på den nyeste versjonen (utkastet). «Døp om», masseoversettingen og «Publiser» sender det med.
+          latestVersionNo: s.versions[0]?.versionNo ?? null,
           updatedAt: s.updatedAt.toISOString(),
           archivedAt: s.archivedAt?.toISOString() ?? null,
           // #1046 steg B: tilstanden regnet ut av tjeneren, samme ord for modul, kurs og seksjon.
@@ -374,6 +419,7 @@ adminSectionsRouter.get("/", async (request, response, next) => {
           courseCount: courses.length,
           courses,
           canManage: manageable.has(s.id),
+          ...(includeRetention && s.archivedAt ? { retention: retention.get(s.id) ?? ({ unknown: true } as ArchivedRetention) } : {}),
         };
       }),
     });
@@ -429,9 +475,8 @@ adminSectionsRouter.get(
 // tilbakeholdte utkast. Samme klasse som #903, og eksportruta rett over ble vaktet med nettopp den
 // begrunnelsen; det hjelper lite når naboruta gir samme kaller samme innhold.
 //
-// Trygt å stramme: ruta brukes kun av seksjonseditoren (`renderEditorView`), som er der eierskap
-// skal kreves. Lista (`GET /`) merker allerede hver rad med `canManage` og skjuler handlingene en
-// ikke-eier ville fått 403 på.
+// (Teksten over er historikk: vakta ble tatt bort igjen, se beslutningen under. #1180: redigereren viser en annens seksjon
+// skrivebeskyttet ut fra `canManage`, og lista viser bare handlingene en ikke-eier kan bruke.)
 // ⚠️ LESING AV KURSINNHOLD ER ÅPEN FOR ALLE FORFATTERE — DET ER EN BESLUTNING, IKKE ET HULL.
 //
 // Produkteier 2026-09-08:
@@ -464,7 +509,9 @@ adminSectionsRouter.get("/:sectionId", async (request, response, next) => {
       actorUserId: request.context?.userId ?? "",
       roles: request.context?.roles ?? [],
     });
-    response.json({ section: { ...toDetail(section), canManage: manageable.has(section.id) } });
+    // #1163: publiseringsdialogen sier hvilke kurs som får den nye teksten — de aktive kursene seksjonen står i (som lista).
+    const courses = (await findActiveCoursesForSections([section.id])).get(section.id) ?? [];
+    response.json({ section: { ...toDetail(section), canManage: manageable.has(section.id), courses } });
   } catch (error) {
     next(error);
   }
@@ -477,9 +524,11 @@ adminSectionsRouter.patch("/:sectionId/title", requireContentOwnership("SECTION"
     return;
   }
   try {
+    // #1163: et nytt navn er et utkast, med det lista så. 409 `section_changed` hvis noen har lagret siden.
     const section = await updateSectionTitle(
       request.params.sectionId,
       localizedTextCodec.serialize(parsed.data.title),
+      { expectedVersionNo: parsed.data.expectedVersionNo, expectedTitle: parsed.data.expectedTitle },
     );
     response.json({ section: toDetail(section) });
   } catch (error) {
@@ -487,21 +536,31 @@ adminSectionsRouter.patch("/:sectionId/title", requireContentOwnership("SECTION"
   }
 });
 
-adminSectionsRouter.put("/:sectionId/content", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
-  const parsed = contentSchema.safeParse(request.body);
+// #1163: redigererens ENE lagring — tittel og tekst i én transaksjon under innholdslåsen, med det fanen lastet. Lager en ny,
+// upublisert versjon; deltakerne ser den publiserte til noen publiserer. 409 `section_changed`: noen har lagret siden, og
+// ingenting er skrevet.
+adminSectionsRouter.put("/:sectionId", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
+  const parsed = saveSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
     return;
   }
   try {
-    const section = await updateSectionContent(
+    const { section, figureTranslation } = await saveSection(
       request.params.sectionId,
-      localizedTextCodec.serialize(parsed.data.bodyMarkdown),
-      request.context?.userId,
+      {
+        title: localizedTextCodec.serialize(parsed.data.title),
+        bodyMarkdown: localizedTextCodec.serialize(parsed.data.bodyMarkdown),
+      },
+      { expectedVersionNo: parsed.data.expectedVersionNo, expectedTitle: parsed.data.expectedTitle },
+      { sourceLocale: parsed.data.sourceLocale },
     );
-    // #916: the save always succeeds — but when the gate held it back, the new version was stored
-    // WITHOUT being activated, and the client has to say so instead of showing a plain "Lagret".
-    response.json({ section: toDetail(section), ...translationGatePayload(section) });
+    response.json({
+      section: toDetail(section),
+      altWarnings: altTextWarnings(parsed.data.bodyMarkdown),
+      // Skive 2: hvor mange figurer lagringen oversatte, og hvor mange som feilet (de står urørt og prøves ved neste lagring).
+      ...(figureTranslation ? { figureTranslation } : {}),
+    });
   } catch (error) {
     next(error);
   }
@@ -529,8 +588,8 @@ adminSectionsRouter.post("/:sectionId/assets", requireContentOwnership("SECTION"
   }
 });
 
-// Samme hull, samme rettelse: figurlista hører til seksjonen, og POST/localize på samme sti er
-// allerede vaktet. En uvoktet GET ved siden av tre voktede skriveruter er en glipp, ikke en policy.
+// Samme hull, samme rettelse: figurlista hører til seksjonen, og opplastingen på samme sti er
+// allerede vaktet. En uvoktet GET ved siden av voktede skriveruter er en glipp, ikke en policy.
 // Vedleggene ER seksjonens innhold — bildene som vises i lesestoffet. Samme beslutning som over.
 adminSectionsRouter.get("/:sectionId/assets", async (request, response, next) => {
   try {
@@ -540,28 +599,19 @@ adminSectionsRouter.get("/:sectionId/assets", async (request, response, next) =>
   }
 });
 
-// #657: generate translated SVG variants for the section's SVG assets. Triggered explicitly by the
-// author's "Translate" action (never implicit on save), consistent with module/MCQ localisation.
-const localizeAssetsSchema = z.object({ sourceLocale: generationLocaleSchema });
-adminSectionsRouter.post("/:sectionId/assets/localize", requireContentOwnership("SECTION", "sectionId"), generateLimiter, async (request: Request<{ sectionId: string }>, response, next) => {
-  const parsed = localizeAssetsSchema.safeParse(request.body);
+// #705: enhetlig livssyklus — seksjoner får samme Publiser/Avpubliser/Arkiver/Gjenopprett som
+// moduler/kurs. Bruk-lås (G2) håndheves i kommandolaget og gir 400 med navngitte kurs.
+adminSectionsRouter.post("/:sectionId/publish", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
+  // #1163: versjonen forfatteren så i dialogen. Valgfri: lista i en fane fra før, og API-kallere uten den, publiserer den nyeste.
+  const parsed = publishSchema.safeParse(request.body && Object.keys(request.body).length > 0 ? request.body : undefined);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
     return;
   }
   try {
-    const result = await localizeSectionAssets(request.params.sectionId, parsed.data.sourceLocale);
-    response.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// #705: enhetlig livssyklus — seksjoner får samme Publiser/Avpubliser/Arkiver/Gjenopprett som
-// moduler/kurs. Bruk-lås (G2) håndheves i kommandolaget og gir 400 med navngitte kurs.
-adminSectionsRouter.post("/:sectionId/publish", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
-  try {
-    const section = await publishSection(request.params.sectionId, request.context?.userId);
+    const section = await publishSection(request.params.sectionId, request.context?.userId, undefined, {
+      expectedVersionNo: parsed.data?.expectedVersionNo,
+    });
     response.json({ section: toDetail(section) });
   } catch (error) {
     // #916: the translation gate blocks with the SAME body shape as the module publish route

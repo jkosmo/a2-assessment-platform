@@ -2,6 +2,8 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { readSection } from "./support/participantFlow.js";
+import { recordFixturePass } from "./support/modulePassFixture.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -100,6 +102,8 @@ describe("Kursrapporten krever leste seksjoner (#966)", () => {
     await prisma.certificationStatus.create({
       data: { userId: participant!.id, moduleId: module.id, latestDecisionId: decision.id, status: "ACTIVE", passedAt: new Date() },
     });
+    // #934: og ModulePass, nummer og krav, som regelen prod bruker leser.
+    await recordFixturePass({ userId: participant!.id, moduleId: module.id, moduleVersionId: moduleVersion.id, submissionId: submission.id, decisionId: decision.id });
 
     const section = await prisma.courseSection.create({
       data: { title: JSON.stringify({ "en-GB": "Les meg" }) },
@@ -153,9 +157,7 @@ describe("Kursrapporten krever leste seksjoner (#966)", () => {
 
     // KONTROLLCASE. Uten dette ville testen over vært like grønn om regelen alltid sa «ikke
     // fullført» — den ville målt at noe er strengt, ikke at det er RIKTIG strengt.
-    const markRead = await request(app)
-      .post(`/api/courses/${course.id}/sections/${section.id}/read`)
-      .set(participantHeaders);
+    const markRead = await readSection(app, participantHeaders, course.id, section.id);
     expect(markRead.status).toBe(204);
 
     const afterRead = await readRow();

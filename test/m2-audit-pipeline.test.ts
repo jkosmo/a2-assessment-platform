@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -49,6 +50,7 @@ describe("MVP audit event pipeline", () => {
       .set(participantHeaders)
       .send({
         moduleId,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, moduleId),
         deliveryType: "text",
         responseJson: {
           response: "Submission with sensitive client data references for manual review trigger.",
@@ -126,6 +128,7 @@ describe("MVP audit event pipeline", () => {
       .set(participantHeaders)
       .send({
         moduleId,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, moduleId),
         deliveryType: "text",
         responseJson: {
           response: "Owner-only submission text.",
@@ -161,6 +164,7 @@ describe("MVP audit event pipeline", () => {
       .set(participantHeaders)
       .send({
         moduleId: seedModule.id,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, seedModule.id),
         deliveryType: "text",
         responseJson: {
           response: "API-005 audit privacy test submission.",

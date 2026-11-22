@@ -19,7 +19,6 @@ test.skip(!auth || !DIR, !auth ? `hopper over: ${reason}` : "hopper over: UI_GAL
 // `handling` gjør det en bruker ville gjort først, så bildet viser innhold og ikke en tom startskjerm.
 const SIDER: Array<{ fil: string; navn: string; rute: string; vent?: string; handling?: (page: Page) => Promise<void> }> = [
   { fil: "01-mine-kurs", navn: "Deltaker: Mine kurs", rute: "/participant", vent: ".course-accordion-item, #moduleList" },
-  { fil: "02-fullforte", navn: "Deltaker: Fullførte", rute: "/participant/completed", vent: "#courseCertList" },
   { fil: "03-profil", navn: "Deltaker: Profil", rute: "/profile", vent: "#coursesBody" },
   { fil: "04-sensor", navn: "Sensor: køer", rute: "/review", vent: "#manualReviewQueueBody" },
   { fil: "05-rapporter", navn: "Rapporter", rute: "/results", vent: "#completionBody" },

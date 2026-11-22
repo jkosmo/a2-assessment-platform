@@ -8,3 +8,17 @@ Eit godt referat blir til i fire steg. To gjer du før du ber KI om hjelp, to et
 4. **Les og rett.** Sjekk vedtak, fristar og namn mot notata før du sender.
 
 > **Hugs:** Du står ansvarleg for referatet. KI lagar berre utkastet.
+
+Notata frå styremøtet seier: *Til stades: Kari, Ola, Siri. Vedtak: budsjettet godkjent. Ola sender
+budsjettet til revisor innan 1. november. Ikkje avklart kven som bestiller lokale.*
+
+:::feil Finn feila i KI-utkastet før det blir sendt.
+- [ ] Til stades: Kari, Ola og Siri.
+- [ ] Vedtak: Budsjettet vart godkjent.
+- [x] Ola sender budsjettet til revisor innan 15. november.
+  Notata seier 1. november. Du finn det når du sjekkar fristar mot notata.
+- [x] Kari bestiller lokale.
+  Notata seier at det ikkje er avklart. Utkastet skulle sagt «uklart».
+- [x] Per var med på møtet som observatør.
+  Per står ikkje i notata. Du finn det når du sjekkar namn.
+:::

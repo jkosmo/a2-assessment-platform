@@ -94,10 +94,10 @@ Expected time: 5 minutes
 
 Canonical routes from [route-map.md](../route-map.md):
 - `/review`
-- `/participant/completed`
+- `/participant` (course card and module; `/participant/completed` redirects here)
 
 - [ ] Open `/review` and confirm the queue/workspace loads
-- [ ] Open `/participant/completed` for a test user with history, if available
+- [ ] Open a failed module in a course for a test user with history (2.126.0: `/participant/completed` is retired)
 - [ ] Confirm completed-result view loads
 - [ ] Confirm the appeal entry path is visible when suitable test data exists
 - [ ] Confirm no obvious authorization leak or empty-page failure occurs on either route

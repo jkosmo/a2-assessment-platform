@@ -47,11 +47,16 @@ credential ever lands in the repo, rotate it. Scrubbing is not rotation.
 
 ## What is deliberately still committed
 
-**Hostnames stay.** `a2-assessment-platform-{prd,stg}-app-*.azurewebsites.net` appears in the stage
-test suite and in two auth-capture scripts. An `azurewebsites.net` hostname is public DNS — anyone
-can enumerate it — so hiding it buys nothing, while removing it would break `npm run test:stage`.
-Weigh the trade rather than scrubbing reflexively: the point is to withhold what is not otherwise
-discoverable.
+**Azure hostnames may stay.** An `azurewebsites.net` hostname is public DNS — anyone can enumerate
+it — so hiding it buys nothing. Weigh the trade rather than scrubbing reflexively: the point is to
+withhold what is not otherwise discoverable.
+
+**The stage address does not.** Since 2026-11-22 stage runs on a self-hosted server, not in Azure. Its
+address is not public knowledge, so it lives only locally: `STAGE_BASE_URL`, or `baseUrl` in the
+gitignored `.stage-service.json` (read by `scripts/test/stage-base-url.mjs` and
+`test/stage/stageAuth.ts`, from the current directory — run stage tests and auth scripts from the
+folder that holds the file). `test/environment-identifier-guard.test.js` fails if that host or its
+domain appears in a tracked file.
 
 
 **Well-known Azure GUIDs stay in the code**, because they are the same for every tenant on earth and

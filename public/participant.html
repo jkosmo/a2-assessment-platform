@@ -3,10 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/static/favicon-16.png" type="image/png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon-180.png" sizes="180x180" />
     <title>A-2 læringsplattform – Mine kurs</title>
     <link rel="stylesheet" href="/static/shared.css" />
     <link rel="stylesheet" href="/static/loading.css" />
     <link rel="stylesheet" href="/static/toast.css" />
+    <link rel="stylesheet" href="/static/mascot/figure.css" />
     <style>
       .assessment-progress { margin-top: calc(var(--space-1) * 1.25); font-size: 16px; font-weight: 600; color: var(--color-progress-text); }
       /* Telleren staar nå på linje med overskriften. Den skal fortsatt lese som «det skjer noe» —
@@ -127,7 +132,10 @@
       .course-accordion-item { border: 1px solid var(--color-module-border); border-radius: var(--radius-card); overflow: hidden; }
       .course-accordion-header { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); background: var(--color-module-surface); cursor: pointer; width: 100%; border: none; text-align: left; font-size: 14px; color: var(--color-text); }
       .course-accordion-header:hover { background: var(--color-blue-light); }
-      .course-accordion-title { font-weight: 600; }
+      /* #1137 (målt på 360 px): et langt navn som «Informasjonssikkerhetsopplæring» er ett ord og
+         dyttet statusmerket ut av kortet, og la seg over «Sertifikat · Vis bevis» i fullført-raden.
+         `anywhere` (ikke `break-word`) senker også minstebredden, så flex-raden får krympe navnet. */
+      .course-accordion-title { font-weight: 600; overflow-wrap: anywhere; }
       .course-accordion-progress { font-size: 12px; color: var(--color-meta); margin-left: 6px; }
       .course-accordion-chevron { margin-left: auto; font-size: 14px; color: var(--color-meta); flex-shrink: 0; }
       /* #921: kurslista står ekspandert. Progresjon og kursbevis er svaret på «hvilke kurs har
@@ -151,9 +159,14 @@
       .course-back-bar { display: flex; align-items: center; margin-bottom: var(--space-1); }
       .course-back-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 4px 0; font-size: 14px; font-weight: 600; color: var(--color-link-active); cursor: pointer; }
       .course-back-btn:hover { text-decoration: underline; }
-      /* #936/#939: et fullført kurs er ÉN grønn rad. Framdriftslinja er droppet — en linje som
-         alltid er 100 % full bærer null informasjon, og den brukte den kraftigste visuelle
-         ressursen i lista på å gjenta «Fullført» som allerede står to andre steder.
+      /* 2.121.0: delingslenka står til høyre i samme linje, som et ikon — den er ikke det man skal gjøre, og
+         tekst brøt over to linjer på smal skjerm. */
+      .course-copy-link-btn { margin-left: auto; width: auto; min-height: 0; display: inline-flex; align-items: center; justify-content: center; padding: 6px; background: none; border: none; border-radius: var(--radius-button); color: var(--color-link-active); cursor: pointer; }
+      .course-copy-link-btn:hover { background: var(--color-primary-tint); }
+      .course-copy-link-btn:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 1px; }
+      .course-link-notice { margin: 0 0 var(--space-2); padding: 4px 0 4px var(--space-1); border-left: 3px solid var(--color-warning); color: var(--color-warning); font-size: 14px; }
+      /* #936/#939: et fullført kurs er ÉN grønn rad. #939 droppet framdriftslinja; #1137 (produkteier
+         2026-11-02) ga den tilbake som én hel GRØNN linje uten båt, under raden.
          ⚠ Sertifikatlenka er en ankertagg og kan derfor IKKE ligge inne i
          .course-accordion-header, som er en knapp — en lenke inni en knapp er ugyldig HTML og
          bryter tastaturnavigasjonen.
@@ -177,25 +190,61 @@
       /* Sertifikat-ID-en er med vilje UTE av lista — 25 tegn maskintekst midt i en rad et menneske
          skal skumme. Den hører hjemme på bevissiden, som lenka går til. */
       .course-done-row .course-accordion-chevron { margin-left: 0; }
+      /* 2.152.0 (produkteier 2026-11-11, PLAN_1139 punkt 13): de fullførte i ETT grønt kort, tette rader, én felles grønn
+         linje nederst. Kursets egen linje står i kortet, skjult; den vises mens båten feirer, og når kurset er åpent alene.
+         Radhøyde 32 px (36 px på telefon): produkteier godtok under 44 px, radene ligger tett og hele bredden er trykkflate. */
+      .course-done-group { display: grid; border: 1px solid #b8d9c6; border-radius: var(--radius-card); background: #f4fbf7; overflow: hidden; }
+      .course-done-group > .course-accordion-item--done { border: 0; border-radius: 0; border-bottom: 1px solid #e3f1e8; }
+      .course-done-group .course-done-row .course-accordion-header { min-height: 32px; padding-top: 2px; padding-bottom: 2px; font-size: 14px; line-height: 1.3; }
+      .course-done-group > .course-accordion-item--done > .course-progress:not(.course-progress--celebrating) { display: none; }
+      .course-done-group-bar { height: 6px; border-radius: 999px; background: var(--color-success, #1f7a4d); margin: 8px var(--space-2) 10px; }
+      @media (max-width: 600px) {
+        .course-done-group .course-done-row .course-accordion-header { min-height: 36px; }
+      }
+      /* Ett kurs åpent alene: gruppen viker, og et åpent fullført kurs ser ut som før (eget kort, egen grønn linje). */
+      .course-accordion--focused .course-done-group:not(:has(.is-focused)) { display: none; }
+      /* Åpent alene er gruppa bare en ramme uten egen form: ingen klipping og ingen rutenettkolonne. Lesevisningen setter med vilje
+         `overflow: visible` på kortet, så hodet («Lukk», tittel) blir stående øverst når man ruller; bredt innhold (kodeblokk,
+         tabell) skal ikke klippes (QA-porten 2.152.0, bør 2). */
+      .course-accordion--focused .course-done-group { display: block; overflow: visible; border: 0; background: transparent; }
+      .course-accordion--focused .course-done-group-bar { display: none; }
+      .course-accordion--focused .course-done-group > .course-accordion-item--done.is-focused:not(.course-reading) { border: 1px solid #b8d9c6; border-radius: var(--radius-card); }
+      .course-accordion--focused .course-done-group > .course-accordion-item--done.is-focused > .course-progress { display: block; }
+      .course-accordion--focused .course-done-group .course-done-row .course-accordion-header { min-height: 0; padding: var(--space-1) var(--space-2); font-size: 14px; line-height: normal; }
       /* Grensen mellom pågående og fullførte kurs. Navngitt, ikke bare en strek: en strek alene
          sier at noe skiller, ikke HVA. */
       .course-group-divider { display: flex; align-items: center; gap: var(--space-1); margin: var(--space-2) 0 var(--space-1); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--color-meta); font-weight: 700; }
       .course-group-divider::after { content: ""; flex: 1; height: 1px; background: var(--color-border-soft); }
       /* Grensen hører til lista, ikke til ett kurs — den skal vike når ett kurs får flaten alene. */
       .course-accordion--focused .course-group-divider { display: none; }
+      /* #1077 leveranse 2: «sett i riktig rekkefølge». Knappene er 44 px høye, så de kan treffes på telefon. */
+      .mcq-order-list { list-style: none; margin: var(--space-1) 0 0; padding: 0; display: grid; gap: 6px; }
+      .mcq-order-item { display: flex; align-items: center; gap: var(--space-1); padding: 4px 4px 4px 12px; border: 1px solid var(--color-module-border); border-radius: 8px; background: var(--color-surface); cursor: grab; }
+      .mcq-order-item.is-dragging { opacity: .5; }
+      .mcq-order-position { font-weight: 700; color: var(--color-meta); min-width: 1.6em; }
+      .mcq-order-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+      .mcq-order-buttons { display: flex; gap: 4px; flex-shrink: 0; }
+      .mcq-order-move { width: 44px; height: 44px; padding: 0; border: 1px solid var(--color-border-soft); border-radius: 8px; background: var(--color-bg); font-size: 18px; cursor: pointer; color: var(--color-text); }
+      .mcq-order-move:disabled { opacity: .35; cursor: default; }
+      .mcq-order-move:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
       /* 2.102.0: «Mine kurs» etter tema. Valget (tema / alfabetisk) står over lista; temanavnet er en
          overskrift, så en skjermleser kan hoppe mellom temaene. Begge viker når ett kurs får flaten. */
-      .course-view-toggle { display: inline-flex; align-self: flex-end; justify-self: end; border: 1px solid var(--color-module-border); border-radius: 999px; background: var(--color-surface); padding: 3px; }
-      .course-view-btn { border: none; border-radius: 999px; padding: 0 16px; min-height: 36px; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; color: var(--color-meta); width: auto; }
-      .course-view-btn[aria-pressed="true"] { background: var(--color-primary); color: #ffffff; }
-      .course-view-btn:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
-      .course-theme-heading { margin: var(--space-2) 0 0; font-size: 17px; color: var(--color-navy); }
+      /* 2.126.0: selve valget er felles med kurslista i innholdsforvaltningen (shared.css). Her står bare plasseringen. */
+      .course-view-toggle { align-self: flex-end; justify-self: end; }
+      /* Produkteier 2026-10-25 valgte variant A av tre («less is more»): messingfarge og litt større,
+         ingen linje. Svart i 17 px lignet kurstitlene og skilte ikke temaene fra hverandre. */
+      .course-theme-heading { margin: var(--space-2) 0 0; font-size: 19px; color: var(--color-link-active); }
       .course-view-toggle + .course-theme-heading { margin-top: 0; }
       .course-accordion--focused .course-view-toggle,
       .course-accordion--focused .course-theme-heading { display: none; }
-      .course-progress-bar { height: 6px; background: var(--color-border-soft); border-radius: 999px; overflow: hidden; }
+      /* #1137: fremdriftslinja. Figuren på linja (seilbåten), retningen linja fylles fra, og radhøyden med figur
+         kommer fra maskotpakken: /static/mascot/figure.css (mascots/<valgt>/figure.css). */
+      .course-progress-bar { height: 6px; background: var(--color-border-soft); border-radius: 999px; overflow: hidden; display: flex; }
       .course-progress-fill { height: 100%; background: var(--color-blue); border-radius: 999px; transition: width 0.3s; }
       .course-progress-fill.completed { background: var(--color-success, #1f7a4d); }
+      .course-progress { position: relative; }
+      /* Fullført: én grønn linje under den grønne raden (produkteier 2026-11-02), utenfor kroppen som er skjult. */
+      .course-accordion-item--done > .course-progress { margin: 0 var(--space-2) var(--space-1); }
       /* #714-followup: kurselement-lista speiler admin-oversiktene — luftige rader, fet tittel,
          dempet handlingsverb som type-hint, status som pille til høyre. */
       .course-module-row { display: flex; align-items: center; gap: var(--space-2); padding: 10px 12px; border-bottom: 1px solid var(--color-border-soft); }
@@ -392,6 +441,10 @@
       @media (max-width: 600px) {
         .course-inline-panel-body { padding: 8px; }
         .course-inline-panel-body .section-reader-body { padding: 12px; }
+        /* #1162: «← Tilbake til kurset» er lengre enn «Lukk modulen». Modulens hode står inne i kursets tidslinje (ikke i
+           lesemodus), og på 360 px ble knappen kuttet i høyre kant av panelet (merke 80 + knapp 132–146 px i et panel på
+           232). Merket viker på telefon, så tittelen får plassen. */
+        .course-item[data-type="MODULE"] .course-inline-panel-tag { display: none; }
       }
       .course-inline-actions { display: flex; gap: var(--space-1); align-items: center; flex-wrap: wrap; margin-top: 12px; }
 
@@ -484,11 +537,6 @@
         <select id="localeSelect" class="locale-select-compact"></select>
       </div>
     </div>
-    <!-- #767: «Mine kurs»-området deler denne undernavigasjonen (Pågående | Fullførte). -->
-    <nav id="mineKursSubnav" class="content-area-nav" aria-label="Mine kurs">
-      <a href="/participant" class="content-area-nav-link" id="subnavPagaende" data-i18n="mineKurs.ongoing">Ongoing</a>
-      <a href="/participant/completed" class="content-area-nav-link" id="subnavFullforte" data-i18n="mineKurs.completed">Completed</a>
-    </nav>
     <h1 data-i18n="page.title">My courses</h1>
     <p class="small" data-i18n="page.subtitle">Track your progress across your courses.</p>
     <section id="previewModeBanner" class="card hidden">
@@ -529,8 +577,14 @@
       <!-- #922: veien tilbake til kurslista står øverst til venstre, der man leter etter den.
            Skjult som standard via inline display:none så den ikke blinker inn ved første maling;
            setHidden() tar den fram (klassen eier flex-oppsettet). -->
+      <!-- 2.121.0: en delingslenke (/kurs/<navn>) eller ?courseId= som ikke peker på et kurs deltakeren
+           har tilgang til. Én melding for begge: den røper ikke om et lukket kurs finnes. -->
+      <p id="courseLinkNotice" class="course-link-notice" role="alert" style="display:none" data-i18n="courses.link.unavailable">This course does not exist, or you do not have access to it.</p>
       <div id="courseBackBar" class="course-back-bar" style="display:none">
-        <button type="button" id="courseBackBtn" class="course-back-btn" data-i18n="courses.backToList">All courses</button>
+        <button type="button" id="courseBackBtn" class="course-back-btn" data-i18n="courses.backToList">← Back to My courses</button>
+        <!-- Deleikonet (Lucide «share-2», som plattformens ikonbibliotek). Navnet settes fra skriptet
+             (aria-label og title), siden oversettelsene her bare fyller tekstinnhold. -->
+        <button type="button" id="courseCopyLinkBtn" class="course-copy-link-btn" style="display:none" aria-label="Copy link" title="Copy link"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg></button>
       </div>
       <div id="courseAccordion" class="course-accordion"></div>
     </section>
@@ -572,8 +626,12 @@
           <div class="module-brief-label" data-i18n="submission.candidateTaskConstraints">Guidance</div>
           <div id="selectedModuleCandidateTaskConstraints" class="module-brief-text module-brief-text--constraints"></div>
         </div>
+        <!-- #1124: «Slik vurderes svaret ditt» — fylles av participant.js fra modulens assessmentCriteria. -->
+        <div id="selectedModuleCriteria" style="display:none"></div>
       </div>
       <div id="submissionFields"></div>
+      <!-- #934 skive 5a-1: tekst fra kladden til felt oppgaven ikke har lenger. Fylles av participant.js. -->
+      <div id="orphanedDraftTexts" hidden></div>
       <div class="small" id="draftStatus" aria-live="polite" aria-atomic="true"></div>
       <div class="small" id="draftBrowserNote" data-i18n="draft.browserNote">Your work is saved automatically in this browser while you switch between modules.</div>
       <!-- #475: one pre-submit attestation group — responsibility + KI declaration as matching tiles. -->
@@ -594,7 +652,7 @@
             <label class="decl-tile ai-declaration-opt" data-v="none"><input type="radio" name="aiDeclaration" value="none" /><span class="t" data-i18n="ai.declaration.opt.none.title">No</span><span class="s" data-i18n="ai.declaration.opt.none.sub">did not use AI</span><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></label>
             <label class="decl-tile ai-declaration-opt" data-v="ideas"><input type="radio" name="aiDeclaration" value="ideas" /><span class="t" data-i18n="ai.declaration.opt.ideas.title">Ideas / look-ups</span><span class="s" data-i18n="ai.declaration.opt.ideas.sub">wrote the answer myself</span><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></label>
             <label class="decl-tile ai-declaration-opt" data-v="improve"><input type="radio" name="aiDeclaration" value="improve" /><span class="t" data-i18n="ai.declaration.opt.improve.title">Improved my text</span><span class="s" data-i18n="ai.declaration.opt.improve.sub">wording, structure</span><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></label>
-            <label class="decl-tile ai-declaration-opt" data-v="autonomous"><input type="radio" name="aiDeclaration" value="autonomous" /><span class="t" data-i18n="ai.declaration.opt.autonomous.title">AI wrote most of it</span><span class="s" data-i18n="ai.declaration.opt.autonomous.sub">did little myself</span><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></label>
+            <label class="decl-tile ai-declaration-opt" data-v="autonomous"><input type="radio" name="aiDeclaration" value="autonomous" /><span class="t" data-i18n="ai.declaration.opt.autonomous.title">AI wrote most of it</span><span class="s" data-i18n="ai.declaration.opt.autonomous.sub">did little myself</span><span class="s" id="aiDeclarationReviewNotice" data-i18n="ai.declaration.opt.autonomous.review" hidden>An assessor then reads the answer</span><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></label>
           </div>
           <label class="ai-declaration-howto" id="aiDeclarationHowtoWrap" style="display:none">
             <span class="small" data-i18n="ai.declaration.howto">Optional: briefly, how did you use AI?</span>
@@ -659,7 +717,6 @@
     <script src="/static/i18n/participant-translations.js" type="module"></script>
     <script src="/static/participant.js" type="module"></script>
     <script src="/static/content-blocks.js" type="module"></script>
-    <script src="/static/mine-kurs-subnav.js" type="module"></script>
     <script src="/static/workspace-help.js" type="module"></script>
       <script type="module" src="/static/page-title.js"></script>
   </body>

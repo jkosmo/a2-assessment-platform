@@ -140,6 +140,7 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
       moduleTaskText: inputContext.moduleTaskText,
       moduleGuidanceText: inputContext.moduleGuidanceText,
       rubricCriteriaIds,
+      rubricCriteria: inputContext.rubricCriteria,
       submissionFieldLabels,
     });
   } catch (error) {
@@ -248,6 +249,7 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
         moduleTaskText: inputContext.moduleTaskText,
         moduleGuidanceText: inputContext.moduleGuidanceText,
         rubricCriteriaIds,
+        rubricCriteria: inputContext.rubricCriteria,
         submissionFieldLabels,
       });
     } catch (error) {

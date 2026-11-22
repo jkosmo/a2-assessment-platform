@@ -15,6 +15,7 @@ import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showLoading } from "/static/loading.js";
 import { setHidden } from "/static/dom-visibility.js";
 import { setTableEmpty } from "/static/table-empty.js";
+import { saveCsvFile } from "/static/csv-file.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -295,8 +296,8 @@ const rapporter = lagLokalisertRessurs({
     renderCompletion(passRatesData.rows, completionData.rows);
     renderCourseReport(courseData.rows ?? []);
     await Promise.all([
-      selectedModuleRow ? loadModuleLearners() : Promise.resolve(renderParticipants([])),
-      selectedCourseRow ? loadCourseLearners() : Promise.resolve(renderCourseLearners([])),
+      loadModuleLearners(),
+      loadCourseLearners(),
     ]);
     log({ passRates: passRatesData, completion: completionData, courses: courseData });
   },
@@ -541,7 +542,6 @@ exportPassRatesButton.addEventListener("click", () => exportCsv("pass-rates"));
 document.getElementById("exportModuleSummary")?.addEventListener("click", () => exportCsv("module-summary"));
 document.getElementById("exportModuleLearners")?.addEventListener("click", () => exportCsv("module-learners"));
 document.getElementById("exportCourseSummary")?.addEventListener("click", () => exportCsv("course-summary"));
-document.getElementById("exportCourseLearners")?.addEventListener("click", () => exportCsv("course-learners"));
 
 loadMeButton?.addEventListener("click", async () => {
   try {
@@ -557,6 +557,10 @@ loadMeButton?.addEventListener("click", async () => {
 const courseReportBody = document.getElementById("courseReportBody");
 const courseLearnerBody = document.getElementById("courseLearnerBody");
 const courseDetailMeta = document.getElementById("courseDetailMeta");
+const exportCourseViewButton = document.getElementById("exportCourseView");
+// Det tabellen viser akkurat nå. Tittelen følger radene, så fila ikke får navnet til et kurs som er valgt, men ikke hentet.
+let courseLearnerView = { courseTitle: "", rows: [] };
+exportCourseViewButton.addEventListener("click", exportCourseLearners);
 
 
 function renderCourseReport(rows) {
@@ -633,9 +637,57 @@ function renderCourseReport(rows) {
   }
 }
 
-function renderCourseLearners(rows) {
+/** Tid på formen Excel leser som dato, i leserens egen tidssone. Tom når det ikke finnes noen. */
+function spreadsheetDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Fila er tabellen på skjermen, ett kurs om gangen. «3/4» ville blitt en dato i Excel, derfor «3 av 4».
+function exportCourseLearners() {
+  const { courseTitle, rows } = courseLearnerView;
+  const today = spreadsheetDateTime(new Date()).slice(0, 10);
+  saveCsvFile(
+    `${courseTitle.replace(/[\\/:*?"<>|]/g, "-")} ${today}.csv`,
+    [
+      t("results.courses.course"),
+      t("results.participants.name"),
+      t("results.participants.email"),
+      t("results.participants.department"),
+      t("results.courses.detail.status"),
+      t("results.courses.detail.completedModules"),
+      t("results.courses.detail.readSections"),
+      t("results.participants.score"),
+      t("results.courses.detail.latestActivityAt"),
+    ],
+    rows.map((row) => [
+      courseTitle,
+      row.participantName,
+      row.participantEmail,
+      row.participantDepartment,
+      learnerStatusText(row),
+      tf("results.courses.detail.ofTotal", { done: row.completedModules, total: row.totalModules }),
+      tf("results.courses.detail.ofTotal", { done: row.readSections ?? 0, total: row.totalSections ?? 0 }),
+      typeof row.score === "number" ? formatScore(row.score) : "",
+      spreadsheetDateTime(row.latestActivityAt),
+    ]),
+  );
+}
+
+// #1145: et kursbevis registrert av administrator for et kurs tatt utenfor plattformen merkes ved statusen (ingen dato,
+// ingen aktivitet).
+function learnerStatusText(row) {
+  const status = formatStatus(row.status);
+  return row.completionSource === "external" ? `${status} (${t("results.courses.detail.takenOutside")})` : status;
+}
+
+function renderCourseLearners(rows, courseTitle = "") {
   courseLearnerBody.innerHTML = "";
   const empty = !Array.isArray(rows) || rows.length === 0;
+  courseLearnerView = { courseTitle, rows: empty ? [] : rows };
+  setHidden(exportCourseViewButton, empty);
   setTableEmpty(courseLearnerBody, empty ? (selectedCourseRow ? t("results.courses.detail.empty") : "") : null);
   if (empty) return;
 
@@ -645,7 +697,7 @@ function renderCourseLearners(rows) {
       <td>${escapeHtmlR(row.participantName ?? "—")}</td>
       <td>${escapeHtmlR(row.participantEmail)}</td>
       <td>${escapeHtmlR(row.participantDepartment ?? "—")}</td>
-      <td>${escapeHtmlR(formatStatus(row.status))}</td>
+      <td>${escapeHtmlR(learnerStatusText(row))}</td>
       <td>${escapeHtmlR(`${row.completedModules}/${row.totalModules}`)}</td>
       <td>${escapeHtmlR(`${row.readSections ?? 0}/${row.totalSections ?? 0}`)}</td>
       <td>${escapeHtmlR(formatScore(row.score))}</td>
@@ -655,45 +707,57 @@ function renderCourseLearners(rows) {
   }
 }
 
+// Bare den siste hentingen teller: et nytt valg eller et nytt filter under hentingen skal ikke få et sent svar lagt over seg, og ikke bli fila.
+let moduleLearnerRequest = 0;
+let courseLearnerRequest = 0;
+
 async function loadModuleLearners() {
+  const request = ++moduleLearnerRequest;
   if (!selectedModuleRow) {
     moduleDetailMeta.textContent = t("results.participants.placeholder");
     renderParticipants([]);
     return;
   }
 
+  const row = selectedModuleRow;
   const params = buildFilterParams();
-  params.set("selectedModuleId", selectedModuleRow.moduleId);
+  params.set("selectedModuleId", row.moduleId);
   try {
     const data = await apiFetch(`/api/reports/completion/details?${params}`, headers);
+    if (request !== moduleLearnerRequest) return;
     moduleDetailMeta.textContent = tf("results.participants.selected", {
-      title: selectedModuleRow.moduleTitle,
+      title: row.moduleTitle,
       count: data.rows?.length ?? 0,
     });
     renderParticipants(data.rows ?? []);
   } catch (error) {
+    if (request !== moduleLearnerRequest) return;
     moduleDetailMeta.textContent = describeApiError(error, t).headline;
     renderParticipants([]);
   }
 }
 
 async function loadCourseLearners() {
+  const request = ++courseLearnerRequest;
   if (!selectedCourseRow) {
     courseDetailMeta.textContent = t("results.courses.placeholder");
     renderCourseLearners([]);
     return;
   }
 
+  const course = selectedCourseRow;
   const params = buildFilterParams();
-  params.set("selectedCourseId", selectedCourseRow.courseId);
+  params.set("selectedCourseId", course.courseId);
   try {
     const data = await apiFetch(`/api/reports/courses/details?${params}`, headers);
+    if (request !== courseLearnerRequest) return;
     courseDetailMeta.textContent = tf("results.courses.selected", {
-      title: selectedCourseRow.courseTitle,
+      title: course.courseTitle,
       count: data.rows?.length ?? 0,
     });
-    renderCourseLearners(data.rows ?? []);
+    renderCourseLearners(data.rows ?? [], course.courseTitle);
   } catch (error) {
+    if (request !== courseLearnerRequest) return;
     courseDetailMeta.textContent = describeApiError(error, t).headline;
     renderCourseLearners([]);
   }

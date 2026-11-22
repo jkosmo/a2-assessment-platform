@@ -487,3 +487,33 @@ describe("#1077 checkLocalization — flere riktige svar", () => {
     expect(result.missing.some((m: { path: string }) => /correctAnswers\[0\]/.test(m.path))).toBe(true);
   });
 });
+
+// #1077 leveranse 2: i «sett i riktig rekkefølge» ER alternativene fasiten, i samme rekkefølge på alle
+// språk. Det finnes ikke noe eget svar å sammenligne — et spørsmål uten correctAnswer er gyldig.
+describe("#1077 leveranse 2 — «order» i språkkontrollen", () => {
+  const withOrder = (extra: Record<string, unknown> = {}) => {
+    const pkg = fullyLocalizedPackage();
+    const q = pkg.objects[0].payload.activeVersion.mcqSet.questions[0];
+    delete q.correctAnswer;
+    Object.assign(q, {
+      questionType: "order",
+      options: [L("Motta klagen", "Ta imot klaga", "Receive the complaint"), L("Vurdere fristen", "Vurdere fristen", "Check the deadline"), L("Avgjøre", "Avgjere", "Decide")],
+      ...extra,
+    });
+    return pkg;
+  };
+
+  it("et oversatt spørsmål uten correctAnswer går gjennom — ingen falsk fasitendring", () => {
+    const result = checkLocalization(withOrder());
+    expect(result.answerKeyChanges).toEqual([]);
+    expect(result.missing.filter((m: { path: string }) => /questions\[0\]/.test(m.path))).toEqual([]);
+  });
+
+  it("kontroll: et element som mangler et språk, meldes fortsatt", () => {
+    const pkg = withOrder();
+    const q = pkg.objects[0].payload.activeVersion.mcqSet.questions[0];
+    q.options[1] = { nb: "Vurdere fristen", nn: "Vurdere fristen" };
+    const result = checkLocalization(pkg);
+    expect(result.missing.some((m: { path: string }) => /questions\[0\]\.options\[1\]/.test(m.path))).toBe(true);
+  });
+});

@@ -7,7 +7,6 @@ import { z } from "zod";
 import {
   createCourse,
   updateCourse,
-  publishCourse,
   unpublishCourse,
   archiveCourse,
   restoreCourse,
@@ -15,19 +14,26 @@ import {
   setCourseItems,
   deleteCourse,
   courseRepository,
+  createCourseRepository,
   assignEnrollments,
   revokeEnrollment,
   listCourseEnrollments,
   getCoursePublishPreview,
   publishCourseCascade,
+  publishCourseChecked,
+  courseFormOutdatedError,
+  assertCourseItemsUsable,
   getCoursePendingVersions,
   publishCoursePendingVersions,
   getCourseCascadeDeletePreview,
   cascadeDeleteCourse,
   findThemeIdsForCourse,
   findLocalizedThemesForCourses,
+  assertCourseThemesExist,
+  findExistingThemeIds,
 } from "../modules/course/index.js";
-import { generationLocaleSchema, importBodySchema, normalizeImportPayload, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { generationLocaleSchema, importBodySchema, normalizeImportPayload, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema, publishPendingVersionedBodySchema } from "../modules/adminContent/adminContentSchemas.js";
+import { publishCoursePendingVersioned } from "../modules/course/versionedPublishService.js";
 import { courseAdminLinks } from "../modules/adminContent/adminUiLinks.js";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { hasAnyRole, ADMIN_ONLY } from "../auth/roleSets.js";
@@ -36,28 +42,38 @@ import { importCourseFromEnvelope } from "../modules/adminContent/contentImportS
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { localizeContentText } from "../i18n/content.js";
 import { localizeCourseCopy } from "../modules/adminContent/llmContentGenerationService.js";
-import { NotFoundError, AppError } from "../errors/AppError.js";
+import { NotFoundError, AppError, ConflictError, DomainRuleError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
 import { countCourseInProgressParticipants } from "../modules/course/contentLifecycle.js";
+import { countMajorVersionRecipients } from "../modules/course/courseVersioning.js";
+import {
+  courseDraftPayloadSchema,
+  discardCourseDraft,
+  findCourseDraft,
+  findCourseIdsWithDraft,
+  publishCourseDraft,
+  readCourseDraftPayload,
+  saveCourseDraft,
+  type CourseDraftPayload,
+  type CourseDraftRow,
+} from "../modules/course/courseDraft.js";
+import { courseBodySchema, courseItemListSchema } from "../modules/course/courseSchemas.js";
+import { getCoursePublishAudience } from "../modules/course/coursePublishAudience.js";
+import { analyzeCourseArchive, analyzeCourseRestore } from "../modules/course/courseArchivePreview.js";
+import { prisma } from "../db/prisma.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
+import { packageCueWarnings } from "../modules/adminContent/mcqCueWarnings.js";
+import { packageRubricWarnings } from "../modules/adminContent/rubricWarnings.js";
+import { packageAltTextWarnings } from "../modules/adminContent/altTextWarnings.js";
+import { assertNotArchivedBeforeLock } from "../modules/content/archivedGuard.js";
+import { createRetentionContext, evaluateArchivedCourse, retentionRequested, type ArchivedRetention } from "../modules/content/archivedRetention.js";
 
 const adminCoursesRouter = Router();
 
-const courseBodySchema = z.object({
-  title: localizedTextPatchSchema,
-  description: localizedTextPatchSchema.optional(),
-  certificationLevel: localizedTextPatchSchema.optional(),
-  // #645/#496: course visibility — OPEN (everyone) or RESTRICTED (only enrolled / class-assigned).
-  enrollmentPolicy: z.enum(["OPEN", "RESTRICTED"]).optional(),
-  // #495/T-QA-4: kurs-master av/på for diskusjon (default true i datamodellen).
-  discussionsEnabled: z.boolean().optional(),
-  // #1093: plassering i «Mine kurs». null = alfabetisk (det vanlige).
-  sortOrder: z.number().int().min(0).max(9999).nullable().optional(),
-  // 2.102.0: kursets tema i «Mine kurs». Satt = nøyaktig disse; utelatt = urørt.
-  themeIds: z.array(z.string().min(1)).max(100).optional(),
-});
+// #1150 skive 2a-1: kursets felt og elementliste står i modules/course/courseSchemas.ts, fordi utkastet til et kurs leses
+// gjennom dem både her og i regelen «brukes andre steder» (courseDraft.ts). Uendret.
 
 const setCourseModulesBodySchema = z.object({
   modules: z.array(
@@ -66,17 +82,44 @@ const setCourseModulesBodySchema = z.object({
       sortOrder: z.number().int().min(0),
     }),
   ),
+  // #934 skive 4a: som `PUT …/items`.
+  expectedRevision: z.number().int().min(0).optional(),
 });
 
 const setCourseItemsBodySchema = z.object({
-  items: z.array(
-    z.discriminatedUnion("type", [
-      z.object({ type: z.literal("MODULE"), moduleId: z.string().min(1), discussionsEnabled: z.boolean().optional() }),
-      z.object({ type: z.literal("SECTION"), sectionId: z.string().min(1), discussionsEnabled: z.boolean().optional() }),
-    ]),
-  ),
+  items: courseItemListSchema,
   // AA-5 (#653): stamped into the items-update's audit event (source: agent_authoring).
   agentRunId: agentRunIdSchema.optional(),
+  // #934 skive 3: forfatterens svar når et publisert kurs endres.
+  version: z.enum(["major", "minor"]).optional(),
+  // #934 skive 4a: overgangen fra 2.129.0 er fjernet. Markøren godtas fortsatt (en klient som sender den, skal
+  // ikke få 400), men betyr ingenting: uten svar avvises endringen når noen har kursbevis.
+  versionAware: z.literal(true).optional(),
+  // #934 skive 4a: telleren skjemaet lastet. Uten den godtas lagringen bare for et kurs som aldri har vært ute.
+  expectedRevision: z.number().int().min(0).optional(),
+  // #934 skive 4b: se `confirmEmailRecipientsSchema`.
+  confirmEmailRecipients: z.number().int().min(0).optional(),
+});
+
+// #934 skive 4b: tallet dialogen viste da forfatteren sa ja til at en hovedversjon sender e-post til over 200
+// deltakere. Serveren teller på nytt; over grensen og ikke bekreftet (eller bekreftet lavere): `409
+// major_email_confirm_required`, og ingenting er skrevet. En gammel klient sender det aldri.
+const confirmEmailRecipientsSchema = setCourseItemsBodySchema.shape.confirmEmailRecipients;
+
+// #934 skive 4a: telleren kursskjemaet lastet (`contentRevision` i kursdetaljen). Kreves av `PUT /:courseId` og
+// `PUT …/content`: uten den er det en fane fra før denne utgivelsen, og den avvises før noe skrives.
+const expectedRevisionSchema = z.number().int().min(0).optional();
+
+// #934 skive 3: `PUT /:courseId/content` — kursskjemaet lagrer navnet og innholdet i ÉN lagring: `items`
+// (samme form som `PUT …/items`, påkrevd) og forfatterens svar `version` skrives i samme transaksjon som
+// navnet, og serveren avgjør versjonen én gang. Et EGET endepunkt, ikke nye felt på `PUT /:courseId`: under
+// rullering svarer en gammel server 404 på dette i stedet for å fjerne `items` stille og svare OK (QA-porten).
+// #934 skive 4a: skjemaet lagrer ALLTID et eksisterende kurs her, også når elementene er uendret.
+const saveCourseContentBodySchema = courseBodySchema.partial().extend({
+  items: setCourseItemsBodySchema.shape.items,
+  version: z.enum(["major", "minor"]).optional(),
+  expectedRevision: expectedRevisionSchema,
+  confirmEmailRecipients: confirmEmailRecipientsSchema,
 });
 
 const courseLocalizationBodySchema = z.object({
@@ -110,6 +153,7 @@ adminCoursesRouter.post("/", idempotency("courses.create"), async (request, resp
       certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : null,
       enrollmentPolicy: parsed.data.enrollmentPolicy,
       discussionsEnabled: parsed.data.discussionsEnabled,
+      discussionOwnerNotifications: parsed.data.discussionOwnerNotifications,
       sortOrder: parsed.data.sortOrder,
       themeIds: parsed.data.themeIds,
       actorId: request.context?.userId,
@@ -152,9 +196,23 @@ adminCoursesRouter.get("/", async (request, response, next) => {
   try {
     const courses = await courseRepository.listCourses();
     // #705-UX(F): vis antall påbegynte-ufullførte deltakere per kurs (samme signal som G3-vakta).
-    const inProgressCounts = await Promise.all(
-      courses.map((c) => countCourseInProgressParticipants(c.id)),
-    );
+    // #1150 skive 2a-1: tellingen er nå den «Mine kurs» bruker, 5–9 spørringer per kurs mot 3 før. Alle kursene samtidig ga
+    // et støt av hundrevis av spørringer mot én database-pool (prod er én B1-maskin). Fire kurs om gangen holder støtet lite.
+    const inProgressCounts: number[] = [];
+    // #1152 skive 4b: et arkivert kurs får i stedet svaret på «slettes når, eller hvorfor beholdes det» (archivedRetention.ts), i
+    // samme løkke og med samme fire om gangen. Overgangstidspunktet leses én gang, og bare når lista har et arkivert kurs.
+    // 4b-2: bare når klienten ber om det (`?includeRetention=1`, filteret «Arkiverte»). Ellers koster lista det den gjorde før.
+    const includeRetention = retentionRequested(request.query.includeRetention);
+    const retentionContext = includeRetention && courses.some((c) => c.archivedAt) ? await createRetentionContext() : null;
+    const retentionByCourse = new Map<string, ArchivedRetention>();
+    for (let i = 0; i < courses.length; i += 4) {
+      // Et arkivert kurs telles ikke: det er allerede arkivert, og tallet er bare et varsel før arkivering (QA-porten 2a-1).
+      inProgressCounts.push(...(await Promise.all(courses.slice(i, i + 4).map(async (c) => {
+        if (!c.archivedAt) return countCourseInProgressParticipants(c.id);
+        if (retentionContext) retentionByCourse.set(c.id, await evaluateArchivedCourse(retentionContext, c.id));
+        return 0;
+      }))));
+    }
     // #787 slice 5: hvilke kurs kan innlogget bruker forvalte (admin eller eier)? Styrer om lista viser
     // rediger/livssyklus-handlingene — speiler eierskaps-vakta så vi ikke rendrer knapper som gir 403.
     const manageable = await listManageableContentIds({
@@ -166,6 +224,8 @@ adminCoursesRouter.get("/", async (request, response, next) => {
     const locale = requestLocale(request);
     // 2.102.0: temaene står i lista, så oversikten kan filtreres på dem.
     const themesByCourse = await findLocalizedThemesForCourses(courses.map((c) => c.id), locale);
+    // #1140 etappe 2: et publisert kurs med et lagret utkast står som «Publisert» med «Nyere utkast», som en modul.
+    const withDraft = await findCourseIdsWithDraft(prisma, courses.map((c) => c.id));
     const items: AdminCourseListItem[] = courses.map((c, i) => ({
       id: c.id,
       title: c.title,
@@ -177,10 +237,14 @@ adminCoursesRouter.get("/", async (request, response, next) => {
       updatedAt: c.updatedAt.toISOString(),
       publishedAt: c.publishedAt?.toISOString() ?? null,
       archivedAt: c.archivedAt?.toISOString() ?? null,
-      lifecycle: deriveContentLifecycle({ archivedAt: c.archivedAt, publishedAt: c.publishedAt }),
+      lifecycle: deriveContentLifecycle({ archivedAt: c.archivedAt, publishedAt: c.publishedAt, hasDraft: withDraft.has(c.id) }),
       inProgressCount: inProgressCounts[i],
       canManage: manageable.has(c.id),
       themes: themesByCourse.get(c.id) ?? [],
+      versionMajor: c.versionMajor,
+      versionMinor: c.versionMinor,
+      // #1152 skive 4b: bare på arkiverte kurs, og bare når klienten ba om det.
+      ...(includeRetention && c.archivedAt ? { retention: retentionByCourse.get(c.id) ?? { unknown: true as const } } : {}),
     }));
     response.json({ courses: items });
   } catch (error) {
@@ -245,6 +309,10 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       targetCourseId: data.targetId,
       // #1095: eierskapet sjekkes per element i tjenesten (seksjoner og moduler kan ha andre eiere enn kurset).
       actorRoles: request.context?.roles ?? [],
+      // #934 skive 3: kreves for `replaceExisting` når kurset har kursbevis.
+      version: data.version,
+      // #934 skive 4b: kreves når hovedversjonen sender e-post til over 200.
+      confirmEmailRecipients: data.confirmEmailRecipients,
     });
     // AA-2 (#650): links + clientRef echo make the response agent-orchestrable.
     response.status(201).json({
@@ -259,6 +327,12 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       // Kommentaren i `contentImportService.ts` lovet at det ble rapportert. Nå gjør det det.
       heldBackByTranslationGate: result.heldBackByTranslationGate,
       ...(result.summary ? { summary: result.summary } : {}),
+      // #1119: tester der svaret kan røpe seg — varsel, ikke stopp. Regnet på fila, med seksjonene før hver test.
+      cueWarnings: packageCueWarnings(data.payload),
+      // #1122: kriterier med én linje for hele skalaen, per modul.
+      rubricWarnings: packageRubricWarnings(data.payload),
+      // #1128: seksjoner der et bilde har en tittel som alt-tekst.
+      altWarnings: packageAltTextWarnings(data.payload),
       links: courseAdminLinks(result.courseId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });
@@ -352,12 +426,23 @@ adminCoursesRouter.get("/:courseId/export-package", async (request, response, ne
 // allerede hver rad med `canManage` — «Rediger» rendres ikke for den som ville fått 403.
 // Samme grep som seksjonene fikk i #916, og linja går der: LISTA er åpen (du må kunne finne dine
 // egne), DETALJEN er ikke.
+// ⚠️ Ingen eierskapsvakt, med vilje: produkteier ønsker størst mulig deling mellom fagansvarlige i
+// organisasjonen (2026-09-07, bekreftet 2026-11-02). Også `certificateHolders` (#934) er åpent for dem.
+// Blir det flere organisasjoner, må lesevaktene på plass. Se doc/DECISIONS.md.
 adminCoursesRouter.get("/:courseId", async (request, response, next) => {
   try {
     const course = await courseRepository.findCourseById(request.params.courseId);
     if (!course) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
+    const hasDraft = (await findCourseDraft(prisma, course.id)) != null;
+    // #1165: lesingen er åpen for alle forfattere; skjemaet viser kurset skrivebeskyttet for den som ikke kan endre det.
+    const manageable = await listManageableContentIds({
+      contentType: "COURSE",
+      contentIds: [course.id],
+      actorUserId: request.context?.userId ?? "",
+      roles: request.context?.roles ?? [],
+    });
     const detail: AdminCourseDetail = {
       id: course.id,
       title: course.title,
@@ -365,11 +450,21 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       certificationLevel: course.certificationLevel,
       enrollmentPolicy: course.enrollmentPolicy,
       discussionsEnabled: course.discussionsEnabled,
+      discussionOwnerNotifications: course.discussionOwnerNotifications,
+      slug: course.slug ?? null,
       sortOrder: course.sortOrder ?? null,
       themeIds: await findThemeIdsForCourse(course.id),
       updatedAt: course.updatedAt.toISOString(),
       publishedAt: course.publishedAt?.toISOString() ?? null,
       archivedAt: course.archivedAt?.toISOString() ?? null,
+      versionMajor: course.versionMajor,
+      versionMinor: course.versionMinor,
+      certificateHolders: await courseRepository.countCertificateHolders(course.id, course.versionMajor),
+      majorEmailRecipients: await countMajorVersionRecipients(prisma, course.id),
+      contentRevision: course.contentRevision,
+      hasDraft,
+      canManage: manageable.has(course.id),
+      lifecycle: deriveContentLifecycle({ archivedAt: course.archivedAt, publishedAt: course.publishedAt, hasDraft }),
       modules: course.modules.map((cm) => ({
         moduleId: cm.moduleId,
         sortOrder: cm.sortOrder,
@@ -383,23 +478,267 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
   }
 });
 
+/**
+ * Kursets felt fra en validert kropp, slik `updateCourse` tar dem imot (lokaliserte tekster lagres som JSON-tekst). Utelatt
+ * felt = urørt. Brukt av `PUT /:courseId`, `PUT …/content` og publiseringen av utkastet, så de tre ikke kan drive fra hverandre.
+ */
+function courseFieldsFromBody(body: Partial<z.infer<typeof courseBodySchema>>) {
+  return {
+    title: body.title ? localizedTextCodec.serialize(body.title) : undefined,
+    description: body.description ? localizedTextCodec.serialize(body.description) : undefined,
+    certificationLevel: body.certificationLevel ? localizedTextCodec.serialize(body.certificationLevel) : undefined,
+    enrollmentPolicy: body.enrollmentPolicy,
+    discussionsEnabled: body.discussionsEnabled,
+    discussionOwnerNotifications: body.discussionOwnerNotifications,
+    sortOrder: body.sortOrder,
+    themeIds: body.themeIds,
+  };
+}
+
+// #934 skive 4a: kursskjemaet bruker ikke lenger denne for et eksisterende kurs (alt går til `…/content`). En fane
+// fra før utrullingen gjør det, og den sender ikke telleren: `409 course_form_outdated` før noe skrives — ellers
+// ville navnet stått lagret mens elementene ble avvist i neste kall, eller skrevet over en annens endring.
 adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
-  const parsed = courseBodySchema.partial().safeParse(request.body);
+  const parsed = courseBodySchema.partial().extend({ expectedRevision: expectedRevisionSchema }).safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
     return;
   }
 
   try {
-    const course = await updateCourse(request.params.courseId, {
-      title: parsed.data.title ? localizedTextCodec.serialize(parsed.data.title) : undefined,
-      description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : undefined,
-      certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : undefined,
-      enrollmentPolicy: parsed.data.enrollmentPolicy,
-      discussionsEnabled: parsed.data.discussionsEnabled,
-      sortOrder: parsed.data.sortOrder,
-      themeIds: parsed.data.themeIds,
-    }, request.context?.userId);
+    if (parsed.data.expectedRevision === undefined) throw courseFormOutdatedError();
+    const course = await updateCourse(request.params.courseId, courseFieldsFromBody(parsed.data), request.context?.userId, { expectedRevision: parsed.data.expectedRevision });
+    response.json({ course });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #934 skive 3: navn og innhold i ÉN lagring, i én transaksjon (se skjemaet over).
+// #934 skive 4a: med telleren skjemaet lastet. Har noen andre lagret kurset siden, `409 course_changed`, og
+// ingenting er skrevet. Uten telleren: en gammel fane, `409 course_form_outdated`.
+adminCoursesRouter.put("/:courseId/content", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = saveCourseContentBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    if (parsed.data.expectedRevision === undefined) throw courseFormOutdatedError();
+    const course = await updateCourse(request.params.courseId, courseFieldsFromBody(parsed.data), request.context?.userId, {
+      items: parsed.data.items,
+      version: parsed.data.version,
+      expectedRevision: parsed.data.expectedRevision,
+      confirmEmailRecipients: parsed.data.confirmEmailRecipients,
+    });
+    response.json({ course });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── #1140 etappe 2: utkastet til et publisert kurs (doc/design/PLAN_1140_E2.md) ──────────────────────────────────────────────
+//
+// «Lagre» i kursbyggeren skriver hit når kurset er publisert. Ingenting deltakerne ser, endres
+// før utkastet publiseres. Alt om `CourseDraft` bor i modules/course/courseDraft.ts; rutene her eier skjemaet, og leser den
+// lagrede teksten gjennom det, både ved henting og ved publisering. Agent-tokenet når ingen av rutene (ikke i hvitelista).
+
+// Skjemaet for innholdet i utkastet (`courseDraftPayloadSchema`) og lesingen av den lagrede teksten (`readCourseDraftPayload`)
+// står i courseDraft.ts (#1150 skive 2a-1): regelen «brukes andre steder» leser elementlista i utkastene, og den skal lese
+// teksten på samme måte som rutene her.
+
+/** Utkastet fana lastet (`LoadedCourseDraft` i courseDraft.ts). Kreves for å lagre videre, forkaste og publisere. */
+const loadedCourseDraftSchema = z.object({ draftId: z.string().min(1), revision: z.number().int().min(1) }).strict();
+
+/** Det skjemaet lastet: et utkast, eller den publiserte utgaven uten utkast (`LoadedCourseEdition`). */
+const loadedCourseEditionSchema = z.union([loadedCourseDraftSchema, z.object({ expectedRevision: z.number().int().min(0) }).strict()]);
+
+const saveCourseDraftBodySchema = courseDraftPayloadSchema.extend({ loaded: loadedCourseEditionSchema });
+
+const publishCourseDraftBodySchema = z
+  .object({
+    loaded: loadedCourseDraftSchema,
+    // Forfatterens svar når lista er endret og noen har kursbevis, som i `PUT …/content`.
+    version: z.enum(["major", "minor"]).optional(),
+    confirmEmailRecipients: confirmEmailRecipientsSchema,
+  })
+  .strict();
+
+type DraftItemReader = Pick<typeof prisma, "module" | "courseSection">;
+
+/**
+ * Elementene i utkastet slik de står NÅ: tittel, og om noe hindrer at de publiseres ut i kurset (arkivert, slettet, eller
+ * nytt i utkastet uten å være publisert). `liveItems` er kursets publiserte liste, hentet av kalleren gjennom den navngitte
+ * døra (`findAllCourseItems`, #958).
+ */
+async function describeCourseDraftItems(
+  client: DraftItemReader,
+  items: CourseDraftPayload["items"],
+  liveItems: ReadonlyArray<{ moduleId: string | null; sectionId: string | null }>,
+) {
+  const moduleIds = items.flatMap((item) => (item.type === "MODULE" ? [item.moduleId] : []));
+  const sectionIds = items.flatMap((item) => (item.type === "SECTION" ? [item.sectionId] : []));
+  const select = { id: true, title: true, archivedAt: true, activeVersionId: true } as const;
+  const modules = moduleIds.length > 0 ? await client.module.findMany({ where: { id: { in: moduleIds } }, select }) : [];
+  const sections = sectionIds.length > 0 ? await client.courseSection.findMany({ where: { id: { in: sectionIds } }, select }) : [];
+  const known = new Map([...modules, ...sections].map((row) => [row.id, row]));
+  // Det som alt står i det publiserte kurset. Et slikt element stopper ikke publiseringen selv om det ikke er publisert:
+  // det er tilstanden kurset alt har (kursimporten kan legge en ny seksjon inn som utkast), og utkastet gjør den ikke verre.
+  const alreadyInCourse = new Set(liveItems.map((row) => row.moduleId ?? row.sectionId));
+  return items.map((item, index) => {
+    const refId = item.type === "MODULE" ? item.moduleId : item.sectionId;
+    const row = known.get(refId);
+    return {
+      type: item.type,
+      sortOrder: index,
+      moduleId: item.type === "MODULE" ? item.moduleId : null,
+      sectionId: item.type === "SECTION" ? item.sectionId : null,
+      title: row?.title ?? null,
+      discussionsEnabled: item.discussionsEnabled !== false,
+      archivedAt: row?.archivedAt?.toISOString() ?? null,
+      // NYTT i utkastet og uten publisert versjon. Et element som bare står i utkastet, ses ikke av bruk-låsen (den leser
+      // kursets liste), så det kan avpubliseres etter at utkastet ble lagret; og velgeren i kursbyggeren tilbyr seksjoner
+      // som aldri har vært publisert. I et levende kurs ville deltakerne da møtt noe NYTT som ikke kan åpnes.
+      unpublished: row != null && row.activeVersionId == null && !alreadyInCourse.has(refId),
+      missing: !row,
+    };
+  });
+}
+
+/** Hvorfor et element i utkastet ikke kan publiseres ut i kurset, eller `null` når det kan. */
+function draftItemProblem(item: { missing: boolean; archivedAt: string | null; unpublished: boolean }): "missing" | "archived" | "unpublished" | null {
+  if (item.missing) return "missing";
+  if (item.archivedAt != null) return "archived";
+  return item.unpublished ? "unpublished" : null;
+}
+
+/**
+ * Utkastet slik kursbyggeren skal vise det: det lagrede, flettet med den publiserte utgaven der et felt er utelatt («som
+ * publisert»), og med titlene på elementene. Et element som er arkivert eller borte, merkes: det stopper publiseringen.
+ */
+async function courseDraftView(courseId: string, draft: CourseDraftRow) {
+  const course = await courseRepository.findCourseById(courseId);
+  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+  const payload = readCourseDraftPayload(draft);
+  // Navnet på den som lagret sist, til linja «Utkast lagret av …» i kursbyggeren. Forfatternavn, ikke deltakerdata.
+  const savedBy = draft.updatedById ? await prisma.user.findUnique({ where: { id: draft.updatedById }, select: { name: true } }) : null;
+  return {
+    id: draft.id,
+    revision: draft.revision,
+    source: draft.source,
+    updatedById: draft.updatedById,
+    updatedByName: savedBy?.name ?? null,
+    updatedAt: draft.updatedAt.toISOString(),
+    course: {
+      title: payload.title ? localizedTextCodec.serialize(payload.title) : course.title,
+      description: payload.description ? localizedTextCodec.serialize(payload.description) : course.description,
+      certificationLevel: payload.certificationLevel ? localizedTextCodec.serialize(payload.certificationLevel) : course.certificationLevel,
+      enrollmentPolicy: payload.enrollmentPolicy ?? course.enrollmentPolicy,
+      discussionsEnabled: payload.discussionsEnabled ?? course.discussionsEnabled,
+      discussionOwnerNotifications: payload.discussionOwnerNotifications ?? course.discussionOwnerNotifications,
+      sortOrder: payload.sortOrder !== undefined ? payload.sortOrder : course.sortOrder ?? null,
+      themeIds: payload.themeIds ?? (await findThemeIdsForCourse(courseId)),
+    },
+    items: await describeCourseDraftItems(prisma, payload.items, await courseRepository.findAllCourseItems(courseId)),
+  };
+}
+
+// Lesingen er åpen for alle forfattere, som kursdetaljen og `GET …/items` (produkteier 2026-09-07: størst mulig deling).
+adminCoursesRouter.get("/:courseId/draft", async (request, response, next) => {
+  try {
+    const draft = await findCourseDraft(prisma, request.params.courseId);
+    if (!draft) throw new NotFoundError("CourseDraft", "course_draft_not_found", "This course has no draft.");
+    response.json({ draft: await courseDraftView(request.params.courseId, draft) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminCoursesRouter.put("/:courseId/draft", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = saveCourseDraftBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const { loaded, ...payload } = parsed.data;
+    const draft = await saveCourseDraft({
+      courseId: request.params.courseId,
+      payload,
+      loaded,
+      actorId: request.context?.userId,
+      // Samme sjekker som lagringen av et kurs gjør: ingen dobbel, ingenting arkivert eller borte, og temaene finnes. En feil
+      // kommer da ved lagring av utkastet, og ikke først når det publiseres.
+      checkUsable: async (tx) => {
+        await assertCourseItemsUsable(tx, payload.items);
+        if (payload.themeIds) await assertCourseThemesExist(tx, payload.themeIds);
+      },
+    });
+    response.json({ draft: await courseDraftView(request.params.courseId, draft) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Forkast: utkastet fana lastet, som `?draftId=…&revision=…` (en DELETE har ingen kropp). Har noen andre lagret siden,
+// `409 course_draft_changed`, og ingenting er forkastet.
+adminCoursesRouter.delete("/:courseId/draft", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const loaded = loadedCourseDraftSchema.safeParse({ draftId: request.query.draftId, revision: Number(request.query.revision) });
+  if (!loaded.success) {
+    response.status(400).json({ error: "validation_error", issues: loaded.error.issues });
+    return;
+  }
+  try {
+    await discardCourseDraft(request.params.courseId, loaded.data, request.context?.userId);
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// «Publiser utkastet»: skriver utkastet til kurset med den vanlige lagringen (`updateCourse`: felt, tema, liste, versjon og
+// e-post avgjøres som ved `PUT …/content`) og sletter utkastet, i ÉN transaksjon. Feiler noe, står begge som før.
+//   - Lista endret og noen har kursbevis: forfatterens svar kreves (`400 course_version_required`), som ved direkte lagring.
+//   - Et element som er arkivert eller borte siden utkastet ble lagret: `400 course_draft_item_unusable`, med navnene.
+//   - Et tema som er slettet siden utkastet ble lagret, tas bort (det stopper ikke publiseringen).
+adminCoursesRouter.post("/:courseId/draft/publish", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = publishCourseDraftBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const courseId = request.params.courseId;
+    const actorId = request.context?.userId;
+    const course = await publishCourseDraft({
+      courseId,
+      loaded: parsed.data.loaded,
+      actorId,
+      apply: async (tx, draft) => {
+        const payload = readCourseDraftPayload(draft);
+        const liveItems = await createCourseRepository(tx).findAllCourseItems(courseId);
+        const unusable = (await describeCourseDraftItems(tx, payload.items, liveItems)).flatMap((item) => {
+          const reason = draftItemProblem(item);
+          return reason ? [{ type: item.type, id: item.moduleId ?? item.sectionId, title: item.title, reason }] : [];
+        });
+        if (unusable.length > 0) {
+          throw new DomainRuleError(
+            "course_draft_item_unusable",
+            "One or more items in the draft are archived, deleted or not published. Publish them or take them out of the draft, and publish again; nothing was published.",
+            { items: unusable },
+          );
+        }
+        const themeIds = payload.themeIds ? await findExistingThemeIds(tx, payload.themeIds) : undefined;
+        // Ingen `expectedRevision`: mens utkastet finnes, stopper låsen alt annet som øker kursets teller, så kurset er
+        // som da utkastet ble laget.
+        return updateCourse(courseId, { ...courseFieldsFromBody(payload), themeIds }, actorId, {
+          items: payload.items,
+          version: parsed.data.version,
+          confirmEmailRecipients: parsed.data.confirmEmailRecipients,
+          publishingDraft: true,
+        }, tx);
+      },
+    });
     response.json({ course });
   } catch (error) {
     next(error);
@@ -414,7 +753,11 @@ adminCoursesRouter.put("/:courseId/modules", requireContentOwnership("COURSE", "
   }
 
   try {
-    await setCourseModules(request.params.courseId, parsed.data.modules);
+    // #934 skive 4a: uten telleren bare på et kurs som aldri har vært ute (sjekkes etter innholdslåsen).
+    await setCourseModules(request.params.courseId, parsed.data.modules, undefined, request.context?.userId, undefined, {
+      expected: parsed.data.expectedRevision,
+      requireUnlessDraft: true,
+    });
     response.status(204).send();
   } catch (error) {
     next(error);
@@ -471,6 +814,11 @@ adminCoursesRouter.put("/:courseId/items", requireContentOwnership("COURSE", "co
     await setCourseItems(request.params.courseId, parsed.data.items, {
       actorId: request.context?.userId,
       agent: { agentRunId: parsed.data.agentRunId },
+      // #934 skive 4a: overgangen fra 2.129.0 er borte. Uten svar avvises endringen når noen har kursbevis.
+      versionRequest: { kind: "question", answer: parsed.data.version, confirmEmailRecipients: parsed.data.confirmEmailRecipients },
+      // #934 skive 4a: uten telleren bare på et kurs som aldri har vært ute — agent-tokenet, og et nytt kurs fra
+      // skjemaet. En gammel fane på et kurs som har vært ute, avvises før noe skrives.
+      revision: { expected: parsed.data.expectedRevision, requireUnlessDraft: true },
     });
     response.status(204).send();
   } catch (error) {
@@ -492,15 +840,44 @@ adminCoursesRouter.get("/:courseId/publish-preview", async (request, response, n
   }
 });
 
+// #1164: hvem som ser kurset etter publiseringen — teksten i dialogen før «Publiser» og «Publiser utkastet». `?draft=1`: med
+// synligheten i kursets lagrede utkast. Vaktet som publiseringen den er forspillet til (#943-mønsteret, som `pending-versions`):
+// den lister klassene kurset er tildelt.
+adminCoursesRouter.get("/:courseId/publish-audience", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  try {
+    // `?draft=1`: synligheten i kursets lagrede utkast, det som gjelder etter «Publiser utkastet». Et utkast som ikke kan leses,
+    // kan bare forkastes, aldri publiseres; da står kursets egen.
+    let policy: "OPEN" | "RESTRICTED" | undefined;
+    if (request.query.draft === "1" || request.query.draft === "true") {
+      const draft = await findCourseDraft(prisma, request.params.courseId);
+      if (draft) {
+        try {
+          policy = readCourseDraftPayload(draft).enrollmentPolicy;
+        } catch {
+          policy = undefined;
+        }
+      }
+    }
+    response.json({ audience: await getCoursePublishAudience(request.params.courseId, { policy }) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // #734: publishing a course must not leave it containing unavailable content (invariant I1). If the
 // course has unpublished modules/sections the caller must opt in to cascade-publishing them via
 // `{ publishItems: true }`; otherwise we return 409 with the unpublished-item preview so the UI can
 // ask the author to confirm. If any unpublished item cannot be published we return 422 with the
 // blockers and publish nothing. Agent tokens cannot publish (publish endpoints are outside the
 // agent-token allowlist — this route is unchanged in that respect).
-const publishCourseBodySchema = z.object({ publishItems: z.boolean().optional() });
+const publishCourseBodySchema = z.object({
+  publishItems: z.boolean().optional(),
+  // #934 skive 3: mindre eller hovedversjon når nytt innhold går live i et kurs som har vært ute og har kursbevis.
+  courseVersion: z.enum(["major", "minor"]).optional(),
+  confirmEmailRecipients: confirmEmailRecipientsSchema,
+});
 
-adminCoursesRouter.post("/:courseId/publish", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+adminCoursesRouter.post("/:courseId/publish",requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = publishCourseBodySchema.safeParse(request.body ?? {});
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -509,29 +886,49 @@ adminCoursesRouter.post("/:courseId/publish", requireContentOwnership("COURSE", 
   const publishItems = parsed.data.publishItems === true;
 
   try {
+    // #1151: forhåndssjekk, så et arkivert kurs svarer «arkivert» og ikke med elementene sine. Sjekken som gjelder, står etter
+    // låsen (`publishCourse`, `publishCourseCascade`).
+    await assertNotArchivedBeforeLock({ type: "COURSE", id: request.params.courseId });
     const preview = await getCoursePublishPreview(request.params.courseId);
 
+    const askForCascade = (unpublishedItems: unknown, publishable: boolean) => {
+      response.status(409).json({
+        error: "course_has_unpublished_items",
+        message: "The course has unpublished items. Confirm cascade publish with { publishItems: true }.",
+        unpublishedItems,
+        publishable,
+      });
+    };
+
     // No unpublished items — plain publish (unchanged happy path; still enforces G1: ≥1 module).
+    // #934 skive 4a: forhåndsvisningen over er regnet ut før innholdslåsen. `publishCourseChecked` ser på nytt etter
+    // den; har noen lagt et upublisert element inn i mellomtiden, får forfatteren samme spørsmål som her under.
     if (preview.allPublished) {
-      const course = await publishCourse(request.params.courseId, request.context?.userId);
-      response.json({ course, publishedItems: [] });
+      try {
+        const course = await publishCourseChecked(request.params.courseId, request.context?.userId);
+        response.json({ course, publishedItems: [] });
+      } catch (error) {
+        if (error instanceof AppError && error.code === "course_has_unpublished_items") {
+          const details = error.details as { unpublishedItems?: unknown; publishable?: boolean } | undefined;
+          askForCascade(details?.unpublishedItems ?? [], details?.publishable ?? false);
+          return;
+        }
+        throw error;
+      }
       return;
     }
 
     // Unpublished items exist but the caller has not opted into cascade — ask for confirmation.
     if (!publishItems) {
-      response.status(409).json({
-        error: "course_has_unpublished_items",
-        message: "The course has unpublished items. Confirm cascade publish with { publishItems: true }.",
-        unpublishedItems: preview.unpublishedItems,
-        publishable: preview.publishable,
-      });
+      askForCascade(preview.unpublishedItems, preview.publishable);
       return;
     }
 
     // Cascade requested: publish items then the course. publishCourseCascade throws a 422 AppError if
     // any item is un-publishable, and never publishes the course unless every item succeeded.
-    const result = await publishCourseCascade(request.params.courseId, request.context?.userId);
+    const result = await publishCourseCascade(request.params.courseId, request.context?.userId, parsed.data.courseVersion, {
+      confirmEmailRecipients: parsed.data.confirmEmailRecipients,
+    });
     response.json(result);
   } catch (error) {
     next(error);
@@ -547,7 +944,9 @@ adminCoursesRouter.get("/:courseId/pending-versions", requireContentOwnership("C
       userId: request.context?.userId ?? "",
       roles: request.context?.roles ?? [],
     });
-    response.json(pending);
+    // #934 skive 5a-3: `affectedCourses`. Titlene lokaliseres her, som i de andre rutene.
+    const locale = requestLocale(request);
+    response.json({ ...pending, affectedCourses: pending.affectedCourses.map((course) => ({ ...course, title: localizeContentText(locale, course.title) ?? course.title })) });
   } catch (error) {
     next(error);
   }
@@ -558,6 +957,9 @@ adminCoursesRouter.get("/:courseId/pending-versions", requireContentOwnership("C
 const publishPendingBodySchema = z.object({
   versionIds: z.array(z.string().min(1)).max(1000),
   supersedesEarlierPasses: z.boolean().optional(),
+  // #934 skive 3: mindre eller hovedversjon for kurset. Utelatt = mindre (standarden).
+  courseVersion: z.enum(["major", "minor"]).optional(),
+  confirmEmailRecipients: confirmEmailRecipientsSchema,
 });
 
 adminCoursesRouter.post("/:courseId/publish-pending", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
@@ -578,6 +980,26 @@ adminCoursesRouter.post("/:courseId/publish-pending", requireContentOwnership("C
   }
 });
 
+// #934 skive 5a-3: «Publiser nye versjoner» med svar per kurs. Svar for alle berørte kurs, listet i `affectedCourses` over.
+// Agent-tokenet slipper ikke til.
+adminCoursesRouter.post("/:courseId/publish-pending-versioned", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = publishPendingVersionedBodySchema.safeParse(request.body ?? {});
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const result = await publishCoursePendingVersioned(
+      request.params.courseId,
+      { userId: request.context?.userId ?? "", roles: request.context?.roles ?? [] },
+      parsed.data,
+    );
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // #705: avpubliser et kurs (motstykke til publish). G3-vakt (påbegynt deltaker) i kommandolaget.
 adminCoursesRouter.post("/:courseId/unpublish", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
@@ -588,20 +1010,70 @@ adminCoursesRouter.post("/:courseId/unpublish", requireContentOwnership("COURSE"
   }
 });
 
-adminCoursesRouter.post("/:courseId/archive", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+// #1150 skive 2a-1: hva en arkivering av kurset ville gjort — deltakere midt i, besvarelser som venter på vurdering, kursets
+// utkast, og hvilke moduler og seksjoner som følger med eller blir stående. Bare lesing, på den globale klienten: et forslag.
+// Arkiveringen (2a-2) regner analysen på nytt under låsen og sammenligner med `expected`. Samme tilgang som `POST …/archive`.
+// Agent-tokenet når den ikke (ikke i hvitelista).
+adminCoursesRouter.get("/:courseId/archive-preview", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
-    const course = await archiveCourse(request.params.courseId, request.context?.userId);
-    response.json({ course });
+    const preview = await analyzeCourseArchive(
+      request.params.courseId,
+      { userId: request.context?.userId ?? "", roles: request.context?.roles ?? [] },
+      requestLocale(request),
+    );
+    response.json(preview);
   } catch (error) {
     next(error);
   }
 });
 
-// #673: gjenopprett et arkivert kurs.
+// #1150 skive 2a-2: arkiveringen tar med seg modulene og seksjonene som ikke brukes andre steder (courseArchive.ts). `expected` er
+// det forfatteren så i forhåndsvisningen; uten det arkiveres bare et kurs der ingen er midt i og ingenting følger med.
+const archiveCourseBodySchema = z.object({
+  expected: z
+    .object({
+      follows: z.object({
+        moduleIds: z.array(z.string().min(1)).max(1000),
+        sectionIds: z.array(z.string().min(1)).max(1000),
+      }),
+      inProgressCount: z.number().int().min(0),
+    })
+    .optional(),
+});
+
+adminCoursesRouter.post("/:courseId/archive", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = archiveCourseBodySchema.safeParse(request.body ?? {});
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const result = await archiveCourse(
+      request.params.courseId,
+      { userId: request.context?.userId ?? "", roles: request.context?.roles ?? [] },
+      { expected: parsed.data.expected, locale: requestLocale(request) },
+    );
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #1150 skive 2a-2: hva en gjenoppretting av kurset setter tilbake (`returns`), og hva som blir arkivert (`staysArchived`). Bare
+// lesing. Samme tilgang som `POST …/restore`.
+adminCoursesRouter.get("/:courseId/restore-preview", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  try {
+    response.json(await analyzeCourseRestore(request.params.courseId, requestLocale(request)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #673: gjenopprett et arkivert kurs. #1150 skive 2a-2: med innholdet som fulgte det inn i arkivet.
 adminCoursesRouter.post("/:courseId/restore", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
-    const course = await restoreCourse(request.params.courseId, request.context?.userId);
-    response.json({ course });
+    const result = await restoreCourse(request.params.courseId, request.context?.userId ?? "", { locale: requestLocale(request) });
+    response.json(result);
   } catch (error) {
     next(error);
   }
@@ -648,8 +1120,27 @@ adminCoursesRouter.post("/:courseId/cascade-delete", async (request, response, n
     response.status(403).json({ error: "forbidden", message: "Only ADMINISTRATOR can cascade-delete a course." });
     return;
   }
+  // #934 skive 4a: det forhåndsvisningen sa ville bli slettet. Stemmer det ikke etter innholdslåsen, 409 og
+  // ingenting slettet. KREVES: uten det kunne en delt seksjon som nettopp ble eksklusiv, slettes uten at
+  // administratoren så det — en eldre fane (som ikke sender det) får `409 course_form_outdated` før noe skjer.
+  const expected = z
+    .object({
+      expectedDeletedModuleIds: z.array(z.string().min(1)).max(1000).optional(),
+      expectedDeletedSectionIds: z.array(z.string().min(1)).max(1000).optional(),
+    })
+    .safeParse(request.body ?? {});
+  if (!expected.success) {
+    response.status(400).json({ error: "validation_error", issues: expected.error.issues });
+    return;
+  }
   try {
-    const summary = await cascadeDeleteCourse(request.params.courseId, request.context?.userId);
+    if (expected.data.expectedDeletedModuleIds === undefined || expected.data.expectedDeletedSectionIds === undefined) {
+      throw courseFormOutdatedError();
+    }
+    const summary = await cascadeDeleteCourse(request.params.courseId, request.context?.userId, {
+      deletedModuleIds: expected.data.expectedDeletedModuleIds,
+      deletedSectionIds: expected.data.expectedDeletedSectionIds,
+    });
     response.json(summary);
   } catch (error) {
     next(error);

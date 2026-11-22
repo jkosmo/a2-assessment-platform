@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/static/favicon-16.png" type="image/png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon-180.png" sizes="180x180" />
     <title>A-2 læringsplattform – Resultater</title>
     <link rel="stylesheet" href="/static/shared.css" />
     <link rel="stylesheet" href="/static/toast.css" />
@@ -33,7 +37,7 @@
         </div>
       </div>
       <!-- #765: «Deltakere»-området deler denne undernavigasjonen (rollegates av deltakere-subnav.js). -->
-      <nav id="deltakereSubnav" class="content-area-nav" aria-label="Deltakere">
+      <nav id="deltakereSubnav" class="content-area-nav" aria-label="Deltakere" data-i18n-aria-label="area.participantsNavAria">
         <a href="/deltakere/klasser" class="content-area-nav-link" id="subnavKlasser" data-i18n="area.classes">Klasser</a>
         <a href="/deltakere/status" class="content-area-nav-link" id="subnavStatus" data-i18n="area.status">Status</a>
         <a href="/deltakere/aktivitet" class="content-area-nav-link" id="subnavActivity" data-i18n="area.activity">Aktivitet</a>
@@ -56,7 +60,8 @@
               <button id="exportModuleSummary" class="row-action-btn" data-i18n="results.export.moduleSummary">Module summary</button>
               <button id="exportModuleLearners" class="row-action-btn" data-i18n="results.export.moduleLearners">Module participants</button>
               <button id="exportCourseSummary" class="row-action-btn" data-i18n="results.export.courseSummary">Course summary</button>
-              <button id="exportCourseLearners" class="row-action-btn" data-i18n="results.export.courseLearners">Course participants</button>
+              <!-- 2.141.0: «Kurs-deltakere» er fjernet (produkteier 2026-11-07). «Eksporter denne listen (CSV)» i kursdetaljen dekker det (2.139.0). -->
+
             </div>
           </details>
         </div>
@@ -177,6 +182,7 @@
           <div id="courseDetailMeta" class="small detail-meta" aria-live="polite" data-i18n="results.courses.placeholder">
             Select a course row to see learner details.
           </div>
+          <button id="exportCourseView" type="button" class="row-action-btn" style="display:none" data-i18n="results.courses.detail.export">Export this list (CSV)</button>
           <div class="list-table-wrap" tabindex="0" role="region" aria-label="Course learner detail">
             <table class="list-table">
               <thead>

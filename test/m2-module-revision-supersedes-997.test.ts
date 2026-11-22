@@ -1,15 +1,12 @@
 // #997: «bestått gjelder til modulen revideres» — implementert som et valg forfatteren tar ved
 // publisering (produkteier 2026-09-19, doc/DESIGN_997.md).
 //
-// Det testen måler, og hvorfor hver del er her:
-//   - Flagget AV er standard: en vanlig publisering rører ingen sertifisering. Uten denne ville
-//     «alt teller fortsatt» og «vi glemte å implementere» sett likt ut.
-//   - Flagget PÅ setter ACTIVE → SUPERSEDED, bevarer raden (dato + vedtak), og peker på versjonen
-//     som gjorde det.
-//   - SUPERSEDED teller ikke som bestått noe sted: kursbevisporten og deltakerens modulstatus.
-//   - Hver som mistet beståtten får ETT varsel, og det ligger i outboxen — ikke sendt direkte, så
-//     en feilet e-post verken ruller tilbake publiseringen eller forsvinner (#1007).
-//   - Revisjonssporet har en egen hendelse med antallet.
+// ⚠️ 2026-11-08: #997 er erstattet av regelen om beståtte per kurs (#934 5a-3, på i prod siden 2026-11-06). Flagget gir
+// `409 client_outdated`, og veien som satte `SUPERSEDED` og sendte varslene, er fjernet med testene sine. Det som står igjen:
+//   - Flagget AV er standard: en vanlig publisering rører ingen sertifisering og sender ingen varsler.
+//   - Flagget PÅ avvises, og ingenting er skrevet.
+//   - Tallet til den gamle dialogen (`passed-count`), og kursrapportens regel for et forsøk som ikke er avgjort (#1116).
+// Hva en ny hovedversjon gjør med beståtte, står i test/m2-module-pass-per-course-934-5a3.test.ts.
 
 import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
@@ -121,100 +118,6 @@ describe("#997 — en revisjon forfatteren merker gjør tidligere bestått ugyld
     expect(await outboxFor(version2Id)).toHaveLength(0);
   });
 
-  it("flagget PÅ: beståtten blir SUPERSEDED, raden bevares og peker på versjonen som gjorde det", async () => {
-    const { moduleId, version2Id, certificationId } = await setupPassedModule();
-
-    const res = await publish(moduleId, version2Id, { supersedesEarlierPasses: true });
-    expect(res.status, JSON.stringify(res.body)).toBe(200);
-
-    const cert = await prisma.certificationStatus.findUnique({ where: { id: certificationId } });
-    expect(cert?.status).toBe("SUPERSEDED");
-    expect(cert?.supersededByVersionId).toBe(version2Id);
-    // ⚠️ Historikken består: raden er ikke slettet, og datoen for den opprinnelige beståtten står.
-    expect(cert?.passedAt?.toISOString()).toBe("2026-05-01T09:00:00.000Z");
-    expect(cert?.latestDecisionId).toBeTruthy();
-  });
-
-  it("ett varsel per deltaker, i outboxen, på MOTTAKERENS språk", async () => {
-    const { moduleId, version2Id, userEmail } = await setupPassedModule({ preferredLocale: "nn" });
-
-    await publish(moduleId, version2Id, { supersedesEarlierPasses: true });
-
-    const events = await outboxFor(version2Id);
-    expect(events).toHaveLength(1);
-    expect(events[0].payload.recipientEmail).toBe(userEmail);
-    expect(events[0].payload.locale).toBe("nn");
-    // ⚠️ I outboxen, ikke sendt direkte: publiseringen skal ikke rulle tilbake fordi en e-post
-    // feilet, og et tapt varsel skal prøves på nytt (#1007).
-    expect(events[0].row.status).toBe("pending");
-  });
-
-  it("revisjonssporet har en egen hendelse med antallet", async () => {
-    const { moduleId, version2Id } = await setupPassedModule();
-
-    await publish(moduleId, version2Id, { supersedesEarlierPasses: true });
-
-    const event = await prisma.auditEvent.findFirst({
-      where: { action: "module_passes_superseded", entityId: moduleId },
-      orderBy: { timestamp: "desc" },
-    });
-    expect(event).not.toBeNull();
-    const meta = JSON.parse(event!.metadataJson) as Record<string, unknown>;
-    expect(meta).toMatchObject({ moduleId, moduleVersionId: version2Id, supersededCount: 1, notifiedCount: 1 });
-  });
-
-  it("deltakeren ser «revidert — ta den på nytt», ikke «ikke påbegynt»", async () => {
-    const { moduleId, version2Id, userId } = await setupPassedModule();
-    const course = await prisma.course.create({
-      data: { title: L(`Kurs 997 ${Date.now()}`), publishedAt: new Date() },
-      select: { id: true },
-    });
-    await prisma.courseItem.create({ data: { courseId: course.id, itemType: "MODULE", moduleId, sortOrder: 0 } });
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { externalId: true, email: true, name: true } });
-    const participantHeaders = {
-      "x-user-id": user.externalId,
-      "x-user-email": user.email,
-      "x-user-name": user.name,
-      "x-user-roles": "PARTICIPANT",
-    };
-
-    const before = await request(app).get(`/api/courses/${course.id}`).set(participantHeaders);
-    expect(before.status, JSON.stringify(before.body)).toBe(200);
-    const moduleBefore = (before.body.course.modules as Array<{ moduleId: string; moduleStatus: string }>)
-      .find((m) => m.moduleId === moduleId);
-    expect(moduleBefore?.moduleStatus).toBe("PASSED");
-
-    await publish(moduleId, version2Id, { supersedesEarlierPasses: true });
-
-    const after = await request(app).get(`/api/courses/${course.id}`).set(participantHeaders);
-    expect(after.status).toBe(200);
-    const moduleAfter = (after.body.course.modules as Array<{ moduleId: string; moduleStatus: string }>)
-      .find((m) => m.moduleId === moduleId);
-    // ⚠️ Kjernen: EGEN tilstand. "NOT_STARTED" ville sagt at deltakeren aldri har vært innom.
-    expect(moduleAfter?.moduleStatus).toBe("REVISED_RETAKE_REQUIRED");
-  });
-
-  // #1116: kursrapporten hadde sin egen regel — vedtaket på siste forsøk — og viste «Fullført» etter
-  // en revisjon der kursbeviset og deltakerens egen visning sa «ta den på nytt».
-  it("#1116: kursrapportens detalj teller ikke en revidert modul som bestått, og sier ikke «Fullført»", async () => {
-    const { moduleId, version2Id, userId } = await setupPassedModule();
-    const course = await prisma.course.create({
-      data: { title: L(`Kurs 1116 ${Date.now()}`), publishedAt: new Date() },
-      select: { id: true },
-    });
-    await prisma.courseItem.create({ data: { courseId: course.id, itemType: "MODULE", moduleId, sortOrder: 0 } });
-    const rad = async () => (await getCourseLearnerReport(course.id, {}, "nb")).rows.find((r) => r.participantId === userId);
-
-    const før = await rad();
-    expect(før).toMatchObject({ passedModules: 1, failedModules: 0, underReviewModules: 0, status: "COMPLETED" });
-
-    await publish(moduleId, version2Id, { supersedesEarlierPasses: true });
-
-    const etter = await rad();
-    // Vedtaket står fortsatt som bestått — det er sertifiseringsstatusen som sier at det ikke gjelder.
-    expect(etter).toMatchObject({ passedModules: 0, failedModules: 0, status: "IN_PROGRESS" });
-  });
-
   it("#1116: et forsøk som ikke er avgjort, teller som under vurdering — ikke bare UNDER_REVIEW", async () => {
     const { moduleId, userId } = await setupPassedModule();
     await prisma.certificationStatus.deleteMany({ where: { userId, moduleId } });
@@ -229,17 +132,22 @@ describe("#997 — en revisjon forfatteren merker gjør tidligere bestått ugyld
     expect(row).toMatchObject({ passedModules: 0, underReviewModules: 1, failedModules: 0 });
   });
 
-  it("forfatteren kan se hvor mange som vil bli berørt før hen svarer", async () => {
-    const { moduleId, version2Id } = await setupPassedModule();
+  it("flagget PÅ avvises med 409 client_outdated, og ingenting er skrevet: tallet står, statusen står, ingen varsler", async () => {
+    const { moduleId, version2Id, certificationId } = await setupPassedModule();
 
     const before = await request(app).get(`/api/admin/content/modules/${moduleId}/passed-count`).set(admin);
     expect(before.status, JSON.stringify(before.body)).toBe(200);
     expect(before.body.passedCount).toBe(1);
 
-    await publish(moduleId, version2Id, { supersedesEarlierPasses: true });
+    const res = await publish(moduleId, version2Id, { supersedesEarlierPasses: true });
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(res.body.error).toBe("client_outdated");
 
-    // Etterpå er ingen «bestått» igjen å erstatte — tallet er selvkorrigerende.
+    const cert = await prisma.certificationStatus.findUnique({ where: { id: certificationId } });
+    expect(cert?.status).toBe("ACTIVE");
+    expect(cert?.supersededByVersionId).toBeNull();
+    expect(await outboxFor(version2Id)).toHaveLength(0);
     const after = await request(app).get(`/api/admin/content/modules/${moduleId}/passed-count`).set(admin);
-    expect(after.body.passedCount).toBe(0);
+    expect(after.body.passedCount).toBe(1);
   });
 });

@@ -42,7 +42,6 @@ export default defineConfig({
       "test/admin-content-translations.test.js",
       "test/participant-translations.test.js",
       "test/calibration-translations.test.js",
-      "test/participant-completed-translations.test.js",
       "test/workspace-html-fallbacks.test.js",
       "test/workspace-help-contracts.test.js",
       "test/workspace-validation-accessibility.test.js",
@@ -64,6 +63,10 @@ export default defineConfig({
       "test/course-archive-entry-guard.test.js",
       "test/participant-sequence-predicate-guard.test.js",
       "test/environment-identifier-guard.test.js",
+      // #934 skive 3: nekter en ny vei som skriver kursets versjon utenom applyCourseVersionChange.
+      "test/course-version-write-guard.test.js",
+      // #934 skive 4a: nekter en skriving til innholdstabellene uten innholdslåsen.
+      "test/content-lock-write-guard.test.js",
       // #958: nekter en niende kaller som går utenom de to navngitte dørene.
       "test/course-items-accessor-guard.test.js",
       // #962: nekter en tjueførste innebygd rollesjekk.
@@ -74,6 +77,21 @@ export default defineConfig({
       "test/outcome-derivation-guard.test.js",
       // #949: nekter at en tjeneste avgjør MCQ-grensen på egen hånd.
       "test/mcq-pass-rule-guard.test.js",
+      // #1142 skive 1: nekter en ny skriver av CourseAssignmentNotice utenom fila som eier regelen.
+      "test/course-assignment-notice-write-guard.test.js",
+      // #1142 skive 1: nekter en ny skriver av medlemskap, tildelinger og publisering uten at den er tatt stilling til.
+      "test/course-assignment-ways-in-guard.test.js",
+      "test/weekly-digest-write-guard.test.js",
+      // #1140 etappe 1: nekter en ny leser av modulens versjon for deltakere utenom regelen, og en skriver av låsen.
+      "test/participant-module-version-guard.test.js",
+      // #1140 etappe 2: nekter en ny leser eller skriver av kursutkastet utenom fila som eier det.
+      "test/course-draft-guard.test.js",
+      // #1149: nekter en ny leser av «hvilke kurs bruker dette elementet» utenom contentLifecycle.ts.
+      "test/content-in-use-guard.test.js",
+      // #1151: hvert skrivested til et kurs, en modul eller en seksjon har vakta mot arkivert, eller et begrunnet unntak.
+      "test/archived-is-readonly-guard.test.js",
+      // #1156: nekter en ny leser av CourseSectionRead utenom findSectionReadCredit og de navngitte unntakene.
+      "test/section-read-reader-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

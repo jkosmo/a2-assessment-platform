@@ -1,5 +1,3 @@
 {
-  "completedSubmissionStatuses": ["COMPLETED"],
-  "defaultCompletedHistoryLimit": 50,
-  "maxCompletedHistoryLimit": 200
+  "completedSubmissionStatuses": ["COMPLETED"]
 }

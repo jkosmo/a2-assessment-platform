@@ -12,7 +12,8 @@ import { runInTransaction, type DbTransactionClient } from "../db/transaction.js
 import type { AuditAction, AuditEventInput } from "../observability/auditEvents.js";
 
 // #804: fixed key for the transaction-scoped advisory lock that serializes audit-chain appends.
-const AUDIT_CHAIN_LOCK_KEY = 8_040_804;
+// #1150 skive 2a-2: eksportert så `lockLearnersInContentWrite` (db/contentLock.ts) kan se om transaksjonen alt holder den.
+export const AUDIT_CHAIN_LOCK_KEY = 8_040_804;
 
 // Callers narrow their tx to `Pick<typeof prisma, "auditEvent" | …>` for encapsulation; at runtime it is
 // always a full interactive TransactionClient (from prisma.$transaction), so the advisory lock reaches

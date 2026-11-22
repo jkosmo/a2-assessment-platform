@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 // #1061: gjennomgangen av flervalgsdelen er fasitens ENE dør. Den svarer tomt når modulversjonen
 // ikke har slått den på, hele trekket med eget svar/riktig svar/begrunnelse når den har det, og
@@ -33,6 +34,7 @@ async function seedModuleId(): Promise<string> {
 async function submitMcq(moduleId: string, headers: Record<string, string>) {
   const created = await request(app).post("/api/submissions").set(headers).send({
     moduleId,
+    moduleVersionId: await seenModuleVersionId(app, headers, moduleId),
     deliveryType: "text",
     responseJson: { response: "En besvarelse.", reflection: "Refleksjon.", promptExcerpt: "Prompt." },
   });

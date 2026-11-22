@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/static/favicon-16.png" type="image/png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon-180.png" sizes="180x180" />
     <title>A-2 læringsplattform – Vurderingskvalitet</title>
     <link rel="stylesheet" href="/static/shared.css" />
     <link rel="stylesheet" href="/static/loading.css" />
@@ -101,12 +105,12 @@
         <nav id="workspaceNav" class="workspace-nav"></nav>
         <div class="locale-picker">
           <span id="appVersion" class="version-badge">…</span>
-          <label for="localeSelect" class="sr-only">Language</label>
+          <label for="localeSelect" class="sr-only" data-i18n="locale.label">Language</label>
           <select id="localeSelect" class="locale-select-compact"></select>
         </div>
       </div>
 
-      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon">
+      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon" data-i18n-aria-label="area.contentNavAria">
         <a href="/admin-content/themes" class="content-area-nav-link" id="navTema" data-i18n="area.themes">Tema</a>
         <a href="/admin-content/courses" class="content-area-nav-link" id="navKurs" data-i18n="area.courses">Kurs</a>
         <a href="/admin-content" class="content-area-nav-link" id="navModuler" data-i18n="area.modules">Moduler</a>
@@ -133,7 +137,7 @@
           <div class="q-filters">
             <div class="q-field">
               <label data-i18n="quality.filter.owner">Eier</label>
-              <div class="q-seg" id="qOwnerSeg" role="group" aria-label="Eier-filter">
+              <div class="q-seg" id="qOwnerSeg" role="group" aria-label="Eier-filter" data-i18n-aria-label="quality.aria.ownerFilter">
                 <button type="button" data-owner="mine" class="on" data-i18n="quality.filter.owner.mine">Mine moduler</button>
                 <button type="button" data-owner="all" data-i18n="quality.filter.owner.all">Alle</button>
               </div>
@@ -209,7 +213,7 @@
             <div class="q-hist-x"><span>0.0</span><span>0.2</span><span>0.4</span><span>0.6</span><span>0.8</span><span>1.0</span></div>
           </div>
           <div class="q-cs-legend" id="qCsLegend"></div>
-          <div class="table-wrap" tabindex="0" role="region" aria-label="Fordeling per KI-erklæring" style="margin-top:var(--space-2)">
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Fordeling per KI-erklæring" data-i18n-aria-label="quality.aria.declarationTable" style="margin-top:var(--space-2)">
             <table class="q-cs-table" id="qCsTable"></table>
           </div>
         </section>
@@ -225,7 +229,7 @@
         <section class="card" id="qOutcomesCard" hidden>
           <details class="q-details">
             <summary data-i18n="quality.outcomes.title">Enkeltsvar (detaljer)</summary>
-            <div class="table-wrap" tabindex="0" role="region" aria-label="Enkeltsvar" style="margin-top:var(--space-1)">
+            <div class="table-wrap" tabindex="0" role="region" aria-label="Enkeltsvar" data-i18n-aria-label="quality.aria.answersTable" style="margin-top:var(--space-1)">
               <table>
                 <thead>
                   <tr>

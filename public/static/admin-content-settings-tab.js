@@ -18,6 +18,8 @@ import {
   captureLatestCriteriaState,
 } from "/static/criteria-editor.js";
 import { LEGACY_STRING_LOCALE, mergeLocaleInto } from "./localized-value.js";
+import { moduleVersionNumber } from "./version-label.js";
+import { isArchivedRejection } from "/static/api-error.js";
 
 /**
  * @param {object} ctx  se toppen av fila. Tilstand leses og skrives via egenskapene; funksjonene er
@@ -35,6 +37,28 @@ export function createSettingsTab(ctx) {
   // new module version through saveSettingsInBackground.
   // ---------------------------------------------------------------------------
 
+  // #1173: hver rad er <dt>etikett</dt><dd>felt</dd>, og en <dt> er ingen <label> — feltene hadde ikke
+  // noe navn for skjermleseren («Navn», «Modultype» og «Sertifiseringsnivå» på en ny modul, og alle
+  // tallfeltene på en lagret). Radene får en id på <dt>, og hvert felt i <dd> som ikke alt har et navn
+  // (avkrysningsboksene står i sin egen <label>) peker dit med aria-labelledby. Én regel for begge
+  // tegningene, så en ny rad får navnet uten at noen må huske det.
+  const rowLabelId = (labelKey) => `settingsRow-${labelKey.replace(/\./g, "-")}`;
+  // #1173 (rest): en rad med to felt (ordlengde, gyldighet, grensesone) ga begge feltene radens navn, så skjermleseren
+  // leste «Gyldig» to ganger. Hvert felt i paret får sitt eget: «Gyldig, fra» og «Gyldig, til».
+  const rangeAria = (labelKey, end) =>
+    escapeHtml(tf(end === "from" ? "shell.settings.rangeFrom" : "shell.settings.rangeTo", { label: t(labelKey) }));
+  function linkRowLabels(host) {
+    for (const dt of host.querySelectorAll("dl.settings-list > dt[id]")) {
+      const dd = dt.nextElementSibling;
+      if (!dd || dd.tagName !== "DD") continue;
+      for (const control of dd.querySelectorAll("input, select, textarea")) {
+        if (control.type === "hidden" || control.closest("label")) continue;
+        if (control.hasAttribute("aria-label") || control.hasAttribute("aria-labelledby")) continue;
+        control.setAttribute("aria-labelledby", dt.id);
+      }
+    }
+  }
+
   // #1046 A1 (produkteier 13.09): et nytt element har ingen versjon å vise innstillinger for. Det som
   // trengs først er navn, modultype og nivå — resten kommer når modulen finnes. Verdiene skrives rett
   // inn i utkastet; Lagre oppretter modulen med dem.
@@ -49,15 +73,16 @@ export function createSettingsTab(ctx) {
     host.innerHTML = `<div class="settings-group">
       <h3 class="settings-group-title">${escapeHtml(t("shell.settings.groupModule"))}</h3>
       <dl class="settings-list">
-        <dt>${escapeHtml(t("shell.directEdit.nameLabel"))} <span class="required-note">${escapeHtml(t("shell.directEdit.required"))}</span></dt>
+        <dt id="${rowLabelId("shell.directEdit.nameLabel")}">${escapeHtml(t("shell.directEdit.nameLabel"))} <span class="required-note">${escapeHtml(t("shell.directEdit.required"))}</span></dt>
         <dd><input id="settingsNewName" class="settings-input" type="text" value="${escapeHtml(name)}" autocomplete="off" /></dd>
-        <dt>${escapeHtml(t("shell.settings.moduleType"))}</dt>
+        <dt id="${rowLabelId("shell.settings.moduleType")}">${escapeHtml(t("shell.settings.moduleType"))}</dt>
         <dd><select id="settingsModuleType" class="settings-input">${modeOptions}</select>
           <span class="settings-help">${escapeHtml(t("shell.settings.newModuleTypeHelp"))}</span></dd>
-        <dt>${escapeHtml(t("shell.settings.certificationLevel"))}</dt>
+        <dt id="${rowLabelId("shell.settings.certificationLevel")}">${escapeHtml(t("shell.settings.certificationLevel"))}</dt>
         <dd><select id="settingsCertLevel" class="settings-input">${levelOptions}</select></dd>
       </dl>
     </div>`;
+    linkRowLabels(host);
     host.querySelector("#settingsNewName")?.addEventListener("input", (e) => {
       const v = e.target.value.trim();
       ctx.sessionDraft = { ...ctx.sessionDraft, title: v ? { [ctx.contentLocale]: v } : "" };
@@ -127,7 +152,7 @@ export function createSettingsTab(ctx) {
       const help = helpText && !helpText.startsWith("shell.settings.info.")
         ? `<span class="settings-help" data-info="${escapeHtml(infoKey)}">${escapeHtml(helpText)}</span>`
         : "";
-      openGroup.push(`<dt>${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}${help}</dd>`);
+      openGroup.push(`<dt id="${rowLabelId(labelKey)}">${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}${help}</dd>`);
     };
     const emptyText = escapeHtml(t("shell.settings.notSet"));
     // #896 S3c: Innstillinger reads in the UI language, not the preview language. The summary rows
@@ -246,10 +271,12 @@ export function createSettingsTab(ctx) {
     row(
       "shell.settings.scopeWords",
       `<input id="settingsScopeMin" class="settings-input" type="number" min="20" max="5000"
-         value="${mod.scopeMinWords ?? ""}" placeholder="${standardOmfang.minWords}" />
+         value="${mod.scopeMinWords ?? ""}" placeholder="${standardOmfang.minWords}"
+         aria-label="${rangeAria("shell.settings.scopeWords", "from")}" />
        <span aria-hidden="true">–</span>
        <input id="settingsScopeMax" class="settings-input" type="number" min="20" max="5000"
-         value="${mod.scopeMaxWords ?? ""}" placeholder="${standardOmfang.maxWords}" />
+         value="${mod.scopeMaxWords ?? ""}" placeholder="${standardOmfang.maxWords}"
+         aria-label="${rangeAria("shell.settings.scopeWords", "to")}" />
        <span class="settings-hint">${escapeHtml(t("shell.settings.scopeWordsHint"))}</span>`,
     );
 
@@ -257,9 +284,11 @@ export function createSettingsTab(ctx) {
     const asDateValue = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
     row(
       "shell.settings.validity",
-      `<input id="settingsValidFrom" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validFrom))}" />
+      `<input id="settingsValidFrom" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validFrom))}"
+         aria-label="${rangeAria("shell.settings.validity", "from")}" />
        <span aria-hidden="true">→</span>
-       <input id="settingsValidTo" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validTo))}" />`,
+       <input id="settingsValidTo" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validTo))}"
+         aria-label="${rangeAria("shell.settings.validity", "to")}" />`,
     );
 
     group("shell.settings.groupAssessment");
@@ -308,6 +337,19 @@ export function createSettingsTab(ctx) {
           ${escapeHtml(t("shell.settings.mcqReviewLabel"))}</label>`,
         false,
         "mcqReview",
+      );
+    }
+    // #1124 del 2: eksempelsvaret etter fritekstvurderingen. Teksten står på språket som redigeres;
+    // visningen er av som standard, av samme grunn som flervalgsgjennomgangen over.
+    if (mode !== "MCQ_ONLY") {
+      row(
+        "shell.settings.modelAnswer",
+        `<textarea id="settingsModelAnswer" class="settings-input settings-input--wide" rows="6"
+           placeholder="${escapeHtml(t("shell.settings.modelAnswerPlaceholder"))}">${escapeHtml(settingsValue(version?.modelAnswer) ?? "")}</textarea>
+         <label class="settings-check"><input id="settingsModelAnswerShow" type="checkbox"${policy?.practical?.modelAnswerAfterAssessment === true ? " checked" : ""} />
+          ${escapeHtml(t("shell.settings.modelAnswerShowLabel"))}</label>`,
+        false,
+        "modelAnswer",
       );
     }
 
@@ -378,11 +420,11 @@ export function createSettingsTab(ctx) {
         "shell.settings.borderlineWindow",
         `<input id="settingsBorderlineMin" class="settings-input settings-input--wide" type="number" min="0" max="100"
           value="${Number.isFinite(Number(borderline?.min)) ? escapeHtml(String(borderline.min)) : ""}"
-          placeholder="${escapeHtml(placeholderLow)}" />
+          placeholder="${escapeHtml(placeholderLow)}" aria-label="${rangeAria("shell.settings.borderlineWindow", "from")}" />
          <span aria-hidden="true">→</span>
          <input id="settingsBorderlineMax" class="settings-input settings-input--wide" type="number" min="0" max="100"
           value="${Number.isFinite(Number(borderline?.max)) ? escapeHtml(String(borderline.max)) : ""}"
-          placeholder="${escapeHtml(placeholderHigh)}" /> %`,
+          placeholder="${escapeHtml(placeholderHigh)}" aria-label="${rangeAria("shell.settings.borderlineWindow", "to")}" /> %`,
         false,
         "borderlineWindow",
       );
@@ -411,9 +453,11 @@ export function createSettingsTab(ctx) {
     // save carries the PERSISTED content forward, so it would quietly drop whatever is in the
     // draft. Blocking with a reason beats a silent loss.
     const draftBlocks = !!ctx.sessionDraft;
-    const actionHtml = draftBlocks
-      ? `<p class="settings-empty">${escapeHtml(t("shell.settings.draftBlocks"))}</p>`
-      : `<button type="button" id="settingsSave" class="btn-primary">${escapeHtml(t("shell.settings.save"))}</button>`;
+    // #1151 skive 3c: en arkivert modul lagres ikke (tjeneren avviser med `module_archived`). Linja i hodet sier hvorfor.
+    const actionHtml = ctx.moduleArchived ? ""
+      : draftBlocks
+        ? `<p class="settings-empty">${escapeHtml(t("shell.settings.draftBlocks"))}</p>`
+        : `<button type="button" id="settingsSave" class="btn-primary">${escapeHtml(t("shell.settings.save"))}</button>`;
 
     // A group with nothing in it is not rendered: MCQ_ONLY has no submission schema and no
     // criteria, and an empty heading reads as something that failed to load.
@@ -452,6 +496,7 @@ export function createSettingsTab(ctx) {
       actionHtml,
       renderVersionHistory(),
     ].join("");
+    linkRowLabels(host);
     mountCriteriaSection();
     mountPromptSection();
     mountSubmissionSchemaSection();
@@ -533,7 +578,7 @@ export function createSettingsTab(ctx) {
     // Rendered by renderSettingsPanel itself, so always present when the tab is open.
     panel: [
       "settingsModuleType", "settingsCertLevel", "settingsValidFrom", "settingsValidTo",
-      "settingsMcqMinPercent", "settingsMcqPerAttempt", "settingsMcqShuffle", "settingsMcqReview", "settingsTotalMin", "settingsPracticalMin",
+      "settingsMcqMinPercent", "settingsMcqPerAttempt", "settingsMcqShuffle", "settingsMcqReview", "settingsModelAnswer", "settingsModelAnswerShow", "settingsTotalMin", "settingsPracticalMin",
       "settingsBorderlineMin", "settingsBorderlineMax", "settingsPracticalWeight",
     ],
     // Inside collapsible sections: absent from the DOM until the author expands them.
@@ -845,8 +890,11 @@ export function createSettingsTab(ctx) {
     if (settingsSelectedMode() === "MCQ_ONLY") return "";
     const prompt = ctx.bundle.selectedConfiguration?.promptTemplateVersion ?? null;
     const localeLabel = escapeHtml(tf("shell.settings.editingInLocale", { locale: ctx.contentLocale }));
+    // #1151 skive 3c: en arkivert modul viser instruksen utfoldet og sperret, uten «Rediger»-knappen — knappen ville
+    // stått sperret i fieldseten, og instruksen ville ikke kunnet leses.
+    const archived = ctx.moduleArchived;
 
-    if (!settingsPromptExpanded) {
+    if (!settingsPromptExpanded && !archived) {
       return `<section class="settings-criteria-section">
         <div class="settings-criteria-head">
           <h3 class="settings-subsection-title">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
@@ -864,11 +912,11 @@ export function createSettingsTab(ctx) {
     return `<section class="settings-criteria-section">
       <div class="settings-criteria-head">
         <h3 class="settings-subsection-title">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
-        <button type="button" id="settingsPromptToggle" class="btn-secondary settings-criteria-toggle"
-          aria-expanded="true" aria-controls="settingsPromptEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>
+        ${archived ? "" : `<button type="button" id="settingsPromptToggle" class="btn-secondary settings-criteria-toggle"
+          aria-expanded="true" aria-controls="settingsPromptEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>`}
       </div>
       <div id="settingsPromptEditor" class="settings-criteria-editor">
-        <p class="settings-empty">${localeLabel}</p>
+        ${archived ? "" : `<p class="settings-empty">${localeLabel}</p>`}
         <label class="settings-field-label" for="settingsPromptSystem">${escapeHtml(t("shell.settings.promptSystem"))}</label>
         <textarea id="settingsPromptSystem" class="settings-textarea" rows="4">${sys}</textarea>
         <label class="settings-field-label" for="settingsPromptUser">${escapeHtml(t("shell.settings.promptUser"))}</label>
@@ -903,8 +951,10 @@ export function createSettingsTab(ctx) {
   function renderSubmissionSchemaSection() {
     if (!ctx.bundle) return "";
     const field = ctx.bundle.selectedConfiguration?.moduleVersion?.submissionSchema?.fields?.[0] ?? null;
+    // #1151 skive 3c: som instruksen — utfoldet og sperret for en arkivert modul, uten «Rediger».
+    const archived = ctx.moduleArchived;
 
-    if (!settingsSchemaExpanded) {
+    if (!settingsSchemaExpanded && !archived) {
       return `<section class="settings-criteria-section">
         <div class="settings-criteria-head">
           <h3 class="settings-group-title">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
@@ -920,11 +970,11 @@ export function createSettingsTab(ctx) {
     return `<section class="settings-criteria-section">
       <div class="settings-criteria-head">
         <h3 class="settings-group-title">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
-        <button type="button" id="settingsSchemaToggle" class="btn-secondary settings-criteria-toggle"
-          aria-expanded="true" aria-controls="settingsSchemaEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>
+        ${archived ? "" : `<button type="button" id="settingsSchemaToggle" class="btn-secondary settings-criteria-toggle"
+          aria-expanded="true" aria-controls="settingsSchemaEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>`}
       </div>
       <div id="settingsSchemaEditor" class="settings-criteria-editor">
-        <p class="settings-empty">${escapeHtml(tf("shell.settings.editingInLocale", { locale: ctx.contentLocale }))}</p>
+        ${archived ? "" : `<p class="settings-empty">${escapeHtml(tf("shell.settings.editingInLocale", { locale: ctx.contentLocale }))}</p>`}
         <label class="settings-field-label" for="settingsSchemaLabel">${escapeHtml(t("shell.settings.schemaLabel"))}</label>
         <input id="settingsSchemaLabel" class="settings-input" type="text" value="${label}" />
         <label class="settings-field-label" for="settingsSchemaPlaceholder">${escapeHtml(t("shell.settings.schemaPlaceholder"))}</label>
@@ -973,17 +1023,21 @@ export function createSettingsTab(ctx) {
       const when = version.createdAt
         ? `<span class="version-when">${escapeHtml(formatDateTime(version.createdAt))}</span>`
         : "";
+      // #934 skive 5b: en publisert versjon har nummeret «2.1». En som aldri er publisert, har ikke noe nummer, og er et utkast.
+      const number = moduleVersionNumber(version);
       // No restore button on the version already loaded — it would copy the module onto itself.
       // aria-label carries the version number: a screen-reader user tabbing a list of five
       // identically-named "Restore" buttons has no way to tell which one goes where.
-      const action = isCurrent
+      // #1151 skive 3c: heller ingen på en arkivert modul. Å hente fram en eldre versjon lager en ny versjon, og tjeneren
+      // avviser den (`module_archived`). «Gjenopprett» i hodet gjelder modulen, ikke en versjon.
+      const action = isCurrent || ctx.moduleArchived
         ? ""
         : `<button type="button" class="btn-secondary version-restore" data-restore-version="${escapeHtml(version.id)}"
-            aria-label="${escapeHtml(tf("shell.versions.restoreVersionAria", { versionNo: version.versionNo }))}">${
+            aria-label="${escapeHtml(tf("shell.versions.restoreVersionAria", { versionNo: number ?? version.versionNo }))}">${
             escapeHtml(t("shell.versions.restore"))
           }</button>`;
       return `<li class="version-item">
-        <span class="version-no">${escapeHtml(tf("shell.versions.versionNo", { versionNo: version.versionNo }))}</span>
+        <span class="version-no">${escapeHtml(number ? tf("shell.versions.versionNo", { versionNo: number }) : tf("shell.versions.draftNo", { versionNo: version.versionNo }))}</span>
         ${when}${badges}${action}
       </li>`;
     });
@@ -1064,7 +1118,8 @@ export function createSettingsTab(ctx) {
       // The click disabled every restore button to stop a double-click. A success path reloads and
       // re-renders them; a failure has to put them back by hand, or the list is dead until reload.
       document.querySelectorAll("[data-restore-version]").forEach((button) => { button.disabled = false; });
-      logResolveSlot(slot, () => `${escapeHtml(t("shell.versions.restoreError"))}${escapeHtml(errMsg)}`, [
+      // #1151 skive 3c: modulen ble arkivert i mellomtiden — et nytt forsøk kan ikke lykkes, så meldingen står alene.
+      logResolveSlot(slot, () => `${escapeHtml(t("shell.versions.restoreError"))}${escapeHtml(errMsg)}`, isArchivedRejection(err) ? [] : [
         // Same key: a retry after a lost response must not create a second version.
         { labelKey: "shell.action.retry", action: () => restoreModuleVersionInBackground(sourceVersionId, key) },
       ]);
@@ -1216,10 +1271,43 @@ export function createSettingsTab(ctx) {
     if (isFreetextOnly) { delete mcqUse.questionsPerAttempt; delete mcqUse.shuffleQuestions; delete mcqUse.reviewAfterSubmit; }
     const mcqChanged = JSON.stringify(mcqUse) !== JSON.stringify(existingPolicy?.mcq ?? {});
 
-    const policy = existingPolicy || Object.keys(passRules).length > 0 || Object.keys(mcqUse).length > 0
-      ? { ...(existingPolicy ?? {}), passRules, ...(Object.keys(mcqUse).length > 0 ? { mcq: mcqUse } : {}) }
+    // #1124 del 2: «vis eksempelsvaret» lagres bare når det er PÅ — av er standarden og trenger ingen verdi.
+    const practicalUse = { ...(existingPolicy?.practical ?? {}) };
+    const modelAnswerShowInput = document.getElementById("settingsModelAnswerShow");
+    if (modelAnswerShowInput) {
+      if (modelAnswerShowInput.checked) practicalUse.modelAnswerAfterAssessment = true;
+      else delete practicalUse.modelAnswerAfterAssessment;
+    }
+    if (isMcqOnly) delete practicalUse.modelAnswerAfterAssessment;
+    const practicalChanged = JSON.stringify(practicalUse) !== JSON.stringify(existingPolicy?.practical ?? {});
+
+    // Selve eksempelsvaret: på språket som redigeres, flettet inn i de andre språkene. Sendes bare når
+    // det er endret — utelatt beholder tjeneren det fra forrige versjon; tomt i alle språk er `null`.
+    const modelAnswerInput = document.getElementById("settingsModelAnswer");
+    let modelAnswerPayload;
+    if (modelAnswerInput && !isMcqOnly) {
+      const stored = version?.modelAnswer ?? null;
+      const before = String(localizeValueForLocale(stored, ctx.contentLocale) ?? "").trim();
+      const after = modelAnswerInput.value.trim();
+      if (after !== before) {
+        const map = stored && typeof stored === "object"
+          ? { ...stored }
+          : (typeof stored === "string" && stored.trim() ? { [ctx.contentLocale]: stored } : {});
+        if (after) map[ctx.contentLocale] = after; else delete map[ctx.contentLocale];
+        modelAnswerPayload = Object.values(map).some((value) => String(value ?? "").trim()) ? map : null;
+      }
+    }
+
+    const policy = existingPolicy || Object.keys(passRules).length > 0 || Object.keys(mcqUse).length > 0 || Object.keys(practicalUse).length > 0
+      ? {
+          ...(existingPolicy ?? {}),
+          passRules,
+          ...(Object.keys(mcqUse).length > 0 ? { mcq: mcqUse } : {}),
+          ...(Object.keys(practicalUse).length > 0 ? { practical: practicalUse } : {}),
+        }
       : null;
     if (policy && Object.keys(mcqUse).length === 0) delete policy.mcq;
+    if (policy && Object.keys(practicalUse).length === 0) delete policy.practical;
 
     // Module-level fields. Sent only when the author actually changed them, so a mode switch
     // does not rewrite a description or a date the panel merely displayed.
@@ -1281,7 +1369,7 @@ export function createSettingsTab(ctx) {
     // The whole pass-rule object, not just the MCQ threshold. Adding the other three rules to the
     // payload without adding them here meant editing the overall pass mark hit "no changes" and
     // nothing was written — the field existed and did nothing.
-    const policyChanged = JSON.stringify(passRules) !== JSON.stringify(existingPolicy?.passRules ?? {}) || mcqChanged;
+    const policyChanged = JSON.stringify(passRules) !== JSON.stringify(existingPolicy?.passRules ?? {}) || mcqChanged || practicalChanged;
     // #896 S3c: criteria edited here ride along as an INLINE rubric, exactly as the direct-edit save
     // does. Referencing `rubricVersionId` would carry the old criteria forward and quietly discard
     // what the author just typed.
@@ -1381,7 +1469,7 @@ export function createSettingsTab(ctx) {
 
     if (
       mode === currentMode && !thresholdChanged && !criteriaRecord && !promptPayload
-      && !submissionSchemaPayload && !weightChanged && !policyChanged && Object.keys(moduleFields).length === 0
+      && !submissionSchemaPayload && !weightChanged && !policyChanged && modelAnswerPayload === undefined && Object.keys(moduleFields).length === 0
     ) {
       showToast(t("shell.settings.noChanges"), "info");
       reenableSettingsSave();
@@ -1398,6 +1486,7 @@ export function createSettingsTab(ctx) {
         assessorExpectedContent:
           dropBlankLocales(latestTaskVersion?.assessorExpectedContent) ?? latestTaskVersion?.assessorExpectedContent,
         candidateTaskConstraints: dropBlankLocales(latestTaskVersion?.candidateTaskConstraints),
+        ...(modelAnswerPayload !== undefined ? { modelAnswer: modelAnswerPayload } : {}),
         // Inline rubric when the author edited criteria here, otherwise keep referencing the
         // existing one. Sending both would be ambiguous; sending only the id would drop the edit.
         // A rubric is written when the criteria OR the practical weight changed — both live on the

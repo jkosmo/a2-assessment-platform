@@ -144,6 +144,8 @@ export type WorkspaceNavigationItem = {
   path: string;
   labelKey: string;
   requiredRoles: AppRoleType[];
+  /** Andre adresser i området; punktet er markert på dem og på sidene under dem (2.126.0). */
+  areaPaths?: string[];
 };
 
 /**
@@ -162,9 +164,8 @@ export function rolesFor(id: ApiRouteCapability["id"]): AppRoleType[] {
 export function buildWorkspaceNavigationItems(calibrationAccessRoles: AppRoleType[]): WorkspaceNavigationItem[] {
   return [
     {
-      // #767: «Mine kurs» — deltakerens egen kurs-arbeidsflate. «Fullførte» er ikke lenger et eget
-      // toppmeny-punkt; den nås via undernavigasjonen (Pågående | Fullførte) rendret av
-      // public/static/mine-kurs-subnav.js på /participant og /participant/completed.
+      // #767: «Mine kurs» — deltakerens egen kurs-arbeidsflate. 2.126.0: undersiden «Fullførte» er
+      // fjernet; /participant/completed videresender hit.
       // #787 QA: synlig for ALLE roller (tom requiredRoles). Deltaker-arbeidsflaten viser kun den
       // publiserte modulkatalogen (participantFacing=true → ingen utkast/admin-data) og er uansett nåbar
       // via URL for enhver innlogget bruker. Tidligere manglet f.eks. en ren SUBJECT_MATTER_OWNER punktet
@@ -181,6 +182,8 @@ export function buildWorkspaceNavigationItems(calibrationAccessRoles: AppRoleTyp
       path: "/admin-content/courses",
       labelKey: "nav.adminContent",
       requiredRoles: [AppRole.SUBJECT_MATTER_OWNER, AppRole.ADMINISTRATOR],
+      // Tema, Moduler, Seksjoner, Vurderingskvalitet og et åpent kurs ligger alle under /admin-content.
+      areaPaths: ["/admin-content"],
     },
     {
       // #765: «Deltakere» samler de person-/utfalls-orienterte flatene (Klasser, Manuell behandling,
@@ -191,6 +194,8 @@ export function buildWorkspaceNavigationItems(calibrationAccessRoles: AppRoleTyp
       id: "deltakere",
       path: "/deltakere/klasser",
       labelKey: "nav.deltakere",
+      // Manuell behandling og Resultater beholdt sine adresser da de ble lagt under «Deltakere» (#765).
+      areaPaths: ["/deltakere", "/review", "/results"],
       requiredRoles: [
         AppRole.SUBJECT_MATTER_OWNER,
         AppRole.ADMINISTRATOR,

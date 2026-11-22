@@ -11,8 +11,20 @@
 //   pictures       every `file` is attached; text and pictures agree; sizes the platform takes
 //   figures        every figure, layout and language variant: labels fit, animation is safe
 //   questions      no option gives the answer away
+//   find errors    the course has a «finn feilene» — a NOTE when not, never a stop  (#1120)
+//   copied answers no exercise is answered word for word by the text above it        (#1121)
+//   criteria       every assessment criterion describes its scale, not one line       (#1122)
+//   example answers every free-text module has a strong example answer — a NOTE when adjusting (#1124)
+//   direct address every section talks to the learner — a NOTE when one reads as a report (#1133)
+//   alt text       every picture is described in 6+ words, not titled                 (#1128)
+//   leftovers      no working notes, numbered section references, figures out of order (#1129)
+//   summaries      one summary per section, not «Formål» + «Nøkkelpoeng» + «Kort oppsummering» (#1126)
+//   focus          boxes, long lists, a section describing itself — a NOTE, never a stop  (#1126)
+//   revision       a «Repetisjon» course opens with questions — a NOTE                   (#1127)
 //   languages      nb, nn and en-GB complete, real translations, same answer in each
 //   approved text  nothing the author approved has gone missing        (needs --state)
+//   objectives     every question and task linked to an objective and to a section before the
+//                  test; an objective no question tests is a NOTE       (needs --state, #1125)
 //   slides         every slide got what the slide list says           (needs --slides)
 //   changes        unchanged is unchanged: every element the change list calls "unchanged" is
 //                  word for word as in the export it came from; "changed" differs; "new" has no
@@ -28,9 +40,16 @@ import path from "node:path";
 import { auditExport, checkGate6Readiness } from "./course-state.mjs";
 import { buildFallbackEnvelope, describeChecks, roundTripFallbackExport } from "./export-validate.mjs";
 import { checkFigureFit } from "./figure-fit-check.mjs";
+import { FRAME_KINDS } from "./frame-structure.mjs";
 import { checkFigureMotion } from "./figure-motion-check.mjs";
 import { LANGUAGES, checkLocalization, extractSvgTextRuns } from "./localization-check.mjs";
 import { checkMcqCues, collectMcqSets } from "./mcq-cue-check.mjs";
+import { checkExerciseCopies } from "./exercise-copy-check.mjs";
+import { checkRubricScales } from "./rubric-check.mjs";
+import { wordsOf } from "./text-overlap.mjs";
+import { ALT_MIN_WORDS, checkAltTexts, checkFigureNumbers, checkLeftovers } from "./section-text-check.mjs";
+import { REVISION_MIN_QUESTIONS, WORDS_PER_CALLOUT, callouts, calloutsAllowed, checkFrameCount, isRevisionTitle, longLists, proseWordCount, selfDescription, summaryHeadings } from "./section-shape-check.mjs";
+import { checkObjectiveMap } from "./objective-map-check.mjs";
 import { SVG_MIME, checkAssets, readCourseState, resolvePackageAssets } from "./package-assets.mjs";
 import { checkSlideCoverage, countForms, readDeck } from "./slide-coverage.mjs";
 import { synthesizeStandaloneEnvelopes } from "./synthesize-envelopes.mjs";
@@ -213,19 +232,20 @@ function withoutCodeBlocks(text) {
 }
 
 // The platform's own reading of a frame's opening line (`:::kort`, `::: Kort`, `:::cards` — blanks and
-// case do not matter), so what is counted here agrees with what the reader will show. The words and
-// their English twins are the platform's (src/modules/course/contentBlocks.ts).
-const FRAME_OPENER = /^:::[ \t]*(kort|cards|tenk|think|sjekk|check|steg|steps|skriv|write|repetisjon|flashcards|par|pairs)\b/i;
-/** Cards take nothing after the word; think, check and write need their question or task there; steps, flashcards and pairs may have a title. */
+// case do not matter), so what is counted here agrees with what the reader will show. The words, their
+// English twins and what stands after them come from the shared table (FRAME_KINDS) — a new frame added
+// there is known here too (#1123: `:::feil` was missing from a list of its own here).
+const FRAME_BY_WORD = new Map(FRAME_KINDS.flatMap((entry) => entry.words.map((word) => [word, entry])));
+const FRAME_OPENER = new RegExp(`^:::[ \\t]*(${[...FRAME_BY_WORD.keys()].join("|")})\\b`, "i");
+/** Cards take nothing after the word; think, check and write need their question or task there; the others may have a title. */
 function isFrameOpener(word, line) {
   const kind = word.toLowerCase();
-  if (kind === "kort" || kind === "cards") return /^:::[ \t]*(?:kort|cards)[ \t]*$/i.test(line);
-  if (["steg", "steps", "repetisjon", "flashcards", "par", "pairs"].includes(kind)) return new RegExp(`^:::[ \\t]*${kind}(?:[ \\t].*)?$`, "i").test(line);
-  return new RegExp(`^:::[ \\t]*${kind}[ \\t]+\\S`, "i").test(line);
+  const after = { none: "[ \\t]*$", optional: "(?:[ \\t].*)?$", text: "[ \\t]+\\S" }[FRAME_BY_WORD.get(kind).opener];
+  return new RegExp(`^:::[ \\t]*${kind}${after}`, "i").test(line);
 }
 
 /** The frames that are drawn only in a section, never in a module's text (2.96.1). */
-const SECTION_ONLY_FRAME = /^:::[ \t]*(steg|steps|skriv|write|repetisjon|flashcards|par|pairs)\b/i;
+const SECTION_ONLY_FRAME = new RegExp(`^:::[ \\t]*(${FRAME_KINDS.filter((entry) => entry.sectionOnly).flatMap((entry) => entry.words).join("|")})\\b`, "i");
 /** A module's text fields the learner reads. */
 const MODULE_TEXT_FIELDS = ["taskText", "candidateTaskConstraints"];
 
@@ -379,8 +399,33 @@ function pairsProblems(kind, lines) {
   return [];
 }
 
+/**
+ * #1123: a «feil» frame is a block only when every line is a sentence (`- [ ]` right, `- [x]` an error) or
+ * an explanation indented under one, with at least three sentences, at least one error and at least one
+ * that is right — the rule of splitErrorSentences in src/modules/course/contentBlocks.ts.
+ */
+function errorsProblems(kind, lines) {
+  const sentences = [];
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    const sentence = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+\S/.exec(line);
+    if (sentence) sentences.push(sentence[1].toLowerCase() === "x");
+    else if (!(sentences.length > 0 && /^(?: {2,}|\t)[ \t]*\S/.test(line))) {
+      return [`a :::${kind} frame has a line that is neither a sentence (\`- [ ]\` / \`- [x]\`) nor an explanation indented under one: «${line.trim()}» — the learner sees the markers as text`];
+    }
+  }
+  const errors = sentences.filter(Boolean).length;
+  if (sentences.length < 3) return [`a :::${kind} frame needs at least three sentences (it has ${sentences.length}) — the learner sees the markers as text`];
+  if (errors === 0 || errors === sentences.length) {
+    return [`a :::${kind} frame needs at least one sentence with an error (\`- [x]\`) and at least one that is right (\`- [ ]\`) — it has ${errors} of ${sentences.length}; the learner sees the markers as text`];
+  }
+  return [];
+}
+
 /** The frames with a shape the platform requires, and the check for each. */
 const FRAME_SHAPE_CHECKS = {
+  feil: errorsProblems,
+  errors: errorsProblems,
   par: pairsProblems,
   pairs: pairsProblems,
   sjekk: checkProblems,
@@ -448,7 +493,7 @@ function checkQuestions(pkg, primary, course, { onlyRefs = null, baselineCounts 
   const sets = collectMcqSets(pkg).filter((set) => inScope(set.clientRef ?? String(set.path).replace(/^objects\[([^\]]+)\].*$/, "$1")));
   let questions = 0;
   for (const set of sets) {
-    const result = checkMcqCues(set.questions, { primary });
+    const result = checkMcqCues(set.questions, { primary, reading: set.reading });
     questions += result.stats.questions;
     for (const issue of result.issues) {
       details.push(`${set.path} ${issue.index == null ? "the set" : `question ${issue.index + 1}`}: ${issue.kind} — ${issue.detail}`);
@@ -479,6 +524,246 @@ function checkQuestions(pkg, primary, course, { onlyRefs = null, baselineCounts 
     sectionsBefore = 0;
   }
   return { name: "questions", status: details.length === 0 ? "ok" : "fail", summary: `${questions} question(s) in ${sets.length} set(s)`, details };
+}
+
+// #1120: every course has at least one «finn feilene» — a piece of work with planted errors the
+// learner finds (section-content.md#find-the-errors). A NOTE, not a failure: the author may say no.
+// Recognised by a `:::feil` frame (#1123), or — as courses made before it have it — by the task line of a
+// `:::skriv` frame, in any of the three languages. Not run on a loose section or module, nor when adjusting
+// a course — that changes only what the author asks for.
+const FIND_THE_ERRORS = /^:::\s*(?:(?:feil|errors)\b|(?:skriv|write)\s+(?:finn|find)\b[^\n]*\b(?:feil\w*|errors?|mistakes?)\b)/im;
+function checkFindTheErrors(pkg, course, { adjusting = false } = {}) {
+  const name = "find errors";
+  if (!course) return { name, status: "skipped", summary: "not run — no course object", details: [] };
+  if (adjusting) return { name, status: "skipped", summary: "not run — adjusting a course changes only what the author asks for", details: [] };
+  const found = (pkg.objects ?? []).filter((object) => {
+    if (object?.type !== "section") return false;
+    const body = object.payload?.bodyMarkdown;
+    const texts = body && typeof body === "object" ? Object.values(body) : [body];
+    return texts.some((text) => FIND_THE_ERRORS.test(withoutCodeBlocks(String(text ?? ""))));
+  });
+  if (found.length > 0) return { name, status: "ok", summary: `in ${found.map((o) => `"${o.clientRef}"`).join(", ")}`, details: [] };
+  return {
+    name,
+    status: "note",
+    summary: "the course has no «finn feilene»",
+    details: ["tell the author, and add one in the section that teaches the check unless they say no (section-content.md#find-the-errors)"],
+  };
+}
+
+// #1121: an exercise whose answer key stands word for word in the text right above it
+// (exercise-copy-check.mjs). Read in the language the course is written in.
+function checkCopiedAnswers(pkg, primary) {
+  const details = [];
+  let sections = 0;
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "section") continue;
+    sections += 1;
+    const body = object.payload?.bodyMarkdown;
+    const text = body && typeof body === "object" ? body[primary] ?? Object.values(body)[0] : body;
+    for (const finding of checkExerciseCopies(text)) details.push(`"${object.clientRef}" line ${finding.line}: ${finding.detail}`);
+  }
+  return {
+    name: "copied answers",
+    status: details.length === 0 ? "ok" : "fail",
+    summary: details.length === 0 ? `${sections} section(s) read: no exercise answered by the text above it` : `${details.length} exercise(s) answered by the text above them`,
+    details,
+  };
+}
+
+// #1133: text that talks to the learner («Når du vurderer …») teaches better than report style
+// («Restrisiko vurderes …») — Clark & Mayer, personalisation. Measured on the 106 stage sections
+// (2026-10-26): median 16.7 «du»-forms per 1000 words, and a separate group at 0–3 — 25 sections of
+// 200+ words, all written as a report or a textbook. A NOTE, not a stop: a reference list or an
+// appendix is rightly impersonal. Read in the language the course is written in; code is left out.
+const ADDRESS_WORDS = new Set(["du", "deg", "din", "ditt", "dine", "dykk", "dykkar", "you", "your", "yours", "yourself"]);
+export const ADDRESS_MIN_WORDS = 200;
+export const ADDRESS_PER_1000_MAX = 3;
+function checkDirectAddress(pkg, primary) {
+  const details = [];
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "section") continue;
+    const body = object.payload?.bodyMarkdown;
+    const text = withoutCodeBlocks(String((body && typeof body === "object" ? body[primary] ?? Object.values(body)[0] : body) ?? ""));
+    const words = wordsOf(text);
+    if (words.length < ADDRESS_MIN_WORDS) continue;
+    const perThousand = (1000 * words.filter((word) => ADDRESS_WORDS.has(word)).length) / words.length;
+    if (perThousand <= ADDRESS_PER_1000_MAX) {
+      details.push(`"${object.clientRef}": ${words.length} words, ${perThousand.toFixed(1)} «du» per 1000 — written as a report. Talk to the learner about their work: «Når du vurderer …», not «… vurderes» (section-content.md#writing-the-text).`);
+    }
+  }
+  return details.length === 0
+    ? { name: "direct address", status: "ok", summary: "every section talks to the learner", details }
+    : { name: "direct address", status: "note", summary: `${details.length} section(s) written as a report`, details };
+}
+
+// #1128: a picture's alt text describes it, in every language (section-text-check.mjs).
+function checkAltText(pkg) {
+  const details = [];
+  let pictures = 0;
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "section") continue;
+    const body = object.payload?.bodyMarkdown;
+    const languages = body && typeof body === "object" ? Object.entries(body) : [["", body]];
+    for (const [language, markdown] of languages) {
+      pictures += (String(markdown ?? "").match(/!\[[^\]]*\]\(asset:/g) ?? []).length;
+      for (const finding of checkAltTexts(markdown)) {
+        details.push(`"${object.clientRef}"${language ? ` (${language})` : ""}: «${finding.alt}» is a title, not a description (${finding.words} words). Say what the picture shows and what it means for the learner, in ${ALT_MIN_WORDS} words or more — «Agentløkken: et mål går inn, LLM vurderer neste steg og velger verktøy …».`);
+      }
+    }
+  }
+  return { name: "alt text", status: details.length === 0 ? "ok" : "fail", summary: `${pictures} picture(s) in the text, each described`, details };
+}
+
+// #1129: working notes, sections referred to by number, and figures numbered out of order
+// (section-text-check.mjs). Figures are counted across the course, in its order.
+function checkLeftoversInText(pkg, course) {
+  const details = [];
+  const sections = (pkg.objects ?? []).filter((object) => object?.type === "section");
+  const order = (course?.payload?.items ?? []).map((item) => item?.ref);
+  sections.sort((a, b) => (order.indexOf(a.clientRef) + 1 || Infinity) - (order.indexOf(b.clientRef) + 1 || Infinity));
+  const byLanguage = new Map();
+  for (const object of sections) {
+    const body = object.payload?.bodyMarkdown;
+    const languages = body && typeof body === "object" ? Object.entries(body) : [["", body]];
+    for (const [language, markdown] of languages) {
+      for (const finding of checkLeftovers(markdown)) {
+        const where = `"${object.clientRef}"${language ? ` (${language})` : ""}`;
+        details.push(finding.kind === "note"
+          ? `${where}: a working note for the author — «${finding.text}». Resolve it with the author, or leave the point out.`
+          : `${where}: «${finding.text}» — refer to a section by its title; the learner sees titles, and a number breaks when the order changes.`);
+      }
+      if (!byLanguage.has(language)) byLanguage.set(language, []);
+      byLanguage.get(language).push(markdown);
+    }
+  }
+  for (const [language, markdowns] of byLanguage) {
+    for (const finding of checkFigureNumbers(markdowns)) {
+      details.push(`figures${language ? ` (${language})` : ""} are numbered ${finding.order.join(", ")} — number ${finding.expected} is ${finding.actual}. Number them in the order they stand, or drop the numbers.`);
+    }
+  }
+  return { name: "leftovers", status: details.length === 0 ? "ok" : "fail", summary: details.length === 0 ? "no working notes, numbered section references or figure numbers out of order" : `${details.length} leftover(s) from the authoring`, details };
+}
+
+/** A section's text per language: [[language, markdown]], or [["", markdown]] for a plain string. */
+function sectionTexts(object) {
+  const body = object.payload?.bodyMarkdown;
+  return body && typeof body === "object" ? Object.entries(body).map(([language, text]) => [language, String(text ?? "")]) : [["", String(body ?? "")]];
+}
+
+// #1126: one summary per section (section-shape-check.mjs). «Formål», «Nøkkelpoeng» and «Kort
+// oppsummering» in one section say the same thing three times — 16 of the 106 stage sections, all
+// real. A STOP: it is always wrong, and the fix is to keep one. Read in every language.
+function checkSummaries(pkg) {
+  const details = [];
+  let sections = 0;
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "section") continue;
+    sections += 1;
+    const hits = sectionTexts(object).map(([language, text]) => [language, summaryHeadings(text)]).filter(([, found]) => found.length > 1);
+    if (hits.length === 0) continue;
+    const [, first] = hits[0];
+    const languages = hits.map(([language]) => language).filter(Boolean);
+    details.push(`"${object.clientRef}"${languages.length ? ` (${languages.join(", ")})` : ""}: ${first.length} summaries — ${first.map((h) => `«${h}»`).join(", ")}. Keep one, at the end, best as a question with the answer hidden; open with the point, not with what the section is for (section-content.md#teach-not-catalogue)`);
+  }
+  return {
+    name: "summaries",
+    status: details.length === 0 ? "ok" : "fail",
+    summary: details.length === 0 ? `${sections} section(s), none with more than one summary` : `${details.length} section(s) with more than one summary`,
+    details,
+  };
+}
+
+// #1126: what makes a section a catalogue rather than teaching (section-shape-check.mjs) — more than
+// one highlighted box (44 of 106 stage sections), a list of nine points or more (17 lists in 10
+// sections), a section that describes itself («Denne seksjonen viser …», 23 sections). A NOTE, not a
+// stop: the source may set a box apart, a table of contents may stay a list, and the author decides.
+// Boxes and lists are read in the course's language (the languages check holds the shape); the
+// self-description in every language.
+function checkFocus(pkg, primary) {
+  const details = [];
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "section") continue;
+    const texts = sectionTexts(object);
+    const main = (texts.find(([language]) => language === primary) ?? texts[0])?.[1] ?? "";
+    const boxes = callouts(main);
+    const words = proseWordCount(main);
+    if (boxes.length > calloutsAllowed(words)) {
+      details.push(`"${object.clientRef}": ${boxes.length} highlighted boxes in ${words} words (${boxes.map((b) => `«${b}»`).join(", ")}) — at most one per ${WORDS_PER_CALLOUT} words, for something with a concrete consequence; the rest is text (section-content.md#teach-not-catalogue)`);
+    }
+    for (const list of longLists(main)) {
+      details.push(`"${object.clientRef}": a list of ${list.items} points («${list.first.slice(0, 50)}» …) — give an example or a choice instead, or move the list to an appendix (section-content.md#teach-not-catalogue)`);
+    }
+    const described = texts.map(([language, text]) => [language, selfDescription(text)]).filter(([, found]) => found);
+    if (described.length > 0) {
+      const languages = described.map(([language]) => language).filter(Boolean);
+      details.push(`"${object.clientRef}"${languages.length ? ` (${languages.join(", ")})` : ""}: «${described[0][1]} …» describes the section instead of teaching — open with the point or the situation, to the learner (section-content.md#teach-not-catalogue)`);
+    }
+  }
+  return details.length === 0
+    ? { name: "focus", status: "ok", summary: "no section with several boxes, a long list or a description of itself", details }
+    : { name: "focus", status: "note", summary: `${details.length} finding(s): boxes, long lists or a section describing itself`, details };
+}
+
+// #1127: a revision course — «Repetisjon» in its title — opens with questions (section-shape-check.mjs).
+// A NOTE: the template is new, and the author may have a reason. Not run on a course that is not one,
+// nor when adjusting (the order is the author's).
+function checkRevisionOpening(pkg, course, { adjusting = false } = {}) {
+  const name = "revision";
+  // Not a revision course: nothing to check — «ok», not «skipped», so the report does not list it as a check left out.
+  if (!course || !isRevisionTitle(course.payload?.course?.title)) return { name, status: "ok", summary: "not a revision course (no «Repetisjon» in the title)", details: [] };
+  if (adjusting) return { name, status: "skipped", summary: "not run — adjusting a course changes only what the author asks for", details: [] };
+  const byRef = new Map((pkg.objects ?? []).map((object) => [object?.clientRef, object]));
+  const first = byRef.get(course.payload?.items?.[0]?.ref);
+  const texts = first?.type === "section" ? sectionTexts(first) : [];
+  const main = (texts[0] ?? [])[1] ?? "";
+  const questions = first?.type === "section" ? checkFrameCount(main) : 0;
+  if (questions >= REVISION_MIN_QUESTIONS) return { name, status: "ok", summary: `opens with ${questions} questions in "${first.clientRef}"`, details: [] };
+  return {
+    name,
+    status: "note",
+    summary: "a revision course that opens with the material again",
+    details: [`the first element${first ? ` ("${first.clientRef}")` : ""} has ${questions} «sjekk deg selv» question(s) — a revision course opens with ${REVISION_MIN_QUESTIONS}–6, then shorter sections (course-design.md#a-revision-course). Tell the author.`],
+  };
+}
+
+// #1122: every assessment criterion describes its scale (rubric-check.mjs).
+function checkCriteria(pkg, primary) {
+  const details = [];
+  let criteria = 0;
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "module") continue;
+    const rubric = object.payload?.activeVersion?.rubric?.criteria;
+    if (!rubric || typeof rubric !== "object") continue;
+    criteria += Object.keys(rubric).length;
+    for (const finding of checkRubricScales(rubric, { primary })) details.push(`"${object.clientRef}": ${finding.detail}`);
+  }
+  return {
+    name: "criteria",
+    status: details.length === 0 ? "ok" : "fail",
+    summary: details.length === 0 ? `${criteria} criteria, each with its scale described` : `${details.length} of ${criteria} criteria with one line for the scale`,
+    details,
+  };
+}
+
+// #1124 del 2: every free-text module has a strong example answer (`activeVersion.modelAnswer`) — the
+// platform shows it next to the learner's own answer after assessment, when the module turns it on
+// (modules.md#example-answer). A stop for a new course; a NOTE when adjusting one, which changes only
+// what the author asks for.
+function checkModelAnswers(pkg, primary, { adjusting = false } = {}) {
+  const name = "example answers";
+  const freetext = (pkg.objects ?? []).filter((object) =>
+    object?.type === "module" && object.payload?.activeVersion?.assessmentMode !== "MCQ_ONLY" && object.payload?.activeVersion?.taskText);
+  if (freetext.length === 0) return { name, status: "ok", summary: "no free-text module — nothing to check", details: [] };
+  const textOf = (value) => (value && typeof value === "object" ? value[primary] ?? Object.values(value)[0] : value);
+  const missing = freetext.filter((object) => !String(textOf(object.payload.activeVersion.modelAnswer) ?? "").trim());
+  if (missing.length === 0) return { name, status: "ok", summary: `${freetext.length} free-text module(s), each with an example answer`, details: [] };
+  return {
+    name,
+    status: adjusting ? "note" : "fail",
+    summary: `${missing.length} of ${freetext.length} free-text module(s) without an example answer`,
+    details: missing.map((object) => `"${object.clientRef}": write \`modelAnswer\` — a strong answer to the task, at the top of every criterion (modules.md#example-answer)`),
+  };
 }
 
 function checkLanguages(pkg, primary) {
@@ -539,6 +824,50 @@ function checkApprovedText(master, pkg) {
     status: details.length === 0 ? "ok" : "fail",
     summary: `${totals.preserved} item(s) in place, ${totals.moved} moved to an attachment, ${totals.deliberatelyRemoved} removed with the author's consent`,
     details,
+  };
+}
+
+// #1125: every question and free-text task points at an objective and at a section before the test
+// (objective-map-check.mjs). The links live in the course state; the questions are read from the
+// package as written, in the course's language. Adjusting a course: only the changed and new tests are
+// read, and a course whose state has no objectives — the platform keeps none — gets a NOTE, not a
+// stop: adding objectives to a course on the platform is the author's call, not part of a change.
+function checkObjectives(master, pkg, course, primary, { onlyRefs = null } = {}) {
+  const name = "objectives";
+  if (!course) return { name, status: "skipped", summary: "not run — no course object", details: [] };
+  const byRef = new Map((pkg.objects ?? []).map((object) => [object?.clientRef, object]));
+  const order = (course.payload?.items ?? []).map((item) => ({ ref: item?.ref, type: byRef.get(item?.ref)?.type }));
+  const pick = (value) => (value && typeof value === "object" ? value[primary] ?? Object.values(value)[0] : value);
+  const modules = order
+    .filter((item) => item.type === "module" && (!onlyRefs || onlyRefs.has(item.ref)))
+    .map((item) => {
+      const version = byRef.get(item.ref).payload?.activeVersion ?? {};
+      const task = String(pick(version.taskText) ?? "").trim();
+      return {
+        ref: item.ref,
+        questions: (version.mcqSet?.questions ?? []).map((question) => String(pick(question?.stem) ?? "")),
+        hasTask: version.assessmentMode !== "MCQ_ONLY" && task.length > 0,
+      };
+    });
+  if (onlyRefs && modules.length === 0) return { name, status: "ok", summary: "no changed or new test", details: [] };
+  if (onlyRefs && !(Array.isArray(master.learningObjectives) && master.learningObjectives.length > 0)) {
+    return {
+      name,
+      status: "note",
+      summary: "the course has no learning objectives in the state — the changed and new tests are not linked",
+      details: [`${modules.map((m) => `"${m.ref}"`).join(", ")}: ask the author whether the course should get objectives; if so, link each question (course-design.md#learning-objectives)`],
+    };
+  }
+  const result = checkObjectiveMap(master, { order, modules, partial: Boolean(onlyRefs) });
+  const fails = result.findings.filter((f) => f.severity === "fail");
+  const lines = (findings) => findings.map((f) => `${f.ref ? `"${f.ref}": ` : ""}${f.detail}`);
+  if (fails.length > 0) return { name, status: "fail", summary: `${fails.length} link(s) missing or wrong`, details: lines(result.findings) };
+  const notes = result.findings.filter((f) => f.severity === "note");
+  return {
+    name,
+    status: notes.length > 0 ? "note" : "ok",
+    summary: `${result.linked} question(s) and task(s) linked to ${result.objectives} objective(s)${notes.length > 0 ? `; ${notes.length} objective(s) not tested` : ""}`,
+    details: lines(notes),
   };
 }
 
@@ -756,6 +1085,16 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
     baselineCounts = new Map((pkg.objects ?? []).filter((o) => o?.type === "module" && o.origin?.moduleId && byModuleId.has(o.origin.moduleId)).map((o) => [o.clientRef, byModuleId.get(o.origin.moduleId)]));
   }
   checks.push(checkQuestions(pkg, primary, course, changesEarly?.elements ? { onlyRefs: new Set(scoped.pkg.objects.map((o) => o.clientRef)), baselineCounts } : {}));
+  checks.push(checkFindTheErrors(pkg, course, { adjusting: Boolean(changesEarly?.elements) }));
+  checks.push(checkCopiedAnswers(scoped.pkg, primary));
+  checks.push(checkCriteria(scoped.pkg, primary));
+  checks.push(checkModelAnswers(scoped.pkg, primary, { adjusting: Boolean(changesEarly?.elements) }));
+  checks.push(checkDirectAddress(scoped.pkg, primary));
+  checks.push(checkAltText(scoped.pkg));
+  checks.push(checkLeftoversInText(scoped.pkg, scoped.course));
+  checks.push(checkSummaries(scoped.pkg));
+  checks.push(checkFocus(scoped.pkg, primary));
+  checks.push(checkRevisionOpening(pkg, course, { adjusting: Boolean(changesEarly?.elements) }));
   checks.push(checkLanguages(scoped.pkg, primary));
 
   let master = null;
@@ -767,8 +1106,10 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
       problems.push(`cannot read the course state ${stateFile}: ${error instanceof Error ? error.message : String(error)}`);
     }
     checks.push(master ? checkApprovedText(master, pkg) : { name: "approved text", status: "fail", summary: "not read", details: problems });
+    checks.push(master ? checkObjectives(master, pkg, course, primary, changesEarly?.elements ? { onlyRefs: new Set(scoped.pkg.objects.map((o) => o.clientRef)) } : {}) : { name: "objectives", status: "fail", summary: "not read", details: problems });
   } else {
     checks.push({ name: "approved text", status: "skipped", summary: "NOT RUN — no --state file. Say so in the report", details: [] });
+    checks.push({ name: "objectives", status: "skipped", summary: "NOT RUN — no --state file: the links between questions, objectives and sections are not checked. Say so in the report", details: [] });
   }
 
   if (slidesFile) {
@@ -860,7 +1201,7 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
 
 /** The report: one line per check, the findings under it, and what to hand over. */
 export function formatProduction(result) {
-  const mark = { ok: "OK  ", fail: "FAIL", skipped: "--  " };
+  const mark = { ok: "OK  ", fail: "FAIL", skipped: "--  ", note: "NOTE" };
   const out = [];
   for (const check of result.checks) {
     out.push(`${mark[check.status]} ${check.name.padEnd(14)} ${check.summary}`);
@@ -871,6 +1212,8 @@ export function formatProduction(result) {
     for (const entry of result.files) out.push(`DELIVER ${entry.file}  —  the author imports it at ${entry.importAt}`);
     const notRun = result.checks.filter((check) => check.status === "skipped").map((check) => check.name);
     if (notRun.length > 0) out.push(`Not run: ${notRun.join(", ")}. Name them as not run when you report.`);
+    const noted = result.checks.filter((check) => check.status === "note").map((check) => check.name);
+    if (noted.length > 0) out.push(`Noted: ${noted.join(", ")}. The file may be delivered; tell the author what is noted.`);
   } else {
     const failed = result.checks.filter((check) => check.status === "fail").map((check) => check.name);
     out.push(`DO NOT DELIVER — failed: ${failed.join(", ")}. Fix what is listed and run again.`);

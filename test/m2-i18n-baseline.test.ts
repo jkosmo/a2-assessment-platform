@@ -4,6 +4,7 @@ import { app } from "../src/app.js";
 import { env } from "../src/config/env.js";
 import { prisma } from "../src/db/prisma.js";
 import { AssessmentJobStatus } from "../src/db/prismaRuntime.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 const originalFetch = global.fetch;
 const originalLlmMode = env.LLM_MODE;
@@ -122,6 +123,7 @@ describe("MVP i18n baseline", () => {
       })
       .send({
         moduleId: seedModule.id,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, seedModule.id),
         deliveryType: "text",
         responseJson: {
           response: "Praktisk svar for i18n-test.",
@@ -216,6 +218,7 @@ describe("MVP i18n baseline", () => {
       })
       .send({
         moduleId: seedModule.id,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, seedModule.id),
         deliveryType: "text",
         responseJson: {
           response: "Praktisk styringssvar for i18n-test.",
@@ -353,6 +356,7 @@ describe("MVP i18n baseline", () => {
       })
       .send({
         moduleId: seedModule.id,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, seedModule.id),
         deliveryType: "text",
         responseJson: {
           response: "Praktisk svar for LLM-lokaliseringskontroll.",

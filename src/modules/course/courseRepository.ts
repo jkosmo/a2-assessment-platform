@@ -1,7 +1,10 @@
 import { prisma } from "../../db/prisma.js";
 import type { ReportFilters } from "../reporting/types.js";
-import { CERTIFICATION_PASSED_STATUSES } from "../certification/certificationRepository.js";
+import { findModuleProgress, type ModuleProgressInput } from "./moduleCredit.js";
 import { sectionAvailableWhere } from "./sectionAvailability.js";
+import { publishedSectionTitle, publishedSectionTitleSelect } from "./sectionTitle.js";
+import { countCertificateHolders, loadSectionReadRules, readCountsForCurrentVersion, type SectionSnapshot } from "./courseVersioning.js";
+import type { LearnerContentTx } from "../../db/contentLock.js";
 
 function buildSubmissionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
   return {
@@ -21,24 +24,17 @@ function buildCompletionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo"
   return {
     ...(filters.dateFrom || filters.dateTo
       ? {
-          completedAt: {
-            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
-            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
-          },
-        }
-      : {}),
-    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
-  };
-}
-
-function buildCertificationWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
-  return {
-    ...(filters.dateFrom || filters.dateTo
-      ? {
-          passedAt: {
-            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
-            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
-          },
+          // #1145: et bevis registrert for et kurs tatt utenfor plattformen har ingen kjent dato; `completedAt` er registreringen.
+          // Det telles som fullført uavhengig av perioden, i stedet for å falle inn eller ut etter når det ble registrert.
+          OR: [
+            {
+              completedAt: {
+                ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+                ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+              },
+            },
+            { source: "external" },
+          ],
         }
       : {}),
     ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
@@ -47,8 +43,82 @@ function buildCertificationWhere(filters: Pick<ReportFilters, "dateFrom" | "date
 
 type CourseRepositoryClient = Pick<
   typeof prisma,
-  "course" | "courseItem" | "courseCompletion" | "courseSectionRead" | "certificationStatus" | "submission"
+  | "course"
+  | "courseItem"
+  | "courseCompletion"
+  | "courseSectionRead"
+  | "courseVersion"
+  | "certificationStatus"
+  | "courseModuleRequirement"
+  | "modulePass"
+  | "platformConfig"
+  | "submission"
+  | "$queryRaw"
 >;
+
+// #934 skive 3: seksjon → aktiv seksjonsversjon for seksjonene kurset inneholder nå. Øyeblikksbildet en
+// ny hovedversjon lagrer i `CourseVersion` (courseVersioning.ts). Alle seksjoner, også arkiverte og
+// tilbakeholdte: det er hva kurset INNEHOLDER som sammenlignes, ikke hva en deltaker kan lese.
+async function findSectionVersions(client: Pick<CourseRepositoryClient, "courseItem">, courseId: string): Promise<Record<string, string | null>> {
+  const items = await client.courseItem.findMany({
+    where: { courseId, itemType: "SECTION", sectionId: { not: null } },
+    select: { sectionId: true, section: { select: { activeVersionId: true } } },
+  });
+  const map: Record<string, string | null> = {};
+  for (const item of items) if (item.sectionId) map[item.sectionId] = item.section?.activeVersionId ?? null;
+  return map;
+}
+
+/**
+ * #1156: hvilken elementliste et kurs spør for når lesinger telles (sectionReadCredit.ts).
+ *   - `participant`: seksjonene deltakeren kan lese nå (`sectionAvailableWhere`, som deltakerdøra). Fremdrift, kursbevis, «Mine
+ *     kurs», kursdetaljen og rapportens «leste seksjoner».
+ *   - `all`: alle seksjonene kurset inneholder, også arkiverte og tilbakeholdte. #1152-vakta (kravet slik det var da kurset ble
+ *     arkivert, med seksjoner arkivert sammen med kurset) og rapportens «har lest i kurset».
+ */
+export type SectionItemList = "participant" | "all";
+
+/** Seksjonene i flere kurs på én gang, fra den valgte lista. Bare id-er: ingenting her går til en deltaker. */
+export async function findSectionItemsForCourses(
+  client: Pick<CourseRepositoryClient, "courseItem">,
+  courseIds: string[],
+  list: SectionItemList,
+): Promise<Array<{ courseId: string; sectionId: string }>> {
+  if (courseIds.length === 0) return [];
+  const rows = await client.courseItem.findMany({
+    where: {
+      courseId: { in: courseIds },
+      itemType: "SECTION",
+      sectionId: { not: null },
+      // #958/#992: samme filter som `findCourseItemsForParticipant`, fra samme konstant.
+      ...(list === "participant" ? { section: sectionAvailableWhere } : {}),
+    },
+    select: { courseId: true, sectionId: true },
+  });
+  return rows.flatMap((row) => (row.sectionId ? [{ courseId: row.courseId, sectionId: row.sectionId }] : []));
+}
+
+/**
+ * Modulene i flere kurs på én gang, også arkiverte moduler: bare id-er, ingen tilgjengelighetsregel, og ingenting av det går til en
+ * deltaker. For «påbegynt» (`learnerVisibility.ts`, `enrollmentService.ts`): svaret brukes bare til å spørre om deltakeren har
+ * levert noe. #1156: frittstående, så den kan leses på transaksjonens klient.
+ */
+export function findModuleItemsForCourses(client: Pick<CourseRepositoryClient, "courseItem">, courseIds: string[]) {
+  if (courseIds.length === 0) return Promise.resolve([] as Array<{ courseId: string; moduleId: string | null }>);
+  return client.courseItem.findMany({
+    where: { courseId: { in: courseIds }, itemType: "MODULE", moduleId: { not: null } },
+    select: { courseId: true, moduleId: true },
+  });
+}
+
+// #934 skive 4b: modulene i kurset som har en aktiv versjon — de deltakeren kan ta nå.
+async function findLiveModuleIds(client: Pick<CourseRepositoryClient, "courseItem">, courseId: string): Promise<string[]> {
+  const items = await client.courseItem.findMany({
+    where: { courseId, itemType: "MODULE", module: { activeVersionId: { not: null } } },
+    select: { moduleId: true },
+  });
+  return items.flatMap((item) => (item.moduleId ? [item.moduleId] : []));
+}
 
 export function createCourseRepository(client: CourseRepositoryClient = prisma) {
   return {
@@ -76,43 +146,75 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       }));
     },
 
-    countPassedModulesForUser(userId: string, moduleIds: string[]) {
-      return client.certificationStatus.count({
-        where: {
-          userId,
-          moduleId: { in: moduleIds },
-          status: { in: CERTIFICATION_PASSED_STATUSES },
-        },
-      });
+    // #934 skive 5a-3: den ene veien til fremdrift i kurs (`moduleCredit.ts`), på denne klienten. Bryteren og beståttene leses
+    // altså i den transaksjonen kalleren eventuelt står i. Ingen andre metoder her svarer på «har deltakeren bestått».
+    findModuleProgress(input: ModuleProgressInput) {
+      return findModuleProgress(client, input);
     },
 
-    findUserCertificationStatusesForModules(userId: string, moduleIds: string[]) {
-      return client.certificationStatus.findMany({
-        where: {
-          userId,
-          moduleId: { in: moduleIds },
-        },
-        select: { moduleId: true, status: true },
-      });
-    },
-
-    findCourseCompletion(userId: string, courseId: string) {
+    // #934: et kursbevis gjelder sin hovedversjon. «Har deltakeren bevis?» spørres derfor alltid for
+    // én hovedversjon — kursets nåværende, når det er utstedelsen som spør.
+    findCourseCompletion(userId: string, courseId: string, versionMajor: number) {
       return client.courseCompletion.findUnique({
-        where: { userId_courseId: { userId, courseId } },
+        where: { userId_courseId_versionMajor: { userId, courseId, versionMajor } },
       });
     },
 
     // #933: seksjonene lagres nå ved siden av modulene. Produkteiers regel er «alle moduler kurset
     // inneholdt DA, samt bekreftet lest alle seksjoner kurset inneholdt på det tidspunkt» — uten
     // seksjonene var halve regelen uetterprøvbar, og et bevis kunne ikke vise hva det dekket.
+    // #934 skive 5a-1: `locked` holder innholdslåsen delt og deltakerlåsen. Beviset skrives altså i samme låste
+    // transaksjon som kravet ble målt i. Uten den merkede klienten kompilerer ikke kallet.
     createCourseCompletion(
+      locked: LearnerContentTx,
       userId: string,
       courseId: string,
+      version: { major: number; minor: number },
       moduleSnapshotJson: string,
       sectionSnapshotJson?: string,
     ) {
-      return client.courseCompletion.create({
-        data: { userId, courseId, moduleSnapshotJson, sectionSnapshotJson },
+      return locked.courseCompletion.create({
+        data: { userId, courseId, versionMajor: version.major, versionMinor: version.minor, moduleSnapshotJson, sectionSnapshotJson },
+      });
+    },
+
+    // #1145: et kurs tatt utenfor plattformen, registrert av administrator (doc/design/PLAN_1145.md). Ingen moduler eller
+    // seksjoner ble målt: begge snapshotene er `"[]"` — IKKE `null`, som betyr «utstedt før 2.23.0» (contentLifecycle.ts).
+    createExternalCourseCompletion(
+      locked: LearnerContentTx,
+      input: { userId: string; courseId: string; version: { major: number; minor: number }; registeredById: string; externalReference: string },
+    ) {
+      return locked.courseCompletion.create({
+        data: {
+          userId: input.userId,
+          courseId: input.courseId,
+          versionMajor: input.version.major,
+          versionMinor: input.version.minor,
+          moduleSnapshotJson: "[]",
+          sectionSnapshotJson: "[]",
+          source: "external",
+          registeredById: input.registeredById,
+          externalReference: input.externalReference,
+        },
+      });
+    },
+
+    // #1145: deltakeren oppfylte kravet på plattformen etter at et `external`-bevis for samme hovedversjon var registrert. Beviset
+    // blir et vanlig bevis med målt dato og snapshot; `certificateId` beholdes, så lenker virker. Bare en rad som FORTSATT er
+    // `external` oppdateres (to samtidige oppgraderinger: den andre treffer ingenting). `registeredById` står igjen for sporbarhet.
+    upgradeExternalCourseCompletion(
+      locked: LearnerContentTx,
+      input: { completionId: string; version: { major: number; minor: number }; moduleSnapshotJson: string; sectionSnapshotJson: string },
+    ) {
+      return locked.courseCompletion.updateMany({
+        where: { id: input.completionId, source: "external" },
+        data: {
+          source: "platform",
+          completedAt: new Date(),
+          versionMinor: input.version.minor,
+          moduleSnapshotJson: input.moduleSnapshotJson,
+          sectionSnapshotJson: input.sectionSnapshotJson,
+        },
       });
     },
 
@@ -125,66 +227,60 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       return courses.map(({ _count, ...rest }) => ({ ...rest, _count: { modules: _count.items } }));
     },
 
-    markSectionRead(userId: string, courseId: string, sectionId: string) {
-      return client.courseSectionRead.upsert({
+    // #934 skive 3: en lesing som ikke teller for kursets nåværende hovedversjon (seksjonen er endret
+    // siden forrige), får nytt tidspunkt når deltakeren leser den på nytt — ellers kunne den aldri telle.
+    // En lesing som teller, står urørt: tidspunktet er når hen leste, og aktivitetsrapporten bygger på det.
+    // #934 skive 4a: `locked` er transaksjonen som holder innholdslåsen DELT, og det er den lesingen skrives på. Den
+    // venter på en åpen versjonsendring, så tidspunktet aldri havner på feil side av grensen `publishedAt`. Skive 5a-1:
+    // den holder også deltakerlåsen. Uten den merkede klienten kompilerer ikke kallet.
+    //
+    // #1156: lesingen teller i alle kurs med seksjonen (sectionReadCredit.ts), så regelen sjekkes for ALLE kurs som har den og
+    // ikke er arkivert. Teller den ikke i ett av dem, får den nytt tidspunkt: ellers kunne en ny lesing i A, etter en ny
+    // hovedversjon i B, latt B vise seksjonen som ulest. `changed` er sann når raden er ny eller fikk nytt tidspunkt; da skal
+    // kursbevisene i de andre kursene sjekkes (utboksen, `recordSectionRead`).
+    async markSectionRead(locked: LearnerContentTx, userId: string, courseId: string, sectionId: string) {
+      const existing = await locked.courseSectionRead.findUnique({
         where: { userId_courseId_sectionId: { userId, courseId, sectionId } },
-        update: {},
-        create: { userId, courseId, sectionId },
       });
-    },
-
-    findReadSectionIds(userId: string, courseId: string) {
-      return client.courseSectionRead
-        .findMany({ where: { userId, courseId }, select: { sectionId: true } })
-        .then((rows) => rows.map((r) => r.sectionId));
+      const read = existing ?? (await locked.courseSectionRead.create({ data: { userId, courseId, sectionId } }));
+      const courses = await locked.courseItem.findMany({
+        where: { sectionId, itemType: "SECTION", course: { archivedAt: null } },
+        select: { courseId: true },
+      });
+      const courseIds = [...new Set([courseId, ...courses.map((row) => row.courseId)])];
+      const rules = await loadSectionReadRules(locked, courseIds);
+      if (courseIds.every((id) => readCountsForCurrentVersion(rules.get(id), sectionId, read.readAt))) {
+        return { read, changed: existing === null };
+      }
+      const refreshed = await locked.courseSectionRead.update({ where: { id: read.id }, data: { readAt: new Date() } });
+      return { read: refreshed, changed: true };
     },
 
     // #799: batch variants of the per-course reads above, so the participant course listing does a fixed
     // number of queries instead of ~4 per visible course. Each returns rows the caller groups in memory.
-    findReadSectionIdsForCourses(userId: string, courseIds: string[]) {
-      if (courseIds.length === 0) return Promise.resolve([] as Array<{ courseId: string; sectionId: string }>);
-      return client.courseSectionRead.findMany({
-        where: { userId, courseId: { in: courseIds } },
-        select: { courseId: true, sectionId: true },
-      });
-    },
-
-    // The set of the user's PASSED module ids among the given modules (one query across every course's
-    // modules). The caller counts per course by intersecting with each course's module ids.
-    findPassedModuleIds(userId: string, moduleIds: string[]) {
-      if (moduleIds.length === 0) return Promise.resolve([] as string[]);
-      return client.certificationStatus
-        .findMany({
-          where: { userId, moduleId: { in: moduleIds }, status: { in: CERTIFICATION_PASSED_STATUSES } },
-          select: { moduleId: true },
-        })
-        .then((rows) => rows.map((r) => r.moduleId));
+    // #934 skive 3: dem en ny hovedversjon gjelder — kursbevis for kursets nåværende hovedversjon.
+    countCertificateHolders(courseId: string, versionMajor: number) {
+      return countCertificateHolders(client, courseId, versionMajor);
     },
 
     // SECTION course-item ids for many courses at once (one query), for the listing's section counts.
+    // #944/#938: lista teller de seksjonene deltakeren FAKTISK KAN LESE — samme regel som bevisporten og kursdetaljen. Sto
+    // tidligere uten filter, og var derfor den tredje telleren som svarte noe annet enn de to andre: et kort kunne vise
+    // «Seksjonar 0/1» ved siden av et utstedt kursbevis. #1156: samme spørring som lesingene telles mot (`participant`).
     findCourseItemSectionIdsForCourses(courseIds: string[]) {
-      if (courseIds.length === 0) return Promise.resolve([] as Array<{ courseId: string; sectionId: string }>);
-      return client.courseItem
-        // #944/#938: lista teller de seksjonene deltakeren FAKTISK KAN LESE — samme regel som
-        // bevisporten og kursdetaljen. Sto tidligere uten filter, og var derfor den tredje telleren
-        // som svarte noe annet enn de to andre: et kort kunne vise «Seksjonar 0/1» ved siden av et
-        // utstedt kursbevis. Filtreres i spørringen, ikke i minnet, så batchen fortsatt er én runde.
-        .findMany({
-          where: {
-            courseId: { in: courseIds },
-            itemType: "SECTION",
-            sectionId: { not: null },
-            // #958/#992: samme filter som `findCourseItemsForParticipant`, fra samme konstant. Sto
-            // tidligere som en egen literal her — den andre formuleringen av setningen.
-            section: sectionAvailableWhere,
-          },
-          select: { courseId: true, sectionId: true },
-        })
-        .then((rows) =>
-          rows
-            .filter((r): r is { courseId: string; sectionId: string } => Boolean(r.sectionId))
-            .map((r) => ({ courseId: r.courseId, sectionId: r.sectionId })),
-        );
+      return findSectionItemsForCourses(client, courseIds, "participant");
+    },
+
+    /**
+     * #1156: de publiserte kursene som ikke er arkivert og som har seksjonen. Omvendt oppslag (seksjon → kurs) for utboksens
+     * kursbevis etter en lesing (`checkAndIssueCourseCompletionsForSection`). Lista er et forslag: utstedelsen måler alt på nytt.
+     */
+    async findPublishedCoursesContainingSection(sectionId: string) {
+      const rows = await client.courseItem.findMany({
+        where: { sectionId, itemType: "SECTION", course: { publishedAt: { not: null }, archivedAt: null } },
+        select: { course: { select: { id: true, enrollmentPolicy: true } } },
+      });
+      return [...new Map(rows.map((row) => [row.course.id, row.course])).values()];
     },
 
     // ─────────────────────────────────────────────────────────────────────────────────────────
@@ -239,7 +335,8 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
                 activeVersion: { select: { publishedAt: true } },
               },
             },
-            section: { select: { id: true, title: true } },
+            // #1163: tittelen deltakeren ser, er den publiserte versjonens — ikke arbeidstittelen.
+            section: { select: { id: true, ...publishedSectionTitleSelect } },
           },
         })
         .then((items) =>
@@ -274,7 +371,8 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
             // konstruksjon; de utilgjengelige er allerede filtrert bort.
             required: item.itemType === "SECTION" ? true : item.module?.archivedAt == null,
             module: item.module ? { id: item.module.id, title: item.module.title } : null,
-            section: item.section,
+            // #1163: `title` er allerede den publiserte. Arbeidstittelen kommer ikke ut av deltakerdøra.
+            section: item.section ? { id: item.section.id, title: publishedSectionTitle(item.section) } : null,
           })),
         );
     },
@@ -297,10 +395,38 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
         where: { courseId },
         orderBy: { sortOrder: "asc" },
         include: {
-          module: { select: { id: true, title: true, archivedAt: true } },
-          section: { select: { id: true, title: true, archivedAt: true } },
+          // #1150 skive 2a-2: merkene fra kursarkiveringen, for gjenopprettingen av kurset (`analyzeCourseRestore`).
+          module: { select: { id: true, title: true, archivedAt: true, archivedWithCourseId: true, activeVersionIdBeforeArchive: true } },
+          section: { select: { id: true, title: true, archivedAt: true, archivedWithCourseId: true, activeVersionIdBeforeArchive: true } },
         },
       });
+    },
+
+    /**
+     * Modulene i flere kurs på én gang, også arkiverte moduler. For «påbegynt» i arkiverte klasser (`classService.ts`).
+     * Samme slag som `findCourseItemSectionIdsForCourses`: bare id-er, ingen tilgjengelighetsregel, og ingenting av det går til
+     * en deltaker. Svaret brukes bare til å spørre om deltakeren har levert noe. Kursets innhold leses fortsatt gjennom de to
+     * dørene (`test/course-items-accessor-guard.test.js`).
+     */
+    findModuleItemsForCourses(courseIds: string[]) {
+      return findModuleItemsForCourses(client, courseIds);
+    },
+
+    // #934 skive 3: se `findSectionVersions` over.
+    findSectionVersions(courseId: string): Promise<Record<string, string | null>> {
+      return findSectionVersions(client, courseId);
+    },
+
+    // #934 skive 4b: øyeblikksbildet før en endring som kan gi ny versjon — seksjonsversjonene og modulene som er
+    // levende i kurset — og hvordan de leses etterpå. `applyCourseVersionChange` bruker det til regelen for seksjoner
+    // og til tallet i e-posten (`changedItemCount`). Tas i samme transaksjon, før noe skrives.
+    async snapshotContent(courseId: string): Promise<SectionSnapshot> {
+      return {
+        before: await findSectionVersions(client, courseId),
+        after: () => findSectionVersions(client, courseId),
+        modulesBefore: await findLiveModuleIds(client, courseId),
+        modulesAfter: () => findLiveModuleIds(client, courseId),
+      };
     },
 
     // #502 contract-fase: `modules` deriveres nå fra CourseItem (MODULE-elementer) i stedet for den
@@ -381,71 +507,15 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       }));
     },
 
-    // #966: leste seksjoner for ETT kurs på tvers av MANGE deltakere. `findReadSectionIdsForCourses`
-    // over er speilvendt (én deltaker, mange kurs) og duger ikke for rapporten, som har hele kullet.
-    //
-    // ⚠️ Datofiltreres på SAMME vindu som innleveringene og fullføringene. Sto den ufiltrert, ville
-    // rapporten blandet to vinduer i ett regnestykke: modultallene fra vinduet, seksjonstallene
-    // all-time. En deltaker som ble ferdig i juni ville med filteret «fra 1. august» vist
-    // «0/4 moduler» ved siden av «12/12 seksjoner», status «Pågår» og «Siste aktivitet: —»
-    // — pågående aktivitet i et vindu uten aktivitet.
-    // #1010: hvem har LEST i kurset i vinduet — uavhengig av tildeling. Fjerde kilde i
-    // `resolveCourseParticipantIds`. Et OPEN-kurs (standarden) kan leses uten innmeldingsrad, og
-    // klienten kaller aldri selv-innmelding, så den som bare har lest fantes ikke for rapporten.
-    // Samme vindu og samme avdelingsfilter som innleveringene.
-    findLearnerSectionReadersForCourse(
-      courseId: string,
-      filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {},
-    ) {
-      return client.courseSectionRead.findMany({
-        where: {
-          courseId,
-          ...(filters.dateFrom || filters.dateTo
-            ? {
-                readAt: {
-                  ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
-                  ...(filters.dateTo ? { lte: filters.dateTo } : {}),
-                },
-              }
-            : {}),
-          ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
-        },
-        distinct: ["userId"],
-        select: { userId: true },
-      });
-    },
-
-    findReadSectionIdsForCourseParticipants(
-      courseId: string,
-      userIds: string[],
-      filters: Pick<ReportFilters, "dateFrom" | "dateTo"> = {},
-    ) {
-      if (userIds.length === 0) {
-        return Promise.resolve([] as Array<{ userId: string; sectionId: string; readAt: Date }>);
-      }
-      return client.courseSectionRead.findMany({
-        where: {
-          courseId,
-          userId: { in: userIds },
-          ...(filters.dateFrom || filters.dateTo
-            ? {
-                readAt: {
-                  ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
-                  ...(filters.dateTo ? { lte: filters.dateTo } : {}),
-                },
-              }
-            : {}),
-        },
-        select: { userId: true, sectionId: true, readAt: true },
-      });
-    },
+    // #1156: lesingene (hvem har lest, hvilke seksjoner som teller) leses ikke her lenger, men i sectionReadCredit.ts, på tvers
+    // av kurs. `test/section-read-reader-guard.test.js` nekter nye lesere av tabellen.
 
     findUserCourseCompletions(userId: string) {
       return client.courseCompletion.findMany({
         where: { userId },
         include: {
           course: {
-            select: { id: true, title: true, certificationLevel: true },
+            select: { id: true, title: true, certificationLevel: true, versionMajor: true },
           },
         },
         orderBy: { completedAt: "desc" },
@@ -458,7 +528,7 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       return client.courseCompletion.findUnique({
         where: { certificateId },
         include: {
-          course: { select: { id: true, title: true, certificationLevel: true } },
+          course: { select: { id: true, title: true, certificationLevel: true, versionMajor: true } },
           user: { select: { id: true, name: true } },
         },
       });
@@ -471,40 +541,6 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           ...buildCompletionWhere(filters),
         },
       });
-    },
-
-    countPassedUsersForModule(moduleId: string, filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
-      return client.certificationStatus.count({
-        where: {
-          moduleId,
-          status: { in: CERTIFICATION_PASSED_STATUSES },
-          ...buildCertificationWhere(filters),
-        },
-      });
-    },
-
-    /**
-     * HVEM som besto modulen, ikke bare hvor mange.
-     *
-     * ⚠️ #996: `countPassedUsersForModule` gir et TALL, og et tall kan ikke unioneres eller
-     * snittes mot kursets publikum. Det var derfor `moduleBreakdown.passRate` fortsatt kunne vise
-     * 400 %: telleren var sertifiseringer i vinduet, nevneren var innleveringer i vinduet, og de to
-     * målte ulike mennesker.
-     *
-     * Med ID-ene kan brøken bli det den utgir seg for: «av dem som er med i kurset, hvor mange
-     * besto denne modulen». Samme kur som #969 én etasje ned.
-     */
-    findPassedUserIdsForModule(moduleId: string, filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
-      return client.certificationStatus
-        .findMany({
-          where: {
-            moduleId,
-            status: { in: CERTIFICATION_PASSED_STATUSES },
-            ...buildCertificationWhere(filters),
-          },
-          select: { userId: true },
-        })
-        .then((rows) => rows.map((r) => r.userId));
     },
 
     countUsersWithSubmissionsForModule(
@@ -573,6 +609,10 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           userId: true,
           completedAt: true,
           certificateId: true,
+          // #934: rapporten skiller bevis for kursets nåværende hovedversjon fra eldre.
+          versionMajor: true,
+          // #1145: et registrert bevis (tatt utenfor plattformen) har ingen dato og er ingen aktivitet.
+          source: true,
           user: {
             select: {
               id: true,

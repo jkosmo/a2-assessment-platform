@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { getCourseReminderNotificationMessage } from "../../src/i18n/notificationMessages.js";
 import type { SupportedLocale } from "../../src/i18n/locale.js";
 
-// #497 — course reminder email copy. Must render in nb/nn/en-GB and, per #688, contain NO links
-// (participants are asked to log in themselves).
+// #497 — course reminder email copy. Must render in nb/nn/en-GB. The text itself holds no address:
+// the link comes from the template (test/unit/email-template-links-1141.test.ts).
 
 const LOCALES: SupportedLocale[] = ["nb", "nn", "en-GB"];
 const dueAt = new Date("2026-03-08T00:00:00.000Z");

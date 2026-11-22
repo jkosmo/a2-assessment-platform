@@ -10,7 +10,7 @@ describe("certification repository", () => {
       },
     } as never);
 
-    await repository.upsertCertificationStatus({
+    await repository.upsertCertificationStatus({ certificationStatus: { upsert } } as never, {
       userId: "user-1",
       moduleId: "module-1",
       latestDecisionId: "decision-1",
@@ -47,7 +47,7 @@ describe("certification repository", () => {
       certificationStatus: { upsert },
     } as never);
 
-    await repository.upsertCertificationStatus({
+    await repository.upsertCertificationStatus({ certificationStatus: { upsert } } as never, {
       userId: "user-1",
       moduleId: "module-1",
       latestDecisionId: "decision-1",

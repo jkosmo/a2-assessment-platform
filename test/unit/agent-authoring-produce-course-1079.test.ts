@@ -49,6 +49,14 @@ function kopi(endre?: (pkg: Pakke, mappe: string) => void) {
 const objekt = (pkg: Pakke, ref: string) => pkg.objects.find((o) => o.clientRef === ref)!;
 const status = (r: Awaited<ReturnType<typeof produceCourse>>) => Object.fromEntries(r.checks.map((c) => [c.name, c.status]));
 const funn = (r: Awaited<ReturnType<typeof produceCourse>>, navn: string) => r.checks.find((c) => c.name === navn)!.details.join(" | ");
+/** #1125: endrer kurstilstanden i kopien — koblingene mellom spørsmål, læringsmål og seksjoner bor der. */
+function tilstand(mappe: string, endre: (s: any) => void) {
+  const fil = join(mappe, "course-state.json");
+  const s = JSON.parse(readFileSync(fil, "utf8"));
+  endre(s);
+  writeFileSync(fil, JSON.stringify(s), "utf8");
+}
+const koblinger = (s: any) => s.elements.find((e: { clientRef: string }) => e.clientRef === "mod-referat").questions as Array<Record<string, unknown>>;
 
 describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
   it("alle kontrollene er kjørt og grønne, og fila som leveres er den som ble lest tilbake", async () => {
@@ -60,8 +68,28 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
       figures: "ok",
       "learner text": "ok",
       questions: "ok",
+      // #1120: eksempelkurset har en «finn feilene» i «sec-arbeidsgang».
+      "find errors": "ok",
+      // #1121: ingen øvelse besvares av teksten rett over.
+      "copied answers": "ok",
+      // #1122: eksempelkurset har bare flervalg — ingen kriterier å lese.
+      criteria: "ok",
+      // #1124 del 2: ingen fritekstmodul — ingen eksempelsvar å kreve.
+      "example answers": "ok",
+      // #1133: seksjonene i eksempelet er korte nok til at de ikke måles.
+      "direct address": "ok",
+      // #1128, #1129: bildene er beskrevet, og ingen rester fra forfatterarbeidet.
+      "alt text": "ok",
+      leftovers: "ok",
+      // #1126: én oppsummering per seksjon; høyst én boks — utkastet over «finn feilene» er øvelsen, ikke en boks.
+      summaries: "ok",
+      focus: "ok",
+
+      revision: "ok",
       languages: "ok",
       "approved text": "ok",
+      // #1125: hvert spørsmål er koblet til et læringsmål og en seksjon foran testen, og begge målene testes.
+      objectives: "ok",
       slides: "ok",
       // #1095: bare et kurs justert fra plattformens eksport har en endringsliste.
       changes: "skipped",
@@ -239,6 +267,233 @@ describe("produce-course — kontrollen «learner text» stopper ikke vanlig fag
   });
 });
 
+// #1120: «finn feilene» er standardveien, men forfatteren kan si nei — derfor en merknad, ikke en stopp.
+describe("produce-course — «finn feilene» (#1120)", () => {
+  const utenOppgave = (p: Pakke) => {
+    const b = objekt(p, "sec-arbeidsgang").payload.bodyMarkdown;
+    for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].slice(0, b[s].search(/\n\n(?:Notatene|Notata|The notes)/));
+  };
+
+  it("et kurs uten oppgaven får en merknad — fila leveres, og rapporten ber om å si det til forfatteren", async () => {
+    const r = await kopi(utenOppgave).kjør();
+    expect(status(r)["find errors"], formatProduction(r)).toBe("note");
+    expect(r.ok).toBe(true);
+    expect(formatProduction(r)).toContain("NOTE find errors");
+    expect(formatProduction(r)).toContain("Noted: find errors. The file may be delivered; tell the author what is noted.");
+  });
+
+  it.each([
+    ["nynorsk", "nn", ":::skriv Finn feila i planen."],
+    ["engelsk", "en-GB", ":::skriv Find the mistakes in the plan."],
+    // #1123: den egne rammen for «finn feilene» — med eller uten oppgave på åpningslinja.
+    ["bokmål, :::feil-rammen", "nb", ":::feil Finn feilene i planen."],
+    ["engelsk, :::errors-rammen", "en-GB", ":::errors"],
+  ])("oppgaven kjennes igjen på %s også", async (_navn, språk, linje) => {
+    const r = await kopi((p) => {
+      utenOppgave(p);
+      objekt(p, "sec-kilder").payload.bodyMarkdown[språk] += `\n\n${linje}\nSvar.\n:::\n`;
+    }).kjør();
+    expect(status(r)["find errors"]).toBe("ok");
+  });
+
+  it("«finn» uten «feil» i oppgaven, eller en oppgave i en kodeblokk, teller ikke", async () => {
+    const r = await kopi((p) => {
+      utenOppgave(p);
+      const b = objekt(p, "sec-kilder").payload.bodyMarkdown;
+      b.nb += "\n\n:::skriv Finn tre saker som skal med i referatet.\nSvar.\n:::\n\n```\n:::skriv Finn feilene\n```\n";
+    }).kjør();
+    expect(status(r)["find errors"]).toBe("note");
+  });
+
+  it("en løs seksjon eller modul uten kurs: ikke kjørt", async () => {
+    const r = await kopi((p) => void (p.objects = p.objects.filter((o) => o.type !== "course"))).kjør();
+    expect(status(r)["find errors"]).toBe("skipped");
+  });
+});
+
+// #1133: en seksjon i rapportstil gir en merknad, ikke en stopp — en referanseliste kan være upersonlig.
+describe("produce-course — snakk til deltakeren (#1133)", () => {
+  const rapport = "Restrisiko vurderes etter at tiltak er gjennomført. Vurderingen dokumenteres i virksomhetens system og godkjennes av ledelsen. ";
+  const samtale = "Når du vurderer restrisikoen, ser du på det som står igjen etter tiltakene. Du dokumenterer vurderingen i systemet ditt. ";
+
+  it("en lang seksjon nesten uten «du» → merknad med seksjonen og tallet; fila leveres", async () => {
+    const r = await kopi((p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += `\n\n${rapport.repeat(120)}`)).kjør();
+    expect(status(r)["direct address"], formatProduction(r)).toBe("note");
+    expect(funn(r, "direct address")).toMatch(/^"sec-kilder": \d+ words, \d\.\d «du» per 1000/);
+    expect(r.ok).toBe(true);
+  });
+
+  it("like lang, men skrevet til deltakeren → ingen merknad", async () => {
+    const r = await kopi((p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += `\n\n${samtale.repeat(14)}`)).kjør();
+    expect(status(r)["direct address"]).toBe("ok");
+  });
+
+  it("en kort seksjon måles ikke, og kode teller ikke som tekst", async () => {
+    const r = await kopi((p) => {
+      const b = objekt(p, "sec-kilder").payload.bodyMarkdown;
+      b.nb = `${rapport}\n\n\`\`\`prompt\n${rapport.repeat(20)}\n\`\`\`\n`;
+    }).kjør();
+    expect(status(r)["direct address"]).toBe("ok");
+  });
+});
+
+// #1126: seksjoner som lærer bort, ikke kataloger. Flere oppsummeringer i én seksjon er alltid feil og
+// rettes ved å beholde én — en stopp. Bokser, lange lister og en seksjon som beskriver seg selv kan
+// forfatteren ha grunn til å beholde — en merknad.
+describe("produce-course — seksjoner som lærer bort (#1126)", () => {
+  const leggTil = (p: Pakke, ref: string, tekst: { nb: string; nn: string; "en-GB": string }) => {
+    const b = objekt(p, ref).payload.bodyMarkdown;
+    for (const s of ["nb", "nn", "en-GB"] as const) b[s] += `\n\n${tekst[s]}\n`;
+  };
+
+  it.each([
+    ["nynorsk", "nn", "## Føremål\n\nDu lærer å velje kjelde.\n\n## Samandrag\n\nBruk notata."],
+    ["engelsk", "en-GB", "## Purpose\n\nYou learn to choose a source.\n\n## Key points\n\n- The notes are the source."],
+    ["bokmål, med ikon, nummer og kolon", "nb", "## 1. **Nøkkelpoeng:**\n\n- Notatene er kilden.\n\n### ![](icon:list-collapse) Det viktigste fra denne seksjonen\n\nBruk notatene."],
+  ])("to oppsummeringer på %s stopper også", async (_navn, språk, tekst) => {
+    const r = await kopi((p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown[språk] += `\n\n${tekst}\n`)).kjør();
+    expect(status(r).summaries, formatProduction(r)).toBe("fail");
+    expect(funn(r, "summaries")).toMatch(new RegExp(`^"sec-kilder" \\(${språk}\\): 2 summaries`));
+  });
+
+  it("samme feil på alle tre språk er én linje som nevner språkene", async () => {
+    const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: "## Formål\n\nA.\n\n## Oppsummering\n\nB.", nn: "## Føremål\n\nA.\n\n## Oppsummering\n\nB.", "en-GB": "## Purpose\n\nA.\n\n## Summary\n\nB." })).kjør();
+    expect(r.checks.find((c) => c.name === "summaries")!.details).toEqual([expect.stringMatching(/^"sec-kilder" \(nb, nn, en-GB\): 2 summaries — «Formål», «Oppsummering»/)]);
+  });
+
+  it("én oppsummering, og en overskrift som bare begynner med «Formål», er greit", async () => {
+    const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: "## Formål og målgruppe\n\nStandarden er for små virksomheter.\n\n## Sammendrag og utforsking av et dokument\n\nA.\n\n## Oppsummering\n\nB.", nn: "## Formål og målgruppe\n\nA.\n\n## Oppsummering\n\nB.", "en-GB": "## Purpose and audience\n\nA.\n\n## Summary\n\nB." })).kjør();
+    expect(status(r).summaries, funn(r, "summaries")).toBe("ok");
+  });
+
+  it("to bokser i én seksjon → merknad med etikettene; fila leveres", async () => {
+    const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: "> **Husk:** Les notatene.\n\nTekst.\n\n> **Tips:** Start tidlig.", nn: "> **Hugs:** Les notata.\n\nTekst.\n\n> **Tips:** Start tidleg.", "en-GB": "> **Remember:** Read the notes.\n\nText.\n\n> **Tip:** Start early." })).kjør();
+    expect(status(r).focus, formatProduction(r)).toBe("note");
+    expect(funn(r, "focus")).toMatch(/"sec-kilder": 2 highlighted boxes in \d+ words \(«Husk», «Tips»\) — at most one per 400 words/);
+    expect(r.ok).toBe(true);
+    expect(formatProduction(r)).toContain("Noted: focus.");
+  });
+
+  // Produkteier 2026-10-26: grensen følger lengden.
+  it("to bokser i en lang seksjon (over 800 ord) → ingen merknad om bokser", async () => {
+    const lang = "Når du skriver referatet, går du gjennom notatene ett punkt om gangen og sjekker det mot utkastet. ".repeat(50);
+    const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: `> **Husk:** Les notatene.\n\n${lang}\n\n> **Tips:** Start tidlig.`, nn: "> **Hugs:** Les notata.\n\nTekst.\n\n> **Tips:** Start tidleg.", "en-GB": "> **Remember:** Read the notes.\n\nText.\n\n> **Tip:** Start early." })).kjør();
+    expect(funn(r, "focus")).not.toContain("highlighted boxes");
+  });
+
+  it("én boks og utkastet i en «finn feilene» er ikke to bokser — men et sitat uten oppgave under er det", async () => {
+    // sec-arbeidsgang har «Husk»; her byttes `:::feil`-rammen ut med utkastet i et sitat — med den gamle
+    // «finn feilene»-oppgaven under, og uten.
+    const utkast = (under: string) => kopi((p) => {
+      const b = objekt(p, "sec-arbeidsgang").payload.bodyMarkdown;
+      for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].replace(/\n:::(?:feil|errors) [^\n]*\n[\s\S]*?\n:::\n?/, `\n> **Utkast fra KI:**\n> - Ola sender budsjettet innen 15. november.\n\n${under}\n`);
+    }).kjør();
+    const medOppgave = await utkast(":::skriv Finn feilene i utkastet.\nFristen er feil.\n:::");
+    expect(status(medOppgave).focus, formatProduction(medOppgave)).toBe("ok");
+    const r = await utkast("Mer tekst.");
+    expect(status(r).focus, formatProduction(r)).toBe("note");
+    expect(funn(r, "focus")).toMatch(/"sec-arbeidsgang": 2 highlighted boxes in \d+ words \(«Husk», «Utkast fra KI»\)/);
+  });
+
+  it("en liste på ni punkter → merknad; åtte, eller ni par i en ramme, eller en liste i kode, er greit", async () => {
+    const punkter = (n: number, x: string) => Array.from({ length: n }, (_, i) => `- ${x} ${i + 1}`).join("\n");
+    const ni = await kopi((p) => leggTil(p, "sec-kilder", { nb: punkter(9, "punkt"), nn: punkter(9, "punkt"), "en-GB": punkter(9, "point") })).kjør();
+    expect(status(ni).focus, formatProduction(ni)).toBe("note");
+    expect(funn(ni, "focus")).toContain(`"sec-kilder": a list of 9 points («punkt 1» …)`);
+    expect(ni.ok).toBe(true);
+
+    const par = Array.from({ length: 9 }, (_, i) => `- Begrep ${i + 1} = Forklaring ${i + 1}`).join("\n");
+    const greit = await kopi((p) => leggTil(p, "sec-kilder", {
+      nb: `${punkter(8, "punkt")}\n\nTekst.\n\n1. steg\n2. steg\n\n${punkter(7, "punkt")}\n\n:::par Koble\n${par}\n:::\n\n\`\`\`\n${punkter(12, "kode")}\n\`\`\``,
+      nn: `${punkter(8, "punkt")}\n\n:::par Kople\n${par}\n:::`,
+      "en-GB": `${punkter(8, "point")}\n\n:::par Match\n${par}\n:::`,
+    })).kjør();
+    expect(status(greit).focus, funn(greit, "focus")).toBe("ok");
+  });
+
+  it("en liste med blanke linjer og innrykk mellom punktene er fortsatt én liste", async () => {
+    const løs = Array.from({ length: 9 }, (_, i) => `${i + 1}. Steg ${i + 1}\n   med en forklaring`).join("\n\n");
+    const r = await kopi((p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += `\n\n${løs}\n`)).kjør();
+    expect(funn(r, "focus")).toContain("a list of 9 points («Steg 1» …)");
+  });
+
+  it.each([
+    ["bokmål", "nb", "Denne seksjonen viser hvordan du velger kilde.", "«Denne seksjonen viser hvordan du velger kilde"],
+    ["bokmål, «svarer på»", "nb", "Denne seksjonen svarer på spørsmål som ofte kommer opp.", "«Denne seksjonen svarer på spørsmål som ofte kommer opp"],
+    ["nynorsk", "nn", "Denne seksjonen forklarar korleis du vel kjelde.", "«Denne seksjonen forklarar korleis du vel kjelde"],
+    ["engelsk", "en-GB", "This section explains how to choose a source.", "«This section explains how to choose a source"],
+  ])("en seksjon som beskriver seg selv på %s → merknad", async (_navn, språk, setning, ventet) => {
+    const r = await kopi((p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown[språk] = `${setning}\n\n${objekt(p, "sec-kilder").payload.bodyMarkdown[språk]}`)).kjør();
+    expect(status(r).focus, formatProduction(r)).toBe("note");
+    expect(funn(r, "focus")).toContain(`"sec-kilder" (${språk}): ${ventet}`);
+    expect(r.ok).toBe(true);
+  });
+
+  it("«I denne seksjonen» og «Etter denne seksjonen skal du» er ikke seksjonen som snakker", async () => {
+    const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: "I denne seksjonen ser du tre kilder. Etter denne seksjonen skal du kunne velge.", nn: "I denne seksjonen ser du tre kjelder.", "en-GB": "In this section you see three sources." })).kjør();
+    expect(status(r).focus, funn(r, "focus")).toBe("ok");
+  });
+});
+
+// #1127: et repetisjonskurs — «Repetisjon» i tittelen — starter med spørsmål. En merknad, ikke en stopp.
+describe("produce-course — repetisjonskurs (#1127)", () => {
+  const somRepetisjon = (p: Pakke) => void (objekt(p, "kurs-motereferat").payload.course.title.nb = "Repetisjon: møtereferat med KI");
+
+  it("et repetisjonskurs som starter med lesestoff → merknad med første element; fila leveres", async () => {
+    const r = await kopi(somRepetisjon).kjør();
+    expect(status(r).revision, formatProduction(r)).toBe("note");
+    expect(funn(r, "revision")).toContain('the first element ("sec-arbeidsgang") has 0 «sjekk deg selv» question(s)');
+    expect(r.ok).toBe(true);
+  });
+
+  it("et repetisjonskurs som starter med fem spørsmål → godkjent", async () => {
+    const spm = (n: number) => `\n\n:::sjekk Spørsmål ${n}?\n- [x] Riktig\n- [ ] Galt\n:::\n`;
+    const r = await kopi((p) => {
+      somRepetisjon(p);
+      objekt(p, "sec-arbeidsgang").payload.bodyMarkdown.nb += [1, 2, 3, 4, 5].map(spm).join("");
+    }).kjør();
+    expect(status(r).revision).toBe("ok");
+  });
+});
+
+describe("produce-course — spørsmål koblet til læringsmål og seksjon (#1125)", () => {
+  it("et læringsmål ingen spørsmål tester → merknad med målet; fila leveres", async () => {
+    const k = kopi();
+    tilstand(k.mappe, (s) => void s.learningObjectives.push({ id: "mal-3", text: "Etter dette kan deltakeren dele referatet med de rette" }));
+    const r = await k.kjør();
+    expect(status(r).objectives, formatProduction(r)).toBe("note");
+    expect(funn(r, "objectives")).toContain(`objective "mal-3" («Etter dette kan deltakeren dele referatet med de rette») is tested by no question or task`);
+    expect(r.ok).toBe(true);
+  });
+
+  it("spørsmålet gjenfinnes med andre mellomrom og store bokstaver; oppgaven kobles med «task» og kan teste flere mål", async () => {
+    const k = kopi((p) => {
+      const v = objekt(p, "mod-referat").payload.activeVersion;
+      v.assessmentMode = "FREETEXT_PLUS_MCQ";
+      v.taskText = { nb: "Skriv et referat fra notatene.", nn: "Skriv eit referat frå notata.", "en-GB": "Write minutes from the notes." };
+    });
+    tilstand(k.mappe, (s) => {
+      koblinger(s)[0]!.question = "  du har fått et utkast fra KI og skal sende referatet\nom ti minutter. Hva gjør du først? ";
+      koblinger(s).push({ task: true, objective: ["mal-1", "mal-2"], section: ["sec-arbeidsgang", "sec-kilder"] });
+    });
+    const r = await k.kjør();
+    expect(status(r).objectives, funn(r, "objectives")).toBe("ok");
+    expect(r.checks.find((c) => c.name === "objectives")!.summary).toBe("5 question(s) and task(s) linked to 2 objective(s)");
+  });
+
+  it("en oppgavetekst i en ren flervalgsmodul er ingen oppgave å koble", async () => {
+    const r = await kopi((p) => void (objekt(p, "mod-referat").payload.activeVersion.taskText = { nb: "Svar på spørsmålene.", nn: "Svar på spørsmåla.", "en-GB": "Answer the questions." })).kjør();
+    expect(status(r).objectives, funn(r, "objectives")).toBe("ok");
+  });
+
+  it("en løs modul uten kurs: ikke kjørt", async () => {
+    const r = await kopi((p) => {
+      p.objects = p.objects.filter((o) => o.type === "module");
+    }).kjør({ slidesFile: undefined });
+    expect(status(r).objectives).toBe("skipped");
+  });
+});
+
 describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
   it.each<[string, (pkg: Pakke, mappe: string) => void, string, string]>([
     ["en seksjon som ikke er plassert i kurset", (p) => void objekt(p, "kurs-motereferat").payload.items.splice(1, 1), "package", `"sec-kilder" is in the package and not in the course`],
@@ -285,6 +540,14 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["en «finn parene» med samme forklaring to ganger (#1107)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::par\n- A = samme\n- B = Samme\n- C = c\n:::\n"), "learner text", "a :::par frame repeats a term or an explanation"],
     ["en «finn parene» rett under et avsnitt (#1107)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nKoble:\n:::par\n- A = a\n- B = b\n- C = c\n:::\n"), "learner text", "a :::par line has text right above it"],
     ["en «finn parene» i modulens oppgavetekst (#1107)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.taskText = { nb: "Oppgave.\n\n:::par\n- A = a\n- B = b\n- C = c\n:::", nn: "Oppgåve.", "en-GB": "Task." }; }, "learner text", '"mod-referat" taskText (nb): a :::par frame works only in a section'],
+    // Kort tar ingenting etter ordet (FRAME_KINDS: opener "none") — med en tittel tegner ikke plattformen rammen.
+    ["en kortramme med tittel på åpningslinja er ingen ramme, og ::: lukker ingenting", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::kort Tre kilder\n### A\nen\n### B\nto\n:::\n"), "learner text", "a ::: closes a frame that was never opened"],
+    // #1123: «finn feilene» har samme regel som plattformen (splitErrorSentences); eksempelkurset er en riktig en.
+    ["en «finn feilene» med bare to setninger (#1123)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::feil Finn feilen.\n- [ ] Riktig.\n- [x] Feil.\n  Fordi.\n:::\n"), "learner text", "a :::feil frame needs at least three sentences (it has 2)"],
+    ["en «finn feilene» uten en eneste feil (#1123)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::errors\n- [ ] A.\n- [ ] B.\n- [ ] C.\n:::\n"), "learner text", "a :::errors frame needs at least one sentence with an error (`- [x]`) and at least one that is right (`- [ ]`) — it has 0 of 3"],
+    ["en «finn feilene» der alt er feil (#1123)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::feil\n- [x] A.\n- [x] B.\n- [x] C.\n:::\n"), "learner text", "it has 3 of 3"],
+    ["en «finn feilene» med en løs linje (#1123)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::feil\n- [ ] A.\n- [x] B.\n- [ ] C.\nEn setning.\n:::\n"), "learner text", "a :::feil frame has a line that is neither a sentence (`- [ ]` / `- [x]`) nor an explanation indented under one: «En setning.»"],
+    ["en «finn feilene» i modulens oppgavetekst (#1123)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.taskText = { nb: "Oppgave.\n\n:::feil\n- [ ] A.\n- [x] B.\n- [ ] C.\n:::", nn: "Oppgåve.", "en-GB": "Task." }; }, "learner text", '"mod-referat" taskText (nb): a :::feil frame works only in a section'],
     ["et par som forsvant i den nynorske oversettelsen (#1107)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; const par = (x: string) => `\n\n:::par\n- A = ${x}1\n- B = ${x}2\n- C = ${x}3\n:::\n`; b.nb += par("a"); b.nn += "\n\n:::par\n- A = n1\n- B = n2\n:::\n"; b["en-GB"] += par("e"); }, "languages", "in: nn (nb has par:3)"],
     ["en følge som forsvant i den engelske oversettelsen (#1110)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb += "\n\n:::sjekk Hva gjør du?\n- [ ] Avslår\n  For mye.\n- [x] Sladder\n:::\n"; b.nn += "\n\n:::sjekk Kva gjer du?\n- [ ] Avslår\n  For mykje.\n- [x] Sladdar\n:::\n"; b["en-GB"] += "\n\n:::sjekk What do you do?\n- [ ] Refuse\n- [x] Redact\n:::\n"; }, "languages", "a feedback line under another option, or a question is missing, in: en-GB"],
     // 2.96.1 (produkteier 2026-10-20): øvelsene tegnes bare i seksjoner, ikke i modulens tekst.
@@ -305,6 +568,48 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["nynorsk tekst som har mistet tabellen", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = b.nn.replace("|---|---|---|", ""); }, "languages", "sec-kilder: nn has 0 table(s), nb has 1"],
     ["engelsk tekst der prompt-boksen ble vanlig tekst", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b["en-GB"] = b["en-GB"].replaceAll("```", ""); }, "languages", "sec-kilder: en-GB has 0 prompt box(es), nb has 1"],
     ["riktig svar som er mye lengre enn de andre", (p) => { for (const q of objekt(p, "mod-referat").payload.activeVersion.mcqSet.questions) { const i = q.options.findIndex((o: { nb: string }) => o.nb === q.correctAnswer.nb); q.options[i] = { nb: `${q.correctAnswer.nb}, og dette er en lang hale som bare det riktige svaret har fått med seg`, nn: `${q.correctAnswer.nn}, og dette er ein lang hale som berre det rette svaret har fått med seg`, "en-GB": `${q.correctAnswer["en-GB"]}, and this is a long tail that only the right answer was given` }; q.correctAnswer = q.options[i]; } }, "questions", "correct_is_longest"],
+    // #1119: lesestoffet før testen følger med inn i kontrollen — uten det kan ekko-regelen ikke slå til.
+    ["riktig svar som gjentar seksjonen ordrett (#1119)", (p) => {
+      const setning = { nb: "Referatet skal alltid sendes til alle deltakerne innen to arbeidsdager etter møtet", nn: "Referatet skal alltid sendast til alle deltakarane innan to arbeidsdagar etter møtet", "en-GB": "The minutes must always be sent to every participant within two working days of the meeting" };
+      const b = objekt(p, "sec-kilder").payload.bodyMarkdown;
+      for (const s of ["nb", "nn", "en-GB"] as const) b[s] += `\n\n${setning[s]}.\n`;
+      const q = objekt(p, "mod-referat").payload.activeVersion.mcqSet.questions[0];
+      const i = q.options.findIndex((o: { nb: string }) => o.nb === q.correctAnswer.nb);
+      q.options[i] = setning;
+      q.correctAnswer = setning;
+    }, "questions", "answer_echoes_text"],
+    // #1121: en «skriv selv» hvis eksempelsvar står ordrett i teksten rett over — en kopiøvelse.
+    ["et eksempelsvar som står ordrett i teksten over (#1121)", (p) => {
+      const svar = "Ola sender budsjettet til revisor innen 1. november, og ingen har ennå fått ansvaret for å bestille lokale.";
+      objekt(p, "sec-arbeidsgang").payload.bodyMarkdown.nb += `\n${svar}\n\n:::skriv Skriv oppfølgingen fra møtet.\n${svar}\n:::\n`;
+    }, "copied answers", `"sec-arbeidsgang" line`],
+    // #1122: et kriterium med én linje for hele skalaen.
+    ["et vurderingskriterium uten beskrevne trinn (#1122)", (p) => void (objekt(p, "mod-referat").payload.activeVersion.rubric = { criteria: { struktur: "0–4: Referatet har god struktur." }, scalingRule: { practical_weight: 100, max_total: 4 } }), "criteria", "«struktur» has one line for 0–4"],
+    // #1128: alt-tekst som bare er en tittel — også når det bare gjelder ett språk.
+    ["en alt-tekst som bare er en tittel, på nynorsk (#1128)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = b.nn.replace(/!\[[^\]]*\]\(asset:img-innstillinger\)/, "![Innstillingar](asset:img-innstillinger)"); }, "alt text", `"sec-kilder" (nn): «Innstillingar» is a title`],
+    // #1129: rester fra forfatterarbeidet.
+    ["et arbeidsnotat igjen i teksten (#1129)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n[Avklaring: sjekk tallene før kurset publiseres.]\n"), "leftovers", "a working note for the author"],
+    ["en seksjon omtalt med nummer (#1129)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nDette behandles i seksjon 3.\n"), "leftovers", "refer to a section by its title"],
+    ["figurer nummerert i feil rekkefølge (#1129)", (p) => {
+      objekt(p, "sec-arbeidsgang").payload.bodyMarkdown.nb += "\n\n*Figur 2. Arbeidsgangen.*\n";
+      objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n*Figur 1. Innstillingene.*\n";
+    }, "leftovers", "figures (nb) are numbered 2, 1"],
+    // #1126: «Formål», «Nøkkelpoeng» og «Kort oppsummering» i samme seksjon (16 seksjoner på stage).
+    ["tre oppsummeringer i én seksjon (#1126)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb = `## Formål\n\nDu lærer å velge kilde.\n\n${objekt(p, "sec-kilder").payload.bodyMarkdown.nb}\n\n## Nøkkelpoeng\n\n- Notatene er kilden.\n\n## Kort oppsummering\n\nBruk notatene.\n`), "summaries", `"sec-kilder" (nb): 3 summaries — «Formål», «Nøkkelpoeng», «Kort oppsummering». Keep one`],
+    // #1125: koblingene mellom spørsmål, læringsmål og seksjoner — kurstilstanden er forfatterens godkjente plan.
+    ["et spørsmål uten kobling til læringsmål og seksjon (#1125)", (_p, m) => tilstand(m, (s) => void koblinger(s).splice(1, 1)), "objectives", "question 2 («Møtet fulgte en fast plan, og du rakk ikke å notere. Hvil…») is not linked"],
+    ["en kobling til et læringsmål kurset ikke har (#1125)", (_p, m) => tilstand(m, (s) => void (koblinger(s)[0]!.objective = "mal-9")), "objectives", `points at objective "mal-9", which is not among the course's learningObjectives (mal-1, mal-2)`],
+    ["en kobling uten læringsmål (#1125)", (_p, m) => tilstand(m, (s) => void delete koblinger(s)[0]!.objective), "objectives", "no objective — name the one it tests"],
+    ["en kobling uten seksjon (#1125)", (_p, m) => tilstand(m, (s) => void delete koblinger(s)[0]!.section), "objectives", "no section — name the section that teaches what it asks"],
+    ["en kobling til noe som ikke er en seksjon (#1125)", (_p, m) => tilstand(m, (s) => void (koblinger(s)[0]!.section = "mod-referat")), "objectives", `points at "mod-referat", which is not a section in the course`],
+    ["et spørsmål om noe en seksjon ETTER testen lærer bort (#1125)", (p) => { const items = objekt(p, "kurs-motereferat").payload.items; items.push(items.splice(1, 1)[0]); }, "objectives", `is taught in "sec-kilder", which comes after the test`],
+    ["en kobling til et spørsmål modulen ikke har lenger (#1125)", (_p, m) => tilstand(m, (s) => void koblinger(s).push({ question: "Hvem skriver referatet?", objective: "mal-1", section: "sec-arbeidsgang" })), "objectives", "the course state links «Hvem skriver referatet?», which is not a question in the module"],
+    // #1124 del 2: en fritekstmodul uten eksempelsvar stopper et nytt kurs.
+    ["en fritekstmodul uten eksempelsvar (#1124)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.assessmentMode = "FREETEXT_PLUS_MCQ"; v.taskText = { nb: "Skriv et referat fra notatene.", nn: "Skriv eit referat frå notata.", "en-GB": "Write minutes from the notes." }; }, "example answers", '"mod-referat": write `modelAnswer`'],
+    ["en fritekstoppgave uten kobling (#1125)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.assessmentMode = "FREETEXT_PLUS_MCQ"; v.taskText = { nb: "Skriv et referat fra notatene.", nn: "Skriv eit referat frå notata.", "en-GB": "Write minutes from the notes." }; }, "objectives", "the free-text task is not linked"],
+    ["en kurstilstand uten læringsmål (#1125)", (_p, m) => tilstand(m, (s) => void delete s.learningObjectives), "objectives", "the course state has no learningObjectives"],
+    ["et læringsmål uten id (#1125)", (_p, m) => tilstand(m, (s) => void delete s.learningObjectives[1].id), "objectives", `learningObjectives[1] needs an "id" and a "text"`],
+    ["samme id på to læringsmål (#1125)", (_p, m) => tilstand(m, (s) => void (s.learningObjectives[1].id = "mal-1")), "objectives", `the id "mal-1" is used twice`],
     ["prompten forfatteren godkjente er kortet bort", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb = b.nb.replace("Bruk bare det som står i notatene under. Skriv «uklart» der notatene ikke sier noe.", "Bruk notatene."); }, "approved text", "templates — «Bruk bare det som står i notatene under."],
     ["et kort lysarklista lovet, er borte", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].replaceAll("### ", "**"); }, "slides", "slide 3: was to become cards"],
   ])("%s", async (_navn, endre, kontroll, ventet) => {
@@ -420,7 +725,9 @@ describe("produce-course — det som ikke ble kjørt, sies (#1079)", () => {
     expect(status(r)["approved text"]).toBe("skipped");
     const rapport = formatProduction(r);
     expect(rapport).toContain("--   approved text  NOT RUN — no --state file. Say so in the report");
-    expect(rapport).toContain("Not run: approved text, changes. Name them as not run when you report.");
+    expect(status(r).objectives).toBe("skipped");
+    expect(rapport).toContain("--   objectives     NOT RUN — no --state file: the links between questions, objectives and sections are not checked. Say so in the report");
+    expect(rapport).toContain("Not run: approved text, objectives, changes. Name them as not run when you report.");
     expect(rapport).toContain(`DELIVER ${k.ut}  —  the author imports it at Innholdsforvaltning → Kurs → «Importer kurs»`);
   });
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MCQ_QUESTION_TYPES, serializeAnswerKey, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
+import { FILL_BLANK_RE, FILL_MAX_ANSWERS, MCQ_QUESTION_TYPES, ORDER_MAX_ITEMS, ORDER_MIN_ITEMS, serializeAnswerKey, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import type { LocalizedText } from "../../codecs/localizedTextCodec.js";
 
 export const localizedTextObjectSchema = z.object({
@@ -168,21 +168,56 @@ export const promptTemplateBodySchema = z.object({
 // publish gate then blocked on gaps the author had just paid an LLM to fill.
 // #1077: `questionType` (standard «single»). «single» har `correctAnswer`; «multiple» (velg alle som
 // stemmer) har `correctAnswers` — minst ett riktig alternativ (alle kan være riktige), hvert av dem
-// et av alternativene. Se doc/DESIGN_1077.md.
+// et av alternativene. «order» (sett i riktig rekkefølge) har 3–6 elementer i riktig rekkefølge og
+// ingen egen fasit — rekkefølgen ER fasiten. Se doc/DESIGN_1077.md.
 const mcqQuestionSchema = z
   .object({
     questionType: z.enum(MCQ_QUESTION_TYPES).optional(),
     stem: localizedTextMaybeUntranslatedSchema,
-    options: z.array(localizedTextMaybeUntranslatedSchema).min(2),
+    // Minst to — unntatt «fill», der alternativene er de godkjente svarene, og ett er nok (under).
+    options: z.array(localizedTextMaybeUntranslatedSchema).min(1),
     correctAnswer: localizedTextMaybeUntranslatedSchema.optional(),
     correctAnswers: z.array(localizedTextMaybeUntranslatedSchema).optional(),
     rationale: localizedTextMaybeUntranslatedSchema.optional(),
   })
   .superRefine((question, context) => {
     const normalizedOptions = question.options.map((option) => localizedTextIdentity(option));
+    if (question.questionType === "fill") {
+      // «Fyll inn»: alternativene er de godkjente svarene; stammen har nøyaktig én lukke på hvert språk.
+      if (question.options.length > FILL_MAX_ANSWERS) {
+        context.addIssue({ code: "custom", message: `A «fill» question has 1–${FILL_MAX_ANSWERS} accepted answers.`, path: ["options"] });
+      }
+      if (new Set(normalizedOptions).size !== normalizedOptions.length) {
+        context.addIssue({ code: "custom", message: "A «fill» question lists the same accepted answer twice.", path: ["options"] });
+      }
+      const stems = typeof question.stem === "string" ? [question.stem] : Object.values(question.stem ?? {});
+      if (stems.some((stem) => typeof stem === "string" && (stem.match(FILL_BLANK_RE) ?? []).length !== 1)) {
+        context.addIssue({ code: "custom", message: "A «fill» question has exactly one blank (___) in its stem, in every language.", path: ["stem"] });
+      }
+      if (question.correctAnswers !== undefined) {
+        context.addIssue({ code: "custom", message: "correctAnswers belongs to a «multiple» question.", path: ["correctAnswers"] });
+      }
+      return;
+    }
+    if (question.options.length < 2) {
+      context.addIssue({ code: "custom", message: "A question has at least two options.", path: ["options"] });
+    }
     if ((question.questionType ?? "single") === "single") {
       if (question.correctAnswer === undefined || !normalizedOptions.includes(localizedTextIdentity(question.correctAnswer))) {
         context.addIssue({ code: "custom", message: "correctAnswer must be one of options.", path: ["correctAnswer"] });
+      }
+      if (question.correctAnswers !== undefined) {
+        context.addIssue({ code: "custom", message: "correctAnswers belongs to a «multiple» question.", path: ["correctAnswers"] });
+      }
+      return;
+    }
+    if (question.questionType === "order") {
+      if (question.options.length < ORDER_MIN_ITEMS || question.options.length > ORDER_MAX_ITEMS) {
+        context.addIssue({ code: "custom", message: `An «order» question has ${ORDER_MIN_ITEMS}–${ORDER_MAX_ITEMS} items.`, path: ["options"] });
+      }
+      // To like elementer kan ikke skilles: deltakeren kan ikke vite hvilken som står først.
+      if (new Set(normalizedOptions).size !== normalizedOptions.length) {
+        context.addIssue({ code: "custom", message: "An «order» question lists the same item twice.", path: ["options"] });
       }
       if (question.correctAnswers !== undefined) {
         context.addIssue({ code: "custom", message: "correctAnswers belongs to a «multiple» question.", path: ["correctAnswers"] });
@@ -215,6 +250,15 @@ export function mcqQuestionTypeFields(question: {
   const questionType = question.questionType ?? "single";
   if (questionType === "single") {
     return { questionType, correctAnswer: question.correctAnswer ?? "", answerKeyJson: null };
+  }
+  // «order»: rekkefølgen er fasiten. Det første elementet står i `correctAnswer`, så lesere som ikke
+  // kjenner typen, viser noe forståelig — som for «multiple».
+  if (questionType === "order") {
+    return { questionType, correctAnswer: question.options[0] ?? "", answerKeyJson: null };
+  }
+  // «fill»: alternativene er de godkjente svarene; det første står i `correctAnswer`, som for «order».
+  if (questionType === "fill") {
+    return { questionType, correctAnswer: question.options[0] ?? "", answerKeyJson: null };
   }
   const identities = question.options.map((option) => localizedTextIdentity(option));
   const correct = (question.correctAnswers ?? []).map((answer) => identities.indexOf(localizedTextIdentity(answer)));
@@ -270,6 +314,12 @@ export const assessmentPolicyBodySchema = z.object({
       reviewAfterSubmit: z.boolean().optional(),
     })
     .optional(),
+  // #1124 del 2: eksempelsvaret etter vurderingen. Se assessmentPolicyCodec.
+  practical: z
+    .object({
+      modelAnswerAfterAssessment: z.boolean().optional(),
+    })
+    .optional(),
   passRules: z
     .object({
       // #547: optional — MCQ-only policies set only mcqMinPercent; decisionService defaults
@@ -298,6 +348,8 @@ export const moduleVersionBodySchema = z
     // afterwards, so they must be able to arrive partially translated.
     taskText: localizedTextMaybeUntranslatedSchema.optional(),
     assessorExpectedContent: localizedTextMaybeUntranslatedSchema.optional(),
+    // #1124 del 2: eksempelsvaret, vist deltakeren etter vurderingen når modulen slår det på.
+    modelAnswer: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     candidateTaskConstraints: localizedTextMaybeUntranslatedSchema.optional(),
     assessmentBlueprint: z.string().trim().optional(),
     rubricVersionId: z.string().min(1).optional(),
@@ -349,6 +401,8 @@ export const composeModuleVersionBodySchema = z.object({
   assessmentMode: assessmentModeSchema.optional(),
   taskText: localizedTextMaybeUntranslatedSchema.optional(),
   assessorExpectedContent: localizedTextMaybeUntranslatedSchema.optional(),
+  // #1124 del 2: eksempelsvaret, vist deltakeren etter vurderingen når modulen slår det på.
+  modelAnswer: localizedTextMaybeUntranslatedSchema.nullable().optional(),
   candidateTaskConstraints: localizedTextMaybeUntranslatedSchema.optional(),
   assessmentBlueprint: z.string().trim().optional(),
   rubric: rubricBodySchema.omit({ active: true }).optional(),
@@ -532,6 +586,8 @@ export const moduleDraftLocalizationBodySchema = z.object({
   taskText: z.string().trim().min(1),
   assessorExpectedContent: z.string().trim().min(1),
   candidateTaskConstraints: z.string().trim().optional(),
+  // #1124 del 2: eksempelsvaret oversettes sammen med resten når modulen har et.
+  modelAnswer: z.string().trim().optional(),
   title: z.string().trim().min(1).optional(),
   sourceLocale: generationLocaleSchema,
   targetLocale: generationLocaleSchema,
@@ -539,7 +595,8 @@ export const moduleDraftLocalizationBodySchema = z.object({
 
 export const generatedMcqQuestionBodySchema = z.object({
   stem: z.string().trim().min(1),
-  options: z.array(z.string().trim().min(1)).min(2).max(6),
+  // Minst ett: en «fyll inn» kan ha ett godkjent svar (alternativene ER de godkjente svarene).
+  options: z.array(z.string().trim().min(1)).min(1).max(6),
   correctAnswer: z.string().trim().min(1),
   // #896 S4: optional, matching the SAVE schema (`mcqSetVersionBodySchema`). It was required here
   // only, so a question saved without a rationale — perfectly legal — could not be sent for
@@ -604,6 +661,7 @@ export const moduleExportPayloadSchema = z.object({
     // - the envelope emits what is stored, and import would reject its own export.
     taskText: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     assessorExpectedContent: localizedTextMaybeUntranslatedSchema.nullable().optional(),
+    modelAnswer: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     candidateTaskConstraints: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     assessmentBlueprint: z.string().nullable().optional(),
     submissionSchema: submissionSchemaBodySchema.nullable().optional(),
@@ -665,10 +723,19 @@ export const sectionAssetExportSchema = z.object({
 // unchanged. Sections legitimately have partial locales (an author may fill only
 // nb), so the export uses the patch schema (string OR partial object), not the
 // strict all-three-locale localizedTextSchema (#512 follow-up).
+// #1163: `title` og `bodyMarkdown` er den NYESTE versjonen (det forfatteren arbeider i). Har seksjonen et utkast over den
+// publiserte versjonen, står det deltakerne ser, i `publishedVersion` (tittel og tekst for seg). Bildene er felles for begge.
+// Valgfri: en fil uten den (eldre filer, skillet) importeres som før, og en eldre tjener hopper over den.
+export const sectionPublishedVersionSchema = z.object({
+  title: localizedTextPatchSchema,
+  bodyMarkdown: localizedTextPatchSchema,
+  audit: exportAuditSchema.optional(),
+});
 export const sectionExportPayloadSchema = z.object({
   title: localizedTextPatchSchema,
   bodyMarkdown: localizedTextPatchSchema,
   audit: exportAuditSchema.optional(),
+  publishedVersion: sectionPublishedVersionSchema.optional(),
   assets: z.array(sectionAssetExportSchema).optional(),
 });
 
@@ -698,6 +765,9 @@ export const courseExportPayloadSchema = z.object({
     certificationLevel: certificationLevelInputSchema.nullable(),
     // #1093: plassering i «Mine kurs». Valgfri, så eldre eksportfiler leses som før.
     sortOrder: z.number().int().min(0).max(9999).nullable().optional(),
+    // #934 skive 5b: kursets versjon da fila ble laget, som opplysning. Valgfri, så eldre filer leses som før. Importen leser dem ikke.
+    versionMajor: z.number().int().min(1).optional(),
+    versionMinor: z.number().int().min(0).optional(),
     // #1095: hvor fila kom fra, så den kan komme tilbake som en oppdatering av det samme kurset
     // (`mode: "updateExisting"`). Valgfri: filer fra skillets «lag kurs»-flyt og eldre filer har den ikke.
     origin: courseOriginSchema.optional(),
@@ -855,6 +925,11 @@ export const importBodySchema = z.object({
   // imported content to as a NEW active version (history is preserved in the
   // destination's normal version chain; the source's history is NOT replayed).
   targetId: z.string().min(1).optional(),
+  // #934 skive 3: bare kursimport med `replaceExisting` — forfatterens svar når kurset har kursbevis.
+  version: z.enum(["major", "minor"]).optional(),
+  // #934 skive 4b: med `version: "major"` — tallet forfatteren bekreftet når hovedversjonen sender e-post til over
+  // 200 deltakere (`majorEmailRecipients` i kursdetaljen). Uten det avvises en slik import med 409.
+  confirmEmailRecipients: z.number().int().min(0).optional(),
   // v1.2.14 (#456): når false, auto-publiser ikke selv om kildens audit.publishedAt er
   // satt. In-app duplisering sender false; fil-import lar default (true) stå.
   autoPublish: z.boolean().optional(),
@@ -866,6 +941,41 @@ export const importBodySchema = z.object({
   (body) => body.mode !== "replaceExisting" || !!body.targetId,
   { message: "targetId is required when mode is replaceExisting", path: ["targetId"] },
 );
+
+// #934 skive 5a-3: de nye endepunktene med svar per kurs. `strict`: et felt serveren ikke kjenner, avvises. Forrige gang fjernet
+// skjemaet `courseVersions` uten å si fra, og forfatterens valg ville forsvunnet.
+const versionChoiceSchema = z.enum(["major", "minor"]);
+const courseVersionsSchema = z.record(z.string().min(1), versionChoiceSchema);
+const expectedCourseIdsSchema = z.array(z.string().min(1)).max(1000);
+// Tallet dialogen viste per kurs, da forfatteren sa ja til e-post til mange (4b).
+const emailConfirmationsSchema = z.record(z.string().min(1), z.number().int().min(0));
+
+export const publishModuleVersionedBodySchema = z
+  .object({
+    moduleVersion: versionChoiceSchema,
+    courseVersions: courseVersionsSchema.optional(),
+    expectedCourseIds: expectedCourseIdsSchema.optional(),
+    confirmEmailRecipients: emailConfirmationsSchema.optional(),
+  })
+  .strict()
+  .superRefine((body, context) => {
+    if (body.moduleVersion === "major" && !body.expectedCourseIds) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["expectedCourseIds"], message: "A major version needs the courses the dialog showed." });
+    }
+    // Mindre for modulen er mindre i alle kurs. Et svar som sier noe annet, skal ikke forsvinne uten at noen sier fra.
+    if (body.moduleVersion === "minor" && Object.values(body.courseVersions ?? {}).includes("major")) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["courseVersions"], message: "A minor version of the module gives a minor version in every course." });
+    }
+  });
+
+export const publishPendingVersionedBodySchema = z
+  .object({
+    versionIds: z.array(z.string().min(1)).max(1000),
+    courseVersions: courseVersionsSchema.optional(),
+    expectedCourseIds: expectedCourseIdsSchema,
+    confirmEmailRecipients: emailConfirmationsSchema.optional(),
+  })
+  .strict();
 
 export function parseRequest<T>(schema: z.ZodType<T>, body: unknown): { data: T; error?: never } | { data?: never; error: z.ZodIssue[] } {
   const parsed = schema.safeParse(body);

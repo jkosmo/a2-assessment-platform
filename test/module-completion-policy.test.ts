@@ -1,21 +1,12 @@
 import { describe, expect, it } from "vitest";
-import {
-  getCompletedSubmissionStatuses,
-  resolveCompletedHistoryLimit,
-} from "../src/modules/module/index.js";
+import { getCompletedSubmissionStatuses } from "../src/modules/module/index.js";
 
 // #952: `isSubmissionStatusCompleted` og `resolveIncludeCompletedForAvailableModules` er fjernet
-// sammen med den frittstående modul-lista de tjente. Det som står igjen gjelder «Fullførte
-// moduler»-historikken på /profile og «Mine kurs → Fullførte», som er levende flater.
+// sammen med den frittstående modul-lista de tjente. 2.141.0: grensen for «Fullførte moduler»-historikken
+// (`resolveCompletedHistoryLimit`) er fjernet sammen med `GET /api/modules/completed`.
 
 describe("module completion policy service", () => {
   it("leser hvilke statuser som teller som fullført fra konfigurasjonen", () => {
     expect(getCompletedSubmissionStatuses()).toContain("COMPLETED");
-  });
-
-  it("bounds completed history limit to config max", () => {
-    expect(resolveCompletedHistoryLimit(undefined)).toBe(50);
-    expect(resolveCompletedHistoryLimit(10)).toBe(10);
-    expect(resolveCompletedHistoryLimit(9999)).toBe(200);
   });
 });

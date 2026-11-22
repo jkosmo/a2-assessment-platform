@@ -62,7 +62,8 @@ Propose two things together.
 **The outline:** sections and modules in order, test form, level
 ([course-design.md](../references/course-design.md#structure)). A slide that returns several
 times with a different part marked (an agenda with "you are here") is the deck's own outline: use
-it as the outline, do not turn it into content three times.
+it as the outline, do not turn it into content three times. A course that repeats one the learners
+have taken starts with questions ([a revision course](../references/course-design.md#a-revision-course)).
 
 **The slide list:** one row per slide.
 

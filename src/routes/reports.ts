@@ -24,7 +24,7 @@ import {
 import { getCourseLearnerReport, getCourseReport } from "../modules/course/index.js";
 import { requestLocale } from "../i18n/requestLocale.js";
 import { requireAnyRole } from "../auth/authorization.js";
-import { REPORT_READERS } from "../auth/roleSets.js";
+import { ADMIN_ONLY, REPORT_READERS } from "../auth/roleSets.js";
 import { resolveAllowedCourseIds } from "../modules/reporting/scope.js";
 import { prisma } from "../db/prisma.js";
 import { localizeContentText } from "../i18n/content.js";
@@ -36,6 +36,10 @@ const reportsRouter = Router();
 // de seks rapportene Resultater bruker, avgrenset til kurs hen eier. Resten av rapportene er analyse
 // på tvers av organisasjonen og krever fortsatt REPORT_READERS.
 const orgWideOnly = requireAnyRole([...REPORT_READERS]);
+// 2.128.0 (produkteier 2026-11-01): «Aktivitet» (#1099) viser innsats per person — «sist sett» og hva hen
+// har gjort. Den er viktig for å følge innføringen, men skal bare administrator se. Arbeidsgiverroller ser
+// resultat, ikke innsats (se doc/design/GAMIFISERING_DESIGN.md).
+const adminOnly = requireAnyRole([...ADMIN_ONLY]);
 const RESULTS_EXPORT_TYPES = new Set([
   "completion", "pass-rates", "module-summary", "module-learners", "course-summary", "course-learners",
 ]);
@@ -181,7 +185,7 @@ const activityQuerySchema = z.object({
   department: z.string().trim().min(1).max(200).optional(),
 });
 
-reportsRouter.get("/activity", orgWideOnly, async (request, response, next) => {
+reportsRouter.get("/activity", adminOnly, async (request, response, next) => {
   const parsed = activityQuerySchema.safeParse(request.query);
   if (!parsed.success) {
     avvisFiltre(next);
@@ -194,7 +198,7 @@ reportsRouter.get("/activity", orgWideOnly, async (request, response, next) => {
   }
 });
 
-reportsRouter.get("/activity/users/:userId/recent", orgWideOnly, async (request, response, next) => {
+reportsRouter.get("/activity/users/:userId/recent", adminOnly, async (request, response, next) => {
   try {
     const recent = await getActivityRecent(String(request.params.userId), requestLocale(request));
     if (!recent) {

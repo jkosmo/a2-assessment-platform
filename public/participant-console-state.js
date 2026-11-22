@@ -1,4 +1,4 @@
-import { isAppealableFail } from "/static/outcome.js";
+import { isAppealableFail, isSettledPass } from "/static/outcome.js";
 
 const allowedMockRoles = new Set([
   "PARTICIPANT",
@@ -90,7 +90,12 @@ export function sanitizeWorkspaceNavigationItems(value) {
       )
       : [];
 
-    items.push({ id, path, labelKey, requiredRoles });
+    // 2.126.0: områdets andre adresser, så punktet er markert på alle sidene i området.
+    const areaPaths = Array.isArray(item.areaPaths)
+      ? item.areaPaths.filter((p) => typeof p === "string" && p.startsWith("/")).map((p) => p.trim())
+      : [];
+
+    items.push({ id, path, labelKey, requiredRoles, ...(areaPaths.length > 0 ? { areaPaths } : {}) });
     uniqueIds.add(id);
   }
 
@@ -114,6 +119,18 @@ function normalizePath(pathValue) {
   }
 
   return withoutQuery;
+}
+
+// 2.126.0 (produkteier 2026-11-01: «det bør uansett være tydelig hvor man er»): toppmenyen markerte
+// bare punktet når adressen var NØYAKTIG lenkas. Innholdsforvaltning lenker til /admin-content/courses,
+// så Moduler, Tema, Seksjoner og et åpent kurs viste ingen markering; det samme gjaldt Fullførte,
+// Manuell behandling og Resultater. Et punkt er nå markert på lenka, på sidene under den, og på
+// adressene området oppgir i `areaPaths`.
+function isInArea(normalizedPath, paths) {
+  return paths.some((p) => {
+    const area = normalizePath(p);
+    return Boolean(area) && (normalizedPath === area || normalizedPath.startsWith(`${area}/`));
+  });
 }
 
 export function resolveWorkspaceNavigationItems(navigationItems, rolesValue, currentPath, fallbackItems = []) {
@@ -140,7 +157,7 @@ export function resolveWorkspaceNavigationItems(navigationItems, rolesValue, cur
     return {
       ...item,
       visible,
-      active: normalizePath(item.path) === normalizedPath,
+      active: isInArea(normalizedPath, [item.path, ...(item.areaPaths ?? [])]),
     };
   });
 }
@@ -251,6 +268,161 @@ export function upsertModuleDraft(moduleDrafts, moduleId, draftData, nowMs = Dat
     .slice(0, Math.max(1, Number(maxModules) || 30));
 
   return Object.fromEntries(ordered);
+}
+
+// #934 skive 5a-1: nøkler i en kladd som ikke er svarfelt.
+/** 2.136.5: kladden lagres per felt-id, og en modul kan ha et felt som heter hva som helst. Svaret om KI må ikke overskrive deltakerens tekst. */
+export const AI_DECLARATION_DRAFT_KEY = "__aiDeclaration";
+
+const DRAFT_META_KEYS = new Set(["mcq", "submittedAs", "updatedAt", AI_DECLARATION_DRAFT_KEY]);
+
+/**
+ * Tekst i kladden til felt siden ikke lenger har. Kladden lagres per felt-id. Har oppgaven fått en ny versjon med andre
+ * felt, eller blitt ren flervalg, ville teksten verken vises eller overleve neste lagring, rett etter at siden sa at
+ * svaret var lagret som kladd.
+ *
+ * En kladd med `submittedAs` er restene av et svar som er levert. Den teksten trenger ikke reddes.
+ *
+ * @returns {{ id: string, text: string }[]}
+ */
+export function orphanedDraftTexts(draft, renderedFieldIds) {
+  if (!draft || typeof draft !== "object" || draft.submittedAs) {
+    return [];
+  }
+  const rendered = new Set(renderedFieldIds);
+  return Object.entries(draft)
+    .filter(([id, text]) => !DRAFT_META_KEYS.has(id) && !rendered.has(id) && typeof text === "string" && text.trim().length > 0)
+    .map(([id, text]) => ({ id, text }));
+}
+
+/** Vurderingen er ferdig nok til at resultatet kan vises (også mens en sensor ser på den). */
+export function isAssessmentResultReady(status) {
+  const normalized = typeof status === "string" ? status.toUpperCase() : "";
+  return normalized === "COMPLETED" || normalized === "UNDER_REVIEW" || normalized === "SCORED";
+}
+
+/**
+ * 2.126.0 (produkteier 2026-11-01): «Man bør ha mulighet for å kunne senere anke på et resultat, det
+ * bør ikke være en beslutning man må ta der og da.» Før ble modulen nullstilt hver gang den ble åpnet:
+ * forrige resultat ble ikke lastet, anke-knappen kom aldri, og en flervalgsmodul startet et nytt forsøk
+ * med en gang. Den eneste veien til en senere anke var «Fullførte»-siden.
+ *
+ * Nå vises siste resultat når modulen åpnes — UNNTATT når deltakeren har begynt på et nytt forsøk:
+ * en kladd med innhold som ikke er det leverte svaret. En kladd lagret mens et svar var levert, bærer
+ * id-en til det svaret (`submittedAs`); er den lik siste innlevering, er kladden bare restene av den.
+ * En kladd uten merket (lagret før 2.126.0) regnes som et nytt forsøk — som før.
+ *
+ * @returns {string | null} innleveringen hvis resultat skal vises
+ */
+export function earlierResultToShow(participantStatus, draft, draftIsMeaningful) {
+  const submissionId = participantStatus?.latestSubmissionId;
+  // REJECTED er et endelig utfall (SETTLED_STATUSES i /static/outcome.js), selv om ingen kodesti skriver
+  // den i dag — et avvist svar skal heller ikke gi et nytt forsøk av seg selv.
+  const status = typeof participantStatus?.latestStatus === "string" ? participantStatus.latestStatus.toUpperCase() : "";
+  if (typeof submissionId !== "string" || !submissionId || !(isAssessmentResultReady(status) || status === "REJECTED")) return null;
+  if (draftIsMeaningful && draft?.submittedAs !== submissionId) return null;
+  return submissionId;
+}
+
+/**
+ * #1160: kan flervalgsforsøket i kladden fortsettes? Avkrysningene lå alltid i kladden (`mcq.responses`), men modulen startet
+ * en ny innlevering og et nytt forsøk hver gang den ble åpnet, så de ble aldri satt inn igjen. Et forsøk fortsetter når
+ * kladden vet hvilken innlevering og hvilket forsøk det var, og forsøket ble startet på den versjonen modulen har nå. En
+ * annen versjon kan ha andre spørsmål, og da ville avkrysningene vært svar på noe annet. En kladd fra før #1160 mangler
+ * innleveringen og versjonen, og fortsettes ikke.
+ *
+ * Om forsøket fortsatt er åpent, vet bare serveren; den spørres før noe vises (`resumeMcqAttempt`).
+ *
+ * @returns {{ submissionId: string, attemptId: string, moduleVersionId: string, responses: Record<string, string|string[]> } | null}
+ */
+export function resumableMcqDraft(draft, { moduleVersionId } = {}) {
+  const mcq = draft && typeof draft === "object" ? draft.mcq : null;
+  if (!mcq || typeof mcq !== "object") return null;
+  const id = (value) => (typeof value === "string" && value.trim() && value !== "-" ? value : null);
+  const attemptId = id(mcq.attemptId);
+  const submissionId = id(mcq.submissionId);
+  const savedVersionId = id(mcq.moduleVersionId);
+  if (!attemptId || !submissionId || !savedVersionId) return null;
+  if (savedVersionId !== moduleVersionId) return null;
+  const responses = mcq.responses && typeof mcq.responses === "object" && !Array.isArray(mcq.responses) ? mcq.responses : {};
+  // Språket spørsmålene ble hentet på. Svarene er alternativenes TEKST, så de må settes inn mot spørsmålene på det samme
+  // språket. En kladd uten språk (lagret av 2.164.0 før dette) leses som før, på språket siden har nå.
+  const locale = typeof mcq.locale === "string" && mcq.locale.trim() ? mcq.locale : null;
+  return { submissionId, attemptId, moduleVersionId: savedVersionId, responses, locale };
+}
+
+// #1160 (QA-porten 2.164.0): statusene som betyr at forsøket ALDRI kan fortsettes — innleveringen finnes ikke (eller er en
+// annens), forsøket er levert eller vurdert, eller forespørselen har feil form. Hvitliste, ikke svarteliste: alt annet
+// (5xx, 401, 403, 408, 429, brudd uten svar) kan gå over, og da skal svarene ikke kastes.
+const DEFINITIVE_MCQ_RESUME_STATUSES = new Set([400, 404, 409]);
+
+/**
+ * #1160: hva svaret på `mcq/start` for et påbegynt forsøk betyr.
+ *  - `resume`: samme forsøk kom tilbake — sett inn avkrysningene.
+ *  - `forget`: et endelig nei (eller et annet forsøk) — glem flervalgsdelen av kladden og åpne modulen som ny.
+ *  - `retry`:  en feil som kan gå over — behold kladden, ikke start noe nytt, la deltakeren prøve igjen.
+ *
+ * @param {{ ok: true, body: any } | { ok: false, status: number | null }} outcome
+ * @param {string} savedAttemptId
+ * @returns {"resume" | "forget" | "retry"}
+ */
+export function classifyMcqResume(outcome, savedAttemptId) {
+  if (outcome?.ok) {
+    const body = outcome.body;
+    return body && body.attemptId === savedAttemptId && Array.isArray(body.questions) ? "resume" : "forget";
+  }
+  return DEFINITIVE_MCQ_RESUME_STATUSES.has(outcome?.status) ? "forget" : "retry";
+}
+
+/**
+ * #934 skive 5a-3: modulen er åpnet fra et kurs som sier at den må tas på nytt. Siste vedtak sier bestått, men det gjaldt en versjon
+ * som ikke lenger teller i dette kurset. Da skal siden starte et nytt forsøk, ikke vise det gamle resultatet som om alt var i orden.
+ * Har deltakeren alt begynt på nytt (strøket, eller saken vurderes), går siden som vanlig: resultatet, med anke og «Prøv igjen».
+ *
+ * `retakeRequired` kommer bare fra kursdetaljen med den nye regelen. Uten den er oppførselen som før.
+ */
+export function courseRetakeApplies(retakeRequired, participantStatus) {
+  if (retakeRequired !== true) return false;
+  return isSettledPass({
+    passFailTotal: participantStatus?.latestDecision?.passFailTotal,
+    submissionStatus: participantStatus?.latestStatus,
+  });
+}
+
+/** #934 skive 5a-3: krever dette kurset, slik serveren svarte, et nytt forsøk i modulen? */
+export function courseStillRequiresRetake(course, moduleId) {
+  return (course?.items ?? []).some((item) => item?.type === "MODULE" && item.moduleId === moduleId && item.retakeRequired === true);
+}
+
+/**
+ * 2.134.1: går «KI skrev det meste» til sensor for denne modulen? Samme regel som `evaluateAiInfluence` på serveren: modulens egen
+ * innstilling først, så den globale. I skyggemodus rutes ingen, og da skal siden ikke love det.
+ */
+export function aiReviewRoutingLive(globalRules, module) {
+  const own = module?.assessmentPolicy?.aiInfluence;
+  const enabled = own?.enabled ?? globalRules?.enabled;
+  const shadowMode = own?.shadowMode ?? globalRules?.shadowMode;
+  return enabled === true && shadowMode !== true;
+}
+
+/**
+ * 2.134.1: en innlevering er opprettet, så modulen er ikke lenger «ikke startet». Kursdetaljene i minnet hentes ellers bare på nytt
+ * etter en bestått, så en sak hos sensor eller et stryk sto som «ikke startet» til siden ble lastet på nytt. Svarer med kursene som
+ * ble endret. Samme overgang som serveren gjør (`moduleStatusOf` i routes/courses.ts).
+ */
+export function markCourseModuleStarted(courseDetails, moduleId) {
+  const changed = [];
+  for (const [courseId, course] of Object.entries(courseDetails ?? {})) {
+    for (const list of [course?.items, course?.modules]) {
+      for (const entry of list ?? []) {
+        if (entry?.moduleId === moduleId && entry.moduleStatus === "NOT_STARTED") {
+          entry.moduleStatus = "IN_PROGRESS";
+          if (!changed.includes(courseId)) changed.push(courseId);
+        }
+      }
+    }
+  }
+  return changed;
 }
 
 export function deriveParticipantFlowGateState(flowState, options = {}) {

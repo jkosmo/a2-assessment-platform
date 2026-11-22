@@ -3,6 +3,7 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { checkAndIssueCourseCompletions } from "../src/modules/course/index.js";
 import { auditActions, auditEntityTypes } from "../src/observability/auditEvents.js";
+import { recordFixturePass } from "./support/modulePassFixture.js";
 
 describe("Course completion issuance", () => {
   afterAll(async () => {
@@ -471,4 +472,6 @@ async function createPassedCertification(
       passedAt: new Date(),
     },
   });
+  // #934: det regelen prod bruker leser (ModulePass, nummer og krav), som vedtakssporet ville skrevet.
+  await recordFixturePass({ userId, moduleId: moduleFixture.module.id, moduleVersionId: moduleFixture.moduleVersion.id, submissionId: submission.id, decisionId: decision.id });
 }

@@ -1,19 +1,15 @@
 import { prisma } from "../../db/prisma.js";
-import { runInTransaction } from "../../db/transaction.js";
+import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
-import { recipientLocale } from "../../i18n/recipientLocale.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { hasAnyRole, PARTICIPANTS } from "../../auth/roleSets.js";
-import { sendCourseAssignmentNotification } from "../certification/participantNotificationService.js";
 import { classRepository, createClassRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
 import { isClassEntraLinkingEnabled } from "./classConfig.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
-import { logOperationalEvent } from "../../observability/operationalLog.js";
-import { operationalEvents } from "../../observability/operationalEvents.js";
-import { isReachableParticipant } from "../user/participantReach.js";
+import { findStartedOrCompletedPairs, pairKey } from "./learnerVisibility.js";
 
 // #645/CL-2: class (cohort) business logic — CRUD + membership + course assignment + dynamic
 // membership evaluation. Course→class assignment is dynamic: a participant is assigned a course if
@@ -23,6 +19,43 @@ async function requireClass(classId: string) {
   const klass = await classRepository.findClassById(classId);
   if (!klass) throw new NotFoundError("Class", "class_not_found", "Class not found.");
   return klass;
+}
+
+/**
+ * Produkteier 2026-11-08: «Man bør ikke kunne legge til folk i en arkivert klasse», og heller ikke tildele kurs til den.
+ *
+ * Klassen leses i SAMME transaksjon som skrivingen, og raden låses (`FOR SHARE`). En arkivering som kommer samtidig, er en
+ * UPDATE på samme rad og venter derfor til denne transaksjonen er ferdig; en arkivering som kom først, sees her. Uten låsen
+ * kunne klassen blitt arkivert mellom sjekken og skrivingen. (Fremmednøkkelen fra medlemsraden låser bare nøkkelen, ikke
+ * `archivedAt`, så den er ikke nok.)
+ *
+ * Gjenoppretting (`restoreClass`) setter `archivedAt` tilbake til null, og da går det igjen.
+ */
+async function assertClassWritable(tx: DbTransactionClient, classId: string, action: "add_member" | "assign_course"): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ archivedAt: Date | null }>>`SELECT "archivedAt" FROM "Class" WHERE "id" = ${classId} FOR SHARE`;
+  if (rows.length === 0) throw new NotFoundError("Class", "class_not_found", "Class not found.");
+  if (rows[0].archivedAt) {
+    throw new DomainRuleError(
+      "class_archived",
+      action === "add_member"
+        ? "The class is archived. Restore it before adding participants."
+        : "The class is archived. Restore it before assigning courses.",
+      { action, classId },
+    );
+  }
+}
+
+/**
+ * #688: et arkivert kurs kan ikke tildeles en klasse. #1166: lest og sjekket i tildelingens transaksjon, med kursets rad låst
+ * (`FOR SHARE`). En arkivering (`archiveCourse`, en UPDATE på samme rad) som kommer samtidig, venter til tildelingen er ferdig;
+ * en som kom først, sees her.
+ */
+async function assertCourseAssignable(tx: DbTransactionClient, courseId: string): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ archivedAt: Date | null }>>`SELECT "archivedAt" FROM "Course" WHERE "id" = ${courseId} FOR SHARE`;
+  if (rows.length === 0) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+  if (rows[0].archivedAt) {
+    throw new DomainRuleError("course_archived", "Cannot assign an archived course.");
+  }
 }
 
 export async function createClass(input: { name: string; description?: string | null }, actorId: string | null) {
@@ -95,23 +128,29 @@ export async function archiveClass(classId: string, actorId: string | null) {
 // listene viser for modul, kurs og seksjon («Slett» finnes bare på arkiverte rader), men her er den
 // også håndhevet på tjenersiden: `DELETE /:classId` arkiverte før, og en gammel klient som fortsatt
 // sender DELETE for «Arkiver» skal få et avslag, ikke en sletting.
+//
+// #1166: «arkivert» sjekkes i slettetransaksjonen, etter at klassens rad er låst (`FOR UPDATE`), som `courseArchive.ts` gjør
+// med kurset. Før ble klassen lest og sjekket før transaksjonen: en gjenoppretting som kom imellom, gjorde klassen aktiv, og
+// slettingen gikk likevel. Nå venter slettingen på gjenopprettingen, og ser at klassen er aktiv.
 export async function deleteClass(classId: string, actorId: string | null) {
-  const klass = await requireClass(classId);
-  if (klass.isSystem) {
-    throw new DomainRuleError(
-      "system_class_immutable",
-      "System classes cannot be deleted.",
-      { action: "delete" },
-    );
-  }
-  if (!klass.archivedAt) {
-    throw new DomainRuleError(
-      "class_not_archived",
-      "Archive the class before deleting it.",
-      { action: "delete" },
-    );
-  }
   await runInTransaction(async (tx) => {
+    const rows = await tx.$queryRaw<Array<{ name: string; isSystem: boolean; archivedAt: Date | null }>>`SELECT "name", "isSystem", "archivedAt" FROM "Class" WHERE "id" = ${classId} FOR UPDATE`;
+    if (rows.length === 0) throw new NotFoundError("Class", "class_not_found", "Class not found.");
+    const klass = rows[0];
+    if (klass.isSystem) {
+      throw new DomainRuleError(
+        "system_class_immutable",
+        "System classes cannot be deleted.",
+        { action: "delete" },
+      );
+    }
+    if (!klass.archivedAt) {
+      throw new DomainRuleError(
+        "class_not_archived",
+        "Archive the class before deleting it.",
+        { action: "delete" },
+      );
+    }
     const repo = createClassRepository(tx);
     await repo.deleteClass(classId);
     // Eierradene har ingen fremmednøkkel til klassen (ContentOwner peker på innhold av fire typer),
@@ -208,6 +247,7 @@ export async function addMember(classId: string, userId: string, actorId: string
   // ⚠️ Id-en som felt: klienten skal kunne navngi HVEM som mangler uten å parse en setning.
   if (!user) throw new DomainRuleError("unknown_user", `Unknown user id: ${userId}.`, { userId });
   await runInTransaction(async (tx) => {
+    await assertClassWritable(tx, classId, "add_member");
     const repo = createClassRepository(tx);
     await repo.addMember(classId, userId, actorId);
     await recordAuditEvent(
@@ -270,18 +310,20 @@ export async function listClassCourseAssignments(classId: string, locale: Suppor
   }));
 }
 
+// #1142: tildelingen sender ingen e-post selv. Jobben i workeren ser det nye paret (person, kurs) i neste runde, og
+// medlemmene får én samlet e-post om nye kurs et kvarter etter siste endring (courseAssignmentNotice.ts). Den gamle e-posten
+// per kurs herfra (#684, fire-and-forget) er fjernet; jobben dekker også veiene den ikke så (nytt medlem, publisering).
+//
+// #1166: kursets arkivtilstand sjekkes i transaksjonen, etter at kursets rad er låst (`FOR SHARE`), slik klassen alt var
+// (`assertClassWritable`). Før ble kurset lest før transaksjonen, og bare klassen ble låst: en arkivering av kurset som kom
+// imellom, gjorde sjekken ugyldig, og tildelingen gikk til et arkivert kurs. Fremmednøkkelen fra tildelingen låser bare
+// kursets nøkkel, og en arkivering endrer ikke nøkkelen; derfor den egne låsen. Låseorden: klassen, så kurset.
+//
+// ⚠️ Kursets EIERSKAP sjekkes ikke her, med vilje: se `CLASS_OWNER_ASSIGNS_ANY_COURSE` (adminClasses.ts).
 export async function assignCourseToClass(courseId: string, classId: string, dueAt: Date | null, actorId: string | null) {
-  const klass = await requireClass(classId);
-  const course = await prisma.course.findUnique({
-    where: { id: courseId },
-    select: { id: true, title: true, archivedAt: true, publishedAt: true },
-  });
-  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
-  // #688: archived courses are retired and must not be assignable to a class.
-  if (course.archivedAt) {
-    throw new DomainRuleError("course_archived", "Cannot assign an archived course.");
-  }
   await runInTransaction(async (tx) => {
+    await assertClassWritable(tx, classId, "assign_course");
+    await assertCourseAssignable(tx, courseId);
     const repo = createClassRepository(tx);
     await repo.assignCourseToClass(courseId, classId, dueAt, actorId);
     await recordAuditEvent(
@@ -295,85 +337,6 @@ export async function assignCourseToClass(courseId: string, classId: string, due
       tx,
     );
   });
-
-  // #684: email the members that their class was assigned a course. Skipped for the "Alle deltakere"
-  // system class (would email the whole org) and for ENTRA classes (no stored member rows). Fire-and-
-  // forget so the assignment is not blocked or failed by email delivery.
-  //
-  // #967: ⚠️ men ikke for et UPUBLISERT kurs. E-posten sier «Logg inn på plattformen for å starte»,
-  // og medlemmet logger inn og finner ingenting — kurset er usynlig for deltakere til det
-  // publiseres. Med #967 er påminnelsene dessuten stille, så denne e-posten ville vært det ENESTE
-  // deltakeren noensinne hørte om kurset.
-  //
-  // Tildelingen blokkeres IKKE: «tildel utkast nå, publiser senere» er en legitim arbeidsflyt, og
-  // #688 blokkerer allerede det som virkelig er feil (arkiverte kurs). Det er varselet som er
-  // feiltimet, ikke tildelingen. Undertrykkelsen logges — en e-post som aldri kom er stille.
-  if (klass.kind === "MANUAL" && !klass.isSystem) {
-    if (course.publishedAt === null) {
-      void suppressAssignmentMail(courseId, classId);
-    } else {
-      void notifyClassMembersOfCourseAssignment(classId, klass.name, course.title, dueAt);
-    }
-  }
-}
-
-async function suppressAssignmentMail(courseId: string, classId: string): Promise<void> {
-  try {
-    const members = await classRepository.listMembers(classId);
-    logOperationalEvent(
-      operationalEvents.course.assignmentMailSuppressed,
-      {
-        courseId,
-        classId,
-        recipientCount: members.filter((m) => m.user.email).length,
-        reason: "unpublished",
-      },
-      "info",
-    );
-  } catch {
-    /* en uteblitt logglinje skal aldri velte en tildeling som allerede er skrevet */
-  }
-}
-
-// #900: avstand mellom tildelings-e-poster. 0 i test (env), ellers 300 ms — sju mottakere = ~2 s.
-const ASSIGNMENT_EMAIL_SPACING_MS = process.env.NODE_ENV === "test" ? 0 : 300;
-
-async function notifyClassMembersOfCourseAssignment(
-  classId: string,
-  className: string,
-  courseTitleJson: string,
-  dueAt: Date | null,
-): Promise<void> {
-  try {
-    const members = await classRepository.listMembers(classId);
-    const recipients = members
-      // #968: ikke e-post til en som har sluttet eller er anonymisert — samme regel som publikummet
-      // og påminnelsene. Før ble den bare filtrert på at adressen fantes.
-      .filter((m) => m.user.email && isReachableParticipant(m.user));
-    // #900: ÉN om gangen, med en pause mellom. Sju e-poster i samme sekund ble strupet av ACS
-    // 13.08.2026 — alle sju tapt. Promise.allSettled her var årsaken; sekvensielt med pause holder oss
-    // under grensen, og sendViaAcs prøver på nytt om ACS likevel struper. Kalleren venter ikke på
-    // dette (void), så tiden koster ingen.
-    for (const [index, m] of recipients.entries()) {
-      if (index > 0) await new Promise((resolve) => setTimeout(resolve, ASSIGNMENT_EMAIL_SPACING_MS));
-      // #970: mottakerens språk («sist sett»), ikke bokmål for alle. Tittelen velges for samme språk.
-      const locale = recipientLocale(m.user);
-      try {
-        await sendCourseAssignmentNotification({
-          recipientEmail: m.user.email,
-          recipientName: m.user.name,
-          courseTitle: localizeContentText(locale, courseTitleJson) ?? courseTitleJson,
-          className,
-          dueAt,
-          locale,
-        });
-      } catch {
-        /* én feilet mottaker skal ikke stoppe de neste */
-      }
-    }
-  } catch {
-    /* never let notification failure surface — assignment already succeeded */
-  }
 }
 
 export async function unassignCourseFromClass(courseId: string, classId: string, actorId: string | null) {
@@ -430,17 +393,32 @@ export async function getUserClassIds(ctx: UserMembershipContext): Promise<Set<s
 }
 
 /**
- * course id → earliest (most urgent) due date, for the courses assigned to any of `classIds`.
- * Used by the visibility filter and "my enrollments" to surface class-assigned courses dynamically.
+ * course id → earliest (most urgent) due date, for the courses `userId` has from the classes in `classIds`.
+ * ⚠️ DET ENE stedet som svarer på «hvilke kurs har deltakeren fra klasser». «Mine kurs» og `/enrollments`, kursdetaljen og
+ * direkte adresse (`findCourseForParticipant`), seksjoner, modulgaten og diskusjonene går hit.
+ *
+ * Produkteier 2026-11-08: «Kurs fra arkiverte klasser som ikke er fullført eller påbegynt bør ikke vises i Mine kurs.»
+ *   - Et kurs fra minst én AKTIV klasse er med, som før.
+ *   - Et kurs deltakeren BARE har fra arkiverte klasser, er med bare når det er påbegynt eller fullført
+ *     (`findStartedOrCompletedCourseIds`, under). Ellers er det borte, som om tildelingen ikke fantes.
+ *   - OPEN-kurs og individuell tildeling avgjøres ikke her (`filterVisibleCourseIds`), og vises som før.
+ * Fristen regnes som før: den tidligste over alle klassene som gir kurset, også arkiverte.
+ *
+ * Påminnelsene, kullstatus og kursrapporten hopper alt over arkiverte klasser (`classRepository`, `class: { archivedAt: null }`).
+ * Kursrapporten tar i tillegg med alle som har levert, lest eller fullført, og det er den samme regelen som her.
  */
-export async function getClassAssignedCourseDueDates(classIds: Set<string>): Promise<Map<string, Date | null>> {
+export async function getClassAssignedCourseDueDates(classIds: Set<string>, userId: string): Promise<Map<string, Date | null>> {
   if (classIds.size === 0) return new Map();
   const rows = await prisma.courseGroupAssignment.findMany({
     where: { classId: { in: [...classIds] } },
-    select: { courseId: true, dueAt: true },
+    select: { courseId: true, dueAt: true, class: { select: { archivedAt: true } } },
   });
+  const fromActiveClass = new Set(rows.filter((r) => r.class.archivedAt === null).map((r) => r.courseId));
+  const onlyFromArchived = [...new Set(rows.map((r) => r.courseId))].filter((courseId) => !fromActiveClass.has(courseId));
+  const keptFromArchived = await findStartedOrCompletedCourseIds(userId, onlyFromArchived);
   const map = new Map<string, Date | null>();
   for (const r of rows) {
+    if (!fromActiveClass.has(r.courseId) && !keptFromArchived.has(r.courseId)) continue;
     if (!map.has(r.courseId)) {
       map.set(r.courseId, r.dueAt);
     } else {
@@ -449,4 +427,28 @@ export async function getClassAssignedCourseDueDates(classIds: Set<string>): Pro
     }
   }
   return map;
+}
+
+/**
+ * Kursene i `courseIds` som deltakeren har påbegynt eller fullført (produkteier 2026-11-08, arkiverte klasser).
+ *
+ * «Påbegynt eller fullført» er det kursdetaljen allerede regner som fremdrift, minst én av:
+ *   1. en lest seksjon i kurset (en rad i `CourseSectionRead` for kurset). #1156: bare en lesing gjort I kurset, ikke en som
+ *      teller på tvers;
+ *   2. en levert modul: en innlevering på en modul som ligger i kurset, uansett status. En bestått modul har alltid en
+ *      innlevering, så «bestått modul» er med her;
+ *   3. et kursbevis for kurset (`CourseCompletion`), uansett versjon: fullført;
+ *   4. deltakelse i kursets diskusjoner: en tråd eller et svar deltakeren har skrevet, eller en tråd hen følger.
+ * Med vilje litt videre enn kursdetaljens telling: en lesing teller her også når seksjonen er endret i en senere hovedversjon,
+ * og en innlevering også når modulen er arkivert. Det deltakeren har gjort i kurset, skal ikke forsvinne fra «Mine kurs».
+ *
+ * ⚠️ Punkt 4 (QA-porten 2026-11-08): svarvarslene (`notifyNewReply`) går til alle som følger tråden, uten å spørre om tilgang.
+ * Uten punkt 4 kunne en deltaker som fulgte en tråd, mistet kurset ved arkiveringen og likevel fått e-post med lenke til en
+ * side som svarer 404. Med punkt 4 beholder hen kurset, og varselet stemmer.
+ */
+export async function findStartedOrCompletedCourseIds(userId: string, courseIds: string[]): Promise<Set<string>> {
+  // #1156: regelen bor i `findStartedOrCompletedPairs` (learnerVisibility.ts), som også svarer for mange deltakere på én gang
+  // (synligheten for lesinger gjort i et annet kurs). Bare lesinger gjort I kurset teller (produkteier 14.11.2026).
+  const pairs = await findStartedOrCompletedPairs(prisma, [userId], courseIds);
+  return new Set(courseIds.filter((courseId) => pairs.has(pairKey(userId, courseId))));
 }

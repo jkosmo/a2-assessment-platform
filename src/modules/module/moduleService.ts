@@ -6,18 +6,14 @@ import { localizeContentText } from "../../i18n/content.js";
 import { renderModuleTextMarkdown } from "../course/sectionContent.js";
 import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
 import { submissionSchemaCodec } from "../../codecs/submissionSchemaCodec.js";
+import { buildParticipantCriteria } from "../assessment/participantCriteria.js";
 import {
   queryModules,
   queryModuleById,
   queryModuleVersion,
 } from "../../repositories/moduleRepository.js";
-import {
-  queryLatestSubmissionsForModules,
-  queryCompletedSubmissionsForUser,
-} from "../submission/submissionRepository.js";
-import {
-  getCompletedSubmissionStatuses,
-} from "./moduleCompletionPolicyService.js";
+import { queryLatestSubmissionsForModules } from "../submission/submissionRepository.js";
+import { withShownVersions, type ModuleReader } from "./participantModuleVersion.js";
 
 // #962: settet bor nå i `src/auth/roleSets.ts`, sammen med de nitten andre rollesjekkene. Det er
 // UENDRET — poenget med flyttingen er at man skal kunne lese hele policyen ett sted og se hvor
@@ -29,7 +25,19 @@ function hasAdminRead(roles: AppRoleType[]) {
 type ListModulesOptions = {
   includeCompleted?: boolean;
   participantFacing?: boolean;
+  /** #1140: gruppene fra innloggingen, for kursene leseren har tilgang til gjennom en Entra-klasse. */
+  groupIds?: string[];
+  /** #1140: kurset modulene åpnes fra. Det kurset bestemmer versjonen for modulene leseren har i det. */
+  courseId?: string;
 };
+
+/**
+ * #1140 etappe 1: den som leser deltakervendt, får versjonen kursene sine viser (`participantModuleVersion.ts`). Forfatter- og
+ * administratorlesing (`participantFacing: false`) og et kall uten bruker får modulens nyeste, som før.
+ */
+function shownVersionReader(roles: AppRoleType[], participantFacing: boolean, userId?: string, groupIds?: string[]): ModuleReader | null {
+  return participantFacing && userId ? { userId, roles, groupIds } : null;
+}
 
 /**
  * #1051: oppgaveteksten og veiledningen — både som tekst og som rendret HTML.
@@ -65,6 +73,28 @@ function briefFields(
   };
 }
 
+/**
+ * #1124: modulversjonen slik den sendes, og kriteriene deltakeren ser før levering.
+ *
+ * ⚠️ `...module` sprer `activeVersion` slik den kom fra databasen. Den har alltid hatt med
+ * `assessorExpectedContent` — toppfeltet ble holdt unna deltakeren (#387), men den samme teksten lå
+ * urørt ett nivå ned, i `activeVersion.assessorExpectedContent`. Nå tas den ut her for deltakeren, og
+ * den rå `rubricVersion` (med skjulte kriterier) tas ut for alle: det eneste som sendes av
+ * kriteriene, er `assessmentCriteria`, bygget av `buildParticipantCriteria`.
+ */
+function versionFields<V extends { assessorExpectedContent?: unknown; rubricVersion?: { criteriaJson: string } | null }>(
+  activeVersion: V | null,
+  locale: SupportedLocale,
+  participantFacing: boolean,
+) {
+  if (!activeVersion) return { activeVersion, assessmentCriteria: [] };
+  const { rubricVersion, assessorExpectedContent, ...rest } = activeVersion;
+  return {
+    activeVersion: participantFacing ? rest : { ...rest, assessorExpectedContent },
+    assessmentCriteria: buildParticipantCriteria(rubricVersion?.criteriaJson, locale),
+  };
+}
+
 export async function listModules(
   roles: AppRoleType[],
   userId?: string,
@@ -74,11 +104,14 @@ export async function listModules(
   const now = new Date();
   const participantFacing = options.participantFacing ?? false;
   const adminRead = participantFacing ? false : hasAdminRead(roles);
-  const modules = await queryModules(adminRead, now);
+  const reader = shownVersionReader(roles, participantFacing, userId, options.groupIds);
+  const published = await queryModules(adminRead, now);
+  const modules = reader ? await withShownVersions(published, reader, options.courseId) : published;
 
   if (!userId) {
     return modules.map((module) => ({
       ...module,
+      ...versionFields(module.activeVersion, locale, participantFacing),
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
       ...briefFields(module.activeVersion, locale),
@@ -119,6 +152,7 @@ export async function listModules(
     const latest = latestByModule.get(module.id);
     return {
       ...module,
+      ...versionFields(module.activeVersion, locale, participantFacing),
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
       ...briefFields(module.activeVersion, locale),
@@ -144,65 +178,26 @@ export async function listModules(
   return mapped;
 }
 
-export async function listCompletedModulesForUser(
-  userId: string,
-  locale: SupportedLocale = "en-GB",
-  limit = 50,
-) {
-  const completedStatuses = getCompletedSubmissionStatuses();
-  const submissions = await queryCompletedSubmissionsForUser(userId, completedStatuses, limit * 10);
-
-  const modules = new Map<
-    string,
-    {
-      moduleId: string;
-      moduleTitle: string;
-      latestSubmissionId: string;
-      latestCompletedAt: Date;
-      latestStatus: string;
-      latestDecision: (typeof submissions)[number]["decisions"][number] | null;
-    }
-  >();
-
-  for (const submission of submissions) {
-    if (modules.has(submission.moduleId)) {
-      continue;
-    }
-
-    modules.set(submission.moduleId, {
-      moduleId: submission.module.id,
-      moduleTitle: localizeContentText(locale, submission.module.title) ?? submission.module.title,
-      latestSubmissionId: submission.id,
-      latestCompletedAt: submission.submittedAt,
-      latestStatus: submission.submissionStatus,
-      latestDecision: submission.decisions[0] ?? null,
-    });
-
-    if (modules.size >= limit) {
-      break;
-    }
-  }
-
-  return Array.from(modules.values());
-}
-
 export async function getModuleById(
   moduleId: string,
   roles: AppRoleType[],
   locale: SupportedLocale = "en-GB",
-  options: { participantFacing?: boolean } = {},
+  options: { participantFacing?: boolean; userId?: string; groupIds?: string[]; courseId?: string } = {},
 ) {
   const now = new Date();
   const participantFacing = options.participantFacing ?? false;
   const adminRead = participantFacing ? false : hasAdminRead(roles);
-  const module = await queryModuleById(moduleId, adminRead, now);
+  const found = await queryModuleById(moduleId, adminRead, now);
 
-  if (!module) {
+  if (!found) {
     return null;
   }
+  const reader = shownVersionReader(roles, participantFacing, options.userId, options.groupIds);
+  const module = reader ? (await withShownVersions([found], reader, options.courseId))[0]! : found;
 
   return {
     ...module,
+    ...versionFields(module.activeVersion, locale, participantFacing),
     title: localizeContentText(locale, module.title) ?? module.title,
     description: localizeContentText(locale, module.description),
     ...briefFields(module.activeVersion, locale),
@@ -215,7 +210,7 @@ export async function getActiveModuleVersion(
   moduleId: string,
   roles: AppRoleType[],
   locale: SupportedLocale = "en-GB",
-  options: { participantFacing?: boolean } = {},
+  options: { participantFacing?: boolean; userId?: string; groupIds?: string[]; courseId?: string } = {},
 ) {
   const participantFacing = options.participantFacing ?? false;
   const module = await getModuleById(moduleId, roles, locale, options);

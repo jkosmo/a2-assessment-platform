@@ -2,10 +2,11 @@ import { NotFoundError } from "../../errors/AppError.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
-import { certificationRepository, createCertificationRepository } from "./certificationRepository.js";
-import { decisionRepository, createDecisionRepository } from "../../repositories/decisionRepository.js";
+import { createCertificationRepository } from "./certificationRepository.js";
+import { recordModulePassFromDecision } from "./modulePass.js";
+import { createDecisionRepository } from "../../repositories/decisionRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import type { DbTransactionClient } from "../../db/transaction.js";
+import type { LearnerTx } from "../../db/contentLock.js";
 
 // #989 (produkteier 2026-08-22): en bestått modul gjelder til den revideres. Ingen utløpsdato, ingen
 // resertifisering. Denne fila het `recertificationService.ts` og regnet ut `expiryDate` +
@@ -15,8 +16,6 @@ import type { DbTransactionClient } from "../../db/transaction.js";
 //
 // Kursfrister (`CourseEnrollment.dueAt`) er noe annet og er urørt — en frist for å bli ferdig, ikke
 // en utløpsdato på kunnskap.
-
-type CertificationTxClient = Pick<DbTransactionClient, "assessmentDecision" | "manualReview" | "submission" | "certificationStatus" | "auditEvent">;
 
 // De to tilstandene som faktisk skrives. Prisma-enumen `CertificationLifecycleStatus` har fortsatt
 // DUE_SOON/DUE/EXPIRED (expand/contract — historiske rader beholder verdiene sine), men ingenting
@@ -28,9 +27,11 @@ type UpsertFromDecisionInput = {
   actorId?: string | null;
 };
 
-export async function upsertCertificationStatusFromDecision(input: UpsertFromDecisionInput, tx?: CertificationTxClient) {
-  const decisionRepo = tx ? createDecisionRepository(tx) : decisionRepository;
-  const certRepo = tx ? createCertificationRepository(tx) : certificationRepository;
+// #934 skive 5a-1: transaksjonen er PÅKREVD og holder deltakerlåsen. Alle vedtak går hit, i samme transaksjon som
+// vedtaket, så et kursbevis aldri leser raden midt i en anke.
+export async function upsertCertificationStatusFromDecision(input: UpsertFromDecisionInput, tx: LearnerTx) {
+  const decisionRepo = createDecisionRepository(tx);
+  const certRepo = createCertificationRepository(tx);
 
   const decision = await decisionRepo.findDecisionWithSubmissionIdentifiers(input.decisionId);
 
@@ -40,6 +41,10 @@ export async function upsertCertificationStatusFromDecision(input: UpsertFromDec
 
   const userId = decision.submission.userId;
   const moduleId = decision.submission.moduleId;
+
+  // #934 skive 5a-2: raden per innlevering, ved siden av statusen. Her, før vakta under: den returnerer tidlig, og et stryk på
+  // samme innlevering skal likevel ta bort beståtten i den nye regelen. `CertificationStatus` skrives som før.
+  await recordModulePassFromDecision(tx, decision);
 
   let status: CertificationStatusOutcome;
   let passedAt: Date | null = null;
@@ -65,7 +70,7 @@ export async function upsertCertificationStatusFromDecision(input: UpsertFromDec
     status = "NOT_CERTIFIED";
   }
 
-  const certification = await certRepo.upsertCertificationStatus({
+  const certification = await certRepo.upsertCertificationStatus(tx, {
     userId,
     moduleId,
     latestDecisionId: decision.id,

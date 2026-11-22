@@ -115,6 +115,27 @@ const envSchema = z.object({
   // #497: daglig bakgrunnsjobb for kurs-frist-påminnelser. Kjører kun i worker-rollen når
   // varselkanalen er aktiv (PARTICIPANT_NOTIFICATION_CHANNEL !== "disabled").
   COURSE_REMINDER_INTERVAL_MS: z.coerce.number().int().positive().default(86_400_000),
+  // #934 skive 4b: e-post når et kurs får en ny hovedversjon. Radene lages alltid (én per mottaker, i samme
+  // transaksjon som hovedversjonen); jobben som sender dem, kjører bare i worker-rollen når denne er "true". Slås på
+  // etter at app og worker begge viser den nye versjonen — før det finnes ingen outbox-rad av den nye typen, så en
+  // gammel worker møter den aldri. Av: radene venter og sendes når den slås på (hvis versjonen fortsatt er kursets nyeste).
+  COURSE_MAJOR_EMAIL_ENABLED: z
+    .string()
+    .transform((value) => value.toLowerCase() === "true")
+    .default("false"),
+  // Hvor ofte jobben ser etter rader som venter. Hver runde legger høyst 20 i outboxen, med tre sekunders mellomrom
+  // (om lag 20 i minuttet, så Azure ikke struper, #900).
+  COURSE_MAJOR_EMAIL_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+  // #1139 (doc/design/PLAN_1139.md, punkt 9 og 12.1): den ukentlige e-posten fra båten. Av som standard; slås på først når app
+  // og worker viser samme nye versjon. Står på WORKEREN (jobben og behandleren), i Bicep, så en infrastrukturutrulling ikke visker
+  // den. Behandleren sjekker den også rett før sending (nødstopp, 12.8).
+  WEEKLY_EMAIL_ENABLED: z
+    .string()
+    .transform((value) => value.toLowerCase() === "true")
+    .default("false"),
+  // Hvem som får den: e-postadresser skilt med komma, `*` for alle. Tom eller manglende = INGEN (lista stenger, 12.1). Adressene
+  // trimmes og sammenlignes uten store/små bokstaver mot `User.email`, i jobben og i behandleren. Stage beholder lista for godt.
+  WEEKLY_EMAIL_RECIPIENTS: z.string().default(""),
   // #497-incident: ms mellom oppstart av hver bakgrunns-monitor i worker-rollen, slik at deres
   // første DB-spørring ikke treffer samtidig (unngår connection-pool-storm ved oppstart). 0 = ingen
   // spredning (start alle samtidig).
@@ -124,6 +145,12 @@ const envSchema = z.object({
     z.string().optional(),
   ),
   ACS_EMAIL_SENDER: z.preprocess(
+    (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
+    z.string().optional(),
+  ),
+  // Lenkene i e-post (compliance 2026-11-06): adressen til plattformen, for eksempel `https://…azurewebsites.net`. Må stå på
+  // både appen og workeren, for begge sender e-post. Uten: e-postene går uten lenke. Se emailLinks.ts og #1143.
+  PUBLIC_APP_BASE_URL: z.preprocess(
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().optional(),
   ),
@@ -248,6 +275,24 @@ if (
   console.warn(
     "WARNING: PARTICIPANT_NOTIFICATION_CHANNEL=acs_email but AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING or ACS_EMAIL_SENDER is missing. Email sending will fail until secrets are resolved.",
   );
+}
+
+/** Adressen i PUBLIC_APP_BASE_URL, uten sti. `https://`, eller `http://` bare lokalt. Alt annet: null. */
+export function parsePublicAppOrigin(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+// En skrivefeil i adressen skal ikke stoppe e-posten, men den skal heller ikke bare gjøre at lenkene forsvinner uten at noen ser hvorfor.
+if (env.PUBLIC_APP_BASE_URL && !parsePublicAppOrigin(env.PUBLIC_APP_BASE_URL)) {
+  console.warn("WARNING: PUBLIC_APP_BASE_URL is not a valid https address. E-mails will be sent without links.");
 }
 
 if (env.PARSER_WORKER_URL && !env.PARSER_WORKER_AUTH_KEY) {

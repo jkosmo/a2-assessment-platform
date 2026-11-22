@@ -51,6 +51,7 @@ jobs:
               parserWorkerAuthKey="whatif-only-placeholder-not-deployed" \
               deployPrincipalId="${{ vars.DEPLOY_PRINCIPAL_ID }}" \
               skipRoleAssignments="${{ vars.SKIP_ROLE_ASSIGNMENTS || 'false' }}" \
+              publicAppBaseUrl="${{ vars.PUBLIC_APP_BASE_URL || '' }}" \
             2>&1 || true)
           # #472: the diff can be hundreds of KB. Passing it through an env var to github-script
           # spawns node with an oversized environment → "Argument list too long" (E2BIG). Write it

@@ -1,6 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import { NotFoundError } from "../../errors/AppError.js";
-import { deriveStatus } from "./enrollmentService.js";
+import { deriveStatuses } from "./enrollmentService.js";
+import { pairKey } from "./learnerVisibility.js";
 import type { EnrollmentStatus } from "./enrollmentStatus.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
 import { classRepository } from "./classRepository.js";
@@ -108,8 +109,8 @@ function emptyCounts(): CohortStatusCounts {
   return { ASSIGNED: 0, IN_PROGRESS: 0, OVERDUE: 0, COMPLETED: 0 };
 }
 
-// NOTE: deriveStatus runs 1–2 queries per audience member (completion lookup + started probe). Fine for
-// typical cohorts; batch the completion/started lookups if cohorts grow large.
+// #1156 (QA-porten): statusene for hele kullet i ett kall (`deriveStatuses`, et fast antall spørringer). Før gikk det én deltaker
+// om gangen, og med lesing på tvers ble det 7–12 spørringer per person.
 export async function getCohortStatus(courseId: string, now: Date = new Date()): Promise<CohortStatusSummary> {
   const course = await prisma.course.findUnique({
     where: { id: courseId },
@@ -122,8 +123,9 @@ export async function getCohortStatus(courseId: string, now: Date = new Date()):
   const counts = emptyCounts();
   const byClassMap = new Map<string, CohortClassBreakdown>();
 
+  const statuses = await deriveStatuses(audience.map((member) => ({ userId: member.userId, courseId, dueAt: member.dueAt })), now);
   for (const member of audience) {
-    const status = await deriveStatus(member.userId, courseId, member.dueAt, now);
+    const status = statuses.get(pairKey(member.userId, courseId))!;
     counts[status] += 1;
     if (member.classId) {
       let bucket = byClassMap.get(member.classId);

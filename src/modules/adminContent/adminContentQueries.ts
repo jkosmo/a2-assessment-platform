@@ -3,6 +3,9 @@ import { prisma } from "../../db/prisma.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText, localesPresent } from "../../i18n/content.js";
 import { deriveContentLifecycle } from "../content/lifecycle.js";
+import { findActiveCoursesForModules } from "../course/contentLifecycle.js";
+import { sectionVersionTitle } from "../course/sectionTitle.js";
+import { createRetentionContext, evaluateArchivedItems, type ArchivedRetention } from "../content/archivedRetention.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
 import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
@@ -37,11 +40,20 @@ export async function listLibraryModules(
   locale: SupportedLocale = "en-GB",
   viewerUserId?: string,
   viewerIsAdmin = false,
+  // #1152 skive 4b-2: bare bibliotekssida med «Arkiverte» ber om svaret (`?includeRetention=1`). Modulvelgeren og Kvalitet gjør det ikke.
+  options: { includeRetention?: boolean } = {},
 ) {
   const modules = await adminContentRepository.listLibraryModules();
   // #787/#836: annotate each module with whether the viewer owns it, so the quality/calibration picker
   // can default to "my modules". Only queried when a viewer id is supplied (unauthenticated → all false).
   const ownedIds = viewerUserId ? await adminContentRepository.listModuleIdsOwnedBy(viewerUserId) : new Set<string>();
+  // #1149: «Brukt i kurs», kursfilteret og popoveren viser bare AKTIVE kurs. Samme spørsmål som seksjonslista stiller.
+  const coursesByModule = await findActiveCoursesForModules(modules.map((module) => module.id), locale);
+  // #1152 skive 4b: «slettes <dato>» eller «beholdes» med grunnen, bare for de arkiverte (content/archivedRetention.ts).
+  const archivedIds = options.includeRetention ? modules.filter((module) => module.archivedAt).map((module) => module.id) : [];
+  const retention = archivedIds.length > 0
+    ? await evaluateArchivedItems(await createRetentionContext(), "MODULE", archivedIds)
+    : new Map<string, ArchivedRetention>();
 
   return modules.map((module) => ({
     id: module.id,
@@ -58,16 +70,17 @@ export async function listLibraryModules(
     updatedAt: module.updatedAt.toISOString(),
     activeVersionId: module.activeVersionId,
     activeVersionNo: module.activeVersion?.versionNo ?? null,
+    // #934 skive 5b: det lista viser, «v2.1».
+    activeVersionMajor: module.activeVersion?.versionMajor ?? null,
+    activeVersionMinor: module.activeVersion?.versionMinor ?? null,
     latestVersionNo: module.versions[0]?.versionNo ?? null,
     ownedByMe: ownedIds.has(module.id),
     // #787 slice 5: admin manages all; a non-admin manages only modules they own (unowned → admin-only).
     // Same rule as the ownership guard, so the library hides the edit/lifecycle actions that would 403.
     canManage: viewerIsAdmin || ownedIds.has(module.id),
-    courseCount: module._count.courseItems,
-    courses: module.courseItems.map((ci) => ({
-      id: ci.course.id,
-      title: localizeContentText(locale, ci.course.title) ?? ci.course.title,
-    })),
+    courseCount: coursesByModule.get(module.id)?.length ?? 0,
+    courses: coursesByModule.get(module.id) ?? [],
+    ...(options.includeRetention && module.archivedAt ? { retention: retention.get(module.id) ?? ({ unknown: true } as ArchivedRetention) } : {}),
   }));
 }
 
@@ -109,8 +122,12 @@ export async function getModuleContentBundle(moduleId: string) {
   const moduleVersions = module.versions.map((version) => ({
     id: version.id,
     versionNo: version.versionNo,
+    // #934 skive 5b: det forfatteren ser, «v2.1». `null` for en versjon som aldri er publisert.
+    versionMajor: version.versionMajor,
+    versionMinor: version.versionMinor,
     taskText: decodeLocalizedText(version.taskText) ?? version.taskText,
     assessorExpectedContent: decodeLocalizedText(version.assessorExpectedContent) ?? version.assessorExpectedContent,
+    modelAnswer: version.modelAnswer ? (decodeLocalizedText(version.modelAnswer) ?? version.modelAnswer) : undefined,
     candidateTaskConstraints: version.candidateTaskConstraints
       ? (decodeLocalizedText(version.candidateTaskConstraints) ?? version.candidateTaskConstraints)
       : undefined,
@@ -306,6 +323,10 @@ export async function buildCourseExportEnvelope(
         description: (course.description ? decodeLocalizedText(course.description) : null) as never,
         certificationLevel: (course.certificationLevel ? decodeLocalizedText(course.certificationLevel) : null) as never,
         sortOrder: course.sortOrder ?? null,
+        // #934 skive 5b: versjonen kurset hadde da fila ble laget, som opplysning. Importen leser dem ikke: versjonen hører til kurset
+        // i det miljøet det står, og endres bare av `applyCourseVersionChange`.
+        versionMajor: course.versionMajor,
+        versionMinor: course.versionMinor,
         origin: { courseId: course.id, exportedAt: new Date().toISOString() },
         audit: {
           publishedAt: course.publishedAt ? new Date(course.publishedAt).toISOString() : null,
@@ -367,20 +388,35 @@ export async function buildSectionExportPayload(
     }
   }
 
+  // #1163: tittelen hører til versjonen. Eksporten av en bestemt versjon (byttet av et fremmed element, #1095) tar den
+  // versjonens tittel; reserven er arbeidstittelen, for en versjon gammel kode laget uten tittel.
+  const versionPayload = (version: { title?: string | null; bodyMarkdown: string | null; publishedAt: Date | string | null; versionNo: number }) => {
+    const title = sectionVersionTitle(version, section.title);
+    return {
+      title: (decodeLocalizedText(title) as never) ?? (title as never),
+      bodyMarkdown: (version.bodyMarkdown ? decodeLocalizedText(version.bodyMarkdown) : "") as never,
+      audit: {
+        // The source's publish state travels with the payload but never decides the destination's:
+        // a standalone section import always lands unpublished (#916), and a course import runs the
+        // imported section through the same gate as any other publish.
+        publishedAt: version.publishedAt ? new Date(version.publishedAt).toISOString() : null,
+        publishedBy: null,
+        publishedByEmail: null,
+        sourceVersionNo: version.versionNo ?? null,
+      },
+    };
+  };
+
+  // #1163 («Etter gjennomlesingen» punkt 1): har seksjonen et utkast over den publiserte versjonen, bærer pakken BEGGE —
+  // utkastet som hovedinnhold (det forfatteren arbeider i, som før) og det deltakerne ser i `publishedVersion`. Importen
+  // «nytt kurs» gjenskaper det slik det var: den publiserte aktiv, utkastet upublisert over. Uten det ville et utkast gått
+  // rett ut til deltakerne i det nye kurset. Bare når kalleren ikke ba om en bestemt versjon.
+  const active = section.activeVersion;
+  const publishedVersion = !versionId && active && active.id !== sourceVersion.id ? versionPayload(active) : null;
+
   return {
-    title: (decodeLocalizedText(section.title) as never) ?? (section.title as never),
-    bodyMarkdown: (sourceVersion?.bodyMarkdown
-      ? decodeLocalizedText(sourceVersion.bodyMarkdown)
-      : "") as never,
-    audit: {
-      // The source's publish state travels with the payload but never decides the destination's:
-      // a standalone section import always lands unpublished (#916), and a course import runs the
-      // imported section through the same gate as any other publish.
-      publishedAt: sourceVersion?.publishedAt ? new Date(sourceVersion.publishedAt).toISOString() : null,
-      publishedBy: null,
-      publishedByEmail: null,
-      sourceVersionNo: sourceVersion?.versionNo ?? null,
-    },
+    ...versionPayload(sourceVersion),
+    ...(publishedVersion ? { publishedVersion: publishedVersion as never } : {}),
     ...(assets.length > 0 ? { assets: assets as never } : {}),
   };
 }
@@ -486,6 +522,7 @@ export async function buildModuleExportEnvelope(
         assessmentMode: moduleVersion.assessmentMode as never,
         taskText: (moduleVersion.taskText ?? null) as never,
         assessorExpectedContent: (moduleVersion.assessorExpectedContent ?? null) as never,
+        modelAnswer: (moduleVersion.modelAnswer ?? null) as never,
         candidateTaskConstraints: (moduleVersion.candidateTaskConstraints ?? null) as never,
         assessmentBlueprint: null,
         submissionSchema: (moduleVersion.submissionSchema ?? null) as never,

@@ -5,7 +5,7 @@ import { env } from "../config/env.js";
 import { AppError } from "../errors/AppError.js";
 import type { AuthPrincipal } from "./principal.js";
 import { getActiveRoles, syncEntraGroupRoles, upsertUserFromPrincipal } from "../repositories/userRepository.js";
-import { isAppOnlyToken, stageTestServicePrincipal } from "./stageTestService.js";
+import { isAppOnlyToken, STAGE_TEST_ROLE_HEADER, stageTestServicePrincipal } from "./stageTestService.js";
 import { AGENT_TOKEN_PREFIX, authenticateAgentToken } from "./agentAuthoringTokenService.js";
 import { resolveRequestLocale } from "../i18n/locale.js";
 import { t } from "../i18n/messages.js";
@@ -91,7 +91,7 @@ function principalFromMockHeaders(request: Request): AuthPrincipal {
   };
 }
 
-async function principalFromBearerToken(token: string): Promise<AuthPrincipal> {
+async function principalFromBearerToken(token: string, stageTestRole: string | undefined): Promise<AuthPrincipal> {
   if (!entraIssuer || !entraJwks || !env.ENTRA_AUDIENCE) {
     throw new Error("ENTRA auth mode is not fully configured.");
   }
@@ -101,13 +101,18 @@ async function principalFromBearerToken(token: string): Promise<AuthPrincipal> {
     audience: env.ENTRA_AUDIENCE,
   });
 
-  return principalFromJwtPayload(payload);
+  return principalFromJwtPayload(payload, stageTestRole);
 }
 
-function principalFromJwtPayload(payload: JWTPayload): AuthPrincipal {
+function principalFromJwtPayload(payload: JWTPayload, stageTestRole: string | undefined): AuthPrincipal {
   // 2.105.0: et token uten bruker godtas bare fra stage-testkontoen, og bare på stage.
+  // 2.154.1: `x-stage-test-role` sendes bare videre hit. Et brukertoken (grenen under) ser aldri hodet.
   if (isAppOnlyToken(payload)) {
-    return stageTestServicePrincipal(payload, { deployEnvironment: env.DEPLOY_ENVIRONMENT, appId: env.STAGE_TEST_SERVICE_APP_ID });
+    return stageTestServicePrincipal(
+      payload,
+      { deployEnvironment: env.DEPLOY_ENVIRONMENT, appId: env.STAGE_TEST_SERVICE_APP_ID },
+      stageTestRole,
+    );
   }
   const externalId = String(payload.oid ?? payload.sub ?? "");
   const email = String(payload.preferred_username ?? payload.upn ?? payload.email ?? "");
@@ -183,7 +188,7 @@ export async function authenticate(request: Request, response: Response, next: N
     principal =
       env.AUTH_MODE === "mock"
         ? principalFromMockHeaders(request)
-        : await principalFromBearerToken(extractBearerToken(request));
+        : await principalFromBearerToken(extractBearerToken(request), request.header(STAGE_TEST_ROLE_HEADER));
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : "";
     const message =

@@ -1,5 +1,6 @@
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
+import type { LearnerContentTx } from "../../db/contentLock.js";
 
 type CreateSubmissionInput = {
   userId: string;
@@ -18,8 +19,10 @@ type SubmissionRepositoryClient = Pick<typeof prisma, "submission">;
 
 export function createSubmissionRepository(client: SubmissionRepositoryClient = prisma) {
   return {
-    create(data: CreateSubmissionInput) {
-      return client.submission.create({ data });
+    // #934 skive 5a-1: `locked` holder innholdslåsen delt og deltakerlåsen. Da er versjonen som er sjekket, fortsatt den
+    // aktive når raden skrives. Uten den merkede klienten kompilerer ikke kallet.
+    create(locked: LearnerContentTx, data: CreateSubmissionInput) {
+      return locked.submission.create({ data });
     },
 
     findOwnedSubmission(submissionId: string, userId: string) {
@@ -117,6 +120,20 @@ export function createSubmissionRepository(client: SubmissionRepositoryClient = 
 
 export const submissionRepository = createSubmissionRepository();
 
+/**
+ * #1124: kriteriene innleveringen ble vurdert mot — rubrikken på innleveringens modulversjon, ikke den
+ * aktive. Hentes for seg i stedet for å legges inn i `findOwnedSubmission`: den spørringen sendes rå
+ * til klienten av `GET /api/submissions/:id`, og råteksten har med skjulte kriterier.
+ */
+export async function queryRubricCriteriaJson(rubricVersionId: string | null | undefined) {
+  if (!rubricVersionId) return null;
+  const rubric = await prisma.rubricVersion.findUnique({
+    where: { id: rubricVersionId },
+    select: { criteriaJson: true },
+  });
+  return rubric?.criteriaJson ?? null;
+}
+
 export async function queryLatestSubmissionsForModules(userId: string, moduleIds: string[]) {
   return prisma.submission.findMany({
     where: { userId, moduleId: { in: moduleIds } },
@@ -140,37 +157,8 @@ export async function queryLatestSubmissionsForModules(userId: string, moduleIds
   });
 }
 
-export async function queryCompletedSubmissionsForUser(
-  userId: string,
-  statuses: SubmissionStatusType[],
-  limit: number,
-) {
-  return prisma.submission.findMany({
-    where: { userId, submissionStatus: { in: statuses } },
-    orderBy: { submittedAt: "desc" },
-    take: limit,
-    select: {
-      id: true,
-      moduleId: true,
-      submittedAt: true,
-      submissionStatus: true,
-      module: { select: { id: true, title: true } },
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-        select: {
-          totalScore: true,
-          passFailTotal: true,
-          decisionType: true,
-          finalisedAt: true,
-        },
-      },
-    },
-  });
-}
-
-export async function getModuleWithActiveVersion(moduleId: string) {
-  return prisma.module.findUnique({
+export async function getModuleWithActiveVersion(moduleId: string, client: Pick<typeof prisma, "module"> = prisma) {
+  return client.module.findUnique({
     where: { id: moduleId },
     include: { activeVersion: true },
   });

@@ -10,7 +10,7 @@ describe("submission repository", () => {
       },
     } as never);
 
-    const result = await repository.create({
+    const result = await repository.create({ submission: { create } } as never, {
       userId: "user-1",
       moduleId: "module-1",
       moduleVersionId: "module-version-1",

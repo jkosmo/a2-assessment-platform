@@ -9,6 +9,7 @@
 //   - «Mine kurs» får temaene per kurs og en samlet liste, alfabetisk i deltakerens språk.
 //   - Slettes et tema, mister kursene bare koblingen.
 
+import { withRevision } from "./support/courseRevision.js";
 import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
@@ -79,23 +80,23 @@ describe("2.102.0 tema i «Mine kurs»", () => {
     const b = await createTheme(`B ${stamp}`, `B ${stamp}`, `B ${stamp}`);
     const courseId = await publishedCourse(`Kurs med tema ${stamp}`);
 
-    const both = await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send({ themeIds: [a, b] });
+    const both = await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send(await withRevision(courseId, { themeIds: [a, b] }));
     expect(both.status).toBe(200);
     let detail = await request(app).get(`/api/admin/content/courses/${courseId}`).set(admin);
     expect([...detail.body.course.themeIds].sort()).toEqual([a, b].sort());
 
     // En vanlig lagring av kursets felter, uten themeIds: temaene står.
-    const titleOnly = await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send({ sortOrder: 3 });
+    const titleOnly = await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send(await withRevision(courseId, { sortOrder: 3 }));
     expect(titleOnly.status).toBe(200);
     detail = await request(app).get(`/api/admin/content/courses/${courseId}`).set(admin);
     expect([...detail.body.course.themeIds].sort()).toEqual([a, b].sort());
 
-    const onlyB = await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send({ themeIds: [b] });
+    const onlyB = await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send(await withRevision(courseId, { themeIds: [b] }));
     expect(onlyB.status).toBe(200);
     detail = await request(app).get(`/api/admin/content/courses/${courseId}`).set(admin);
     expect(detail.body.course.themeIds).toEqual([b]);
 
-    const none = await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send({ themeIds: [] });
+    const none = await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send(await withRevision(courseId, { themeIds: [] }));
     expect(none.status).toBe(200);
     detail = await request(app).get(`/api/admin/content/courses/${courseId}`).set(admin);
     expect(detail.body.course.themeIds).toEqual([]);
@@ -104,7 +105,7 @@ describe("2.102.0 tema i «Mine kurs»", () => {
   it("et tema som ikke finnes, avvises — og ingenting lagres", async () => {
     const a = await createTheme(`Finnes ${stamp}`, `Finst ${stamp}`, `Exists ${stamp}`);
     const courseId = await publishedCourse(`Kurs ukjent tema ${stamp}`);
-    const res = await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send({ themeIds: [a, "finnes-ikke"], sortOrder: 7 });
+    const res = await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send(await withRevision(courseId, { themeIds: [a, "finnes-ikke"], sortOrder: 7 }));
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("course_theme_not_found");
     const course = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { sortOrder: true } });
@@ -126,7 +127,7 @@ describe("2.102.0 tema i «Mine kurs»", () => {
     const x = await createTheme(`Øving ${stamp}`, `Øving ${stamp}`, `Alpha ${stamp}`);
     const y = await createTheme(`Begynnelse ${stamp}`, `Byrjing ${stamp}`, `Zulu ${stamp}`);
     const courseId = await publishedCourse(`Mine kurs-tema ${stamp}`);
-    await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send({ themeIds: [x, y] }).expect(200);
+    await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send(await withRevision(courseId, { themeIds: [x, y] })).expect(200);
 
     const nb = await request(app).get("/api/courses").set(headersFor("PARTICIPANT", "deltaker", "nb"));
     expect(nb.status).toBe(200);
@@ -147,8 +148,8 @@ describe("2.102.0 tema i «Mine kurs»", () => {
     const early = await createTheme(`Bakkene ${stamp}`, `Bakkane ${stamp}`, `Early ${stamp}`);
     const first = await publishedCourse(`Alfa-kurs ${stamp}`);
     const second = await publishedCourse(`Beta-kurs ${stamp}`);
-    await request(app).put(`/api/admin/content/courses/${first}`).set(admin).send({ themeIds: [late] }).expect(200);
-    await request(app).put(`/api/admin/content/courses/${second}`).set(admin).send({ themeIds: [early] }).expect(200);
+    await request(app).put(`/api/admin/content/courses/${first}`).set(admin).send(await withRevision(first, { themeIds: [late] })).expect(200);
+    await request(app).put(`/api/admin/content/courses/${second}`).set(admin).send(await withRevision(second, { themeIds: [early] })).expect(200);
 
     const res = await request(app).get("/api/courses").set(headersFor("PARTICIPANT", "deltaker2", "nb"));
     const ids = res.body.courses.map((c: { id: string }) => c.id);
@@ -160,7 +161,7 @@ describe("2.102.0 tema i «Mine kurs»", () => {
   it("kursoversikten i innholdsforvaltningen har temaene per kurs", async () => {
     const a = await createTheme(`Oversikt ${stamp}`, `Oversikt ${stamp}`, `Overview ${stamp}`);
     const courseId = await publishedCourse(`Kurs i oversikt ${stamp}`);
-    await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send({ themeIds: [a] }).expect(200);
+    await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send(await withRevision(courseId, { themeIds: [a] })).expect(200);
     const list = await request(app).get("/api/admin/content/courses").set(admin);
     const row = list.body.courses.find((c: { id: string }) => c.id === courseId);
     expect(row.themes).toEqual([{ id: a, name: `Oversikt ${stamp}` }]);
@@ -169,7 +170,7 @@ describe("2.102.0 tema i «Mine kurs»", () => {
   it("et slettet tema forsvinner fra kursene, og kursene står", async () => {
     const a = await createTheme(`Slettes ${stamp}`, `Slettast ${stamp}`, `Deleted ${stamp}`);
     const courseId = await publishedCourse(`Kurs mister tema ${stamp}`);
-    await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send({ themeIds: [a] }).expect(200);
+    await request(app).put(`/api/admin/content/courses/${courseId}`).set(admin).send(await withRevision(courseId, { themeIds: [a] })).expect(200);
 
     const list = await request(app).get("/api/admin/content/themes").set(admin);
     expect(list.body.themes.find((t: { id: string }) => t.id === a).courseCount).toBe(1);

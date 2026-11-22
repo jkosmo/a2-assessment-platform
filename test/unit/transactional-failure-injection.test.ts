@@ -26,7 +26,8 @@ const decisionSubmissionUpdate = vi.fn();
 // ─── manualReviewService mocks ───────────────────────────────────────────────
 
 const findManualReviewForOverride = vi.fn();
-const createOverrideDecision = vi.fn();
+// Testgjennomgangen 2026-11 (avsnitt 1.1): `createOverrideDecision` og `createResolutionDecision` er fjernet her. Funksjonene
+// ble fjernet i 2.133.0, og variablene ble ikke gitt til noen `vi.mock`. Vedtaket skrives med `assessmentDecisionCreate`.
 const resolveManualReviewGuarded = vi.fn();
 const findManualReviewById = vi.fn();
 const manualReviewSubmissionUpdate = vi.fn();
@@ -35,7 +36,6 @@ const notifyAssessmentResult = vi.fn();
 // ─── appealService mocks ──────────────────────────────────────────────────────
 
 const findAppealForResolution = vi.fn();
-const createResolutionDecision = vi.fn();
 const markAppealResolvedGuarded = vi.fn();
 const findAppealById = vi.fn();
 const appealSubmissionUpdate = vi.fn();
@@ -62,10 +62,20 @@ vi.mock("../../src/db/prisma.js", () => ({
   },
 }));
 
+// #934 skive 5a-1: låsene er SQL; her går de rett gjennom den falske transaksjonen.
+vi.mock("../../src/db/contentLock.js", () => import("../support/contentLockThroughTransaction.js"));
+
+// #1140 etappe 1: ingen kurs har låst en hovedversjon i disse testene, så versjonen er modulens aktive.
+vi.mock("../../src/modules/module/participantModuleVersion.js", () => ({
+  prepareShownMajorScope: vi.fn(async () => null),
+  findVersionToSubmitOn: vi.fn(async (_client: unknown, _moduleId: string, active: unknown) => active),
+  ShownMajorScopeOutdatedError: class extends Error {},
+}));
+
 vi.mock("../../src/modules/submission/submissionRepository.js", () => ({
   getModuleWithActiveVersion,
   submissionRepository: { create: submissionCreate },
-  createSubmissionRepository: () => ({ create: submissionCreate }),
+  createSubmissionRepository: () => ({ create: (_locked: unknown, data: unknown) => submissionCreate(data) }),
 }));
 vi.mock("../../src/modules/assessment/documentParsingService.js", () => ({ resolveSubmissionResponseJson }));
 vi.mock("../../src/modules/review/index.js", () => ({ supersedeEligibleReviewsForRetake }));
@@ -78,7 +88,7 @@ vi.mock("../../src/repositories/decisionRepository.js", () => ({
     updateSubmissionStatus: decisionSubmissionUpdate,
   },
   createDecisionRepository: () => ({
-    createAssessmentDecision: assessmentDecisionCreate,
+    createAssessmentDecision: (_locked: unknown, data: unknown) => assessmentDecisionCreate(data),
     createManualReview: manualReviewCreate,
     updateSubmissionStatus: decisionSubmissionUpdate,
   }),
@@ -87,13 +97,11 @@ vi.mock("../../src/repositories/decisionRepository.js", () => ({
 vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
   manualReviewRepository: {
     findManualReviewForOverride,
-    createOverrideDecision,
     resolveManualReviewGuarded,
     findManualReviewById,
     updateSubmissionStatus: manualReviewSubmissionUpdate,
   },
   createManualReviewRepository: () => ({
-    createOverrideDecision,
     resolveManualReviewGuarded,
     findManualReviewById,
     updateSubmissionStatus: manualReviewSubmissionUpdate,
@@ -103,13 +111,11 @@ vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
 vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
   appealRepository: {
     findAppealForResolution,
-    createResolutionDecision,
     markAppealResolvedGuarded,
     findAppealById,
     updateSubmissionStatus: appealSubmissionUpdate,
   },
   createAppealRepository: () => ({
-    createResolutionDecision,
     markAppealResolvedGuarded,
     findAppealById,
     updateSubmissionStatus: appealSubmissionUpdate,
@@ -145,7 +151,9 @@ vi.mock("../../src/i18n/content.js", () => ({
   localizeContentText: (_locale: string, value: unknown) =>
     typeof value === "string" ? value : "Module Title",
 }));
-vi.mock("../../src/i18n/locale.js", () => ({
+// Resten av modulen (SUPPORTED_LOCALES) er ekte: maskotpakken leser språkene når e-postmalen lastes.
+vi.mock("../../src/i18n/locale.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/i18n/locale.js")>()),
   normalizeLocale: (v: string) => v,
 }));
 
@@ -278,7 +286,6 @@ describe("transactional failure injection", () => {
     manualReviewCreate.mockReset();
     decisionSubmissionUpdate.mockReset();
     findManualReviewForOverride.mockReset();
-    createOverrideDecision.mockReset();
     resolveManualReviewGuarded.mockReset();
     resolveManualReviewGuarded.mockResolvedValue({ count: 1 });
     findManualReviewById.mockReset();
@@ -286,7 +293,6 @@ describe("transactional failure injection", () => {
     manualReviewSubmissionUpdate.mockReset();
     notifyAssessmentResult.mockReset().mockResolvedValue(undefined);
     findAppealForResolution.mockReset();
-    createResolutionDecision.mockReset();
     markAppealResolvedGuarded.mockReset();
     markAppealResolvedGuarded.mockResolvedValue({ count: 1 });
     findAppealById.mockReset();
@@ -352,7 +358,7 @@ describe("transactional failure injection", () => {
   // ── finalizeManualReviewOverride ──────────────────────────────────────────
 
   describe("finalizeManualReviewOverride", () => {
-    it("halts the pipeline when createOverrideDecision fails", async () => {
+    it("halts the pipeline when writing the override decision fails", async () => {
       findManualReviewForOverride.mockResolvedValue(BASE_MANUAL_REVIEW);
       assessmentDecisionCreate.mockRejectedValue(new Error("DB write failed"));
 
@@ -467,7 +473,7 @@ describe("transactional failure injection", () => {
   // ── resolveAppeal ─────────────────────────────────────────────────────────
 
   describe("resolveAppeal", () => {
-    it("halts the pipeline when createResolutionDecision fails", async () => {
+    it("halts the pipeline when writing the resolution decision fails", async () => {
       findAppealForResolution.mockResolvedValue(BASE_APPEAL);
       assessmentDecisionCreate.mockRejectedValue(new Error("DB write failed"));
 
@@ -604,7 +610,7 @@ describe("transactional failure injection", () => {
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
       await expect(
-        createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+        createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
       ).rejects.toThrow("DB write failed");
 
       expect(supersedeEligibleReviewsForRetake).not.toHaveBeenCalled();
@@ -618,7 +624,7 @@ describe("transactional failure injection", () => {
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
       await expect(
-        createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+        createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
       ).rejects.toThrow("Review supersede failed");
 
       expect(supersedeEligibleAppealsForRetake).not.toHaveBeenCalled();
@@ -631,7 +637,7 @@ describe("transactional failure injection", () => {
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
       await expect(
-        createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+        createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} }),
       ).rejects.toThrow("Appeal supersede failed");
     });
 
@@ -641,7 +647,7 @@ describe("transactional failure injection", () => {
 
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
 
-      const result = await createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} });
+      const result = await createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
 
       expect(supersedeEligibleReviewsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", FAKE_TX);
       expect(supersedeEligibleAppealsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", FAKE_TX);
@@ -657,7 +663,7 @@ describe("transactional failure injection", () => {
       supersedeEligibleAppealsForRetake.mockResolvedValue(0);
 
       const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
-      await createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} });
+      await createSubmission({ userId: "user-1", roles: [], moduleId: "module-1", moduleVersionId: "module-version-1", locale: "nb", deliveryType: "text", responseJson: {} });
 
       const actions = recordAuditEvent.mock.calls.map((c: unknown[]) => (c[0] as { action: string }).action);
       expect(actions).toContain("submission_created");

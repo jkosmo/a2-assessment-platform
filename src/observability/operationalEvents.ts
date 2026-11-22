@@ -11,9 +11,13 @@ export const operationalEvents = {
     // #1009: `completionCheckFailed` ("course_completion_check_failed") er fjernet — begge avsenderne
     // ble erstattet av outboxen i #946, og et hendelsesnavn uten avsender ser ut som dekning man
     // ikke har.
-    // #967: tildelings-e-posten ble holdt tilbake fordi kurset ikke var publisert. Tildelingen
-    // gikk gjennom — det er VARSELET som ikke ble sendt, og en e-post som aldri kom er stille.
-    assignmentMailSuppressed: "course_assignment_mail_suppressed",
+    // #1142: `assignmentMailSuppressed` ("course_assignment_mail_suppressed", #967) er fjernet med den gamle e-posten per
+    // kurs. Et upublisert kurs gir ingen rad; e-posten kommer når det publiseres.
+    // #1142: en ventende rad om et nytt kurs ble slettet fordi regelen ikke lenger sa ja (avpublisert, ikke lenger tildelt,
+    // fjernet fra klassen, sluttet, påbegynt, …). `stage` sier om det var jobben som samlet, eller behandleren rett før sending.
+    assignmentNoticeRemoved: "course_assignment_notice_removed",
+    // #1146: personen har fått kurset på nytt (fjernet og lagt inn igjen etter forrige varsel). Raden ble `waiting` igjen.
+    assignmentNoticeReset: "course_assignment_notice_reset",
   },
   audit: {
     // #1000: tilgangsloggen for et revisjonsspor kunne ikke skrives. Skjer typisk mens
@@ -74,6 +78,9 @@ export const operationalEvents = {
   },
   retention: {
     auditScanCompleted: "audit_retention_scan_completed",
+    // #1152 skive 4b: overgangsraden for fristen på arkivert innhold mangler eller kan ikke leses. Listene viser da ingen slettedato,
+    // og jobben (4c) sletter ingenting. Logges én gang per prosess.
+    archivedFloorUnavailable: "archived_content_retention_floor_unavailable",
   },
   submission: {
     documentParse: "submission_document_parse",
@@ -83,12 +90,16 @@ export const operationalEvents = {
 export type OperationalEventName = NestedValue<typeof operationalEvents>;
 
 export type OperationalEventMetadataByName = {
-  // #967: hvor mange medlemmer som IKKE fikk «nytt kurs tildelt», og hvorfor.
-  [operationalEvents.course.assignmentMailSuppressed]: EventMetadata<{
-    courseId: string;
-    classId: string;
-    recipientCount: number;
-    reason: "unpublished";
+  [operationalEvents.course.assignmentNoticeRemoved]: EventMetadata<{
+    stage: "collect" | "deliver";
+    userId: string;
+    courseIds: string[];
+    count: number;
+  }>;
+  [operationalEvents.course.assignmentNoticeReset]: EventMetadata<{
+    userId: string;
+    courseIds: string[];
+    count: number;
   }>;
   [operationalEvents.appeal.slaBacklog]: EventMetadata<{
     openAppeals: number;
@@ -293,6 +304,10 @@ export type OperationalEventMetadataByName = {
     deletedCount: number;
     cutoffDate: string;
     retentionDays: number;
+  }>;
+  [operationalEvents.retention.archivedFloorUnavailable]: EventMetadata<{
+    key: string;
+    reason: "missing" | "unparseable";
   }>;
   [operationalEvents.submission.documentParse]: EventMetadata<{
     submissionId: string;

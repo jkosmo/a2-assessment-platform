@@ -97,6 +97,17 @@ describe("#999 — domenevaktenes feilkoder", () => {
     expect(apiErrorCodeText("content_in_use", t("nb"), [], null)).toBeNull();
   });
 
+  it("#1185: et felt som slutter på «Date», er en kalenderdato og skrives på sidens språk", () => {
+    expect(fillErrorPlaceholders("fra {untilDate}", { untilDate: "2026-11-28" }, "nb")).toBe("fra 28.11.2026");
+    expect(fillErrorPlaceholders("from {untilDate}", { untilDate: "2026-11-28" }, "en-GB")).toBe("from 28 November 2026");
+    // Uten lesbar dato: ødelagt setning, altså null, så kalleren tar den generiske.
+    expect(fillErrorPlaceholders("fra {untilDate}", { untilDate: "snart" }, "nb")).toBeNull();
+    expect(fillErrorPlaceholders("fra {untilDate}", { untilDate: null }, "nb")).toBeNull();
+    // Hele setningen fra «Slett», på bokmål (uten dokument: bokmål).
+    expect(apiErrorCodeText("course_has_unfinished_submissions", t("nb"), [], { count: 2, untilDate: "2026-11-28" }))
+      .toBe("Kurset kan ikke slettes ennå fordi 2 deltaker(e) har levert tekst i en av kursets moduler uten å fullføre. De får 7 dager fra leveringen; kurset kan slettes fra 28.11.2026.");
+  });
+
   // Og at fallbacken faktisk brukes: en 429 uten tallet skal gi en lokalisert generisk setning,
   // ikke en ødelagt en.
   it("en kode uten dataene sine faller tilbake på den generiske setningen", () => {

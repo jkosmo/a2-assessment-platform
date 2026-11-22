@@ -1,4 +1,5 @@
 import request from "supertest";
+import { withRevision } from "./support/courseRevision.js";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
@@ -22,12 +23,12 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
     expect(create.status).toBe(201);
     const id = create.body.course.id as string;
 
-    const bRes = await request(app).put(`/api/admin/content/courses/${id}`).set(smoB).send({ title: L("hijack") });
+    const bRes = await request(app).put(`/api/admin/content/courses/${id}`).set(smoB).send(await withRevision(id, { title: L("hijack") }));
     expect(bRes.status).toBe(403);
     expect(bRes.body.error).toBe("content_ownership");
 
-    expect((await request(app).put(`/api/admin/content/courses/${id}`).set(smoA).send({ title: L("owner edit") })).status).toBe(200);
-    expect((await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send({ title: L("admin edit") })).status).toBe(200);
+    expect((await request(app).put(`/api/admin/content/courses/${id}`).set(smoA).send(await withRevision(id, { title: L("owner edit") }))).status).toBe(200);
+    expect((await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send(await withRevision(id, { title: L("admin edit") }))).status).toBe(200);
   });
 
   it("SECTION: non-owner SMO is blocked, owner + admin allowed", async () => {
@@ -35,12 +36,18 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
     expect(create.status).toBe(201);
     const id = create.body.section.id as string;
 
-    const bRes = await request(app).put(`/api/admin/content/sections/${id}/content`).set(smoB).send({ bodyMarkdown: "# hijack" });
-    expect(bRes.status).toBe(403);
-    expect(bRes.body.error).toBe("content_ownership");
-
-    expect((await request(app).put(`/api/admin/content/sections/${id}/content`).set(smoA).send({ bodyMarkdown: "# owner" })).status).toBe(200);
-    expect((await request(app).put(`/api/admin/content/sections/${id}/content`).set(admin).send({ bodyMarkdown: "# admin" })).status).toBe(200);
+    // #1163: redigererens ene lagring (`PUT …/:id`) og publiseringen står bak vakta. (2.168.0: den gamle `PUT …/content` er borte.)
+    const lagring = async (bodyMarkdown: string) => {
+      const fane = (await request(app).get(`/api/admin/content/sections/${id}`).set(smoA)).body.section;
+      return { title: L("Enf section"), bodyMarkdown, expectedVersionNo: fane.versionNo, expectedTitle: fane.title };
+    };
+    const bSave = await request(app).put(`/api/admin/content/sections/${id}`).set(smoB).send(await lagring("# hijack"));
+    expect(bSave.status).toBe(403);
+    expect(bSave.body.error).toBe("content_ownership");
+    const bPublish = await request(app).post(`/api/admin/content/sections/${id}/publish`).set(smoB).send({ expectedVersionNo: 1 });
+    expect(bPublish.status).toBe(403);
+    expect((await request(app).put(`/api/admin/content/sections/${id}`).set(smoA).send(await lagring("# owner"))).status).toBe(200);
+    expect((await request(app).put(`/api/admin/content/sections/${id}`).set(admin).send(await lagring("# admin"))).status).toBe(200);
   });
 
   // #1046 D3: DELETE arkiverte før; nå arkiverer POST /archive og DELETE sletter for godt (bare en
@@ -128,23 +135,14 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
     const skriv = await request(app)
       .put(`/api/admin/content/courses/${id}/items`)
       .set(smoB)
-      .send({ items: [] });
+      .send(await withRevision(id, { items: [] }));
     expect(skriv.status, "en fremmed SMO skal fortsatt ikke kunne endre kurset").toBe(403);
     expect(skriv.body.error).toBe("content_ownership");
   });
 
-  // Lista skal FORTSATT være åpen. Den er hvordan man finner sine egne kurs, og hver rad bærer
-  // allerede `canManage`. Uten denne testen ville en senere «stram alt»-runde kunne lukke lista
-  // uten at noe ble rødt — og da fant ingen SMO fram til noe som helst.
-  it("COURSE-lista forblir lesbar for en fremmed SMO, med canManage: false", async () => {
-    const create = await request(app).post("/api/admin/content/courses").set(smoA).send({ title: L("Listed course") });
-    const id = create.body.course.id as string;
-
-    const list = await request(app).get("/api/admin/content/courses").set(smoB);
-    expect(list.status).toBe(200);
-    const row = (list.body.courses as Array<{ id: string; canManage?: boolean }>).find((c) => c.id === id);
-    expect(row?.canManage).toBe(false);
-  });
+  // Lista skal FORTSATT være åpen for en fremmed SMO, med `canManage: false`. Testgjennomgangen 2026-11 (avsnitt 4.2): testen
+  // av det er slettet; den var en delmengde av «COURSE list: canManage true for owner+admin, false for non-owner» over, som
+  // leser lista som fremmed SMO og krever `canManage: false`. Lukkes lista, blir den rød.
 
   // ⚠️ Denne er saken #943 IKKE navnga — den pekte på kurs. Klassene har samme form én ruter
   // bortenfor, og lesingen der er den som lekker mest: `/members` gir NAVN og E-POST.
@@ -209,14 +207,14 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
     const orphaned = await request(app)
       .put(`/api/admin/content/courses/${id}/items`)
       .set(smoA)
-      .send({ items: [] });
+      .send(await withRevision(id, { items: [] }));
     expect(orphaned.status).toBe(403);
     // ⚠️ Feilkoden, ikke bare statusen: `content_unowned` og `content_ownership` betyr to helt
     // ulike ting for den som leser meldingen — «ingen eier ennå» mot «ikke din».
     expect(orphaned.body.error).toBe("content_unowned");
 
     // Kontrollen motsatt vei: administrator går forbi eierskapssjekken og møter handleren.
-    expect((await request(app).put(`/api/admin/content/courses/${id}/items`).set(admin).send({ items: [] })).status)
+    expect((await request(app).put(`/api/admin/content/courses/${id}/items`).set(admin).send(await withRevision(id, { items: [] }))).status)
       .toBeLessThan(300);
   });
 

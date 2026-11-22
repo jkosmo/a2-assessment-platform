@@ -1,8 +1,9 @@
 import { AppealStatus, DecisionType, SubmissionStatus } from "../../db/prismaRuntime.js";
 import { allLocaleValues } from "../../i18n/allLocaleValues.js";
-import { ConflictError, NotFoundError } from "../../errors/AppError.js";
-import { appealRepository, createAppealRepository } from "./appealRepository.js";
+import { ConflictError, DomainRuleError, NotFoundError } from "../../errors/AppError.js";
+import { appealRepository, createAppealRepository, createAppealWriter, findModuleAppealScope } from "./appealRepository.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
+import { runContentReadForLearner, runLearnerWrite } from "../../db/contentLock.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { env } from "../../config/env.js";
@@ -14,6 +15,25 @@ import { operationalEvents } from "../../observability/operationalEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { toAppealWorkspaceView } from "./appealReadModels.js";
+
+/**
+ * 2.170.0 (produkteier 21.11.2026, doc/DECISIONS.md): «Det skal ikke være mulig å anke et arkivert kurs … når kurset er arkivert har
+ * heller ikke stryk og anke noen konsekvens». En innlevering kjenner bare modulen, så regelen går gjennom den (godkjent tolkning):
+ * anke stoppes når modulen er arkivert, eller når alle kursene den står i, er arkivert. Står den i minst ett aktivt kurs, eller i
+ * ingen kurs, kan den ankes; anken gjelder da det aktive kurset.
+ */
+export function assertAppealAllowed(
+  module: { archivedAt: Date | null; courses: Array<{ archived: boolean }> } | null,
+): void {
+  if (!module) return;
+  const onlyArchivedCourses = module.courses.length > 0 && module.courses.every((course) => course.archived);
+  if (module.archivedAt || onlyArchivedCourses) {
+    throw new DomainRuleError(
+      "appeal_course_archived",
+      "The course is archived. An archived course cannot be appealed, and a fail or an appeal has no effect on it.",
+    );
+  }
+}
 
 export async function createSubmissionAppeal(input: {
   submissionId: string;
@@ -32,19 +52,23 @@ export async function createSubmissionAppeal(input: {
     );
   }
 
-  const activeAppeal = await appealRepository.findActiveAppealForSubmission(submission.id, [
-    AppealStatus.OPEN,
-    AppealStatus.IN_REVIEW,
-  ]);
-
-  if (activeAppeal) {
-    throw new ConflictError("appeal_already_open", "Submission already has an open or in-review appeal.");
-  }
-
-  const appeal = await runInTransaction(async (tx) => {
+  // #1152: under deltakerlåsen, som vedtakene. Kursslettingen tar deltakerlåsene før den måler «ingenting venter»; uten låsen her
+  // kunne anken kommet mellom målingen og slettingen. Sjekken av en åpen anke står inne i samme transaksjon, så to samtidige
+  // anker på samme innlevering ikke begge kommer gjennom.
+  // 2.170.0 (QA-porten): innholdslåsen DELT i tillegg, så en arkivering ikke kan komme mellom sjekken under og skrivingen.
+  const appeal = await runContentReadForLearner(input.appealedById, async (tx) => {
     const txRepo = createAppealRepository(tx);
+    // 2.170.0 (produkteier 21.11.2026): et arkivert kurs kan ikke ankes. Sjekket under låsene, før noe skrives.
+    assertAppealAllowed(await findModuleAppealScope(tx, submission.moduleId));
+    const activeAppeal = await txRepo.findActiveAppealForSubmission(submission.id, [
+      AppealStatus.OPEN,
+      AppealStatus.IN_REVIEW,
+    ]);
+    if (activeAppeal) {
+      throw new ConflictError("appeal_already_open", "Submission already has an open or in-review appeal.");
+    }
 
-    const createdAppeal = await txRepo.createAppeal({
+    const createdAppeal = await createAppealWriter(tx).createAppeal({
       submissionId: submission.id,
       appealedById: input.appealedById,
       appealReason: input.appealReason,
@@ -81,6 +105,7 @@ export async function createSubmissionAppeal(input: {
       recipientEmail: appealedBy.email,
       recipientName: appealedBy.name,
       moduleTitle,
+      moduleId: submission.moduleId,
       locale,
     });
   }
@@ -229,6 +254,7 @@ export async function claimAppeal(appealId: string, handlerId: string, isAdmin =
     recipientEmail: appeal.appealedBy.email,
     recipientName: appeal.appealedBy.name,
     moduleTitle: claimModuleTitle,
+    moduleId: appeal.submission.moduleId,
     locale: claimLocale,
   });
 
@@ -297,6 +323,7 @@ export async function resolveAppeal(input: {
     recipientEmail: appeal.appealedBy.email,
     recipientName: appeal.appealedBy.name,
     moduleTitle: resolveModuleTitle,
+    moduleId: appeal.submission.moduleId,
     locale: resolveLocale,
     passFailTotal: input.passFailTotal,
     resolutionNote: input.resolutionNote,
@@ -318,7 +345,8 @@ async function resolveAppealCommand(
   latestDecision: ResolutionDecision,
   finalisedAt: Date,
 ) {
-  return runInTransaction(async (tx) => {
+  // #934 skive 5a-1: deltakerlåsen, som første setning. Innleveringens eier endres aldri, så den kan leses før.
+  return runLearnerWrite(appeal.submission.userId, async (tx) => {
     const repo = createAppealRepository(tx);
 
     // #790: perform the guarded state transition FIRST. If a concurrent resolve already moved the appeal

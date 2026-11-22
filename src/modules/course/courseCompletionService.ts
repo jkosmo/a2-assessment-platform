@@ -2,21 +2,35 @@ import { prisma } from "../../db/prisma.js";
 import { createCourseRepository } from "./courseRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
-import type { DbTransactionClient } from "../../db/transaction.js";
-
-type CompletionTxClient = Pick<
-  DbTransactionClient,
-  "course" | "courseItem" | "courseCompletion" | "courseSectionRead" | "certificationStatus" | "auditEvent" | "submission"
->;
+import { AppError } from "../../errors/AppError.js";
+import { lockLearnersInContentWrite, runContentReadForLearner, type ContentWriteTx, type LearnerContentTx } from "../../db/contentLock.js";
+import { findSectionReadCredit } from "./sectionReadCredit.js";
+import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
+import { findCoursesVisibleToLearner } from "./enrollmentService.js";
+import { findLearnersSeeingCourses } from "./learnerVisibility.js";
 
 type CourseRepo = ReturnType<typeof createCourseRepository>;
+type CreditClient = Parameters<typeof findSectionReadCredit>[0];
 
 /**
- * Evaluates and (if newly satisfied) issues a course completion for one course.
- * Certification requires BOTH: all modules passed AND all learning sections read (#525/#476).
+ * #1156: det kalleren alt vet om hvilke kurs deltakeren ser (lesinger gjort i et annet kurs teller bare der). Regnet ut FØR låsene,
+ * så målingen under låsene ikke slår opp noe: lesingen og utboksen vet at kurset er synlig, avstemmingen har hele svaret.
+ * Utelatt: synligheten slås opp i transaksjonen (arkiveringen), i ett sett med spørringer.
  */
-async function evaluateCourseCompletion(
+type KnownVisibility = { knownVisibleCourseIds: Iterable<string>; visibilityComplete?: boolean };
+
+// #934 skive 5a-1: det som står i kursbeviset, målt i ett øyeblikk. #1145: `upgradeCompletionId` når det for denne hovedversjonen
+// bare finnes et bevis registrert for et kurs tatt utenfor plattformen; det oppgraderes i stedet for at et nytt lages.
+type CompletionGate = { moduleIds: string[]; requiredSectionIds: string[]; upgradeCompletionId?: string };
+
+/**
+ * Is a new certificate due for this course? Certification requires BOTH: all modules passed AND all
+ * learning sections read (#525/#476). Only reads; `null` means nothing to issue.
+ */
+async function findCompletionToIssue(
   repo: CourseRepo,
+  // #1156: lesingene telles på tvers av kurs (`findSectionReadCredit`), på samme klient som resten av målingen.
+  client: CreditClient,
   userId: string,
   // #945: `module.archivedAt` er PÅKREVD i typen, ikke valgfri. Alle tre repository-veiene bærer
   // det nå, og en fjerde kaller som glemmer det skal ikke kompilere — da ville arkivfilteret under
@@ -26,9 +40,13 @@ async function evaluateCourseCompletion(
     modules: { moduleId: string; module: { archivedAt: Date | null } | null }[];
     publishedAt?: Date | null;
     archivedAt?: Date | null;
+    // #934: PÅKREVD, som `module.archivedAt` over. Beviset utstedes for kursets nåværende versjon; en
+    // vei inn som glemte den, skal ikke kompilere — ellers ville et nytt bevis stille fått versjon 1.
+    versionMajor: number;
+    versionMinor: number;
   },
-  tx?: CompletionTxClient,
-): Promise<void> {
+  visibility?: KnownVisibility,
+): Promise<CompletionGate | null> {
   // #933 (produkteier 2026-08-19): «Utstedelse av bestått skal kun skje hvis kurset er publisert.»
   //
   // Alle tre inngangene filtrerte allerede på publisert — `findPublishedCoursesContainingModule`,
@@ -43,7 +61,7 @@ async function evaluateCourseCompletion(
   // sti kan levere et upublisert kurs hit. Den er ren dybdeforsvar mot en fjerde kaller, og det er
   // skrevet her framfor å late som en test dekker den. Skulle noen legge til en kaller som ikke
   // forhåndsfiltrerer, er dette linja som redder det — og DA blir den testbar.
-  if (!course.publishedAt || course.archivedAt) return;
+  if (!course.publishedAt || course.archivedAt) return null;
 
   // #945: arkiverte moduler filtreres nå bort, slik arkiverte seksjoner alltid har vært. Asymmetrien
   // var utilsiktet og hadde en levende konsekvens: en arkivert modul i et publisert kurs blokkerte
@@ -72,29 +90,78 @@ async function evaluateCourseCompletion(
     .map((item) => item.sectionId as string);
 
   // Truly empty course (no modules AND no sections) is never completable.
-  if (moduleIds.length === 0 && requiredSectionIds.length === 0) return;
+  if (moduleIds.length === 0 && requiredSectionIds.length === 0) return null;
 
+  // #934 skive 5a-3: regelen velges der, ut fra bryteren. I den låste veien er bryteren og beståttene lest i samme transaksjon.
   if (moduleIds.length > 0) {
-    const passedCount = await repo.countPassedModulesForUser(userId, moduleIds);
-    if (passedCount < moduleIds.length) return;
+    const progress = await repo.findModuleProgress({ userIds: [userId], courses: [{ courseId: course.id, moduleIds }] });
+    if (progress.passedModuleIds(userId, course.id).size < moduleIds.length) return null;
   }
 
   if (requiredSectionIds.length > 0) {
-    const readSectionIds = new Set(await repo.findReadSectionIds(userId, course.id));
+    // #1156: lesinger fra alle kurs med seksjonen; en gjort et annet sted teller bare når deltakeren ser kurset. Samme
+    // elementliste som kravet over (`participant`).
+    const credit = await findSectionReadCredit(client, { userIds: [userId], courseIds: [course.id], items: "participant", ...visibility });
+    const readSectionIds = credit.readSectionIds(userId, course.id);
     const allSectionsRead = requiredSectionIds.every((id) => readSectionIds.has(id));
-    if (!allSectionsRead) return;
+    if (!allSectionsRead) return null;
   }
 
-  const existing = await repo.findCourseCompletion(userId, course.id);
-  if (existing) return;
+  // #934: ett bevis per hovedversjon. Har deltakeren bevis for en eldre hovedversjon, står det —
+  // og et nytt utstedes for denne når kravet er oppfylt (produkteier 2026-11-01).
+  const existing = await repo.findCourseCompletion(userId, course.id, course.versionMajor);
+  // #1145: et registrert bevis (tatt utenfor plattformen) blokkerer ikke et ekte: kravet er nå målt, og beviset oppgraderes.
+  if (existing && existing.source === "external") return { moduleIds, requiredSectionIds, upgradeCompletionId: existing.id };
+  if (existing) return null;
+
+  return { moduleIds, requiredSectionIds };
+}
+
+// #934 skive 5a-1 (doc/DESIGN_934.md, «5a-1»): den ENE veien til et kursbevis. Kurset, kravet, beståtte og lesinger
+// leses inne i transaksjonen som holder innholdslåsen delt og deltakerlåsen, og beviset skrives i samme transaksjon.
+//   - Innholdslåsen: en ny versjon av kurset står enten ferdig, og da gjelder beviset den, eller venter til beviset er
+//     skrevet, og da teller den personen som mottaker av e-posten.
+//   - Deltakerlåsen: en anke eller en lesing kan ikke komme midt i målingen. Bestått og lest var oppfylt samtidig.
+// #1150 skive 2a-2: svarer om et bevis ble utstedt (eller et registrert oppgradert). Arkiveringen teller dem; de andre kallerne
+// ser bort fra svaret.
+async function evaluateCourseCompletionLocked(locked: LearnerContentTx, userId: string, courseId: string, visibility?: KnownVisibility): Promise<boolean> {
+  const repo = createCourseRepository(locked);
+  const course = await repo.findCourseById(courseId);
+  if (!course) return false;
+  const gate = await findCompletionToIssue(repo, locked, userId, course, visibility);
+  if (!gate) return false;
+
+  if (gate.upgradeCompletionId) {
+    const upgraded = await repo.upgradeExternalCourseCompletion(locked, {
+      completionId: gate.upgradeCompletionId,
+      version: { major: course.versionMajor, minor: course.versionMinor },
+      moduleSnapshotJson: JSON.stringify(gate.moduleIds),
+      sectionSnapshotJson: JSON.stringify(gate.requiredSectionIds),
+    });
+    if (upgraded.count === 0) return false;
+    const row = await repo.findCourseCompletion(userId, course.id, course.versionMajor);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: course.id,
+        action: auditActions.course.completionIssued,
+        actorId: userId,
+        metadata: { userId, courseId: course.id, certificateId: row?.certificateId ?? "", upgradedFrom: "external" },
+      },
+      locked,
+    );
+    return true;
+  }
 
   // #933: begge halvdelene av regelen lagres nå. `requiredSectionIds` er nettopp «seksjonene kurset
   // inneholdt på det tidspunkt» — den lista gaten akkurat målte mot, ikke en ny utledning.
   const completion = await repo.createCourseCompletion(
+    locked,
     userId,
     course.id,
-    JSON.stringify(moduleIds),
-    JSON.stringify(requiredSectionIds),
+    { major: course.versionMajor, minor: course.versionMinor },
+    JSON.stringify(gate.moduleIds),
+    JSON.stringify(gate.requiredSectionIds),
   );
 
   await recordAuditEvent(
@@ -105,41 +172,91 @@ async function evaluateCourseCompletion(
       actorId: userId,
       metadata: { userId, courseId: course.id, certificateId: completion.certificateId },
     },
-    tx,
+    locked,
   );
+  return true;
 }
 
-/** Re-check completion for every published course containing the module that was just passed. */
-export async function checkAndIssueCourseCompletions(
-  input: { userId: string; moduleId: string },
-  tx?: CompletionTxClient,
-) {
-  const client = (tx ?? prisma) as Parameters<typeof createCourseRepository>[0];
-  const repo = createCourseRepository(client);
+/**
+ * #1150 skive 2a-2 (QA-porten for 2a-1, funn 1): kursbevisene som mangler, utstedt i arkiveringens egen transaksjon, før kurset
+ * arkiveres. En deltaker som har gjort alle steg uten å ha fått beviset (utstedelsen glapp, eller forfatteren tok ut steget hen
+ * manglet), får det ellers aldri: avstemmingen når «Mine kurs» åpnes, hopper over arkiverte kurs.
+ *
+ * `userIds` er et forslag (`findCourseInProgressParticipants`, «fullført uten kursbevis»). Hver av dem måles på nytt med den ENE
+ * veien til et kursbevis (`evaluateCourseCompletionLocked`), under deltakerlåsen, akkurat som ellers. Et kurs som ikke er
+ * publisert, utsteder ingenting (#933); de får beviset hvis kurset gjenopprettes og publiseres.
+ *
+ * Låsene: arkiveringen holder innholdslåsen EKSKLUSIVT, som stenger ute all annen utstedelse, lesing og innlevering. Det som
+ * kan komme midt i, er et vedtak (`runLearnerWrite`), og derfor tas deltakerlåsene, alle sammen og sortert, før noe skrives
+ * (`lockLearnersInContentWrite`, som også stopper hvis revisjonssporets lås alt er tatt). Svarer med dem som fikk bevis.
+ */
+export async function issueMissingCompletionsBeforeArchive(locked: ContentWriteTx, courseId: string, userIds: readonly string[]): Promise<string[]> {
+  if (userIds.length === 0) return [];
+  const learners = await lockLearnersInContentWrite(locked, userIds);
+  const issued: string[] = [];
+  for (const userId of [...new Set(userIds)].sort()) {
+    if (await evaluateCourseCompletionLocked(learners, userId, courseId)) issued.push(userId);
+  }
+  return issued;
+}
 
-  const courses = await repo.findPublishedCoursesContainingModule(input.moduleId);
-  if (courses.length === 0) return;
-
+/**
+ * Re-check completion for every published course containing the module that was just passed.
+ * #934 skive 5a-1: én kort transaksjon per kurs. Lista er bare et forslag; alt sjekkes på nytt under låsene. Får
+ * ett kurs ikke låsen, kaster den (503), og outboxen prøver hele hendelsen igjen; utstedelsen tåler det.
+ */
+export async function checkAndIssueCourseCompletions(input: { userId: string; moduleId: string }) {
+  const courses = await createCourseRepository(prisma).findPublishedCoursesContainingModule(input.moduleId);
   for (const course of courses) {
-    await evaluateCourseCompletion(repo, input.userId, course, tx);
+    await runContentReadForLearner(input.userId, (tx) => evaluateCourseCompletionLocked(tx, input.userId, course.id));
+  }
+}
+
+/**
+ * #1156: kursbevis i de ANDRE kursene med seksjonen, etter en lesing (utboksen, `section_read_completion_check`). Samme vei som
+ * for moduler (`checkAndIssueCourseCompletions`): alle publiserte, ikke-arkiverte kurs med seksjonen som deltakeren ser, én kort
+ * låst transaksjon per kurs. Kurset lesingen ble gjort i, er alt sjekket i lesingens egen transaksjon. Lista er et forslag:
+ * utstedelsen måler alt på nytt, og teller lesingen bare i kurs deltakeren ser.
+ *
+ * Synligheten regnes fra rollene i databasen (workeren har ingen innlogging); bevis som går tapt der, tas av avstemmingen når
+ * «Mine kurs» åpnes (`reconcileCourseCompletionsForUser`, med innloggingen).
+ */
+export async function checkAndIssueCourseCompletionsForSection(input: { userId: string; sectionId: string; readInCourseId?: string }) {
+  const candidates = (await createCourseRepository(prisma).findPublishedCoursesContainingSection(input.sectionId)).filter(
+    (course) => course.id !== input.readInCourseId,
+  );
+  if (candidates.length === 0) return;
+  // Synligheten før låsene, for alle kursene i ett sett med spørringer; målingen under låsen slår da ikke opp noe.
+  const seeing = await findLearnersSeeingCourses(prisma, candidates, [input.userId]);
+  for (const course of candidates) {
+    if (!seeing.get(course.id)?.has(input.userId)) continue;
+    await runContentReadForLearner(input.userId, (tx) =>
+      evaluateCourseCompletionLocked(tx, input.userId, course.id, { knownVisibleCourseIds: [course.id] }),
+    );
   }
 }
 
 /**
  * Re-check completion for a single course — called after a section is marked read (#476), since
  * reading the final section can be the last gate even when all modules are already passed.
+ * #934 skive 5a-1: i lesingens egen låste transaksjon, så lesingen og beviset commiter sammen (#946).
+ * #1156: lesingen skrives her også (`markSectionRead`). Er den ny eller fikk den nytt tidspunkt, legges en hendelse i utboksen i
+ * samme transaksjon, og kursbevisene i de andre kursene med seksjonen sjekkes etter commit
+ * (`checkAndIssueCourseCompletionsForSection`). Lesetransaksjonen blir ikke lengre av det.
  */
-export async function checkCourseCompletionForCourse(
-  input: { userId: string; courseId: string },
-  tx?: CompletionTxClient,
+export async function recordSectionRead(
+  tx: LearnerContentTx,
+  input: { userId: string; courseId: string; sectionId: string },
 ) {
-  const client = (tx ?? prisma) as Parameters<typeof createCourseRepository>[0];
-  const repo = createCourseRepository(client);
-
-  const course = await repo.findCourseById(input.courseId);
-  if (!course || !course.publishedAt || course.archivedAt) return;
-
-  await evaluateCourseCompletion(repo, input.userId, course, tx);
+  const { changed } = await createCourseRepository(tx).markSectionRead(tx, input.userId, input.courseId, input.sectionId);
+  // Ruta har slått fast at deltakeren ser kurset (`findCourseForParticipant`, med innloggingen): ingenting slås opp under låsene.
+  await evaluateCourseCompletionLocked(tx, input.userId, input.courseId, { knownVisibleCourseIds: [input.courseId] });
+  if (changed) {
+    await enqueueOutboxEvents(
+      [{ type: OUTBOX_EVENT_TYPES.sectionReadCompletionCheck, payload: { userId: input.userId, sectionId: input.sectionId, readInCourseId: input.courseId } }],
+      tx,
+    );
+  }
 }
 
 /**
@@ -149,18 +266,27 @@ export async function checkCourseCompletionForCourse(
  * completion path that didn't trigger it — a course can show "completed" in the progress view yet
  * have no certificate. This sweep, run when the user opens their certificates page, backfills any
  * completion whose gates (all modules passed + all sections read) are now satisfied.
+ * #1156: lesinger gjort i et annet kurs teller bare i kurs deltakeren ser (`findSectionReadCredit`), så avstemmingen utsteder
+ * ikke bevis i et begrenset kurs hen ikke er tildelt fordi hen har lest de samme seksjonene et annet sted. Moduler er uendret.
+ * `viewer` er innloggingen, når ruta har den. Synligheten regnes én gang, før løkka og låsene, og er hele svaret for målingene.
  */
-export async function reconcileCourseCompletionsForUser(userId: string, tx?: CompletionTxClient) {
-  const client = (tx ?? prisma) as Parameters<typeof createCourseRepository>[0];
-  const repo = createCourseRepository(client);
+export async function reconcileCourseCompletionsForUser(userId: string, viewer?: { roles: string[]; groupIds?: string[] }) {
+  const repo = createCourseRepository(prisma);
 
   const courses = await repo.findPublishedCourses();
+  const visibility: KnownVisibility = { knownVisibleCourseIds: await findCoursesVisibleToLearner(userId, courses, viewer), visibilityComplete: true };
   for (const course of courses) {
     // Per-course isolation: a single malformed course must never blank the user's entire
     // certificate list (or 500 the page that triggers this sweep). Backfill is best-effort.
     try {
-      await evaluateCourseCompletion(repo, userId, course, tx);
+      // #934 skive 5a-1: siden åpnes ofte, og det er sjelden noe å gjøre. Først en sjekk uten låser; bare et kurs der
+      // det ser ut til å mangle et bevis, får en låst transaksjon, og der måles alt på nytt.
+      if (!(await findCompletionToIssue(repo, prisma, userId, course, visibility))) continue;
+      await runContentReadForLearner(userId, (tx) => evaluateCourseCompletionLocked(tx, userId, course.id, visibility));
     } catch (error) {
+      // Noen skriver innhold: det gjelder alle kursene, og hvert av dem ville ventet sine 3 sekunder. Lista vises nå;
+      // beviset kommer neste gang siden åpnes.
+      if (error instanceof AppError && error.code === "content_busy") return;
       console.warn(
         `[course-completion] reconcile skipped course ${course.id} for user ${userId}:`,
         error,

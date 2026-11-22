@@ -41,13 +41,15 @@ One file, `work/course-state.json`, separate from the chat:
 
 | Field | Holds |
 |---|---|
-| `order` | the elements' `clientRef`s in the course's final order |
+| `order` | the elements' `clientRef`s in the course's final order. The elements are the sections and modules; the course object itself (title, description) is not an element — it is not in `order` or `elements` |
 | `clientRef` | the element's id (`a–z`, `0–9`, `-`), the same as in the package; never reused |
 | `status` | `draft` until the author has approved the element, then `approved` |
 | `contentFile` | for a section: the file that holds its text as last approved — the same file the package points at, relative to the state file |
-| `content` | for a module and the course: the **full text as last approved**, written out — the task, the criteria, every question with its options. Never a summary |
+| `content` | for a module: the **full text as last approved**, written out — the task, the criteria, every question with its options. Never a summary |
 | `mandatory` | the exact strings that must survive: `examples`, `formulas`, `templates` (prompts, forms, attachments), `tasks`, `assessmentCriteria`. `terms` and any other list you add are tracked too |
 | `figures` | per approved figure: `{ "sourceId": "fig-…", "labels": ["…", "…"] }` — every piece of label text, as it stands in the primary language |
+| `learningObjectives` | at the top of the file: the objectives approved at gate 2, each `{ "id": "mal-1", "text": "…" }` |
+| `questions` | for a module: each question (as written) and the free-text task, with the objective it tests and the section that teaches it ([course-design.md](course-design.md#linking-questions-to-objectives)) |
 | `deliberatelyRemoved` | strings the author has agreed to drop — only possible for `terms` and your own lists; a mandatory item cannot be removed, only moved to an attachment |
 
 A whole state file: [examples/course-from-slides/course-state.json](../examples/course-from-slides/course-state.json).

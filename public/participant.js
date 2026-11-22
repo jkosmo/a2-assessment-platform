@@ -1,10 +1,11 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { moduleVersionLabel } from "/static/version-label.js";
 import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
 import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
 import { runWithBusyButton } from "/static/busy-button.js";
 import { pickLocalizedText, resolveInitialLocale } from "/static/i18n-locale.js";
 import { localizeDecisionReason } from "/static/decision-reason.js";
-import { describeApiError } from "/static/api-error.js";
+import { apiErrorStatus, describeApiError } from "/static/api-error.js";
 import {
   buildHeadline,
   planRows,
@@ -16,6 +17,7 @@ import { createNumberFormatter, createDateTimeFormatter } from "/static/format-d
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlP } from "/static/html-escape.js";
+import { renderCourseProgress, launchCourseBoatCelebration, COURSE_BOAT_CELEBRATION_MS } from "/static/course-progress-boat.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { certLevelKey, localizeCertLevel } from "/static/cert-level.js";
 import { setSectionLocked } from "/static/section-lock.js";
@@ -36,10 +38,25 @@ import {
 } from "/static/outcome.js";
 import { showToast } from "/static/toast.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { buildCriteriaPanel, buildCriterionScoreList } from "/static/assessment-criteria.js";
 import { groupCoursesByTheme, hasAnyTheme } from "/static/course-theme-groups.js";
 import {
+  buildParticipantUrl,
+  findSequenceEntry,
+  itemOfOpenEntry,
+  readParticipantLocation,
+  sameParticipantItem,
+} from "/static/participant-location.js";
+import {
   buildModuleCardViewModels,
+  courseRetakeApplies,
   deriveParticipantFlowGateState,
+  aiReviewRoutingLive,
+  AI_DECLARATION_DRAFT_KEY,
+  markCourseModuleStarted,
+  courseStillRequiresRetake,
+  earlierResultToShow,
+  isAssessmentResultReady,
   findMatchingPreset,
   parseDraftEnvelope,
   pruneExpiredModuleDrafts,
@@ -47,11 +64,14 @@ import {
   resolveWorkspaceNavigationItems,
   resolveSelectedModule,
   upsertModuleDraft,
+  orphanedDraftTexts,
   // #992: kurssekvensens tilgjengelighets- og ferdig-predikater. Se modulen for hvorfor de
   // bor der og ikke her: de er rene funksjoner, og skal kunne testes som det.
   isEntryAvailable,
   isEntryDone,
   isEntryOutstanding,
+  resumableMcqDraft,
+  classifyMcqResume,
 } from "/static/participant-console-state.js";
 
 const output = document.getElementById("output");
@@ -77,6 +97,7 @@ const selectedModuleBrief = document.getElementById("selectedModuleBrief");
 const selectedModuleTaskText = document.getElementById("selectedModuleTaskText");
 const selectedModuleCandidateConstraintsSection = document.getElementById("selectedModuleCandidateConstraintsSection");
 const selectedModuleCandidateTaskConstraints = document.getElementById("selectedModuleCandidateTaskConstraints");
+const selectedModuleCriteria = document.getElementById("selectedModuleCriteria");
 const submissionIdLabel = document.getElementById("submissionId");
 const attemptIdLabel = document.getElementById("attemptId");
 // #940: flytkrommet rundt resultatet. Se `applyResultChrome`.
@@ -95,6 +116,7 @@ const createSubmissionButton = document.getElementById("createSubmission");
 const submitMcqButton = document.getElementById("submitMcq");
 const loadHistoryButton = document.getElementById("loadHistory");
 const submissionFieldsContainer = document.getElementById("submissionFields");
+const orphanedDraftPanel = document.getElementById("orphanedDraftTexts");
 const ackCheckbox = document.getElementById("ack");
 // #475: pre-submit attestation group — responsibility tile + KI declaration (config-gated).
 const attestGroup = document.getElementById("attestGroup");
@@ -137,12 +159,22 @@ const PARTICIPANT_PREVIEW_STORAGE_KEY = "adminContent.participantPreview.v1";
 const COMPLETED_MODULE_STATUSES = new Set(["COMPLETED"]);
 
 let currentQuestions = [];
+// #1160: versjonen innleveringen og flervalgsforsøket ble startet på. Står i kladden, så et forsøk på en eldre versjon ikke
+// fortsettes etter at modulen er endret (andre spørsmål → avkrysningene ville vært svar på noe annet).
+let mcqAttemptVersionId = null;
+// #1160 (QA-porten): språket spørsmålene i forsøket ble hentet på. Avkrysningene lagres som alternativenes tekst, så et
+// forsøk fortsettes på det samme språket — ellers ville «Beta» ikke funnet igjen «Bravo» etter et språkbytte.
+let mcqAttemptLocale = null;
 let currentLocale = resolveInitialLocale(supportedLocales);
 // ⚠️ Anything `setLocale` touches MUST be declared here, with the boot state — not next to the code
 // that uses it. setLocale runs during startup, so a `let` further down the file is still in its
 // temporal dead zone and throws, which kills the whole script. This has now bitten twice (#893).
 let courseDetailCache = {};        // courseId -> CourseDetail (resolved under the fetching locale)
 let courseAccordionInitialized = false;
+// #1158: elementet adressen ber om å åpne når kurset er tegnet (lenke, oppfriskning, fram/tilbake). Se openPendingItem.
+let pendingItemOpen = null;
+// #1158: «Lukk» gikk ett steg tilbake i historikken. Popstate-en som kommer etterpå, er vår egen.
+let awaitingCloseBack = false;
 let latestResult = null;
 // #549: ensures the pass celebration (confetti + banner) fires once per submission, not on every
 // result poll. Reset when the module context changes / a new submission starts.
@@ -184,6 +216,16 @@ let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 let loadedModules = [];
 let hasLoadedModules = false;
 let selectedModuleId = "";
+// #934 skive 5a-3: modulen er åpnet fra et kurs som sier at den må tas på nytt (`retakeRequired`). Står til et nytt vedtak kommer.
+let courseRetakeModuleId = null;
+let courseRetakeCourseId = null;
+// #1140 etappe 1: kurset `loadedModules` ble hentet for. Kurset modulen åpnes fra, bestemmer hvilken versjon deltakeren får, så
+// modullista hentes for kurset (`?courseId=`), og innleveringen sender det samme kurset. `null`: lista er hentet uten kurs, og
+// serveren bruker reserven. Settes bare av `loadModulesForCourse`, sammen med lista.
+let moduleContextCourseId = null;
+// Løpenummer: bare svaret på den siste hentingen av modullista tas i bruk, og bare det siste klikket på en modul i et kurs åpner.
+let moduleListFetchSeq = 0;
+let courseModuleOpenSeq = 0;
 let autosaveTimer = null;
 let flowState = {
   hasSubmission: false,
@@ -265,7 +307,7 @@ function normalizePreviewQuestions(questions) {
 
       return {
         id: typeof question.id === "string" && question.id.trim().length > 0 ? question.id : `preview-q-${index + 1}`,
-        questionType: question.questionType === "multiple" ? "multiple" : "single",
+        questionType: ["multiple", "order", "fill"].includes(question.questionType) ? question.questionType : "single",
         stem,
         options,
       };
@@ -331,9 +373,10 @@ function setLocale(locale) {
   } else if (hasLoadedModules) {
     // Re-fetch modules so server-resolved titles and descriptions reflect the new locale.
     // Intentionally fire-and-forget — locale switch must not block or disrupt flow state.
-    apiFetch("/api/modules?includeCompleted=true", headers)
-      .then((body) => {
-        loadedModules = Array.isArray(body.modules) ? body.modules : [];
+    loadModulesForCourse(moduleContextCourseId)
+      .then(({ applied }) => {
+        // #1140: åpnet deltakeren en modul fra et annet kurs i mellomtiden, er den hentingen nyere, og den tegner selv.
+        if (!applied) return;
         renderModules();
         renderSelectedModuleSummary();
       })
@@ -712,15 +755,22 @@ function renderSubmissionFields(fields) {
   applySubmissionReadMode();
 }
 
+function renderSelectedModuleStatus(selectedModule) {
+  // #934 skive 5a-3: «Fullført» ville stått feil her. Kurset sier at modulen må tas på nytt.
+  const statusSummary = selectedModule && courseRetakeModuleId === selectedModule.id
+    ? t("courses.module.revisedRetakeHint")
+    : formatModuleStatusSummary(selectedModule);
+  selectedModuleStatus.textContent = statusSummary;
+  selectedModuleStatus.classList.toggle("hidden", statusSummary.length === 0);
+}
+
 function renderSelectedModuleSummary() {
   const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
   selectedModuleIdInput.value = selectedModule?.id ?? "";
   selectedModuleTitle.textContent = selectedModule?.title ?? t("submission.selectedModuleNone");
   selectedModuleDescription.textContent = selectedModule?.description ?? "";
   selectedModuleDescription.classList.toggle("hidden", !(selectedModule?.description ?? "").trim());
-  const statusSummary = formatModuleStatusSummary(selectedModule);
-  selectedModuleStatus.textContent = statusSummary;
-  selectedModuleStatus.classList.toggle("hidden", statusSummary.length === 0);
+  renderSelectedModuleStatus(selectedModule);
   // ⚠️ #1051: HTML-EN ER RENDRET OG SANITERT PÅ SERVEREN, som for seksjoner. Skill-en skriver
   // oppgaveteksten i markdown, og `textContent` viste den som rå tegn: «## Oppgave» og «**uthevet**».
   //
@@ -755,6 +805,13 @@ function renderSelectedModuleSummary() {
   // MCQ-only module (taskText == null) doesn't show an empty OPPGAVE/VEILEDNING brief (#525 follow-up).
   if (selectedModuleCandidateConstraintsSection) {
     setHidden(selectedModuleCandidateConstraintsSection, !constraints);
+  }
+  // #1124: «Slik vurderes svaret ditt» — kriteriene med trinnene, under oppgaveteksten. Serveren har
+  // allerede holdt tilbake skjulte kriterier; ingen kriterier å vise gir ingen panel.
+  if (selectedModuleCriteria) {
+    const panel = buildCriteriaPanel(document, selectedModule?.assessmentCriteria, { t, labelFor: localizeCriterionName });
+    selectedModuleCriteria.replaceChildren(...(panel ? [panel] : []));
+    setHidden(selectedModuleCriteria, !panel);
   }
   setHidden(selectedModuleBrief, !(selectedModule && selectedModule.taskText));
   renderSubmissionFields(getSubmissionFields(selectedModule));
@@ -888,13 +945,16 @@ function updateCreateSubmissionAvailability() {
 
 // #475: AI-use declaration helpers ------------------------------------------------------------
 function aiDeclarationEnabled() {
-  return participantRuntimeConfig?.aiInfluence?.enabled === true;
+  // Samme regel som serveren: modulens egen innstilling først, så den globale.
+  const own = resolveSelectedModule(loadedModules, selectedModuleId)?.assessmentPolicy?.aiInfluence;
+  return (own?.enabled ?? participantRuntimeConfig?.aiInfluence?.enabled) === true;
 }
 
 // Live routing/nudge only when enabled AND not in shadow mode. In shadow mode we still collect the
 // declaration (the pilot dataset) but show no nudge and route no one.
 function aiDeclarationNudgeLive() {
-  return aiDeclarationEnabled() && participantRuntimeConfig?.aiInfluence?.shadowMode !== true;
+  // 2.134.1: samme regel som serveren, med modulens egen innstilling. Dialogen, teksten og rutingen kan ikke si hver sin ting.
+  return aiReviewRoutingLive(participantRuntimeConfig?.aiInfluence, resolveSelectedModule(loadedModules, selectedModuleId));
 }
 
 // The declaration applies to free-text submissions only (MCQ-only modules have no deliverable).
@@ -920,6 +980,24 @@ function syncAiTileSelection() {
   }
 }
 
+// 2.136.1: svaret hører til modulen og står i kladden, sammen med resten av besvarelsen.
+function currentAiDeclarationDraft() {
+  const value = getSelectedAiDeclaration();
+  return value ? { value, text: value === "none" ? "" : aiDeclarationText?.value ?? "" } : null;
+}
+
+// Et svar fra en innlevering som er levert, gjelder ikke neste forsøk. Der spørsmålet er slått av, tømmer applyAiDeclarationVisibility det igjen.
+function restoreAiDeclarationFromDraft(draft) {
+  const saved = draft?.submittedAs ? null : draft?.[AI_DECLARATION_DRAFT_KEY];
+  if (!saved?.value) return;
+  const input = [...(aiDeclarationBlock?.querySelectorAll('input[name="aiDeclaration"]') ?? [])].find((one) => one.value === saved.value);
+  if (!input) return;
+  input.checked = true;
+  if (aiDeclarationText) aiDeclarationText.value = typeof saved.text === "string" ? saved.text : "";
+  syncAiTileSelection();
+  setAiHowtoVisible(saved.value !== "none");
+}
+
 function clearAiDeclarationSelection() {
   for (const input of aiDeclarationBlock?.querySelectorAll('input[name="aiDeclaration"]') ?? []) {
     input.checked = false;
@@ -937,6 +1015,8 @@ function applyAiDeclarationVisibility() {
   const applies = aiDeclarationApplies();
   setHidden(aiDeclarationBlock, !applies);
   if (!applies) clearAiDeclarationSelection();
+  const reviewNotice = document.getElementById("aiDeclarationReviewNotice");
+  if (reviewNotice) setHidden(reviewNotice, !aiDeclarationNudgeLive());
 }
 
 async function confirmAiNudge() {
@@ -952,6 +1032,7 @@ async function confirmAiNudge() {
         </div>
         <div class="ai-nudge-body">
           <p>${escapeHtmlP(t("ai.nudge.body"))}</p>
+          <p>${escapeHtmlP(t("ai.nudge.review"))}</p>
           <div class="why">${escapeHtmlP(t("ai.nudge.why"))}</div>
         </div>
         <div class="ai-nudge-foot">
@@ -982,6 +1063,11 @@ async function confirmAiNudge() {
 function hasMeaningfulStoredDraft(draft) {
   if (!draft || typeof draft !== "object") {
     return false;
+  }
+
+  // 2.136.4: en forklaring er tekst deltakeren har skrevet, så forrige resultat skal ikke legge seg over den.
+  if (draft[AI_DECLARATION_DRAFT_KEY]?.text?.trim()) {
+    return true;
   }
 
   for (const field of currentSubmissionFields) {
@@ -1039,7 +1125,7 @@ function renderModules() {
     button.addEventListener("click", () => {
       // #865: the standalone module path uses the workspace at its home location. If it was moved
       // inline under a course row, collapse that and bring it home first (no-op in course-only mode).
-      collapseInlineOpen();
+      closeInlineItem();
       restoreModuleWorkspaceHome();
       activateParticipantModule(module.id);
     });
@@ -1049,11 +1135,12 @@ function renderModules() {
     title.textContent = module.title;
     // v1.2.20 (#461): vis modul-versjon diskret etter tittelen så support kan reprodusere
     // hvilken versjon en deltaker har fått servert. Publiseringsdato vises i tooltip.
-    const versionNo = module.activeVersion?.versionNo;
-    if (versionNo != null) {
+    // #934 skive 5b: «v2.1», ikke lenger rekkefølgen av lagringer.
+    const versionLabel = moduleVersionLabel(module.activeVersion);
+    if (versionLabel) {
       const versionTag = document.createElement("span");
       versionTag.className = "module-version-tag";
-      versionTag.textContent = ` · v${versionNo}`;
+      versionTag.textContent = ` · ${versionLabel}`;
       if (module.activeVersion?.publishedAt) {
         try {
           const d = new Date(module.activeVersion.publishedAt);
@@ -1165,7 +1252,7 @@ function syncParticipantModuleWorkspace(options = {}) {
 }
 
 function activateParticipantModule(moduleId, options = {}) {
-  const { scrollIntoView = false, logSelection = true } = options;
+  const { scrollIntoView = false, logSelection = true, retakeRequired = false, retakeCourseId = null } = options;
   const nextModule = loadedModules.find((module) => module?.id === moduleId) ?? null;
   if (!nextModule) {
     return false;
@@ -1173,7 +1260,15 @@ function activateParticipantModule(moduleId, options = {}) {
 
   const previousModuleId = selectedModuleId;
   const savedDraft = persistCurrentModuleDraft(false);
+  // En lås satt mens forrige moduls resultat ble hentet, gjelder ikke denne modulen.
+  releaseEarlierResultLock();
+  releaseMcqResumeLock();
   selectedModuleId = moduleId;
+  courseRetakeModuleId = retakeRequired ? moduleId : null;
+  courseRetakeCourseId = retakeRequired ? retakeCourseId : null;
+  // 2.136.1: svaret om KI gjaldt forrige modul eller et levert forsøk. Blir det stående, kan det sendes med, og «KI skrev det meste» går til sensor.
+  // Et svar som ikke er levert, står i kladden og hentes tilbake under.
+  clearAiDeclarationSelection();
   resetFlowStateForModuleContext();
   renderModules();
   renderSelectedModuleSummary();
@@ -1186,10 +1281,8 @@ function activateParticipantModule(moduleId, options = {}) {
   // #2 fix: don't auto-start for an already-passed module (avoids a needless retake / 409).
   // #978: ⚠️ dette er det ENE stedet som med vilje ser bort fra statusen. En bestått-men-under-
   // vurdering modul skal ikke autostarte et nytt forsøk. Se begrunnelsen i /static/outcome.js.
-  const alreadyPassed = hasPassingDecision(nextModule.participantStatus?.latestDecision?.passFailTotal);
-  if (moduleIsMcqOnly(nextModule) && !alreadyPassed && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
-    createSubmissionButton.click();
-  }
+  // #934 skive 5a-3: unntaket er en bestått som ikke lenger teller i kurset modulen ble åpnet fra. Da skal et nytt forsøk starte.
+  continueModuleFlow(nextModule, retakeRequired);
 
   // v1.2.22 (#465): kollaps modullisten så modul-innholdet får mer plass. Bruker kan
   // ekspandere igjen ved å klikke «Last moduler»-knappen.
@@ -1210,6 +1303,125 @@ function activateParticipantModule(moduleId, options = {}) {
   return true;
 }
 
+/**
+ * Hva modulen gjør når den er åpnet: viser forrige resultat, fortsetter et påbegynt flervalgsforsøk, eller starter et nytt
+ * (ren flervalg). Står for seg selv fordi #1160 kaller den en gang til når et påbegynt forsøk ikke kunne fortsettes.
+ */
+function continueModuleFlow(nextModule, retakeRequired) {
+  const retakeNow = courseRetakeApplies(retakeRequired, nextModule.participantStatus);
+  const alreadyPassed = !retakeNow && hasPassingDecision(nextModule.participantStatus?.latestDecision?.passFailTotal);
+  const draft = readModuleDraftMap()[nextModule.id];
+  // 2.126.0: har deltakeren et resultat, vises det — med anke-knappen ved stryk — i stedet for at et nytt
+  // forsøk starter av seg selv. «Prøv igjen» står ved resultatet.
+  const earlierSubmissionId = previewModeEnabled || retakeNow ? null : earlierResultToShow(
+    nextModule.participantStatus,
+    draft,
+    // #934 skive 5a-1: å vise forrige resultat ville merket kladden som levert, og teksten som ikke passer i feltene, ville gått tapt.
+    hasMeaningfulStoredDraft(draft)
+      || orphanedDraftTexts(draft, renderedSubmissionFieldIds()).length > 0,
+  );
+  // #1160: et flervalgsforsøk som er påbegynt i denne nettleseren, på den versjonen modulen har nå, fortsetter med
+  // avkrysningene. Før startet modulen et nytt forsøk hver gang den ble åpnet, og alt deltakeren hadde krysset av, var borte.
+  const resumable = earlierSubmissionId || previewModeEnabled
+    ? null
+    : resumableMcqDraft(draft, { moduleVersionId: nextModule.activeVersion?.id });
+  if (earlierSubmissionId) {
+    showEarlierResult(nextModule.id, earlierSubmissionId).catch((error) => logApiError(error));
+  } else if (resumable) {
+    resumeMcqAttempt(nextModule, resumable, retakeRequired).catch((error) => logApiError(error));
+  } else if (moduleIsMcqOnly(nextModule) && !alreadyPassed && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
+    createSubmissionButton.click();
+  }
+}
+
+// #1160: mens det påbegynte forsøket hentes, er «Opprett innlevering» låst (et klikk der ville startet et nytt forsøk ved
+// siden av), og kladden lagres ikke (den lagrede er den riktige; siden har ennå ikke innleveringen). Gjelder bare modulen den
+// ble satt for — samme mønster som `earlierResultLoading`.
+let mcqResumeLoading = null;
+
+function releaseMcqResumeLock() {
+  if (!mcqResumeLoading) return;
+  mcqResumeLoading = null;
+  createSubmissionButton.dataset.busy = "";
+}
+
+/** #1160: flervalgsdelen av kladden gjelder ikke lenger (forsøket er levert, borte eller tilhører noen andre). Resten står. */
+function forgetMcqDraft(moduleId) {
+  const moduleDrafts = readModuleDraftMap();
+  if (moduleDrafts[moduleId]?.mcq) {
+    moduleDrafts[moduleId] = { ...moduleDrafts[moduleId], mcq: null };
+    writeModuleDraftMap(moduleDrafts);
+  }
+  if (selectedModuleId === moduleId) {
+    currentQuestions = [];
+    attemptIdLabel.textContent = "-";
+    mcqAttemptVersionId = null;
+    mcqAttemptLocale = null;
+    renderQuestions();
+  }
+}
+
+/**
+ * #1160: fortsetter forsøket fra kladden. Serveren gir det ÅPNE forsøket på innleveringen tilbake (`mcq/start` er idempotent
+ * så lenge forsøket ikke er levert), med de samme spørsmålene, så avkrysningene settes inn igjen mot spørsmålene forsøket
+ * faktisk har. Ingen svar sendes. Svarer serveren med et annet forsøk, eller avviser den innleveringen (levert, vurdert, en
+ * annen deltaker), glemmes flervalgsdelen av kladden, og modulen åpnes som om den var ny.
+ */
+let mcqResumeSeq = 0;
+
+async function resumeMcqAttempt(module, saved, retakeRequired) {
+  const moduleId = module.id;
+  const request = ++mcqResumeSeq;
+  mcqResumeLoading = moduleId;
+  createSubmissionButton.dataset.busy = "true";
+  createSubmissionButton.disabled = true;
+  // QA-porten 2.164.0: spørsmålene hentes på språket forsøket ble besvart på, så avkrysningene (alternativenes tekst) finner
+  // igjen sine alternativer også etter et språkbytte. Rekkefølgen tjeneren gir er tilfeldig for hvert kall og alternativene har
+  // ingen id, så en språkuavhengig nøkkel finnes ikke uten en endring i forsøket på tjeneren.
+  const locale = saved.locale && supportedLocales.includes(saved.locale) ? saved.locale : currentLocale;
+  let outcome;
+  try {
+    const body = await apiFetch(
+      `/api/modules/${encodeURIComponent(moduleId)}/mcq/start?submissionId=${encodeURIComponent(saved.submissionId)}`,
+      headers,
+      { headers: { "x-locale": locale } },
+    );
+    outcome = { ok: true, body };
+  } catch (error) {
+    outcome = { ok: false, status: apiErrorStatus(error) };
+    console.warn("[participant] påbegynt flervalgsforsøk ble ikke hentet", error);
+  }
+  // Et nyere kall (modulen åpnet på nytt, eller en annen modul) eier modulen og låsen nå.
+  if (request !== mcqResumeSeq || selectedModuleId !== moduleId) return;
+  const verdict = classifyMcqResume(outcome, saved.attemptId);
+  if (verdict === "retry") {
+    // QA-porten 2.164.0: en feil som kan gå over (nettverket, en 5xx, for mange forespørsler) skal ikke koste svarene. Kladden
+    // står, låsen står (ingen ny innlevering, og ingen lagring som tar innleveringen ut av kladden), og modulen lukkes som når
+    // en åpning feiler: deltakeren åpner testen igjen fra kurset, og forsøket hentes på nytt.
+    showToast(t("mcq.resumeFailed"), "error");
+    closeInlineItem();
+    return;
+  }
+  releaseMcqResumeLock();
+  if (verdict === "forget") {
+    forgetMcqDraft(moduleId);
+    updateCreateSubmissionAvailability();
+    continueModuleFlow(module, retakeRequired);
+    return;
+  }
+  const body = outcome.body;
+  submissionIdLabel.textContent = saved.submissionId;
+  attemptIdLabel.textContent = body.attemptId;
+  mcqAttemptVersionId = saved.moduleVersionId;
+  mcqAttemptLocale = locale;
+  currentQuestions = body.questions;
+  flowState = { ...flowState, hasSubmission: true };
+  renderQuestions(saved.responses);
+  updateCreateSubmissionAvailability();
+  renderFlowGating();
+  persistCurrentModuleDraft(false);
+}
+
 async function ensureParticipantModuleAvailable(moduleId) {
   if (loadedModules.some((module) => module?.id === moduleId)) {
     return true;
@@ -1220,25 +1432,193 @@ async function ensureParticipantModuleAvailable(moduleId) {
     return loadedModules.some((module) => module?.id === moduleId);
   }
 
-  const body = await apiFetch("/api/modules?includeCompleted=true", headers);
-  loadedModules = Array.isArray(body.modules) ? body.modules : [];
-  hasLoadedModules = true;
+  await loadModulesForCourse(moduleContextCourseId);
   syncParticipantModuleWorkspace();
 
   return loadedModules.some((module) => module?.id === moduleId);
 }
 
-async function openCourseModule(courseId, moduleId) {
+/** #1140 etappe 1: adressen til modullista for et kurs. Uten kurs: lista uten kurs, og serveren bruker reserven. */
+function modulesListUrl(courseId) {
+  const base = "/api/modules?includeCompleted=true";
+  return courseId ? `${base}&courseId=${encodeURIComponent(courseId)}` : base;
+}
+
+/**
+ * #1140 etappe 1: DET ENE STEDET modullista hentes. Lista tas i bruk sammen med kurset den ble hentet for, i samme øyeblikk, så
+ * `moduleContextCourseId` alltid er kurset `loadedModules` gjelder — også når hentingen feiler (da står begge som de var), og
+ * når to hentinger krysser hverandre: bare svaret på den SISTE tas i bruk (QA-porten 2.154.0). Innleveringen sender versjonen
+ * fra lista og dette kurset, og serveren regner ut versjonen for det samme kurset.
+ *
+ * Svarer `applied: false` når en nyere henting er startet i mellomtiden; den tar da lista i bruk.
+ */
+async function loadModulesForCourse(courseId) {
+  const request = ++moduleListFetchSeq;
+  const body = await apiFetch(modulesListUrl(courseId), headers);
+  if (request !== moduleListFetchSeq) return { applied: false, body };
+  loadedModules = Array.isArray(body.modules) ? body.modules : [];
+  moduleContextCourseId = courseId || null;
+  hasLoadedModules = true;
+  return { applied: true, body };
+}
+
+/**
+ * #1140 etappe 1: en modul åpnes fra et annet kurs enn lista gjelder. Kurset bestemmer versjonen, så lista hentes på nytt for
+ * det kurset FØR modulen velges. Kladden for modulen som står valgt, lagres først, så ingenting som er skrevet, går tapt i
+ * omtegningen.
+ */
+async function enterModuleCourseContext(courseId) {
+  if (previewModeEnabled || !courseId || moduleContextCourseId === courseId) return;
+  persistCurrentModuleDraft(false);
+  const { applied } = await loadModulesForCourse(courseId);
+  if (applied) syncParticipantModuleWorkspace({ restoreDraft: true });
+}
+
+/**
+ * Åpner modulen fra kurset. Svarer `false` når et nyere klikk (en annen modul eller et annet kurs) kom mens modullista ble
+ * hentet: det klikket åpner sin modul, og dette gjør ingenting. Uten det ville den først klikkede modulen blitt åpnet til
+ * slutt, og en ren flervalgsmodul ville startet en innlevering deltakeren ikke ba om (QA-porten 2.154.0).
+ */
+async function openCourseModule(courseId, moduleId, retakeRequired) {
+  const request = ++courseModuleOpenSeq;
+  await enterModuleCourseContext(courseId);
+  // Sjekkes FØR noe mer hentes: et forbigått klikk skal ikke starte en henting som skyver til side den riktige.
+  if (request !== courseModuleOpenSeq) return false;
+  if (!previewModeEnabled && moduleContextCourseId !== courseId) {
+    // En annen henting (språkbyttet) kom imellom og tok lista i bruk for et annet kurs. Én gang til, så modulen aldri åpnes
+    // fra en liste som gjelder et annet kurs enn det den ble åpnet fra.
+    await enterModuleCourseContext(courseId);
+    if (request !== courseModuleOpenSeq) return false;
+    if (moduleContextCourseId !== courseId) throw new Error(t("courses.module.unavailable"));
+  }
   const available = await ensureParticipantModuleAvailable(moduleId);
+  if (request !== courseModuleOpenSeq) return false;
   if (!available) {
     throw new Error(t("courses.module.unavailable"));
   }
 
-  activateParticipantModule(moduleId, { scrollIntoView: true });
+  // #934 skive 5a-3: kursets status, ikke bare siste vedtak. Samme modul kan telle i ett kurs og ikke i et annet.
+  // 2.136.4: fra raden deltakeren klikket. En oppfrisket kursliste kan ha tømt `courseDetailCache` mens modulene ble hentet, og da ville siden sagt «Fullført».
+  activateParticipantModule(moduleId, { scrollIntoView: true, retakeRequired, retakeCourseId: courseId });
 
   if (courseDetailCache[courseId]) {
     renderCourseDetailModules(courseId, courseDetailCache[courseId]);
   }
+  return true;
+}
+
+/**
+ * 2.134.1: modulen er ikke lenger «ikke startet» når innleveringen er opprettet. Bare merkelappene byttes. Å tegne kursdetaljen på nytt ville
+ * slettet en usendt tekst i kursdiskusjonen (QA-porten).
+ */
+function courseModuleBadge(courseId, moduleId) {
+  const entry = courseDetailCache[courseId]?.items?.find((item) => item?.type === "MODULE" && item.moduleId === moduleId);
+  if (!entry) return null;
+  return document.getElementById(`courseDetail_${courseId}`)?.querySelector(`.course-item[data-key="${courseItemKey(entry)}"] .module-status-badge`) ?? null;
+}
+
+function showCourseModuleStarted(moduleId) {
+  for (const courseId of markCourseModuleStarted(courseDetailCache, moduleId)) {
+    const badge = courseModuleBadge(courseId, moduleId);
+    if (badge) {
+      badge.textContent = t("courses.module.inProgress");
+      badge.classList.add("retake");
+    }
+    const course = participantCourses.find((one) => one.id === courseId);
+    if (course?.progress?.courseStatus !== "NOT_STARTED") continue;
+    course.progress.courseStatus = "IN_PROGRESS";
+    for (const item of document.querySelectorAll(`.course-accordion-item[data-course-id="${courseId}"]`)) {
+      const pill = item.querySelector(".course-accordion-header .module-status-badge:not(.course-new-version-badge)");
+      if (!pill) continue;
+      pill.textContent = t("courses.status.inProgress");
+      pill.classList.add("retake");
+    }
+  }
+}
+
+/** 2.126.0: hold modulens siste innlevering oppdatert i denne økta (statusen hentes bare ved sidelasting). */
+function noteLatestSubmission(moduleId, patch) {
+  const module = loadedModules.find((m) => m?.id === moduleId);
+  if (!module) return;
+  module.participantStatus = { ...(module.participantStatus ?? {}), ...patch };
+  showCourseModuleStarted(moduleId);
+}
+
+/**
+ * 2.136.1: bare serveren vet om en bestått dekker kravet i et kurs. Kravet er per kurs og gjelder hovedversjonen, og en ny versjon kan ha kommet
+ * mens vurderingen pågikk. Siden henter kurset på nytt etter en bestått, og vedtaket er skrevet før klienten ser det, så svaret er oppdatert.
+ * Beskjeden gjelder kurset modulen ble åpnet fra, så et annet kurs uten kravet tar den ikke bort.
+ */
+function syncCourseRetakeHint(courseId, course) {
+  if (!courseRetakeModuleId || courseRetakeCourseId !== courseId) return;
+  if (courseStillRequiresRetake(course, courseRetakeModuleId)) return;
+  const moduleId = courseRetakeModuleId;
+  courseRetakeModuleId = null;
+  courseRetakeCourseId = null;
+  if (selectedModuleId === moduleId) renderSelectedModuleStatus(loadedModules.find((m) => m?.id === moduleId));
+}
+
+// 2.126.0: modulen slik den sto rett etter vurderingen — det leverte svaret (skrivebeskyttet), resultatet,
+// og anke-knappen ved et avgjort stryk. Bestått gir ingen konfetti her: den hører til øyeblikket det skjer.
+//
+// Mens resultatet hentes, er «Opprett innlevering» låst: et klikk der ville startet et nytt forsøk som
+// resultatet så la seg over (QA-porten 2026-11-01). Låsen gjelder bare modulen den ble satt for.
+let earlierResultLoading = null;
+
+function releaseEarlierResultLock() {
+  if (!earlierResultLoading) return;
+  earlierResultLoading = null;
+  createSubmissionButton.dataset.busy = "";
+}
+
+async function showEarlierResult(moduleId, submissionId) {
+  earlierResultLoading = moduleId;
+  createSubmissionButton.dataset.busy = "true";
+  createSubmissionButton.disabled = true;
+  try {
+    await loadEarlierResult(moduleId, submissionId);
+  } finally {
+    if (earlierResultLoading === moduleId) {
+      releaseEarlierResultLock();
+      updateCreateSubmissionAvailability();
+      renderFlowGating();
+    }
+  }
+}
+
+async function loadEarlierResult(moduleId, submissionId) {
+  const [resultBody, submissionBody] = await Promise.all([
+    apiFetch(`/api/submissions/${encodeURIComponent(submissionId)}/result`, headers),
+    apiFetch(`/api/submissions/${encodeURIComponent(submissionId)}`, headers).catch(() => null),
+  ]);
+  // Deltakeren kan ha gått videre til en annen modul mens svaret var på vei.
+  if (selectedModuleId !== moduleId) return;
+  const response = submissionBody?.submission?.response;
+  if (response && typeof response === "object") {
+    let placed = false;
+    for (const field of currentSubmissionFields) {
+      const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
+      if (element && typeof response[field.id] === "string") {
+        element.value = response[field.id];
+        placed = true;
+      }
+    }
+    // Har modulen fått nytt svarskjema siden svaret ble levert, finnes ingen av feltene lenger. Da står
+    // svaret i det første feltet, del for del — heller det enn et tomt felt ved siden av resultatet.
+    const first = currentSubmissionFields[0] && submissionFieldsContainer.querySelector(`[data-field-id="${currentSubmissionFields[0].id}"]`);
+    const parts = Object.values(response).filter((value) => typeof value === "string" && value.trim());
+    if (!placed && first && parts.length > 0) first.value = parts.join("\n\n");
+  }
+  submissionIdLabel.textContent = submissionId;
+  celebrationShown = true;
+  flowState = {
+    ...flowState,
+    hasSubmission: true,
+    hasMcqSubmission: !selectedModuleIsFreetextOnly(),
+    resultStatus: typeof resultBody?.status === "string" ? resultBody.status : null,
+  };
+  renderResultSummary(resultBody);
+  renderFlowGating();
 }
 
 function resetFlowStateForModuleContext() {
@@ -1255,6 +1635,8 @@ function resetFlowStateForModuleContext() {
   setAssessmentProgressDetail();
   submissionIdLabel.textContent = "-";
   attemptIdLabel.textContent = "-";
+  mcqAttemptVersionId = null;
+  mcqAttemptLocale = null;
   appealIdLabel.textContent = "-";
   renderResultSummary(null);
   renderAssessmentProgress();
@@ -1413,11 +1795,6 @@ function stopAutoAssessmentLoop(clearDetail = true) {
     setAssessmentProgressDetail();
     renderAssessmentProgress();
   }
-}
-
-function isAssessmentResultReady(status) {
-  const normalized = typeof status === "string" ? status.toUpperCase() : "";
-  return normalized === "COMPLETED" || normalized === "UNDER_REVIEW" || normalized === "SCORED";
 }
 
 async function startAutomaticAssessmentFlow(submissionId) {
@@ -1582,8 +1959,13 @@ function collectCurrentMcqDraft() {
 
   const attemptId = attemptIdLabel.textContent;
   if (attemptId && attemptId !== "-") {
+    // #1160: innleveringen og versjonen forsøket hører til, så det kan fortsettes etter en oppfriskning eller en pause.
+    const submissionId = submissionIdLabel.textContent;
     return {
       attemptId,
+      submissionId: submissionId && submissionId !== "-" ? submissionId : null,
+      moduleVersionId: mcqAttemptVersionId,
+      locale: mcqAttemptLocale,
       questions: currentQuestions,
       responses,
     };
@@ -1605,16 +1987,37 @@ function persistCurrentModuleDraft(showStatus = false) {
   if (!selectedModule) {
     return { saved: false, meaningful: false, title: "" };
   }
+  // 2.126.0: mens forrige resultat hentes, står det leverte svaret ennå ikke i feltene, og kladden som
+  // ligger lagret er den riktige. Å lagre nå ville erstattet den med en uten merket — og resultatet
+  // ville forsvunnet neste gang modulen ble åpnet (QA-porten 2026-11-01).
+  if (earlierResultLoading === selectedModule.id) {
+    return { saved: false, meaningful: false, title: selectedModule.title };
+  }
+  // #1160: det samme mens et påbegynt forsøk hentes: siden har ennå ikke innleveringen, og en lagring nå ville tatt den ut av
+  // kladden, så forsøket ikke kunne fortsettes neste gang.
+  if (mcqResumeLoading === selectedModule.id) {
+    return { saved: false, meaningful: false, title: selectedModule.title };
+  }
 
-  const data = {};
+  const settings = getDraftSettings();
+  const existing = readModuleDraftMap();
+
+  // #934 skive 5a-1: tekst til felt siden ikke har lenger, følger med videre. Lagringen erstatter hele kladden.
+  const data = Object.fromEntries(
+    orphanedDraftTexts(existing[selectedModule.id], renderedSubmissionFieldIds()).map(({ id, text }) => [id, text]),
+  );
   for (const field of currentSubmissionFields) {
     const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
     data[field.id] = element?.value ?? "";
   }
   data.mcq = collectCurrentMcqDraft();
+  const aiDeclaration = currentAiDeclarationDraft();
+  if (aiDeclaration) data[AI_DECLARATION_DRAFT_KEY] = aiDeclaration;
+  // 2.126.0: en kladd lagret mens et svar er levert, er restene av det svaret — ikke et nytt forsøk.
+  // Merket lar modulen vise resultatet igjen neste gang den åpnes (earlierResultToShow).
+  const submittedAs = submissionIdLabel.textContent;
+  if (flowState.hasSubmission && submittedAs && submittedAs !== "-") data.submittedAs = submittedAs;
 
-  const settings = getDraftSettings();
-  const existing = readModuleDraftMap();
   const updated = upsertModuleDraft(existing, selectedModule.id, data, Date.now(), settings.maxModules);
   writeModuleDraftMap(updated);
 
@@ -1643,20 +2046,53 @@ function scheduleDraftAutosave() {
   }, 250);
 }
 
+function renderedSubmissionFieldIds() {
+  return [...submissionFieldsContainer.querySelectorAll("[data-field-id]")].map((element) => element.dataset.fieldId);
+}
+
+// #934 skive 5a-1: teksten står urørt ved siden av de nye feltene. Deltakeren avgjør selv hva som kan brukes; de nye
+// feltene kan spørre om noe annet, så den fylles ikke inn i dem.
+function renderOrphanedDraftTexts(draft) {
+  const texts = orphanedDraftTexts(draft, renderedSubmissionFieldIds());
+  orphanedDraftPanel.replaceChildren();
+  orphanedDraftPanel.hidden = texts.length === 0;
+  if (texts.length === 0) {
+    return;
+  }
+  const heading = document.createElement("div");
+  heading.className = "module-brief-label";
+  heading.textContent = t("draft.orphaned.heading");
+  const hint = document.createElement("p");
+  hint.className = "small";
+  hint.textContent = t("draft.orphaned.hint");
+  orphanedDraftPanel.append(heading, hint);
+  for (const { text } of texts) {
+    const textarea = document.createElement("textarea");
+    textarea.readOnly = true;
+    textarea.rows = 6;
+    textarea.value = text;
+    textarea.setAttribute("aria-label", t("draft.orphaned.heading"));
+    orphanedDraftPanel.append(textarea);
+  }
+}
+
 function restoreDraftForSelectedModule(showStatus = true) {
   const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
   if (!selectedModule) {
+    renderOrphanedDraftTexts(null);
     setDraftStatus("none", "");
     return;
   }
 
   const moduleDrafts = readModuleDraftMap();
   const draft = moduleDrafts[selectedModule.id];
+  renderOrphanedDraftTexts(draft);
 
   if (!draft) {
     resetModuleDraftInputsToDefaultLocaleValues();
     currentQuestions = [];
     attemptIdLabel.textContent = "-";
+    mcqAttemptVersionId = null;
     renderQuestions();
     updateCreateSubmissionAvailability();
     if (showStatus) {
@@ -1676,12 +2112,17 @@ function restoreDraftForSelectedModule(showStatus = true) {
   if (mcqDraft && Array.isArray(mcqDraft.questions)) {
     currentQuestions = mcqDraft.questions;
     attemptIdLabel.textContent = mcqDraft.attemptId || "-";
+    mcqAttemptVersionId = mcqDraft.moduleVersionId ?? null;
+    mcqAttemptLocale = mcqDraft.locale ?? null;
     renderQuestions(mcqDraft.responses ?? {});
   } else {
     currentQuestions = [];
     attemptIdLabel.textContent = "-";
+    mcqAttemptVersionId = null;
     renderQuestions();
   }
+
+  restoreAiDeclarationFromDraft(draft);
 
   if (showStatus) {
     setDraftStatus("restored", selectedModule.title);
@@ -1892,7 +2333,11 @@ function log(data, options = {}) {
   outputStatus.dataset.hasContent = "true";
   outputStatus.textContent = statusText;
 
-  if (notify) {
+  // #1161: et VELLYKKET svar gir ingen toast. Oppsummeringen av det («Opprett innlevering: <id>», «Request completed.»,
+  // «Updated: submission») er en linje for feilsøkingspanelet, ikke en beskjed til deltakeren: det deltakeren trenger å se,
+  // står på siden (spørsmålene, framdriften, resultatet, anken). Feil, og tekster kalleren har skrevet selv, vises som før.
+  // En ny toast for noe som gikk bra, skrives som en menneskelig, oversatt tekst der den hører hjemme (showToast(t(…))).
+  if (notify && (humanized || typeof data === "string")) {
     showToast(statusText, humanized ? "error" : inferParticipantToastType(data), toastDetail);
   }
 
@@ -2402,8 +2847,10 @@ function applySettledChrome(hasResult) {
   }
   // Maskin-ID-ene: forsøks-ID-en ligger nå bak «Vis detaljer» i kortet, der den trengs når noe skal
   // ettergås (#939). To ID-linjer i tillegg er støy over et ferdig resultat.
+  // #1161: og før resultatet er de bare feilsøking: «Forsøks-ID: <id>» under «Send test» sier deltakeren ingenting. De vises med
+  // `?debug=1`. Elementene blir stående, for siden leser id-ene fra dem (`attemptIdLabel`, `submissionIdLabel`).
   for (const node of [attemptIdLine, submissionIdLine]) {
-    if (node) setHidden(node, hasResult);
+    if (node) setHidden(node, hasResult || !isRawDebugEnabled());
   }
   // «Vurderingshandlinger er tilgjengelige.» og «Vurdering er ferdig.» sier begge noe kortet
   // allerede har sagt tydeligere.
@@ -2469,12 +2916,15 @@ function renderNextSteps(body, adviceItems) {
 let mcqReviewHost = null;
 async function renderMcqReview(submissionId) {
   if (!submissionId) return;
+  // 2.126.0: deltakeren kan ha byttet modul mens svaret var på vei — da hører det ikke hjemme her.
+  const shownFor = submissionIdLabel.textContent;
   let review;
   try {
     review = await apiFetch(`/api/submissions/${submissionId}/mcq-review`, headers);
   } catch {
     return; // Gjennomgangen er et tillegg til resultatet; feiler den, står resultatet.
   }
+  if (submissionIdLabel.textContent !== shownFor) return;
   if (!review?.enabled || !Array.isArray(review.questions) || review.questions.length === 0) return;
   // Resultatet tegnes på nytt ved hver polling — ett kort, byttet ut, ikke stablet.
   if (mcqReviewHost?.isConnected) mcqReviewHost.remove();
@@ -2506,15 +2956,25 @@ async function renderMcqReview(submissionId) {
     item.appendChild(stem);
     const yours = document.createElement("div");
     yours.className = "mcq-review-line";
-    // #1077: i «velg alle som stemmer» er svaret og fasiten flere alternativer.
+    // #1077: i «velg alle som stemmer» er svaret og fasiten flere alternativer; i «sett i rekkefølge»
+    // er de en rekkefølge (leveranse 2).
     const multiple = q.questionType === "multiple";
-    const yourText = multiple ? (q.selectedAnswers?.length ? q.selectedAnswers.join(" · ") : null) : q.selectedAnswer;
-    yours.textContent = `${t("result.mcqReview.yourAnswer")}: ${yourText ?? t("result.mcqReview.unanswered")}`;
+    const order = q.questionType === "order";
+    // Leveranse 3: «fyll inn» — det deltakeren skrev, og de godkjente svarene.
+    const fill = q.questionType === "fill";
+    const yourText = order
+      ? (q.selectedOrder?.length ? q.selectedOrder.join(" → ") : null)
+      : multiple ? (q.selectedAnswers?.length ? q.selectedAnswers.join(" · ") : null) : q.selectedAnswer;
+    yours.textContent = `${t(order ? "result.mcqReview.yourOrder" : "result.mcqReview.yourAnswer")}: ${yourText ?? t("result.mcqReview.unanswered")}`;
     item.appendChild(yours);
     if (!q.isCorrect) {
       const correct = document.createElement("div");
       correct.className = "mcq-review-line mcq-review-correct";
-      correct.textContent = `${t("result.mcqReview.correctAnswer")}: ${multiple ? (q.correctAnswers ?? []).join(" · ") : q.correctAnswer}`;
+      correct.textContent = order
+        ? `${t("result.mcqReview.correctOrder")}: ${(q.correctOrder ?? []).join(" → ")}`
+        : fill
+          ? `${t("result.mcqReview.acceptedAnswers")}: ${(q.acceptedAnswers ?? []).join(" · ")}`
+          : `${t("result.mcqReview.correctAnswer")}: ${multiple ? (q.correctAnswers ?? []).join(" · ") : q.correctAnswer}`;
       item.appendChild(correct);
     }
     if (q.rationale) {
@@ -2528,6 +2988,74 @@ async function renderMcqReview(submissionId) {
   card.appendChild(list);
   mcqReviewHost = card;
   resultSummary.appendChild(card);
+}
+
+// #1124 del 2: eksempelsvaret etter fritekstvurderingen — eget kall, egen dør, som flervalgsgjennomgangen.
+// Tjeneren svarer `modelAnswer: null` når modulen ikke har slått det på eller vurderingen ikke er ferdig.
+//
+// Nærhet (Clark & Mayer): eksempelsvaret står VED SIDEN AV deltakerens eget svar, ikke på en egen side.
+// På mobil kommer det etter tilbakemeldingen per kriterium, og eget svar kan foldes ut; på bred skjerm
+// står de to side om side, over kriteriene (prototypen godkjent 2026-10-26).
+let modelAnswerHost = null;
+const MODEL_ANSWER_WIDE = "(min-width: 900px)";
+
+async function renderModelAnswer(submissionId) {
+  if (!submissionId) return;
+  // 2.126.0: deltakeren kan ha byttet modul mens svaret var på vei — da hører det ikke hjemme her.
+  const shownFor = submissionIdLabel.textContent;
+  let view;
+  try {
+    view = await apiFetch(`/api/submissions/${submissionId}/model-answer`, headers);
+  } catch {
+    return; // Et tillegg til resultatet; feiler det, står resultatet.
+  }
+  if (submissionIdLabel.textContent !== shownFor) return;
+  if (modelAnswerHost?.isConnected) modelAnswerHost.remove();
+  modelAnswerHost = null;
+  if (!view?.enabled || typeof view.modelAnswer !== "string" || !view.modelAnswer.trim()) return;
+
+  const wide = window.matchMedia?.(MODEL_ANSWER_WIDE)?.matches ?? false;
+  const card = createSummaryCard(t(wide ? "result.modelAnswer.titleWide" : "result.modelAnswer.title"));
+  card.classList.add("model-answer-card");
+  const compare = document.createElement("div");
+  compare.className = "model-answer-compare";
+
+  const example = document.createElement("div");
+  example.className = "model-answer-example";
+  const exampleHead = document.createElement("div");
+  exampleHead.className = "model-answer-head";
+  exampleHead.textContent = t("result.modelAnswer.example");
+  const exampleBody = document.createElement("div");
+  exampleBody.className = "model-answer-text";
+  exampleBody.textContent = view.modelAnswer;
+  const exampleNote = document.createElement("div");
+  exampleNote.className = "model-answer-note";
+  exampleNote.textContent = t("result.modelAnswer.note");
+  example.append(exampleHead, exampleBody, exampleNote);
+
+  const own = Array.isArray(view.ownAnswer) ? view.ownAnswer.filter((text) => typeof text === "string" && text.trim()) : [];
+  if (own.length > 0) {
+    // Eget svar foldes ut på mobil, og står åpent ved siden av eksempelsvaret på bred skjerm.
+    const yours = document.createElement("details");
+    yours.className = "model-answer-own";
+    if (wide) yours.open = true;
+    const summary = document.createElement("summary");
+    summary.textContent = t("result.modelAnswer.yours");
+    const ownBody = document.createElement("div");
+    ownBody.className = "model-answer-text";
+    ownBody.textContent = own.join("\n\n");
+    yours.append(summary, ownBody);
+    compare.append(yours, example);
+  } else {
+    compare.append(example);
+  }
+  card.appendChild(compare);
+
+  const criteriaCard = resultSummary.querySelector('[data-card="criteria"]');
+  if (wide && criteriaCard) resultSummary.insertBefore(card, criteriaCard);
+  else if (criteriaCard) criteriaCard.after(card);
+  else resultSummary.appendChild(card);
+  modelAnswerHost = card;
 }
 
 function createSummaryCard(title) {
@@ -2657,6 +3185,16 @@ function renderResultSummary(body) {
 
   // Track the outcome so renderFlowGating can de-emphasise the retry button once passed.
   flowState.resultPassFail = body?.decision?.passFailTotal ?? null;
+  // 2.126.0: modulens status ble hentet ved sidelasting. Uten dette ville et resultat fra denne økta
+  // ikke vises igjen når deltakeren går tilbake til modulen (earlierResultToShow leser statusen).
+  const shownSubmissionId = submissionIdLabel.textContent;
+  if (shownSubmissionId && shownSubmissionId !== "-") {
+    noteLatestSubmission(selectedModuleId, {
+      latestSubmissionId: shownSubmissionId,
+      latestStatus: typeof body.status === "string" ? body.status : null,
+      latestDecision: body.decision ?? null,
+    });
+  }
 
   clearSummaryContainer(resultSummary);
   resultSummary.appendChild(buildResultCard(body));
@@ -2672,7 +3210,30 @@ function renderResultSummary(body) {
   }
 
   const rationales = body.participantGuidance?.criterionRationales ?? {};
-  const rationaleEntries = Object.entries(rationales);
+  // #1124: poengene per kriterium — «1 av 2» på kriteriets egen skala, begrunnelsen, og hva
+  // toppnivået krever der deltakeren ikke fikk fullt. Begrunnelser for kriterier serveren ikke sendte
+  // poeng for (skjulte, eller en eldre server), står i lista under som før.
+  const { list: scoreList, covered } = buildCriterionScoreList(
+    document,
+    body.participantGuidance?.criterionScores,
+    rationales,
+    { t, labelFor: localizeCriterionName },
+  );
+  if (scoreList) {
+    const scoreCard = createSummaryCard(t("result.criteria.title"));
+    scoreCard.dataset.card = "criteria";
+    // Poengene er KI-ens. Har en vurderer overstyrt vedtaket, sier merknaden det — ellers kan
+    // «2 av 2» ved siden av «Ikke bestått» se ut som en feil.
+    if (body.participantGuidance?.finalDecisionByAssessor === true) {
+      const note = document.createElement("p");
+      note.className = "criterion-score-note";
+      note.textContent = t("result.criteria.byAssessorNote");
+      scoreCard.appendChild(note);
+    }
+    scoreCard.appendChild(scoreList);
+    resultSummary.appendChild(scoreCard);
+  }
+  const rationaleEntries = Object.entries(rationales).filter(([criterion]) => !covered.has(criterion));
   if (rationaleEntries.length > 0) {
     const rationaleCard = createSummaryCard(t("result.rationales"));
     const rationaleList = document.createElement("ul");
@@ -2691,6 +3252,8 @@ function renderResultSummary(body) {
   // #1061: gjennomgangen av flervalgsdelen — eget kall, egen dør for fasiten. Tjeneren svarer tomt
   // når modulen ikke har slått den på; da vises ingenting.
   if (body.scoreComponents?.mcqPercentScore != null) void renderMcqReview(body.submissionId);
+  // #1124 del 2: eksempelsvaret — bare der det finnes en fritekstdel.
+  if (body.scoreComponents?.practicalScaledScore != null || scoreList) void renderModelAnswer(body.submissionId);
 
   // #549: celebrate an automatic/confirmed pass — confetti + a clear "passed" banner, shown once
   // per result (the result view re-renders on each poll). De-emphasising retry is handled in
@@ -2755,7 +3318,7 @@ function renderHistorySummary(body) {
   historySummary.dataset.hasHistory = "true";
 }
 
-async function startMcqForSubmission(moduleId, submissionId) {
+async function startMcqForSubmission(moduleId, submissionId, moduleVersionId = null) {
   if (!moduleId || !submissionId || submissionId === "-") {
     throw new Error(t("errors.createSubmissionFirst"));
   }
@@ -2765,6 +3328,8 @@ async function startMcqForSubmission(moduleId, submissionId) {
     headers,
   );
   attemptIdLabel.textContent = body.attemptId;
+  mcqAttemptVersionId = moduleVersionId;
+  mcqAttemptLocale = currentLocale;
   currentQuestions = body.questions;
   renderQuestions();
   scheduleDraftAutosave();
@@ -2781,10 +3346,14 @@ function clearCurrentModuleDraft() {
   const moduleDrafts = readModuleDraftMap();
   delete moduleDrafts[selectedModule.id];
   writeModuleDraftMap(moduleDrafts);
+  renderOrphanedDraftTexts(null);
 
   resetModuleDraftInputsToDefaultLocaleValues();
+  // 2.136.1: svaret om KI er en del av kladden. Blir det stående, følger det forrige forsøks svar med inn i det neste.
+  clearAiDeclarationSelection();
   currentQuestions = [];
   attemptIdLabel.textContent = "-";
+  mcqAttemptVersionId = null;
   renderQuestions();
   resetFlowStateForModuleContext();
   setDraftStatus("cleared", selectedModule.title);
@@ -2877,9 +3446,7 @@ loadModulesButton.addEventListener("click", async () => {
         loadPreviewModules();
         return;
       }
-      const body = await apiFetch("/api/modules?includeCompleted=true", headers);
-      loadedModules = Array.isArray(body.modules) ? body.modules : [];
-      hasLoadedModules = true;
+      const { body } = await loadModulesForCourse(moduleContextCourseId);
       syncParticipantModuleWorkspace({ restoreDraft: true });
       log(body);
     } catch (error) {
@@ -2942,6 +3509,14 @@ createSubmissionButton.addEventListener("click", async () => {
       }
 
       const moduleId = selectedModuleId;
+      // #934 skive 5a-1: versjonen siden viser, lest samtidig med svaret og før noe venter. Dialogen under kan stå åpen mens
+      // `loadedModules` byttes (språkbytte), og da ville et svar på den gamle versjonen blitt sendt med den nye. Er versjonen
+      // ikke lenger aktiv, svarer serveren 409. Svaret står i feltene og i kladden (autolagringen hvert kvarte sekund, og
+      // `beforeunload`), så det er der etter at siden er lastet på nytt.
+      const seenVersionId = resolveSelectedModule(loadedModules, moduleId)?.activeVersion?.id;
+      // #1140 etappe 1: kurset lista ble hentet for, lest i samme øyeblikk som versjonen. Serveren regner ut versjonen for det
+      // samme kurset, så de to stemmer også om et annet kurs åpnes mens dialogen under står oppe.
+      const seenInCourseId = moduleContextCourseId;
       const responseJson = {};
       for (const field of currentSubmissionFields) {
         const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
@@ -2954,6 +3529,8 @@ createSubmissionButton.addEventListener("click", async () => {
       let processSignals;
       if (aiDeclarationApplies()) {
         const declaration = getSelectedAiDeclaration();
+        // 2.136.4: lest før dialogen, som svaret. Et modulbytte bak dialogen bytter innholdet i feltet. Ved «Nei» er feltet skjult, og teksten skal ikke sendes.
+        const declarationText = declaration === "none" ? "" : aiDeclarationText?.value.trim();
         let insistedAfterPrompt = false;
         if (declaration === "autonomous" && aiDeclarationNudgeLive()) {
           const proceed = await confirmAiNudge();
@@ -2962,7 +3539,6 @@ createSubmissionButton.addEventListener("click", async () => {
           }
           insistedAfterPrompt = true;
         }
-        const declarationText = aiDeclarationText?.value.trim();
         processSignals = {
           declaration,
           ...(declarationText ? { declarationText } : {}),
@@ -2976,6 +3552,8 @@ createSubmissionButton.addEventListener("click", async () => {
         method: "POST",
         body: JSON.stringify({
           moduleId,
+          moduleVersionId: seenVersionId,
+          ...(seenInCourseId ? { courseId: seenInCourseId } : {}),
           deliveryType: "text",
           responseJson,
           responsibilityAcknowledged: selectedModuleIsMcqOnly() ? true : ackCheckbox.checked,
@@ -2983,6 +3561,7 @@ createSubmissionButton.addEventListener("click", async () => {
         }),
       });
       submissionIdLabel.textContent = body.submission.id;
+      noteLatestSubmission(moduleId, { latestSubmissionId: body.submission.id, latestStatus: body.submission.submissionStatus ?? "SUBMITTED", latestDecision: null });
       stopAutoAssessmentLoop(true);
       latestAppeal = null;
       assessmentProgressKey = "assessment.progress.idle";
@@ -2997,6 +3576,8 @@ createSubmissionButton.addEventListener("click", async () => {
       renderAssessmentProgress();
       renderAppealState();
       renderFlowGating();
+      // 2.136.4: kladden er nå restene av et levert svar. Dreper mobilen fanen under vurderingen, går ikke `beforeunload`, og svaret om KI ville fulgt med til neste forsøk.
+      if (selectedModuleId === moduleId) persistCurrentModuleDraft(false);
       // #578: FREETEXT_ONLY has no MCQ — don't start an MCQ attempt (the server would 400). The
       // assessment runs directly on the free-text submission (auto if enabled, otherwise via the
       // now-unlocked "Start assessment" button).
@@ -3004,7 +3585,7 @@ createSubmissionButton.addEventListener("click", async () => {
         await startAutomaticAssessmentFlow(body.submission.id);
         log({ submission: body.submission });
       } else {
-        const mcqStartBody = await startMcqForSubmission(moduleId, body.submission.id);
+        const mcqStartBody = await startMcqForSubmission(moduleId, body.submission.id, seenVersionId ?? null);
         log({
           submission: body.submission,
           mcqStarted: {
@@ -3087,9 +3668,13 @@ submitMcqButton.addEventListener("click", async () => {
       }
 
       const responses = answers.map(({ question, selected }) => (
-        isMultipleQuestion(question)
-          ? { questionId: question.id, selectedAnswers: selected }
-          : { questionId: question.id, selectedAnswer: selected }
+        isFillQuestion(question)
+          ? { questionId: question.id, textAnswer: selected }
+          : isOrderQuestion(question)
+            ? { questionId: question.id, orderedAnswers: selected }
+            : isMultipleQuestion(question)
+              ? { questionId: question.id, selectedAnswers: selected }
+              : { questionId: question.id, selectedAnswer: selected }
       ));
 
       const body = await apiFetch(`/api/modules/${moduleId}/mcq/submit`, headers, {
@@ -3291,7 +3876,9 @@ aiDeclarationBlock?.addEventListener("change", (event) => {
   setAiHowtoVisible(Boolean(declaration) && declaration !== "none");
   aiDeclarationHint?.classList.add("hidden");
   updateCreateSubmissionAvailability();
+  scheduleDraftAutosave();
 });
+aiDeclarationText?.addEventListener("input", () => scheduleDraftAutosave());
 
 window.addEventListener("beforeunload", () => {
   stopAutoAssessmentLoop(false);
@@ -3316,12 +3903,124 @@ function markUnansweredQuestions(numbers) {
 // #1077: «velg alle som stemmer» (questionType «multiple») svares med avkrysning, alt annet med ett valg.
 // Antallet riktige oppgis ikke (produkteier 2026-10-24) — det ville vært et hint.
 const isMultipleQuestion = (question) => question?.questionType === "multiple";
+// Leveranse 2: «sett i riktig rekkefølge» (questionType «order») — elementene flyttes med «Flytt opp» /
+// «Flytt ned» (tastatur og skjermleser), og kan dras med musa. De kommer stokket fra tjeneren, aldri i
+// riktig rekkefølge, så rekkefølgen deltakeren ser, er alltid et svar.
+const isOrderQuestion = (question) => question?.questionType === "order";
+// Leveranse 3: «fyll inn ordet som mangler» (questionType «fill») — deltakeren skriver selv; tjeneren
+// sender aldri alternativene, for de er de godkjente svarene.
+const isFillQuestion = (question) => question?.questionType === "fill";
 
-/** Det deltakeren har valgt på et spørsmål: én tekst, flere (multiple), eller ingenting. */
+/** Det deltakeren har valgt på et spørsmål: én tekst, flere (multiple), alle i sin rekkefølge (order), det hun skrev (fill), eller ingenting. */
 function selectedForQuestion(question) {
+  if (isFillQuestion(question)) {
+    const value = document.querySelector(`[data-fill-input="${CSS.escape(question.id)}"]`)?.value.trim() ?? "";
+    return value || null;
+  }
+  if (isOrderQuestion(question)) {
+    const items = [...document.querySelectorAll(`[data-order-list="${CSS.escape(question.id)}"] [data-order-item]`)].map((li) => li.dataset.orderItem);
+    return items.length > 0 ? items : null;
+  }
   const checked = [...document.querySelectorAll(`input[name='q_${question.id}']:checked`)].map((input) => input.value);
   if (isMultipleQuestion(question)) return checked.length > 0 ? checked : null;
   return checked[0] ?? null;
+}
+
+/**
+ * Leveranse 2: lista for «sett i riktig rekkefølge». Hvert element har «Flytt opp» og «Flytt ned»; på
+ * PC kan det også dras. Etter en flytting står fokus på samme knapp på det samme elementet, så en
+ * tastaturbruker kan fortsette å flytte det.
+ * @param {string[] | undefined} saved  rekkefølgen fra kladden, om noen
+ */
+function buildOrderList(question, saved) {
+  const fragment = document.createDocumentFragment();
+  const hint = document.createElement("p");
+  hint.className = "mcq-question-hint small";
+  hint.textContent = t("mcq.putInOrder");
+  fragment.appendChild(hint);
+
+  const list = document.createElement("ol");
+  list.className = "mcq-order-list";
+  list.dataset.orderList = question.id;
+  // Kladden gjelder bare hvis den har nøyaktig de samme elementene.
+  const items = Array.isArray(saved) && saved.length === question.options.length && saved.every((item) => question.options.includes(item))
+    ? saved
+    : question.options;
+
+  const announce = document.createElement("p");
+  announce.className = "sr-only";
+  announce.setAttribute("aria-live", "polite");
+
+  const changed = () => {
+    list.closest(".mcq-question-card")?.classList.remove("mcq-question-card--unanswered");
+    [...list.children].forEach((li, i) => {
+      li.querySelector(".mcq-order-position").textContent = `${i + 1}.`;
+      li.querySelector("[data-order-move='up']").disabled = i === 0;
+      li.querySelector("[data-order-move='down']").disabled = i === list.children.length - 1;
+    });
+    scheduleDraftAutosave();
+  };
+  const move = (li, direction) => {
+    const sibling = direction === "up" ? li.previousElementSibling : li.nextElementSibling;
+    if (!sibling) return;
+    if (direction === "up") list.insertBefore(li, sibling);
+    else list.insertBefore(sibling, li);
+    changed();
+    const position = [...list.children].indexOf(li) + 1;
+    announce.textContent = fillPlaceholders(t("mcq.orderMoved"), { item: li.dataset.orderItem, n: position });
+    const button = li.querySelector(`[data-order-move='${direction}']`);
+    (button && !button.disabled ? button : li.querySelector("[data-order-move]:not(:disabled)"))?.focus();
+  };
+
+  let dragged = null;
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.className = "mcq-order-item";
+    li.dataset.orderItem = item;
+    li.draggable = true;
+    const position = document.createElement("span");
+    position.className = "mcq-order-position";
+    position.setAttribute("aria-hidden", "true");
+    const text = document.createElement("span");
+    text.className = "mcq-order-text";
+    text.textContent = item;
+    const buttons = document.createElement("span");
+    buttons.className = "mcq-order-buttons";
+    for (const [direction, key, symbol] of [["up", "mcq.moveUp", "↑"], ["down", "mcq.moveDown", "↓"]]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "mcq-order-move";
+      button.dataset.orderMove = direction;
+      button.textContent = symbol;
+      button.setAttribute("aria-label", fillPlaceholders(t(key), { item }));
+      button.addEventListener("click", () => move(li, direction));
+      buttons.appendChild(button);
+    }
+    li.append(position, text, buttons);
+    li.addEventListener("dragstart", (event) => {
+      dragged = li;
+      li.classList.add("is-dragging");
+      event.dataTransfer?.setData("text/plain", item);
+    });
+    li.addEventListener("dragend", () => { li.classList.remove("is-dragging"); dragged = null; });
+    li.addEventListener("dragover", (event) => {
+      if (!dragged || dragged === li) return;
+      event.preventDefault();
+      const after = event.clientY > li.getBoundingClientRect().top + li.offsetHeight / 2;
+      list.insertBefore(dragged, after ? li.nextElementSibling : li);
+    });
+    li.addEventListener("drop", (event) => { event.preventDefault(); changed(); });
+    list.appendChild(li);
+  }
+  fragment.appendChild(list);
+  fragment.appendChild(announce);
+  // Nummer og knapper settes én gang her, uten å lagre en kladd (ingenting er endret ennå).
+  [...list.children].forEach((li, i) => {
+    li.querySelector(".mcq-order-position").textContent = `${i + 1}.`;
+    li.querySelector("[data-order-move='up']").disabled = i === 0;
+    li.querySelector("[data-order-move='down']").disabled = i === list.children.length - 1;
+  });
+  return fragment;
 }
 
 function renderQuestions(selectedResponses = {}) {
@@ -3343,6 +4042,41 @@ function renderQuestions(selectedResponses = {}) {
     title.textContent = question.stem;
     titleRow.appendChild(title);
     wrapper.appendChild(titleRow);
+
+    if (isOrderQuestion(question)) {
+      wrapper.appendChild(buildOrderList(question, selectedResponses[question.id]));
+      mcqQuestions.appendChild(wrapper);
+      continue;
+    }
+
+    // Leveranse 3: «fyll inn» — ett tekstfelt for lukka i spørsmålet. Feltet har spørsmålet som
+    // beskrivelse, så en skjermleser leser setningen med lukka før den ber om svaret.
+    if (isFillQuestion(question)) {
+      const label = document.createElement("label");
+      label.className = "mcq-fill";
+      const caption = document.createElement("span");
+      caption.className = "mcq-fill-label small";
+      caption.textContent = t("mcq.fillLabel");
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "mcq-fill-input";
+      input.dataset.fillInput = question.id;
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      input.maxLength = 200;
+      title.id = `mcqStem_${question.id}`;
+      input.setAttribute("aria-describedby", title.id);
+      const saved = selectedResponses[question.id];
+      if (typeof saved === "string") input.value = saved;
+      input.addEventListener("input", () => {
+        input.closest(".mcq-question-card")?.classList.remove("mcq-question-card--unanswered");
+        scheduleDraftAutosave();
+      });
+      label.append(caption, input);
+      wrapper.appendChild(label);
+      mcqQuestions.appendChild(wrapper);
+      continue;
+    }
 
     const multiple = isMultipleQuestion(question);
     if (multiple) {
@@ -3403,11 +4137,74 @@ if (previewModeEnabled) {
 let participantCourses = [];
 // 2.102.0: temaene deltakeren har kurs i, alfabetisk på deltakerens språk (tjeneren sorterer).
 let participantThemes = [];
-let participantCompletions = {};   // courseId -> completion
+let participantCompletions = {};   // courseId -> completion for the course's CURRENT major version
+// #934: courseId -> newest completion for an EARLIER major version, when there is none for the current.
+let participantEarlierCompletions = {};
 // #550: celebrate a course completion only when it happens during the session (e.g. the
 // participant just passed the last module / read the last section), not for already-completed
 // courses on first load.
 const celebratedCompletedCourses = new Set();
+// #1137 (QA 2.130.1): kurs som er fullført, men der båten ennå ikke har fått komme i mål fordi lista var
+// skjult (deltakeren sto inne i et kurs). Feires når lista vises igjen.
+const pendingBoatCelebrations = new Set();
+// #1137: kurs der båten feirer akkurat nå → når feiringen startet (performance.now()). En omtegning av lista
+// (språk- eller visningsbytte, ny lasting) bytter ut kortene og dermed båtene; da startes de igjen der de var,
+// til den opprinnelige tiden er ute. Ikke på nytt fra start.
+const runningBoatCelebrations = new Map();
+
+function boatClock() {
+  return window.performance?.now?.() ?? Date.now();
+}
+
+function boatReducedMotion() {
+  return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+}
+
+function courseCardsFor(container, courseId) {
+  return container.querySelectorAll(`.course-accordion-item[data-course-id="${courseId}"]`);
+}
+
+// Feiringer som ble avbrutt av en omtegning, fortsetter på de nye kortene. Kalles bare rett etter en omtegning:
+// på kort som fortsatt står, går båten allerede.
+function resumeRunningBoatCelebrations(container) {
+  if (focusedCourseId || runningBoatCelebrations.size === 0) return;
+  const reducedMotion = boatReducedMotion();
+  const now = boatClock();
+  for (const [id, startedAt] of runningBoatCelebrations) {
+    const elapsedMs = now - startedAt;
+    if (elapsedMs >= COURSE_BOAT_CELEBRATION_MS) {
+      runningBoatCelebrations.delete(id);
+      continue;
+    }
+    for (const card of courseCardsFor(container, id)) {
+      launchCourseBoatCelebration(card.querySelector(".course-progress"), { reducedMotion, elapsedMs });
+    }
+  }
+}
+
+// Tømmer køen av ventende båter mot kortene som står i lista nå: ruller til det første ventende kortet, og
+// starter båten på hvert kort for hvert kurs, også temakopiene. Gjør ingenting mens lista er skjult.
+//
+// Rullingen skjer HER, når kortene vises — ikke i øyeblikket kursene ble fullført. Sto deltakeren da inne i et
+// kurs, var kortene skjult, og rullingen gjorde ingenting (QA 2.130.1, runde 3): i en lang liste feiret båtene
+// nederst i «Fullført», utenfor synsfeltet. Rullingen gjelder også med redusert bevegelse; det er bare båten
+// som ikke vises.
+function flushPendingBoatCelebrations(container) {
+  if (!container || focusedCourseId || pendingBoatCelebrations.size === 0) return;
+  const selector = [...pendingBoatCelebrations].map((id) => `.course-accordion-item[data-course-id="${id}"]`).join(", ");
+  // #936/#929: kurset har nettopp flyttet seg ned under «Fullført». Uten rullingen skjer flyttingen utenfor
+  // synsfeltet, og deltakeren står igjen med inntrykket av at ingenting hendte — nøyaktig klagen #929 kom fra.
+  container.querySelector(selector)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  const reducedMotion = boatReducedMotion();
+  const now = boatClock();
+  for (const id of pendingBoatCelebrations) {
+    for (const card of courseCardsFor(container, id)) {
+      launchCourseBoatCelebration(card.querySelector(".course-progress"), { reducedMotion });
+    }
+    if (!reducedMotion) runningBoatCelebrations.set(id, now);
+  }
+  pendingBoatCelebrations.clear();
+}
 
 
 async function loadParticipantCourses() {
@@ -3418,9 +4215,16 @@ async function loadParticipantCourses() {
   participantCourses = Array.isArray(coursesBody.courses) ? coursesBody.courses : [];
   participantThemes = Array.isArray(coursesBody.themes) ? coursesBody.themes : [];
   participantCompletions = {};
+  participantEarlierCompletions = {};
   if (Array.isArray(completionsBody.completions)) {
     for (const c of completionsBody.completions) {
-      participantCompletions[c.courseId] = c;
+      // #934: et kursbevis gjelder sin hovedversjon. Bare et bevis for kursets NÅVÆRENDE gjør kurset
+      // fullført; et eldre står for seg (det nyeste av dem) og vises som «Kursbevis, versjon N».
+      // `current` mangler fra eldre tjenere — da er beviset det eneste, og det gjelder.
+      if (c.current !== false) participantCompletions[c.courseId] = c;
+      else if (!participantEarlierCompletions[c.courseId] || c.versionMajor > participantEarlierCompletions[c.courseId].versionMajor) {
+        participantEarlierCompletions[c.courseId] = c;
+      }
     }
   }
   // Reloading the course list rebuilds the accordion with fresh "loading…" detail containers;
@@ -3485,16 +4289,25 @@ function applyCourseFocusState() {
     }
   }
   setHidden(document.getElementById("courseBackBar"), !focused);
+  // 2.121.0: «Kopier lenke» når kurset har en delingslenke. Et åpent kurs fjerner meldingen om en lenke
+  // som ikke førte noe sted — deltakeren har gått videre.
+  const focusedCourse = focused ? participantCourses.find((c) => c.id === focusedCourseId) : null;
+  const copyLinkBtn = document.getElementById("courseCopyLinkBtn");
+  if (copyLinkBtn) {
+    // Knappen er bare et ikon: navnet skjermlesere og verktøytipset leser, settes her, på språket som gjelder nå.
+    copyLinkBtn.setAttribute("aria-label", t("courses.link.copy"));
+    copyLinkBtn.title = t("courses.link.copy");
+  }
+  setHidden(copyLinkBtn, !focusedCourse?.slug);
+  if (focused) setHidden(document.getElementById("courseLinkNotice"), true);
 }
 
 // Nettleserens tilbakeknapp skal føre samme sted som tilbake-lenka (#922). Begge retninger legger
 // en historikkoppføring, så Back/Forward vandrer mellom liste og kurs. ?courseId= er samme
 // parameter som dyplenka allerede brukte, så en oppfriskning lander på samme sted.
+// #1158: et åpent element (seksjon eller modul) hører til kurset, så det følger ikke med til et annet kurs eller lista.
 function courseFocusUrl(courseId) {
-  const url = new URL(window.location.href);
-  if (courseId) url.searchParams.set("courseId", courseId);
-  else url.searchParams.delete("courseId");
-  return `${url.pathname}${url.search}${url.hash}`;
+  return buildParticipantUrl(window.location.href, { courseId });
 }
 
 function pushCourseFocusHistory(courseId) {
@@ -3528,33 +4341,165 @@ function unfocusCourse(options = {}) {
   focusedCourseId = null;
   applyCourseFocusState();
   if (options.pushHistory !== false) pushCourseFocusHistory(null);
+  // #1137 (QA 2.130.1, runde 3): båtene som ventet på at lista skulle vises, feirer nå, på kortene som allerede
+  // står. Ikke først etter den nye lastingen: feiler den (feilen svelges med vilje), ville de aldri blitt vist.
+  // Lykkes den, tegnes lista på nytt, og båtene fortsetter der de var (resumeRunningBoatCelebrations).
+  flushPendingBoatCelebrations(document.getElementById("courseAccordion"));
   // Tilbake til lista er det naturlige tidspunktet å vise fersk progresjon på — og det er her
   // #550-feiringen lander når siste seksjon ble lest uten en «marker lest»-knapp (#924).
   loadParticipantCourses().catch(() => {/* stille */});
 }
 
+// ───────────────────────────────────────────────────────────────────────────────
+// #1158: seksjonen og modulen står i adressen, ved siden av kurset (`&sectionId=` / `&moduleId=`, se
+// /static/participant-location.js). Historikken har høyst ÉN elementoppføring over kursets:
+//
+//   [kurs] → åpne et element      → [kurs, element]   (pushState, merket `participantItemOverCourse`)
+//   [kurs, element] → et annet    → [kurs, element']  (replaceState: tilbake skal til kurset, ikke gjennom alt som ble åpnet)
+//   [kurs, element] → «Lukk»      → [kurs]            (history.back(), så appens og nettleserens tilbake gjør det samme)
+//
+// En lenke rett til et element (e-post, bokmerke) legger kurset under elementet, så tilbake lukker elementet og står i kurset
+// også da. En oppfriskning har alt kurset under seg (merket overlever i history.state).
+// ───────────────────────────────────────────────────────────────────────────────
+
+function itemHistoryState(courseId, item, overCourse) {
+  return { participantCourseId: courseId ?? null, participantItem: item, participantItemOverCourse: overCourse === true };
+}
+
+/** Deltakeren har åpnet et element: adressen får det. Står det alt der (fram/tilbake, lenke, oppfriskning), skjer ingenting. */
+function recordOpenedItem() {
+  const item = itemOfOpenEntry(inlineOpen);
+  if (!item) return;
+  const courseId = inlineOpen.courseId;
+  const location = readParticipantLocation(window.location.search);
+  if (location.courseId === courseId && sameParticipantItem(location.item, item)) return;
+  try {
+    const url = buildParticipantUrl(window.location.href, { courseId, item });
+    if (location.item) {
+      window.history.replaceState(itemHistoryState(courseId, item, window.history.state?.participantItemOverCourse), "", url);
+    } else {
+      window.history.pushState(itemHistoryState(courseId, item, true), "", url);
+    }
+  } catch {/* historikk er en bekvemmelighet, ikke en forutsetning */}
+}
+
+/**
+ * Deltakeren har lukket elementet («Lukk», Escape, «Avslutt kurset»): adressen står i kurset igjen. Ligger kurset rett under i
+ * historikken, går vi dit, så nettleserens fram-knapp åpner elementet igjen, akkurat som etter nettleserens tilbake.
+ */
+function recordClosedItem() {
+  const location = readParticipantLocation(window.location.search);
+  if (!location.item) return;
+  try {
+    if (window.history.state?.participantItemOverCourse === true) {
+      awaitingCloseBack = true;
+      window.history.back();
+      return;
+    }
+    window.history.replaceState({ participantCourseId: location.courseId }, "", buildParticipantUrl(window.location.href, { courseId: location.courseId }));
+  } catch {/* historikk er en bekvemmelighet */}
+}
+
+/** Elementet i adressen finnes ikke lenger (eller kan ikke åpnes): adressen står i kurset, uten et nytt steg i historikken. */
+function dropItemFromUrl() {
+  const location = readParticipantLocation(window.location.search);
+  if (!location.item) return;
+  try {
+    window.history.replaceState({ participantCourseId: location.courseId }, "", buildParticipantUrl(window.location.href, { courseId: location.courseId }));
+  } catch {/* historikk er en bekvemmelighet */}
+}
+
+/** Lukker det åpne elementet slik deltakeren ba om det, og fører adressen med. Interne lukkinger bruker collapseInlineOpen. */
+function closeInlineItem() {
+  collapseInlineOpen();
+  recordClosedItem();
+}
+
+function showItemLinkNotice(type) {
+  const notice = document.getElementById("courseLinkNotice");
+  if (!notice) return;
+  const key = type === "SECTION" ? "courses.link.sectionUnavailable" : "courses.link.moduleUnavailable";
+  notice.setAttribute("data-i18n", key);
+  notice.textContent = t(key);
+  setHidden(notice, false);
+}
+
+/**
+ * Åpner elementet adressen ba om, når kurset det står i er tegnet. Kalles fra renderCourseDetailModules (kurset ble tegnet) og
+ * fra popstate (kurset står alt). Finnes ikke elementet i kurset, eller kan det ikke åpnes (arkivert, avpublisert, ikke i
+ * kurset lenger), står deltakeren i kurset med meldingen, og adressen mister elementet.
+ */
+function openPendingItem(courseId) {
+  const pending = pendingItemOpen;
+  if (!pending || pending.courseId !== courseId || !courseSequences[courseId]) return;
+  pendingItemOpen = null;
+  if (inlineOpen?.courseId === courseId && sameParticipantItem(itemOfOpenEntry(inlineOpen), pending)) return;
+  const entry = findSequenceEntry(courseSequences[courseId], pending);
+  if (!entry || !isEntryAvailable(entry)) {
+    collapseInlineOpen();
+    showItemLinkNotice(pending.type);
+    dropItemFromUrl();
+    return;
+  }
+  openInlineItemByEntry(courseId, entry);
+}
+
 window.addEventListener("popstate", (event) => {
   const stateCourseId = event.state && typeof event.state === "object" ? event.state.participantCourseId : undefined;
-  const target = stateCourseId ?? new URLSearchParams(window.location.search).get("courseId");
-  if (target) focusCourse(target, { pushHistory: false });
-  else unfocusCourse({ pushHistory: false });
+  const location = readParticipantLocation(window.location.search);
+  const target = stateCourseId ?? location.courseId;
+  const item = target && location.item ? location.item : null;
+  if (awaitingCloseBack) {
+    awaitingCloseBack = false;
+    // «Lukk» har alt lukket elementet. Ble et nytt åpnet før tilbake-steget kom fram, skal det stå i adressen.
+    if (inlineOpen) {
+      recordOpenedItem();
+      return;
+    }
+  }
+  pendingItemOpen = item ? { courseId: target, ...item } : null;
+  if (!target) {
+    unfocusCourse({ pushHistory: false });
+    return;
+  }
+  if (target !== focusedCourseId) {
+    // Tegningen av kurset åpner elementet (openPendingItem i renderCourseDetailModules).
+    focusCourse(target, { pushHistory: false });
+    return;
+  }
+  // Samme kurs: bare elementet har endret seg. Kurset tegnes ikke på nytt.
+  if (!item) {
+    collapseInlineOpen();
+    return;
+  }
+  openPendingItem(target);
 });
 
 document.getElementById("courseBackBtn")?.addEventListener("click", () => unfocusCourse());
 
 // 2.102.0: pågående først, så fullførte bak en navngitt grense (#936) — i hele lista, og i hvert tema.
+// 2.152.0 (produkteier 2026-11-11, PLAN_1139 punkt 13): de fullførte står i ETT grønt kort med tette rader og én felles grønn
+// linje nederst (`.course-done-group-bar`). Kursets egen linje står fortsatt i hvert kort, skjult i gruppen; den vises mens
+// båten feirer (`course-progress--celebrating`) og når kurset er åpent alene.
 function appendCourseGroup(container, ongoing, done, appendCourse) {
-  for (const course of ongoing) appendCourse(course);
+  for (const course of ongoing) appendCourse(container, course);
   if (done.length === 0) return;
   // Grensen vises bare når det FINNES noe på begge sider. En «Fullført»-overskrift over hele
   // lista til en deltaker som har fullført alt sier ingenting.
   if (ongoing.length > 0) {
     const divider = document.createElement("div");
     divider.className = "course-group-divider";
-    divider.textContent = t("courses.list.completedGroup");
+    divider.textContent = `${t("courses.list.completedGroup")} · ${done.length}`;
     container.appendChild(divider);
   }
-  for (const course of done) appendCourse(course);
+  const group = document.createElement("div");
+  group.className = "course-done-group";
+  for (const course of done) appendCourse(group, course);
+  const bar = document.createElement("div");
+  bar.className = "course-done-group-bar";
+  bar.setAttribute("aria-hidden", "true");
+  group.appendChild(bar);
+  container.appendChild(group);
 }
 
 // 2.102.0: valget mellom tema og alfabetisk huskes i nettleseren. Lagringen kan mangle (privat
@@ -3606,6 +4551,8 @@ function renderParticipantCourseAccordion() {
     // Uten kurs finnes det ikke noe kurs å stå inne i — tilbake-linja skal ikke bli stående igjen.
     focusedCourseId = null;
     applyCourseFocusState();
+    // 2.121.0: en delingslenke til en som ikke har noen kurs, skal også få meldingen.
+    resolveCourseLink();
     return;
   }
   const isFirstRender = !courseAccordionInitialized;
@@ -3616,8 +4563,8 @@ function renderParticipantCourseAccordion() {
   const themed = hasAnyTheme(participantCourses);
   if (themed) container.appendChild(buildCourseViewToggle());
   const placed = new Set();
-  const appendCourse = (course) => {
-    container.appendChild(buildCourseAccordionItem(course, { copy: placed.has(course.id) }));
+  const appendCourse = (target, course) => {
+    target.appendChild(buildCourseAccordionItem(course, { copy: placed.has(course.id) }));
     placed.add(course.id);
   };
   if (themed && courseListView === "theme") {
@@ -3650,39 +4597,162 @@ function renderParticipantCourseAccordion() {
   if (focusedCourseId) loadCourseDetail(focusedCourseId);
 
   // #550: confetti when a course becomes completed during this session.
-  let newlyCompleted = false;
-  let newlyCompletedId = null;
+  // 2.130.1 (QA): én bestått modul kan fullføre FLERE kurs på én gang. Alle skal feire, ikke bare det siste.
+  const newlyCompletedIds = [];
   for (const course of participantCourses) {
     if (!isCourseCompleted(course)) continue;
+    // #1145: et kurs registrert som tatt utenfor plattformen feires ikke: deltakeren gjorde ingenting her nå. Det merkes heller
+    // ikke som feiret, så det feires når deltakeren senere fullfører det på plattformen (beviset blir da `platform`).
+    if (participantCompletions[course.id]?.source === "external") continue;
     if (!celebratedCompletedCourses.has(course.id)) {
       celebratedCompletedCourses.add(course.id);
-      if (courseAccordionInitialized) {
-        newlyCompleted = true;
-        newlyCompletedId = course.id;
-      }
+      if (courseAccordionInitialized) newlyCompletedIds.push(course.id);
     }
   }
-  if (newlyCompleted) {
+  if (newlyCompletedIds.length > 0) {
     launchConfetti();
     showToast(t("courses.celebrateComplete"), "success");
-    // #936/#929: kurset har nettopp flyttet seg ned under «Fullført». Uten dette skjer flyttingen
-    // utenfor synsfeltet, og deltakeren står igjen med inntrykket av at ingenting hendte — som er
-    // nøyaktig klagen #929 kom fra. Handlingen fortjener et synlig resultat.
-    const moved = container.querySelector(`.course-accordion-item[data-course-id="${newlyCompletedId}"]`);
-    moved?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
+  // #1137: båten kommer i mål på den grønne linja, feirer og glir ut — på hvert kort for hvert kurs som ble
+  // fullført, også temakopiene. Står deltakeren inne i et kurs, er lista skjult (en delt modul fullfører ofte
+  // flere kurs der), så båtene venter til lista vises igjen. Med redusert bevegelse vises de ikke. Rullingen
+  // til det fullførte kurset skjer i det køen tømmes (flushPendingBoatCelebrations), når kortene vises.
+  // Omtegningen byttet ut kortene: feiringer som var i gang, fortsetter først, så feirer de nye.
+  resumeRunningBoatCelebrations(container);
+  for (const id of newlyCompletedIds) pendingBoatCelebrations.add(id);
+  flushPendingBoatCelebrations(container);
   courseAccordionInitialized = true;
 
   // Deep link: ?courseId=xxx opens that course — only on the FIRST render, so a later re-render (e.g. after
   // marking a section read) doesn't re-toggle it and fight the open-state preservation above.
-  const linkedCourseId = new URLSearchParams(window.location.search).get("courseId");
-  if (isFirstRender && linkedCourseId && container.querySelector(`[data-course-id="${linkedCourseId}"]`)) {
-    // Dyplenka ER allerede «kurset alene»-tilstanden, så den skal ikke legge en ekstra
-    // historikkoppføring: nettleserens tilbakeknapp skal føre ut av siden, ikke til en liste
-    // deltakeren aldri sto i.
-    focusCourse(linkedCourseId, { pushHistory: false });
+  if (isFirstRender) resolveCourseLink();
+}
+
+// Lenka i adressen leses én gang per sidelasting; senere omtegninger (lest seksjon, språkbytte) skal
+// verken åpne kurset på nytt eller vise meldingen igjen.
+let courseLinkResolved = false;
+
+// 2.121.0: dyplenka — ?courseId=<id>, eller ?kurs=<navn> fra delingslenka /kurs/<navn>. «Mine kurs»
+// inneholder bare kursene deltakeren har tilgang til, så det er den lista som avgjør: et treff åpner
+// kurset, og alt annet gir ÉN melding, som ikke røper om et lukket kurs finnes. Før ble en lenke til et
+// kurs uten tilgang bare stille ignorert, og mottakeren sto i kurslista uten å vite hvorfor.
+function resolveCourseLink() {
+  if (courseLinkResolved) return;
+  courseLinkResolved = true;
+  const params = new URLSearchParams(window.location.search);
+  const slug = params.get("kurs");
+  const linkedCourseId = params.get("courseId");
+  const linkedModuleId = params.get("moduleId");
+  if (!slug && !linkedCourseId) {
+    if (linkedModuleId) resolveModuleLink(linkedModuleId).catch((error) => logApiError(error));
+    return;
+  }
+  const course = slug
+    ? participantCourses.find((c) => c.slug === slug)
+    : participantCourses.find((c) => c.id === linkedCourseId);
+  if (!course) {
+    setHidden(document.getElementById("courseLinkNotice"), false);
+    return;
+  }
+  if (slug) {
+    // Adressen skrives om til den vanlige, så tilbake/fram og en oppfriskning oppfører seg som for
+    // ethvert åpent kurs (popstate leser ?courseId=).
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("kurs");
+      url.searchParams.set("courseId", course.id);
+      window.history.replaceState({ participantCourseId: course.id }, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch {/* historikk er en bekvemmelighet */}
+  }
+  // Lenka i e-post om en diskusjon: tråden åpnes når kurset er tegnet (`renderCourseDetailModules`).
+  const linkedThreadId = params.get("threadId");
+  if (linkedThreadId) pendingDiscussionThread = { courseId: course.id, threadId: linkedThreadId };
+  // #1158: en seksjon eller modul i adressen åpnes når kurset er tegnet. Kommer deltakeren rett inn i den (e-post, bokmerke),
+  // står kurset først i adressen, og åpningen legger elementet over det: tilbake lukker elementet og står i kurset, som når det
+  // ble åpnet fra kurset. Ved en oppfriskning ligger kurset alt under (merket i history.state), og adressen står som den er.
+  const linkedItem = readParticipantLocation(window.location.search).item;
+  if (linkedItem) {
+    pendingItemOpen = { courseId: course.id, ...linkedItem };
+    if (window.history.state?.participantItemOverCourse !== true) {
+      try {
+        window.history.replaceState({ participantCourseId: course.id }, "", buildParticipantUrl(window.location.href, { courseId: course.id }));
+      } catch {/* historikk er en bekvemmelighet */}
+    }
+  }
+  // Dyplenka ER allerede «kurset alene»-tilstanden, så den skal ikke legge en ekstra
+  // historikkoppføring: nettleserens tilbakeknapp skal føre ut av siden, ikke til en liste
+  // deltakeren aldri sto i.
+  focusCourse(course.id, { pushHistory: false });
+}
+
+let pendingDiscussionThread = null;
+
+/** Tråden fra lenka, én gang. Fjernes fra adressen, så en oppfriskning eller et annet kurs ikke åpner den igjen. */
+function takePendingDiscussionThread(courseId) {
+  if (pendingDiscussionThread?.courseId !== courseId) return null;
+  const { threadId } = pendingDiscussionThread;
+  pendingDiscussionThread = null;
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("threadId");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {/* historikk er en bekvemmelighet */}
+  return threadId;
+}
+
+// Lenka i e-post om resultat og anke: ?moduleId=<id>. En modul kan bare åpnes inne i et kurs, og e-posten vet ikke hvilket, så vi
+// finner kurset blant dem deltakeren har. Ligger modulen i flere, velges et som krever nytt forsøk, så deltakeren ser kravet.
+// Ingen treff gir samme type melding som kurslenka, som ikke røper om modulen finnes.
+async function resolveModuleLink(moduleId) {
+  const candidates = [];
+  for (const course of participantCourses) {
+    let detail = courseDetailCache[course.id];
+    if (!detail) {
+      try {
+        detail = (await apiFetch(`/api/courses/${encodeURIComponent(course.id)}`, headers)).course;
+        courseDetailCache[course.id] = detail;
+      } catch {
+        continue;
+      }
+    }
+    const entry = detail?.items?.find((item) => item?.type === "MODULE" && item.moduleId === moduleId);
+    if (entry) candidates.push({ courseId: course.id, retakeRequired: entry.retakeRequired === true });
+  }
+  const target = candidates.find((candidate) => candidate.retakeRequired) ?? candidates[0];
+  if (!target) {
+    showItemLinkNotice("MODULE");
+    return;
+  }
+  // Adressen skrives om til kursets, som for ?kurs=. #1158: åpningen under legger modulen over kurset i historikken
+  // (`?courseId=…&moduleId=…`), så en oppfriskning holder modulen åpen, og tilbake står i kurset.
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("moduleId");
+    url.searchParams.set("courseId", target.courseId);
+    window.history.replaceState({ participantCourseId: target.courseId }, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {/* historikk er en bekvemmelighet */}
+  focusCourse(target.courseId, { pushHistory: false });
+  const entry = courseSequences[target.courseId]?.find((item) => item?.type === "MODULE" && item.moduleId === moduleId);
+  if (entry && isEntryAvailable(entry)) openCourseItemEntry(target.courseId, entry);
+  // QA-porten 2.164.0: modulen står i kurset, men kan ikke åpnes (avpublisert, arkivert). Samme melding som når
+  // `?courseId=…&moduleId=…` peker på den — før sto deltakeren i kurset uten å få vite hvorfor modulen ikke åpnet seg.
+  else showItemLinkNotice("MODULE");
+}
+
+async function copyCourseLink() {
+  const course = participantCourses.find((c) => c.id === focusedCourseId);
+  if (!course?.slug) return;
+  const link = `${window.location.origin}/kurs/${course.slug}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    showToast(t("courses.link.copied"), "success");
+  } catch {
+    // Uten tilgang til utklippstavla (eldre nettleser, Teams-nettleseren): vis lenka, så den kan kopieres.
+    showToast(link, "info");
   }
 }
+
+document.getElementById("courseCopyLinkBtn")?.addEventListener("click", () => { copyCourseLink(); });
 
 // #714: vis fremdrift per type («Moduler x/y · Seksjoner x/y») i stedet for den misvisende
 // «x/total moduler» (total teller med seksjoner). Faller tilbake til x/total hvis backend mangler
@@ -3746,6 +4816,18 @@ function buildCourseAccordionItem(course, options = {}) {
   const pct = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0;
   const stepsLabel = fillPlaceholders(t("courses.progress.steps"), { done: passedCount, total: totalCount });
   const completion = participantCompletions[course.id];
+  // #1137: seilbåten. Fullført = hel grønn linje uten båt (produkteier 2026-11-02 — opphever #939s
+  // «ingen linje»); ikke påbegynt = tom linje; bare kurs i gang har båt.
+  // 2.130.1 (QA): et fullført kurs kan ha «5 av 6 steg» — en mindre versjon la til et steg, og beviset
+  // gjelder fortsatt. Linja er da hel og grønn, så verdien, etiketten og verktøytipset må si det samme.
+  const progressPct = completed ? 100 : pct;
+  const barLabel = completed ? t("courses.status.completed") : stepsLabel;
+  const progressHtml = renderCourseProgress({
+    completed,
+    stepsDone: passedCount,
+    pct,
+    barAttrs: `role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPct}" aria-label="${escapeHtmlP(barLabel)}" title="${escapeHtmlP(barLabel)}"`,
+  });
 
   const item = document.createElement("div");
   item.className = "course-accordion-item";
@@ -3766,8 +4848,16 @@ function buildCourseAccordionItem(course, options = {}) {
     : `<div id="courseDetail_${course.id}" class="course-detail-slot"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>`;
 
   if (completed) {
+    // 2.130.1 (QA): et fullført kurs kan stå på 5 av 6 steg — en mindre versjon la til et steg, og beviset
+    // gjelder. Raden sier «fullført» (hake, grønn linje, skjermlesertekst), så en ufullstendig telling ved
+    // siden av ville motsagt den, for øyet og for skjermleseren. Tellingen vises bare når den er full.
+    const doneRowCountHtml = passedCount >= totalCount
+      ? `<span class="course-accordion-progress">${escapeHtmlP(formatCourseProgressLabel(course.progress))}</span>`
+      : "";
     // #939: ett fullført kurs = én grønn rad. Statuspillen er droppet — hakemerket og gruppegrensen
     // sier det allerede, og pillen ville vært det tredje stedet på samme rad.
+    // #1162: kursbeviset åpnes i samme fane (ingen target="_blank"), så nettleserens tilbake fører hit igjen; kurset og et
+    // åpent element står i adressen (#1158). Gjelder også lenken til et eldre bevis under.
     item.classList.add("course-accordion-item--done");
     item.innerHTML = `
       <div class="course-done-row">
@@ -3775,7 +4865,7 @@ function buildCourseAccordionItem(course, options = {}) {
           <span class="course-done-tick" aria-hidden="true">&#10003;</span>
           <span>
             <span class="course-accordion-title">${escapeHtmlP(localizePreviewText(course.title))}</span>
-            <span class="course-accordion-progress">${escapeHtmlP(formatCourseProgressLabel(course.progress))}</span>
+            ${doneRowCountHtml}
             <!-- ⚠️ Statuspillen bar ordet «Fullført» og lå inne i knappen; #939 fjernet den til fordel
                  for hakemerket og gruppegrensen. Men hakemerket er aria-hidden og grensen er en
                  naken div utenfor tabb-rekkefølgen — så en skjermleserbruker som tabber gjennom lista
@@ -3784,23 +4874,35 @@ function buildCourseAccordionItem(course, options = {}) {
             <span class="sr-only">${escapeHtmlP(t("courses.status.completed"))}</span>
           </span>
         </button>
-        ${completion ? `<a class="course-certificate-link" href="/certificate?id=${encodeURIComponent(completion.certificateId)}" target="_blank" rel="noopener">${escapeHtmlP(t("courses.certificate.short"))} · ${escapeHtmlP(t("courses.certificate.view"))}</a>` : ""}
+        ${completion ? `<a class="course-certificate-link" href="/certificate?id=${encodeURIComponent(completion.certificateId)}">${escapeHtmlP(t("courses.certificate.view"))}</a>` : ""}
         <span class="course-accordion-chevron" aria-hidden="true">&#8250;</span>
       </div>
+      ${progressHtml}
       <div class="course-accordion-body">${detailSlot}</div>
     `;
   } else {
+    // #934: kurset har fått en ny hovedversjon siden deltakeren fullførte. Det gamle beviset står og
+    // vises; kurset er ikke fullført i den nye (produkteier 2026-11-01).
+    const earlier = participantEarlierCompletions[course.id];
+    const earlierHtml = earlier
+      ? `<p class="course-new-version-note small">${escapeHtmlP(t("courses.newVersion.hint"))}
+          <a class="course-certificate-link course-certificate-link--earlier" href="/certificate?id=${encodeURIComponent(earlier.certificateId)}">${escapeHtmlP(fillPlaceholders(t("courses.certificate.earlier"), { n: earlier.versionMajor }))}</a></p>`
+      : "";
+    const badgeHtml = earlier
+      ? `<span class="module-status-badge course-new-version-badge" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(t("courses.newVersion"))}</span>`
+      : `<span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(statusText)}</span>`;
     item.innerHTML = `
       <button type="button" class="course-accordion-header">
         <span>
           <span class="course-accordion-title">${escapeHtmlP(localizePreviewText(course.title))}</span>
           <span class="course-accordion-progress">${escapeHtmlP(formatCourseProgressLabel(course.progress))}</span>
         </span>
-        <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(statusText)}</span>
+        ${badgeHtml}
         <span class="course-accordion-chevron" aria-hidden="true">&#8250;</span>
       </button>
       <div class="course-accordion-body">
-        <div class="course-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="${escapeHtmlP(stepsLabel)}" title="${escapeHtmlP(stepsLabel)}"><div class="course-progress-fill" style="width:${pct}%"></div></div>
+        ${earlierHtml}
+        ${progressHtml}
         ${detailSlot}
       </div>
     `;
@@ -3830,6 +4932,7 @@ async function loadCourseDetail(courseId) {
   try {
     const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}`, headers);
     courseDetailCache[courseId] = body.course;
+    syncCourseRetakeHint(courseId, body.course);
     renderCourseDetailModules(courseId, body.course);
   } catch (error) {
     if (container) {
@@ -4035,6 +5138,7 @@ function renderCourseDetailModules(courseId, course) {
       <span class="course-discussion-hint">${escapeHtmlP(t("discussion.courseHint"))}</span>
     `;
 
+    const linkedThreadId = takePendingDiscussionThread(courseId);
     let mounted = false;
     toggle.addEventListener("click", () => {
       // setHidden holder attributtet i takt med inline display, så `body.hidden` er fremdeles en
@@ -4054,6 +5158,7 @@ function renderCourseDetailModules(courseId, course) {
           t,
           escapeHtml: escapeHtmlP,
           showToast,
+          initialThreadId: linkedThreadId,
         });
       }
     });
@@ -4061,11 +5166,17 @@ function renderCourseDetailModules(courseId, course) {
     disc.appendChild(toggle);
     disc.appendChild(body);
     container.appendChild(disc);
+    if (linkedThreadId) {
+      toggle.click();
+      disc.scrollIntoView({ block: "start" });
+    }
   }
 
   // #865: re-open the inline item that was expanded before this re-render (esp. the live module
   // workspace, which was moved home during the wipe above).
   reopenInlineAfterRender(courseId, container);
+  // #1158: en seksjon eller modul fra adressen (lenke, oppfriskning, fram/tilbake) åpnes når radene står.
+  openPendingItem(courseId);
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -4172,10 +5283,12 @@ async function openInlineItemByEntry(courseId, entry) {
 
   // Clicking the already-open item collapses it (toggle).
   if (inlineOpen && inlineOpen.courseId === courseId && inlineOpen.key === key) {
-    collapseInlineOpen();
+    closeInlineItem();
     return;
   }
   collapseInlineOpen();
+  // #1158: deltakeren har gått videre fra en lenke som ikke førte fram.
+  setHidden(document.getElementById("courseLinkNotice"), true);
 
   const panel = itemWrap.querySelector(".course-inline-panel");
   const row = itemWrap.querySelector(".course-module-row");
@@ -4195,6 +5308,8 @@ async function openInlineItemByEntry(courseId, entry) {
     itemWrap.closest(".course-accordion-item")?.classList.add("course-reading");
     setHidden(panel, false);
     row?.setAttribute("aria-expanded", "true");
+    // #1158: seksjonen står i adressen fra den åpnes, så tilbake og en oppfriskning virker også mens teksten hentes.
+    recordOpenedItem();
     // ⚠️ Rull ETTER at innholdet er rendret. Sto før `await`-en, altså mot et tomt panel — og da
     // regnet nettleseren ut hvor den skulle rulle basert på en høyde som ikke fantes ennå.
     await renderSectionReaderInto(panel, courseId, entry);
@@ -4206,13 +5321,21 @@ async function openInlineItemByEntry(courseId, entry) {
   // MODULE: relocate the singleton workspace inline under this row.
   if (row) row.disabled = true;
   inlineOpen = { courseId, key, type: "MODULE", moduleId: entry.moduleId, title: entry.title };
+  // #1158: modulen står i adressen fra klikket. Et nyere klikk erstatter den; feiler åpningen, går adressen tilbake til kurset.
+  recordOpenedItem();
   try {
     // openCourseModule activates the module AND re-renders the course detail; the re-render's
     // reopenInlineAfterRender mounts the workspace into this row's panel.
-    await openCourseModule(courseId, entry.moduleId);
+    const opened = await openCourseModule(courseId, entry.moduleId, entry.retakeRequired === true);
+    if (!opened) {
+      // #1140: et nyere klikk tok over mens modullista ble hentet. Det eier `inlineOpen` og visningen nå.
+      if (row) row.disabled = false;
+      return;
+    }
   } catch (error) {
     inlineOpen = null;
     if (row) row.disabled = false;
+    if (sameParticipantItem(readParticipantLocation(window.location.search).item, { type: "MODULE", id: entry.moduleId })) recordClosedItem();
     participantErrorToast(error, "courses.loadError");
     return;
   }
@@ -4231,6 +5354,8 @@ function reopenInlineAfterRender(courseId, container) {
     // The item disappeared (e.g. module became unavailable) — release the workspace safely.
     if (inlineOpen.type === "MODULE") restoreModuleWorkspaceHome();
     inlineOpen = null;
+    // #1158: adressen skal ikke peke på et element som ikke står der.
+    dropItemFromUrl();
     // Lesemodus (#1079): uten et åpent steg ville klassen skjult hele kurset.
     container.closest(".course-accordion-item")?.classList.remove("course-reading");
     return;
@@ -4278,10 +5403,10 @@ function buildModuleInlinePanel(panel, courseId, ctx) {
     <div class="course-inline-panel-sticky">
       <span class="course-inline-panel-tag">${escapeHtmlP(t("courses.module.workspaceTag"))}</span>
       <span class="course-inline-panel-title">${escapeHtmlP(localizePreviewText(ctx.title) || "")}</span>
-      <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.module.close"))}</button>
+      <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.item.backToCourse"))}</button>
     </div>
     <div class="course-inline-panel-body"></div>`;
-  panel.querySelector('[data-role="close"]').addEventListener("click", () => collapseInlineOpen());
+  panel.querySelector('[data-role="close"]').addEventListener("click", () => closeInlineItem());
   const body = panel.querySelector(".course-inline-panel-body");
   mountModuleWorkspaceInto(body);
   const nextBtn = buildInlineNextButton(courseId, ctx.key);
@@ -4302,9 +5427,16 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   // modul, skal deltakeren dit, ikke forbi vurderingen som var lagt der med vilje. Teksten sier
   // hvilken av delene det er, for en knapp skal si det den gjør.
   const nextEntry = nextEntryAfter(courseId, courseItemKey(entry));
-  const advanceLabel = nextEntry
-    ? (nextEntry.type === "MODULE" ? t("courses.section.markReadAndTest") : t("courses.section.markReadAndNext"))
-    : "";
+  // #1162 skive 4: en seksjon som alt er lest, sier «Gå videre» / «Gå til testen» og sender ikke lesingen på nytt. `read` fra
+  // serveren er lesingen som teller for kursets nåværende hovedversjon (sectionReadCredit), så en seksjon som må leses på nytt
+  // etter en ny versjon, er ulest her og får lesingen. «Avslutt kurset» på siste steg sender den fortsatt: det er porten for
+  // kursbeviset, og serveren tåler den (idempotent).
+  const alreadyRead = entry.read === true;
+  const advanceLabel = !nextEntry
+    ? ""
+    : nextEntry.type === "MODULE"
+      ? t(alreadyRead ? "courses.section.goToTest" : "courses.section.markReadAndTest")
+      : t(alreadyRead ? "courses.section.next" : "courses.section.markReadAndNext");
   // #929: siste element får «Avslutt kurset» — men BARE når alt annet er ferdig.
   //
   // Det sto ingen knapp her før, og lesningen ble registrert stille av systemet. Produkteier
@@ -4316,10 +5448,13 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   const outstanding = nextEntry ? [] : outstandingBeforeFinish(courseId, entry);
   const canFinish = !nextEntry && outstanding.length === 0;
   let actionsMarkup = "";
-  if (nextEntry) {
-    actionsMarkup = `<button type="button" id="sectionReaderMarkRead" class="btn-primary" data-role="markReadNext">${escapeHtmlP(advanceLabel)}</button>`;
+  if (nextEntry && alreadyRead) {
+    // Ingen lesing å vente på, så knappen er på fra start.
+    actionsMarkup = `<button type="button" id="sectionReaderNext" class="btn-primary" data-role="next">${escapeHtmlP(advanceLabel)}</button>`;
+  } else if (nextEntry) {
+    actionsMarkup = `<button type="button" id="sectionReaderMarkRead" class="btn-primary" data-role="markReadNext" disabled>${escapeHtmlP(advanceLabel)}</button>`;
   } else if (canFinish) {
-    actionsMarkup = `<button type="button" id="sectionReaderFinish" class="btn-primary" data-role="finishCourse">${escapeHtmlP(t("courses.section.finishCourse"))}</button>`;
+    actionsMarkup = `<button type="button" id="sectionReaderFinish" class="btn-primary" data-role="finishCourse" disabled>${escapeHtmlP(t("courses.section.finishCourse"))}</button>`;
   } else {
     // Ingen avslutt-knapp, men en forklaring. En blindvei uten begrunnelse er verre enn en knapp som
     // mangler — deltakeren vet ikke om det er dem eller systemet det er noe galt med.
@@ -4355,7 +5490,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
         <button type="button" data-reader-width="narrow" aria-pressed="${readerWidth === "narrow"}">${escapeHtmlP(t("courses.section.widthNarrow"))}</button>
         <button type="button" data-reader-width="wide" aria-pressed="${readerWidth === "wide"}">${escapeHtmlP(t("courses.section.widthWide"))}</button>
       </span>
-      <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.section.close"))}</button>
+      <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.item.backToCourse"))}</button>
     </div>
     <div class="course-inline-panel-body">
       <h2 class="course-reading-title">${escapeHtmlP(localizePreviewText(entry.title) || "")}</h2>
@@ -4363,7 +5498,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       <div class="course-inline-actions">${actionsMarkup}</div>
     </div>`;
 
-  panel.querySelector('[data-role="close"]').addEventListener("click", () => collapseInlineOpen());
+  panel.querySelector('[data-role="close"]').addEventListener("click", () => closeInlineItem());
   for (const button of panel.querySelectorAll("[data-reader-width]")) {
     button.addEventListener("click", () => {
       const width = button.dataset.readerWidth === "narrow" ? "narrow" : "wide";
@@ -4373,6 +5508,14 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     });
   }
 
+  // #934 skive 5a-1: lesingen sender versjonen teksten kom fra. Knappene er derfor av til teksten er lastet; en lesing
+  // av noe deltakeren ikke har sett, skal ikke kunne registreres.
+  let seenSectionVersionId = null;
+  const postSectionRead = () => apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}/read`, headers, {
+    method: "POST",
+    body: JSON.stringify({ sectionVersionId: seenSectionVersionId }),
+  });
+
   // #924: marker lest OG gå videre, i ett. Rekkefølgen er nøye: kursdetaljen hentes på nytt før vi
   // åpner neste element, så radene i DOM er de ferske openCourseItemEntry slår opp i — og
   // nextEntryAfter regnes ut på nytt fra den ferske sekvensen, ikke fra et gammelt øyeblikksbilde.
@@ -4380,16 +5523,24 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   markReadBtn?.addEventListener("click", async () => {
     markReadBtn.disabled = true;
     try {
-      await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}/read`, headers, { method: "POST" });
+      await postSectionRead();
       collapseInlineOpen();
       loadParticipantCourses().catch(() => {});
       await loadCourseDetail(courseId);
       const target = nextEntryAfter(courseId, courseItemKey(entry));
+      // #1158: neste element tar over seksjonens plass i adressen. Er det ikke noe neste likevel, står deltakeren i kurset.
       if (target) openCourseItemEntry(courseId, target);
+      else recordClosedItem();
     } catch (error) {
       markReadBtn.disabled = false;
       participantErrorToast(error, "courses.loadError");
     }
+  });
+
+  // #1162 skive 4: lest fra før — bare videre. Neste element erstatter seksjonen i adressen, som «Gå til …» under.
+  panel.querySelector("#sectionReaderNext")?.addEventListener("click", () => {
+    const target = nextEntryAfter(courseId, courseItemKey(entry));
+    if (target) openCourseItemEntry(courseId, target);
   });
 
   panel.querySelector("#sectionReaderGoOutstanding")?.addEventListener("click", () => {
@@ -4404,8 +5555,8 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   finishBtn?.addEventListener("click", async () => {
     finishBtn.disabled = true;
     try {
-      await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}/read`, headers, { method: "POST" });
-      collapseInlineOpen();
+      await postSectionRead();
+      closeInlineItem();
       // Vent på lista: det er DEN som viser at kurset er fullført, og som utløser
       // kursbevis-feiringen. Å ikke vente ga nettopp den stille fullføringen #929 finnes for.
       await loadParticipantCourses();
@@ -4427,6 +5578,10 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     // policy client-side (defense-in-depth) before this innerHTML sink.
     if (bodyEl) {
       bodyEl.innerHTML = sanitizeSectionHtml(body.html);
+      // Teksten står. Knappene venter ikke på bildene: et bilde som henger, skal ikke stenge deltakeren inne.
+      seenSectionVersionId = body.sectionVersionId ?? null;
+      if (markReadBtn) markReadBtn.disabled = false;
+      if (finishBtn) finishBtn.disabled = false;
       // Private asset images can't carry auth headers as a plain <img>; hydrate them.
       await hydrateContentAssetImages(bodyEl, headers);
     }
@@ -4468,5 +5623,5 @@ function outstandingBeforeFinish(courseId, current) {
 
 // Escape collapses whatever inline item is open (parity with the old modal's Escape-to-close).
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && inlineOpen) collapseInlineOpen();
+  if (e.key === "Escape" && inlineOpen) closeInlineItem();
 });

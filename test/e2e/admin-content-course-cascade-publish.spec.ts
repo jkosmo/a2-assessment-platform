@@ -4,8 +4,8 @@ import type { Page, Route } from "@playwright/test";
 import { mockCommonApis } from "./admin-content-helpers.js";
 
 // #734: publishing a course with unpublished modules/sections must open a cascade-publish dialog that
-// lists them and offers to publish them together with the course. When every item is already
-// published the course publishes directly (no dialog). When an item cannot be published the dialog
+// lists them and offers to publish them together with the course. #1164: when every item is already
+// published the dialog still opens (who sees the course), and publishes plainly. When an item cannot be published the dialog
 // explains why and blocks publishing (no "course only" escape hatch — that would leave broken content).
 
 const DRAFT_COURSE = {
@@ -74,7 +74,8 @@ test.describe("course cascade publish (#734)", () => {
     await expect(page.locator(".toast--success")).toContainText("Course published.");
   });
 
-  test("all-published course publishes directly with no dialog", async ({ page }) => {
+  // #1164 (produkteier 14.11.2026): før publiserte et kurs der alt var publisert, direkte. Nå spør dialogen, og sier hvem som ser det.
+  test("all-published course still asks, then publishes plainly (no cascade)", async ({ page }) => {
     await mockCommonApis(page, { courses: [{ ...DRAFT_COURSE }] });
     await mockPublishPreview(page, {
       courseId: "course-1",
@@ -89,9 +90,15 @@ test.describe("course cascade publish (#734)", () => {
     const row = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
     await row.locator('[data-action="publish"]').click();
 
-    // No dialog; publish fires directly with publishItems: false.
+    // The dialog opens without a list; nothing is sent until the author confirms.
+    const dialog = page.locator("#cascadePublishDialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("[data-publish-audience='open']")).toContainText("All participants");
+    await expect(page.locator("#cascadePublishList")).toBeEmpty();
+    expect(captured.publishItems).toBeNull();
+    await page.locator("#cascadePublishConfirmBtn").click();
     await expect.poll(() => captured.publishItems).toBe(false);
-    await expect(page.locator("#cascadePublishDialog")).toBeHidden();
+    await expect(dialog).toBeHidden();
     await expect(page.locator(".toast--success")).toContainText("Course published.");
   });
 

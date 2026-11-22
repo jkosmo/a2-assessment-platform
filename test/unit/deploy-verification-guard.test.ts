@@ -84,6 +84,93 @@ describe("deployen verifiseres av en maskin, uansett utfall", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// VAKT: workeren skal kjøre den nye pakken, ikke bare være frisk.
+//
+// ⚠️ MÅLT 2026-11-07. Stage-utrullingen av 2.140.0 la pakken på workeren, helsesjekken svarte 200 og
+// kjøringen ble grønn — men `startedAt` var uendret, og den gamle koden kjørte videre. Rettelsen i
+// KI-vurderingen (som kjører i workeren) så ut til å være ute uten å være det. Helsesjekken kan ikke se
+// det: den gamle prosessen er frisk.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("workeren kjører den nye pakken etter utrulling", () => {
+  const ps = les("../../scripts/azure/deploy-environment.ps1");
+  const linjer = ps.split("\n");
+  const linjeMed = (tekst: string) => linjer.findIndex((l) => l.includes(tekst) && !l.trimStart().startsWith("#"));
+
+  it("⚠️ oppstartstiden leses FØR pakken legges ut, og sammenlignes ETTER helsesjekken", () => {
+    const før = linjeMed("$workerStartedAtBefore = Get-ProcessStartedAt");
+    const utrulling = linjeMed("Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName");
+    const helse = linjeMed('Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz"');
+    const sammenligning = linjeMed("Assert-WorkerRestarted -Url");
+
+    // Kontrollcase: finnes ikke stegene, måler vakta ingenting.
+    expect([før, utrulling, helse, sammenligning].every((i) => i >= 0), "fant ikke stegene i skriptet").toBe(true);
+    expect(før, "oppstartstiden må leses før workeren får ny pakke").toBeLessThan(utrulling);
+    expect(sammenligning, "sammenligningen må komme etter helsesjekken av workeren").toBeGreaterThan(helse);
+    expect(linjer[sammenligning], "sammenligningen må få verdien fra før utrullingen").toContain("-Before $workerStartedAtBefore");
+  });
+
+  it("⚠️ uendret oppstartstid gir omstart, og feiler utrullingen om den fortsatt er uendret", () => {
+    const start = ps.indexOf("function Assert-WorkerRestarted");
+    const slutt = ps.indexOf("\nfunction ", start + 1);
+    expect(start, "fant ikke Assert-WorkerRestarted").toBeGreaterThanOrEqual(0);
+    const kropp = ps.slice(start, slutt);
+    expect(kropp).toContain("az webapp restart");
+    expect(kropp, "en worker som fortsatt kjører gammel kode, skal feile utrullingen, ikke melde grønt").toMatch(/\bthrow\b/);
+  });
+
+  it("⚠️ en ny prosess godtas bare når den rapporterer versjonen som ble rullet ut", () => {
+    // QA 2026-11-07: ny `startedAt` alene kan være en omstart av den GAMLE pakken.
+    const idx = les("../../src/index.ts");
+    expect(idx, "workerens svar må ha versjonen").toMatch(/version:\s*appVersion/);
+    const start = ps.indexOf("function Wait-StartedAtChanged");
+    const kropp = ps.slice(start, ps.indexOf("\nfunction ", start + 1));
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(kropp, "ventingen må sammenligne versjonen").toMatch(/\$version -eq \$ExpectedVersion/);
+    const kall = linjer[linjeMed("Assert-WorkerRestarted -Url")] ?? "";
+    expect(kall).toContain("-ExpectedVersion $packageVersion");
+    expect(linjeMed("$packageVersion = "), "versjonen må være lest før sjekken").toBeLessThan(linjeMed("Assert-WorkerRestarted -Url"));
+  });
+
+  it("⚠️ sjekken venter på en treg omstart før den starter på nytt eller feiler", () => {
+    // MÅLT 2026-11-07: en omstart på B1 tar ~15 min. Første versjon ga opp etter 10 og gjorde en vellykket
+    // utrulling rød. Ventetiden må dekke en omstart, og den må komme FØR omstarten.
+    const start = ps.indexOf("function Assert-WorkerRestarted");
+    const kropp = ps.slice(start, ps.indexOf("\nfunction ", start + 1));
+    const minutter = Number((kropp.match(/\[int\]\$WaitMinutes\s*=\s*(\d+)/) ?? [])[1]);
+    expect(minutter, "ventetiden må dekke en omstart på B1 (~15 min)").toBeGreaterThanOrEqual(18);
+    const venter = kropp.indexOf("Wait-StartedAtChanged");
+    expect(venter, "ventingen må komme før omstarten").toBeGreaterThanOrEqual(0);
+    expect(venter).toBeLessThan(kropp.indexOf("az webapp restart"));
+    // Etter omstarten er det `$WaitMinutes` som gjelder: den må dekke en treg omstart.
+    const etterOmstart = kropp.slice(kropp.indexOf("az webapp restart"));
+    expect(etterOmstart).toContain("-Minutes $WaitMinutes");
+  });
+
+  it("⚠️ ventetiden FØR omstarten er kort: pakken starter ikke workeren av seg selv", () => {
+    // MÅLT 2026-11-07 (2.141.0 på stage): workeren var uendret etter 20 min, og en eksplisitt omstart tok 33 s.
+    // 20 min venting før omstart la et kvarter til hver utrulling uten å gi noe.
+    const start = ps.indexOf("function Assert-WorkerRestarted");
+    const kropp = ps.slice(start, ps.indexOf("\nfunction ", start + 1));
+    const minutter = Number((kropp.match(/\[int\]\$InitialWaitMinutes\s*=\s*(\d+)/) ?? [])[1]);
+    expect(minutter, "fant ikke InitialWaitMinutes").toBeGreaterThan(0);
+    expect(minutter, "ventetiden før omstart skal være kort").toBeLessThanOrEqual(8);
+    const førOmstart = kropp.slice(0, kropp.indexOf("az webapp restart"));
+    expect(førOmstart).toContain("-Minutes $InitialWaitMinutes");
+  });
+
+  it("⚠️ oppstartstiden leses som tekst, ikke gjennom ConvertFrom-Json", () => {
+    // PowerShell 7 gjør ISO-tider om til DateTime; to like tider kunne da sammenlignes ulikt, eller omvendt.
+    const start = ps.indexOf("function Get-ProcessStartedAt");
+    const kropp = ps.slice(start, ps.indexOf("\n}", start));
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(kropp).not.toContain("ConvertFrom-Json");
+    expect(kropp).not.toContain("Invoke-RestMethod");
+    expect(kropp).toContain('"startedAt"');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // VAKT: porten skal stå der arbeidet er.
 //
 // ⚠️ MÅLT KONSEKVENS. CI kjørte bare på pull request og på push til `main`. Alt arbeid skjer på

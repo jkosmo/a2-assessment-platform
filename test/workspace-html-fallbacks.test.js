@@ -7,7 +7,6 @@ const workspacePages = [
   "public/admin-content.html",
   // #896 S3c: public/admin-content-advanced.html er slettet. Sto her til 2026-08-18.
   "public/review.html",
-  "public/participant-completed.html",
 ];
 
 function readWorkspaceHtml(relativePath) {

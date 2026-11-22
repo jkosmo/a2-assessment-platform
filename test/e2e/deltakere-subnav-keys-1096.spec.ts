@@ -1,9 +1,12 @@
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, type Page, type Route } from "@playwright/test";
+import { forventUndermenyMedOrd } from "../support/deltakereSubnav.js";
 
-// #1096: under Deltakere viste undermenyen rå nøkler (`area.classes`, `area.status`, …) i prod.
-// Ordene kommer fra `content-area-nav-i18n.js` (admin-buntens `area.*`), men sidene Status,
-// Resultater og Manuell behandling oversatte ALLE `[data-i18n]` med sin egen bunt etterpå — og der
-// finnes ikke `area.*`, så oversetteren ga nøkkelen tilbake og skrev den over menyteksten.
+// #1096: under Deltakere viste undermenyen rå nøkler (`area.classes`, `area.status`, …) i prod. Se
+// test/support/deltakereSubnav.ts for hvorfor.
+//
+// Testgjennomgangen 2026-11 (4.1-2): /results, /review og /deltakere/aktivitet på tre språk ble lastet både her og i
+// page-title.spec.ts, med nesten lik mock. Undermenyen sjekkes nå inne i page-title-testen for de tre sidene. Her står
+// /deltakere/status, som page-title ikke laster.
 
 const ROLLER = ["ADMINISTRATOR", "SUBJECT_MATTER_OWNER", "REVIEWER", "APPEAL_HANDLER", "REPORT_READER"];
 
@@ -31,29 +34,12 @@ async function mockAlt(page: Page, locale: string) {
   }, locale);
 }
 
-const FORVENTET: Record<string, Record<string, string>> = {
-  nb: { subnavKlasser: "Klasser", subnavStatus: "Status", subnavActivity: "Aktivitet", subnavReview: "Manuell behandling", subnavResults: "Resultater" },
-  nn: { subnavKlasser: "Klassar", subnavStatus: "Status", subnavActivity: "Aktivitet", subnavReview: "Manuell behandling", subnavResults: "Resultat" },
-  "en-GB": { subnavKlasser: "Classes", subnavStatus: "Status", subnavActivity: "Activity", subnavReview: "Manual review", subnavResults: "Results" },
-};
-
-for (const side of ["/deltakere/status", "/deltakere/aktivitet", "/results", "/review"]) {
+for (const side of ["/deltakere/status"]) {
   for (const locale of ["nb", "nn", "en-GB"]) {
     test(`${side} (${locale}): undermenyen under Deltakere viser ord, ikke nøkler`, async ({ page }) => {
       await mockAlt(page, locale);
       await page.goto(side);
-      const nav = page.locator("#deltakereSubnav");
-      await expect(nav).toBeVisible();
-      // Gi sidens egen oversettelse tid til å kjøre (den gikk etter menyens og skrev over den).
-      await page.waitForLoadState("networkidle");
-      await page.waitForTimeout(300);
-      for (const [id, tekst] of Object.entries(FORVENTET[locale]!)) {
-        const lenke = page.locator(`#${id}`);
-        if ((await lenke.count()) === 0) continue; // rollestyrt bort
-        await expect(lenke).toHaveText(tekst);
-      }
-      const alle = await nav.locator("a").allInnerTexts();
-      expect(alle.filter((t) => t.trim().startsWith("area.")), "rå nøkler i undermenyen").toEqual([]);
+      await forventUndermenyMedOrd(page, locale);
     });
   }
 }

@@ -1,31 +1,38 @@
 import { Router } from "express";
-import { courseRepository, createCourseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
-import { runInTransaction } from "../db/transaction.js";
+import { z } from "zod";
+import { courseRepository, createCourseRepository, computeCourseStatus, getSection, recordSectionRead, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
+import { findSectionReadCredit } from "../modules/course/sectionReadCredit.js";
+import { publishedSectionTitle } from "../modules/course/sectionTitle.js";
+import { prisma } from "../db/prisma.js";
+import { pairKey } from "../modules/course/learnerVisibility.js";
+import { runContentReadForLearner } from "../db/contentLock.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
-import { NotFoundError } from "../errors/AppError.js";
+import { ConflictError, NotFoundError } from "../errors/AppError.js";
 import { sortCoursesForParticipant } from "../modules/course/courseOrdering.js";
 import {
   listUserEnrollments,
   selfEnroll,
-  filterVisibleCourseIds,
   // #959: deltakerrutene henter kurs GJENNOM denne. `findCourseById` er ufiltrert og hører til
   // forfatter-/systemflatene; `course-visibility-guard` nekter den i denne fila.
   findCourseForParticipant,
   getUserClassIds,
   getClassAssignedCourseDueDates,
-  deriveStatus,
-  findLocalizedThemesForCourses,
+  deriveStatuses,
   sortThemesByName,
+  getMyCoursesProgress,
 } from "../modules/course/index.js";
-import type { CourseListItem, CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
+import type { CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
 import { queryLatestSubmissionsForModules } from "../modules/submission/submissionRepository.js";
-import { isCertificationPassed } from "../modules/certification/certificationRepository.js";
 import { hasCertificateBackground } from "../modules/platformConfig/certificateBackgroundService.js";
 import { discussionsRouter } from "./discussions.js";
 
 const coursesRouter = Router();
+
+// #934 skive 5a-1: valgfri i skjemaet, som ved innleveringen, så en fane fra før utrullingen får `409 client_outdated`. Også
+// `null`: GET-ruta kan svare det, og siden sender verdien uendret tilbake.
+const markSectionReadSchema = z.object({ sectionVersionId: z.string().nullish() });
 
 // #495/T-QA-2: diskusjon/Q&A under kurs-stien så authz arver «har tilgang til publisert kurs».
 // mergeParams lar sub-routeren lese :courseId. Registreres tidlig; de spesifikke metodene/stiene
@@ -42,76 +49,12 @@ coursesRouter.get("/", async (request, response, next) => {
   const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
 
   try {
-    const allCourses = await courseRepository.findPublishedCourses();
-    // #496/EN-2 + #645/CL-2: RESTRICTED courses are visible to users with an individual enrolment OR
-    // a class assignment (member of a class the course is assigned to); OPEN courses to everyone.
-    const classIds = await getUserClassIds({
+    // #1139 skive 0: framdriften er flyttet uendret til `getMyCoursesProgress`, som den ukentlige e-posten også bruker.
+    const { items } = await getMyCoursesProgress({
       userId,
       roles: request.context?.roles ?? [],
       groupIds: request.context?.principal?.groupIds,
-    });
-    const classCourseDue = await getClassAssignedCourseDueDates(classIds);
-    const visibleIds = await filterVisibleCourseIds(userId, allCourses, new Set(classCourseDue.keys()));
-    const courses = allCourses.filter((course) => visibleIds.has(course.id));
-
-    // #799: batch every per-course read across ALL visible courses (a fixed number of queries) instead of
-    // ~4 queries per course, then derive each course's progress in memory. Behaviour-preserving — the same
-    // counts as the previous per-course version, just fetched together.
-    const courseIds = courses.map((course) => course.id);
-    const allModuleIds = courses.flatMap((course) => course.modules.map((m) => m.moduleId));
-
-    const [sectionRows, passedModuleIds, readRows, latestSubmissions] = await Promise.all([
-      courseRepository.findCourseItemSectionIdsForCourses(courseIds),
-      courseRepository.findPassedModuleIds(userId, allModuleIds),
-      courseRepository.findReadSectionIdsForCourses(userId, courseIds),
-      allModuleIds.length > 0 ? queryLatestSubmissionsForModules(userId, allModuleIds) : Promise.resolve([]),
-    ]);
-
-    const sectionIdsByCourse = new Map<string, string[]>();
-    for (const row of sectionRows) {
-      const list = sectionIdsByCourse.get(row.courseId);
-      if (list) list.push(row.sectionId);
-      else sectionIdsByCourse.set(row.courseId, [row.sectionId]);
-    }
-    const passedModuleSet = new Set(passedModuleIds);
-    const readSectionsByCourse = new Map<string, Set<string>>();
-    for (const row of readRows) {
-      const set = readSectionsByCourse.get(row.courseId);
-      if (set) set.add(row.sectionId);
-      else readSectionsByCourse.set(row.courseId, new Set([row.sectionId]));
-    }
-    const startedModuleIds = new Set(latestSubmissions.map((s) => s.moduleId));
-    // 2.102.0: temaene i «Mine kurs». Ett kall for alle kursene.
-    const themesByCourse = await findLocalizedThemesForCourses(courseIds, locale);
-
-    const items: CourseListItem[] = courses.map((course) => {
-      // #938/#945: samme filter som kursdetaljen og bevisporten — den tredje telleren.
-      const moduleIds = course.modules.filter((m) => m.module?.archivedAt == null).map((m) => m.moduleId);
-      const sectionIds = sectionIdsByCourse.get(course.id) ?? [];
-      const passed = moduleIds.filter((id) => passedModuleSet.has(id)).length;
-      const readSet = readSectionsByCourse.get(course.id);
-      const readCount = readSet ? sectionIds.filter((id) => readSet.has(id)).length : 0;
-      const total = moduleIds.length + sectionIds.length;
-      const completed = passed + readCount;
-      const hasStarted = moduleIds.some((id) => startedModuleIds.has(id)) || readCount > 0;
-
-      return {
-        id: course.id,
-        title: localizeContentText(locale, course.title) ?? course.title,
-        description: localizeContentText(locale, course.description) ?? course.description,
-        sortOrder: course.sortOrder ?? null,
-        themes: themesByCourse.get(course.id) ?? [],
-        moduleCount: moduleIds.length,
-        progress: {
-          completed,
-          total,
-          courseStatus: computeCourseStatus(completed, total, hasStarted),
-          moduleCompleted: passed,
-          moduleTotal: moduleIds.length,
-          sectionCompleted: readCount,
-          sectionTotal: sectionIds.length,
-        },
-      };
+      locale,
     });
 
     // #1093: satt rekkefølge først, resten alfabetisk på tittelen i deltakerens språk. Klienten
@@ -145,18 +88,17 @@ coursesRouter.get("/enrollments", async (request, response, next) => {
       roles: request.context?.roles ?? [],
       groupIds: request.context?.principal?.groupIds,
     });
-    const classCourseDue = await getClassAssignedCourseDueDates(classIds);
-    const classEntries = await Promise.all(
-      [...classCourseDue.entries()]
-        .filter(([courseId]) => !seen.has(courseId))
-        .map(async ([courseId, dueAt]) => ({
-          courseId,
-          source: "CLASS" as const,
-          dueAt: dueAt ? dueAt.toISOString() : null,
-          assignedAt: null,
-          status: await deriveStatus(userId, courseId, dueAt, now),
-        })),
-    );
+    const classCourseDue = await getClassAssignedCourseDueDates(classIds, userId);
+    // #1156: statusene i ett kall (`deriveStatuses`), ikke ett per kurs.
+    const fromClasses = [...classCourseDue.entries()].filter(([courseId]) => !seen.has(courseId));
+    const statuses = await deriveStatuses(fromClasses.map(([courseId, dueAt]) => ({ userId, courseId, dueAt })), now);
+    const classEntries = fromClasses.map(([courseId, dueAt]) => ({
+      courseId,
+      source: "CLASS" as const,
+      dueAt: dueAt ? dueAt.toISOString() : null,
+      assignedAt: null,
+      status: statuses.get(pairKey(userId, courseId))!,
+    }));
 
     response.json({ enrollments: [...individual, ...classEntries] });
   } catch (error) {
@@ -176,16 +118,25 @@ coursesRouter.get("/completions", async (request, response, next) => {
   try {
     // #580 follow-up: backfill any completion whose gates are met but whose certificate was never
     // issued (event-driven issuance can miss). Idempotent — only creates genuinely-missing ones.
-    await reconcileCourseCompletionsForUser(userId);
+    // #1156: med innloggingen, så lesinger gjort i et annet kurs teller etter samme synlighet som «Mine kurs».
+    await reconcileCourseCompletionsForUser(userId, { roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds });
     const completions = await courseRepository.findUserCourseCompletions(userId);
     const items = completions.map((cc) => ({
       courseId: cc.courseId,
       certificateId: cc.certificateId,
-      completedAt: cc.completedAt.toISOString(),
+      // #1145: et bevis registrert for et kurs tatt utenfor plattformen har ingen kjent dato. `null` (gamle klienter viser «—»),
+      // og `source` sier hvorfor.
+      completedAt: cc.source === "external" ? null : cc.completedAt.toISOString(),
+      source: cc.source,
       courseTitle: localizeContentText(locale, cc.course.title) ?? cc.course.title,
       // #1027: sertifiseringsnivået sendes lokalisert, som tittelen på linja over. Det sto som
       // rå JSON, og hver klient tolket det selv — samme mønster #1022 rettet for modultittelen.
       certificationLevel: localizeContentText(locale, cc.course.certificationLevel) ?? cc.course.certificationLevel,
+      // #934: et kursbevis gjelder sin hovedversjon. `current` sier om det er kursets nåværende — bare da
+      // regnes kurset som fullført. Et eldre bevis står og vises, men kurset er ikke fullført i den nye.
+      versionMajor: cc.versionMajor,
+      versionMinor: cc.versionMinor,
+      current: cc.versionMajor === cc.course.versionMajor,
     }));
     response.json({ completions: items });
   } catch (error) {
@@ -226,9 +177,15 @@ coursesRouter.get("/completions/:certificateId", async (request, response, next)
       courseId: completion.courseId,
       courseTitle: localizeContentText(locale, completion.course.title) ?? completion.course.title,
       certificationLevel: localizeContentText(locale, completion.course.certificationLevel) ?? completion.course.certificationLevel,
-      completedAt: completion.completedAt.toISOString(),
+      // #1145: som i lista over: ingen dato for et kurs tatt utenfor plattformen.
+      completedAt: completion.source === "external" ? null : completion.completedAt.toISOString(),
+      source: completion.source,
       participantName: completion.user.name,
       moduleCount,
+      // #934: versjonen beviset ble utstedt for, og om den fortsatt er kursets nåværende hovedversjon.
+      versionMajor: completion.versionMajor,
+      versionMinor: completion.versionMinor,
+      current: completion.versionMajor === completion.course.versionMajor,
       // #580: URL of the platform-wide diploma background, or null when none is configured.
       // Served unauthenticated (branding image) so <img>/CSS background can load it without headers.
       certificateBackgroundUrl: (await hasCertificateBackground()) ? "/certificate-background" : null,
@@ -266,15 +223,15 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     // «to tellere er uenige» som saken handlet om, bare på modulsiden. Jeg hadde fikset
     // seksjonstellingen og glemt denne.
     const moduleIds = course.modules.filter((cm) => cm.module?.archivedAt == null).map((cm) => cm.moduleId);
-    const [certStatuses, passedCount, latestSubmissions] = await Promise.all([
-      courseRepository.findUserCertificationStatusesForModules(userId, moduleIds),
-      courseRepository.countPassedModulesForUser(userId, moduleIds),
+    const [moduleProgress, latestSubmissions] = await Promise.all([
+      // #934 skive 5a-3: den ene veien til fremdrift i kurs, som porten for kursbevis. Teller og modulstatus leser det samme.
+      courseRepository.findModuleProgress({ userIds: [userId], courses: [{ courseId: course.id, moduleIds }] }),
       moduleIds.length > 0
         ? queryLatestSubmissionsForModules(userId, moduleIds)
         : Promise.resolve([]),
     ]);
+    const passedCount = moduleProgress.passedModuleIds(userId, course.id).size;
 
-    const certStatusByModuleId = new Map(certStatuses.map((cs) => [cs.moduleId, cs.status]));
     const latestSubmissionByModuleId = new Map<string, (typeof latestSubmissions)[number]>();
     for (const submission of latestSubmissions) {
       if (!latestSubmissionByModuleId.has(submission.moduleId)) {
@@ -282,11 +239,28 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       }
     }
 
+    // #997: REVIDERT er en EGEN tilstand, ikke «ikke påbegynt»: en modul som var bestått og plutselig ikke er det, uten
+    // forklaring, er verre enn ingenting. #934 skive 5a-3: én regel for `items` og `modules` under.
+    const moduleStatusOf = (moduleId: string) => {
+      const standing = moduleProgress.standing(userId, course.id, moduleId);
+      if (standing === "PASSED") return "PASSED" as const;
+      if (standing === "REVISED") return "REVISED_RETAKE_REQUIRED" as const;
+      return latestSubmissionByModuleId.has(moduleId) ? ("IN_PROGRESS" as const) : ("NOT_STARTED" as const);
+    };
+
     // Mixed module/section sequence (#491/P1) with per-section read state (#492).
     // #958: deltakerdøra. Seksjoner deltakeren ikke kan åpne er allerede filtrert bort, og hvert
     // element bærer et ferdig avgjort `available` — ruta har ikke lenger noen egen regel å glemme.
     const courseItems = await courseRepository.findCourseItemsForParticipant(course.id);
-    const readSectionIds = new Set(await courseRepository.findReadSectionIds(userId, course.id));
+    // #1156: lesinger fra alle kurs med seksjonen, etter samme regel som porten for kursbevis. Kurset er synlig for deltakeren
+    // (døra over), så en lesing gjort et annet sted teller her.
+    const credit = await findSectionReadCredit(prisma, {
+      userIds: [userId],
+      courseIds: [course.id],
+      items: "participant",
+      knownVisibleCourseIds: [course.id],
+    });
+    const readSectionIds = credit.readSectionIds(userId, course.id);
     let readSectionCount = 0;
     // ⚠️ #992: upubliserte seksjoner UTELATES fra deltakerens sekvens — de vises ikke som en
     // nedtonet rad, de er borte.
@@ -333,12 +307,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         };
       }
       const moduleId = item.moduleId ?? item.module?.id ?? "";
-      const certStatus = certStatusByModuleId.get(moduleId);
-      const passed = isCertificationPassed(certStatus);
-      // #997: revidert etter at deltakeren besto. EGEN tilstand, ikke «ikke påbegynt»: en modul som
-      // var bestått og plutselig ikke er det, uten forklaring, er verre enn ingenting.
-      const superseded = certStatus === "SUPERSEDED";
-      const hasStarted = latestSubmissionByModuleId.has(moduleId);
+      const moduleStatus = moduleStatusOf(moduleId);
       // #502-followup/#958: regelen bor nå i `findCourseItemsForParticipant`. Ruta leser en
       // avgjørelse i stedet for å ta en — feltene den ble regnet ut av finnes ikke her lenger.
       //
@@ -352,7 +321,9 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         moduleId,
         courseItemId: item.id,
         title: localizeContentText(locale, item.module?.title ?? "") ?? item.module?.title ?? moduleId,
-        moduleStatus: passed ? "PASSED" : superseded ? "REVISED_RETAKE_REQUIRED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
+        moduleStatus,
+        // #934 skive 5a-3: «ta den på nytt» fra kurset, så modulsiden ikke leser siste vedtak og tror den er ferdig.
+        ...(moduleStatus === "REVISED_RETAKE_REQUIRED" ? { retakeRequired: true as const } : {}),
         discussionsEnabled: item.discussionsEnabled,
         available,
         required: item.required,
@@ -378,6 +349,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       description: localizeContentText(locale, course.description) ?? course.description,
       certificationLevel: localizeContentText(locale, course.certificationLevel) ?? course.certificationLevel,
       sortOrder: course.sortOrder ?? null,
+      slug: course.slug ?? null,
       publishedAt: course.publishedAt.toISOString(),
       discussionsEnabled: course.discussionsEnabled,
       moduleCount: moduleIds.length,
@@ -394,7 +366,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       // ikke — og da sa samme respons to ting samtidig: `moduleCount: 0` og `progress 0/0`, mens
       // `modules[]` inneholdt en arkivert modul som `NOT_STARTED`.
       //
-      // Verre enn et skjevt tall: sertifiseringsoppslaget (`certStatusByModuleId`) bygges bare for
+      // Verre enn et skjevt tall: oppslaget av beståtte (`moduleProgress`) bygges bare for
       // ikke-arkiverte moduler, så en modul deltakeren FAKTISK BESTO før arkiveringen kom tilbake
       // som «ikke påbegynt». En eldre klient som leser denne flaten viser da en klikkbar modul som
       // resten av responsen sier ikke finnes i kravet.
@@ -403,19 +375,13 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       // fra `course.modules` er hele fiksen — én kilde, ikke to.
       modules: course.modules
         .filter((cm) => moduleIds.includes(cm.moduleId))
-        .map((cm) => {
-          const certStatus = certStatusByModuleId.get(cm.moduleId);
-          const passed = isCertificationPassed(certStatus);
-          const superseded = certStatus === "SUPERSEDED";
-          const hasStarted = latestSubmissionByModuleId.has(cm.moduleId);
-          return {
-            moduleId: cm.moduleId,
-            sortOrder: cm.sortOrder,
-            title: localizeContentText(locale, cm.module.title) ?? cm.module.title,
-            // #997: samme tre-deling som i `items` over — én regel, to steder som viser den.
-            moduleStatus: passed ? "PASSED" : superseded ? "REVISED_RETAKE_REQUIRED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
-          };
-        }),
+        .map((cm) => ({
+          moduleId: cm.moduleId,
+          sortOrder: cm.sortOrder,
+          title: localizeContentText(locale, cm.module.title) ?? cm.module.title,
+          // #997: samme tre-deling som i `items` over — én regel, to steder som viser den.
+          moduleStatus: moduleStatusOf(cm.moduleId),
+        })),
       items,
     };
 
@@ -464,9 +430,16 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
     if (!section) {
       throw new NotFoundError("CourseSection", "section_not_found", "Section not found.");
     }
-    const localizedTitle = localizeContentText(locale, section.title) ?? section.title;
+    // #1163: tittelen fra den publiserte versjonen, som teksten under. Arbeidstittelen kan være et upublisert utkast.
+    const participantTitle = publishedSectionTitle(section);
+    const localizedTitle = localizeContentText(locale, participantTitle) ?? participantTitle;
     const localizedBody = localizeContentText(locale, section.activeVersion?.bodyMarkdown ?? "") ?? "";
-    response.json({ title: localizedTitle, html: renderSectionMarkdown(localizedBody, locale) });
+    // #934 skive 5a-1: `sectionVersionId` er versjonen teksten kom fra. Siden sender den tilbake når deltakeren har lest.
+    response.json({
+      title: localizedTitle,
+      html: renderSectionMarkdown(localizedBody, locale),
+      sectionVersionId: section.activeVersion?.id ?? null,
+    });
   } catch (error) {
     next(error);
   }
@@ -477,6 +450,11 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
   const userId = request.context?.userId;
   if (!userId) {
     response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const parsed = markSectionReadSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
     return;
   }
   try {
@@ -492,16 +470,7 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     if (!course) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
-    // #944/#958: samme dør som lesestien. Var dette to oppslag med hver sin regel, kunne markeringen
-    // gå gjennom for en seksjon lesestien nektet — og kursbeviset bli utstedt for innhold som aldri
-    // ble publisert. Det var nøyaktig hullet i #944.
-    const courseItems = await courseRepository.findCourseItemsForParticipant(course.id);
-    const item = courseItems.find(
-      (i) => i.itemType === "SECTION" && i.sectionId === request.params.sectionId,
-    );
-    if (!item) {
-      throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
-    }
+    const seenVersionId = parsed.data.sectionVersionId;
     // #946: markeringen og bevisporten commiter sammen. Sto tidligere som to uavhengige skriv:
     // seksjonen ble markert lest, og feilet porten etterpå, var kurset ferdig uten at noe bevis
     // ble utstedt — og ingenting rettet det før deltakeren selv åpnet bevissiden.
@@ -509,11 +478,32 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     // ⚠️ Bevisst IKKE flyttet til outboxen slik de tre andre veiene er. Deltakeren står på siden
     // og leser ferdig siste seksjon; her skal beviset finnes med én gang, ikke når worker-en
     // rekker det. Transaksjonen gir holdbarheten uten å gjøre utstedelsen asynkron.
-    await runInTransaction(async (tx) => {
+    // #934 skive 4a: innholdslåsen DELT, som første setning — lesingen venter på en versjonsendring som pågår.
+    // Skive 5a-1: så deltakerlåsen, og alt som avgjør om lesingen er gyldig, sjekkes etter dem.
+    await runContentReadForLearner(userId, async (tx) => {
       const txRepo = createCourseRepository(tx);
-      await txRepo.markSectionRead(userId, course.id, request.params.sectionId);
+      // #944/#958: samme dør som lesestien. Var dette to oppslag med hver sin regel, kunne markeringen
+      // gå gjennom for en seksjon lesestien nektet — og kursbeviset bli utstedt for innhold som aldri
+      // ble publisert. Det var nøyaktig hullet i #944.
+      const courseItems = await txRepo.findCourseItemsForParticipant(course.id);
+      const item = courseItems.find(
+        (i) => i.itemType === "SECTION" && i.sectionId === request.params.sectionId,
+      );
+      if (!item) {
+        throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
+      }
+      // #934 skive 5a-1: en fane fra før utrullingen sender ikke versjonen, og en som har stått åpen, kan ha lest en
+      // eldre tekst. Lesingen registreres bare på versjonen deltakeren faktisk så. Ingenting er skrevet ved 409.
+      if (!seenVersionId) {
+        throw new ConflictError("client_outdated", "This page is out of date. Nothing was recorded; reload the page.", { sectionId: request.params.sectionId });
+      }
+      const section = await tx.courseSection.findUnique({ where: { id: request.params.sectionId }, select: { activeVersionId: true } });
+      if (section?.activeVersionId !== seenVersionId) {
+        throw new ConflictError("section_version_changed", "The text has changed since this page was opened. Nothing was recorded; reload the page.", { sectionId: request.params.sectionId });
+      }
       // Reading the final section can be the last gate for certification (#476/#525) — re-check.
-      await checkCourseCompletionForCourse({ userId, courseId: course.id }, tx);
+      // #1156: lesingen og beviset i dette kurset i samme transaksjon; de andre kursene med seksjonen gjennom utboksen.
+      await recordSectionRead(tx, { userId, courseId: course.id, sectionId: request.params.sectionId });
     });
     response.status(204).send();
   } catch (error) {

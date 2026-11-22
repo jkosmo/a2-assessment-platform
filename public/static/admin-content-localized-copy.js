@@ -130,6 +130,14 @@ export function mcqCorrectPositions(question) {
  * så den holder på alle språk av konstruksjon (alternativene står i samme rekkefølge).
  */
 export function carryMcqAnswerKey(target, source) {
+  // Leveranse 2: i «sett i rekkefølge» er rekkefølgen fasiten, og den står likt på alle språk.
+  if (source?.questionType === "order" && target) {
+    return { ...target, questionType: "order", correctAnswer: (target.options ?? [])[0] ?? target.correctAnswer };
+  }
+  // Leveranse 3: i «fyll inn» er alternativene de godkjente svarene; det første står i `correctAnswer`.
+  if (source?.questionType === "fill" && target) {
+    return { ...target, questionType: "fill", correctAnswer: (target.options ?? [])[0] ?? target.correctAnswer };
+  }
   if (source?.questionType !== "multiple" || !target) return target;
   const positions = mcqCorrectPositions(source);
   const options = target.options ?? [];
@@ -231,6 +239,39 @@ export function normalizeModuleTitlePatch(title) {
     }
   }
   return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+/**
+ * #1163 skive 2 (prinsipp 3, doc/DECISIONS.md «felles prinsipper»): hva en lagring skal oversette.
+ *
+ * «Alt innhold oversettes bare ved lagring», og bare det som er endret, fra språket som ble endret. For hvert felt sammenlignes
+ * det skjemaet har nå (`current`), med det som sist ble lagret (`saved`), språk for språk:
+ *   - Ingen språk endret → feltet oversettes ikke. Et felt forfatteren ikke har rørt, skal ikke få en ny maskinoversettelse av
+ *     seg selv (og et hull i det fylles av publiseringens «Fyll inn det som mangler», ikke av lagringen).
+ *   - Kilden er språket forfatteren står i (`editLocale`) hvis det er endret, ellers det første endrede i `locales`. Kilden må
+ *     ha tekst; et språk som er tømt, oversettes ikke fra.
+ *   - Målene er de andre språkene som IKKE er endret. Har forfatteren selv skrevet på to språk i samme lagring, står begge.
+ *
+ * Felles for kurs, moduler og seksjoner: seksjonene bruker den fra 2.167.0; kurs og moduler skal over i #1177/#1178.
+ * Ren funksjon, så regelen kan prøves uten nettverket.
+ *
+ * @param {Record<string, { current: Record<string,string>|null|undefined, saved: Record<string,string>|null|undefined }>} fields
+ * @param {{ editLocale?: string, locales: string[] }} options
+ * @returns {Record<string, { sourceLocale: string, targetLocales: string[] }>} bare feltene som skal oversettes
+ */
+export function changedFieldTranslations(fields, { editLocale, locales }) {
+  const text = (map, locale) => String(map?.[locale] ?? "").trim();
+  const plan = {};
+  for (const [field, { current, saved }] of Object.entries(fields ?? {})) {
+    const changed = locales.filter((locale) => text(current, locale) !== text(saved, locale));
+    const withText = changed.filter((locale) => text(current, locale).length > 0);
+    if (withText.length === 0) continue;
+    const sourceLocale = withText.includes(editLocale) ? editLocale : withText[0];
+    const targetLocales = locales.filter((locale) => locale !== sourceLocale && !changed.includes(locale));
+    if (targetLocales.length === 0) continue;
+    plan[field] = { sourceLocale, targetLocales };
+  }
+  return plan;
 }
 
 export function strictLocaleValue(value, locale) {

@@ -3,6 +3,7 @@ export type { CertificationStatusOutcome } from "./certificationStatusService.js
 
 export {
   notifyAssessmentResult,
+  notifyAssessmentUnderReview,
   notifyAppealStatusTransition,
   sendAppealStatusNotification,
   sendModuleRevisedNotification,

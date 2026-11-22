@@ -2,7 +2,8 @@
  * #968: ÉN regel for «kan denne deltakeren nås / telles».
  *
  * En deltaker som er deaktivert (sluttet, org-synk) eller anonymisert (pseudonymisert) skal verken
- * telles i et kulls publikum, få påminnelser, eller få tildelings-e-post. Regelen sto på fire steder
+ * telles i et kulls publikum, få påminnelser, eller få e-post om nye kurs (#1142: samme felt i SQL-regelen
+ * `eligibleAssignmentPairs`, som erstattet tildelings-e-posten). Regelen sto på fire steder
  * og ble håndhevet på tre — og innad i `resolveCourseAudience` bare for KLASSE-medlemmer, ikke for
  * individuelle innmeldinger. Samme person talte eller ikke, avhengig av hvilken vei hen kom inn.
  *

@@ -2,6 +2,7 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { readSection } from "./support/participantFlow.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // #1010: den som bare har LEST i kurset, teller med.
@@ -74,7 +75,7 @@ describe("#1010 — kursrapporten teller den som bare har lest", () => {
     expect((await kursrad())?.enrolledParticipants ?? 0).toBe(0);
 
     // Deltakeren leser — via den ekte ruta, uten å være meldt inn.
-    const les = await request(app).post(`/api/courses/${course.id}/sections/${section.id}/read`).set(leser);
+    const les = await readSection(app, leser, course.id, section.id);
     expect(les.status).toBeLessThan(300);
     expect(await prisma.courseEnrollment.count({ where: { courseId: course.id } }), "kontroll: fortsatt ingen innmelding").toBe(0);
     expect(await prisma.courseCompletion.count({ where: { courseId: course.id } }), "kontroll: ingen fullføring — ellers kommer hen inn den veien").toBe(0);

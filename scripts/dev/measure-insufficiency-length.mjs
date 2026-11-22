@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { requireStageBaseUrl } from "../test/stage-base-url.mjs";
 
 // #1048: MÅL om regelen faktisk skiller de to sakene den skal skille.
 //
@@ -35,7 +36,7 @@ if (!fs.existsSync(AUTH_FILE)) {
   process.exit(1);
 }
 const auth = JSON.parse(fs.readFileSync(AUTH_FILE, "utf8"));
-const BASE = auth.baseUrl ?? "https://a2-assessment-platform-stg-app-x6eyx4.azurewebsites.net";
+const BASE = auth.baseUrl ?? requireStageBaseUrl();
 const locale = (process.argv.find((a) => a.startsWith("--locale=")) ?? "--locale=nb").split("=")[1];
 const perCase = Number((process.argv.find((a) => a.startsWith("--per-case=")) ?? "--per-case=2").split("=")[1]);
 const H = {
@@ -173,6 +174,7 @@ for (const sak of SAKER) {
     const svar = await leverMedTålmodighet(
       {
         moduleId: modul.id,
+      moduleVersionId: modul.activeVersion?.id, // #934 2.133.0: versjonen «siden» så; uten den svarer ruta 409.
         deliveryType: "text",
         responseJson: { response: sak.response, reflection: sak.reflection },
         processSignals: { declaration: "improve", declarationText: "Modellen ble brukt som utkastverktøy." },

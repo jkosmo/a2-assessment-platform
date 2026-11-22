@@ -139,7 +139,7 @@ test("participant: the module brief renders markdown HTML and re-sanitises it (#
     "<script>window.__pwned = true;</script>",
     '<img src="x" onerror="window.__pwned = true">',
   ].join("");
-  await page.route("**/api/modules?includeCompleted=true", (route: Route) =>
+  await page.route("**/api/modules?includeCompleted=true**", (route: Route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -205,7 +205,7 @@ test("participant: without taskTextHtml the brief falls back to plain text (#105
       body: JSON.stringify({ course: { id: "c1", title: "Kurs", items: [{ type: "MODULE", moduleId: "m1", title: "Modul", available: true }] } }),
     }),
   );
-  await page.route("**/api/modules?includeCompleted=true", (route: Route) =>
+  await page.route("**/api/modules?includeCompleted=true**", (route: Route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",

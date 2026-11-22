@@ -96,25 +96,23 @@ const FLATER: Flate[] = [
         }],
       }),
     }],
-    ekstra: [{ mønster: "**/api/modules/completed**", svar: { modules: [] } }],
+    ekstra: [{ mønster: "**/api/me/stats", svar: { mood: "ny", weeks: [], recent: {}, totals: {}, passedModules: [] } }],
   },
   {
-    navn: "fullførte moduler",
-    rute: "/participant/completed",
+    // #1138: «Beståtte moduler» kommer fra statistikken, med modultittelen ferdig lokalisert av serveren.
+    navn: "profilen, beståtte moduler",
+    rute: "/profile",
     roller: [],
-    beholder: "#courseCertList",
-    tekst: { nb: "Viderekommen", "en-GB": "Advanced" },
+    beholder: "#modulesBody",
+    tekst: TITTEL,
     data: [{
-      mønster: "**/api/courses/completions**",
+      mønster: "**/api/me/stats",
       svar: (locale) => ({
-        completions: [{
-          courseId: "c-1", certificateId: "cert-1", completedAt: "2026-08-01T10:00:00.000Z",
-          courseTitle: locale === "nb" ? "Endringsledelse" : "Change management",
-          certificationLevel: locale === "nb" ? "Viderekommen" : "Advanced",
-        }],
+        mood: "mett", weeks: [], recent: {}, totals: {},
+        passedModules: [{ moduleId: "m-1", moduleTitle: TITTEL[locale] ?? TITTEL["en-GB"], passedAt: "2026-08-01T10:00:00.000Z", totalScore: 90 }],
       }),
     }],
-    ekstra: [{ mønster: "**/api/modules/completed**", svar: { modules: [] } }],
+    ekstra: [{ mønster: "**/api/courses/completions**", svar: { completions: [] } }],
   },
   {
     navn: "resultatsiden",
@@ -257,24 +255,19 @@ async function observerGlimt(page: Page, beholder: string) {
 
 for (const flate of FLATER) {
   test.describe(`#1044 flatekontrakt — ${flate.navn}`, () => {
-    test("lasting gir lesbar tekst, ingen rå JSON og ingen rød feilmelding", async ({ page }) => {
+    // Testgjennomgangen 2026-11 (4.1-1): «lasting gir lesbar tekst …» lastet den samme flaten og ventet på den samme engelske
+    // teksten som denne testen. De to sjekkene den hadde i tillegg, står nå her, før språkbyttet.
+    test("lasting gir lesbar tekst uten rå JSON eller rød feilmelding, og språkbytte følges av innholdet", async ({ page }) => {
       await mock(page, flate);
       await page.goto(flate.rute);
       await flate.forbered?.(page);
-
       await expect(page.locator(flate.beholder)).toContainText(flate.tekst["en-GB"]);
       // ⚠️ Rå JSON på skjermen er det #1027 handlet om: `{"en-GB":"…"}` der det skulle stått tekst.
       await expect(page.locator(flate.beholder)).not.toContainText('"en-GB"');
       const feiltekster = await page.locator(".toast--error").allTextContents();
       expect(feiltekster, `røde feilmeldinger ved lasting: ${JSON.stringify(feiltekster)}`).toEqual([]);
-    });
 
-    test("språkbytte følges av innholdet, ikke bare av etikettene", async ({ page }) => {
-      await mock(page, flate);
-      await page.goto(flate.rute);
-      await flate.forbered?.(page);
-      await expect(page.locator(flate.beholder)).toContainText(flate.tekst["en-GB"]);
-
+      // Så språkbyttet: innholdet skal følge, ikke bare etikettene.
       await page.selectOption("#localeSelect", "nb");
 
       await expect(page.locator(flate.beholder)).toContainText(flate.tekst.nb);

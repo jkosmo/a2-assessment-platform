@@ -1,9 +1,11 @@
 import { escapeHtml } from "./html-escape.js";
+import { confirmModuleDelete } from "./module-lifecycle-dialogs.js";
 import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
 import { lifecycleBadge } from "./content-status-badge.js";
 import { createFormPage, formPageTexts } from "./form-page.js";
 import { createSettingsTab } from "./admin-content-settings-tab.js";
 import { createPublishFlow } from "./admin-content-publish.js";
+import { moduleVersionNumber } from "./version-label.js";
 import { createCriteriaTools } from "./admin-content-criteria.js";
 import { LEGACY_STRING_LOCALE, mergeLocaleInto } from "./localized-value.js";
 import {
@@ -12,6 +14,7 @@ import {
   translations as adminContentTranslations,
 } from "/static/i18n/admin-content-translations.js";
 import { resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
+import { createDateTimeFormatter } from "/static/format-display.js";
 import {
   apiFetch,
   buildConsoleHeaders,
@@ -23,8 +26,9 @@ import {
   resolveRoleSwitchState,
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
-import { showToast } from "/static/toast.js";
-import { apiErrorCodeText, apiIssueLines, describeApiError } from "/static/api-error.js";
+import { flushQueuedToast, queueToast, showToast } from "/static/toast.js";
+import { describeCueWarnings, describeRubricWarnings } from "/static/mcq-cue-warnings.js";
+import { apiErrorCodeText, apiIssueLines, describeApiError, isArchivedRejection } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { localizeValueForLocale, buildPreviewHtml, hydratePreviewMarkdown } from "/static/admin-content-preview.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
@@ -67,7 +71,11 @@ import {
 
 let currentLocale = resolveInitialLocale(supportedLocales);
 
-const { t, tf } = createTranslator(adminContentTranslations, () => currentLocale);
+// Menyspråket som funksjon: oversettelsene og (#1163) tidspunktet i stripen leser det herfra.
+const menuLocale = () => currentLocale;
+const { t, tf } = createTranslator(adminContentTranslations, menuLocale);
+// #1163: tidspunktet i stripen «Utkast lagret …», som kursets.
+const formatModuleDraftTime = createDateTimeFormatter(menuLocale, "");
 
 // #972: `err.message` fra apiFetch er "<status>: <hele JSON-kroppen>" — rå JSON på serverens språk.
 // `apiErrorText` slår opp KODEN i den delte tabellen (api-error.js) og gir en setning på
@@ -253,6 +261,26 @@ function logResolveSlot(slot, htmlFn, choices = []) {
   announceStatus(text);
   if (slot?.entry?.quiet) return;
   showToast(text, /feil|error|failed|avvist|refus|kunne ikke|could not|mislyktes/i.test(text) ? "error" : "info");
+}
+
+// #1119: lagringen lyktes. Har testen spørsmål der svaret kan røpe seg, sier toasten det — varsel, ikke stopp.
+// #1122: det samme for kriterier — fra lagringen selv, eller fra KI-rubrikken laget rett før (`ensure`).
+function announceSaved(composed, generatedRubricWarnings = []) {
+  const cue = describeCueWarnings(composed?.cueWarnings, t, tf);
+  const rubric = describeRubricWarnings([...(composed?.rubricWarnings ?? []), ...(generatedRubricWarnings ?? [])], t, tf);
+  // Overskriften står i selve meldingen: toast.js viser ikke samme tekst to ganger, og lagringsloggen
+  // har alt vist «lagret» alene.
+  const parts = [
+    ...(cue.length > 0 ? [{ heading: t("mcqCue.heading"), lines: cue }] : []),
+    ...(rubric.length > 0 ? [{ heading: t("rubricCheck.heading"), lines: rubric }] : []),
+  ];
+  if (parts.length === 0) {
+    showToast(t("shell.save.success"), "success");
+    return;
+  }
+  const [first, ...rest] = parts;
+  const detail = [first.lines.join(" "), ...rest.map((part) => `${part.heading} ${part.lines.join(" ")}`)].join(" ");
+  showToast(`${t("shell.save.success")} ${first.heading}`, "warning", detail);
 }
 
 // Identity / headers
@@ -892,6 +920,8 @@ async function refreshBlueprintHash() {
 
 function renderPreview() {
   const opts = { locale: contentLocale, t, tf };
+  // #1151 skive 3c: hver ny modul (eller ingen) tegnes herfra, så sperren følger den lastede modulen.
+  applyModuleArchivedLock();
 
   if (!bundle && !sessionDraft && !previewDraft) {
     previewContent.innerHTML = buildPreviewHtml({ emptyText: t("adminContent.status.noneTitle") }, opts);
@@ -915,7 +945,7 @@ function renderPreview() {
     const isDraft = !!cfg.moduleVersion && !isLive;
 
     const versionChainParts = [];
-    if (cfg.moduleVersion) versionChainParts.push(`Modul v${cfg.moduleVersion.versionNo}`);
+    if (cfg.moduleVersion) versionChainParts.push(`Modul v${moduleVersionNumber(cfg.moduleVersion) ?? cfg.moduleVersion.versionNo}`);
     if (cfg.rubricVersion) versionChainParts.push(`Rubrikk v${cfg.rubricVersion.versionNo}`);
     if (cfg.promptTemplateVersion) versionChainParts.push(`Prompt v${cfg.promptTemplateVersion.versionNo}`);
     if (cfg.mcqSetVersion) versionChainParts.push(`MCQ v${cfg.mcqSetVersion.versionNo}`);
@@ -938,7 +968,8 @@ function renderPreview() {
       // #896 S1: the Forhaandsvisning tab claims to show what the participant meets, so it
       // must not leak the assessor expectation, the MCQ answer key and rationale, or criteria
       // marked candidateVisible:false. Rediger keeps showing all of it - that is the author's
-      // working view.
+      // working view. #1124: a criterion WITHOUT the flag is visible, as for the participant
+      // (`isCandidateVisible` in admin-content-preview.js mirrors the server rule).
       audience: forParticipant ? "participant" : "author",
       versionChain: versionChainParts.join(" · "),
       badgeClass: hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell",
@@ -1370,6 +1401,17 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
  * Returnerer `{ questions, failedLocales }`, samme form som søsterfunksjonene, slik at kalleren kan
  * si fra i stedet for å vise «ferdig».
  */
+/**
+ * Leveranse 2b og 3b: en linje når genereringen ikke ga noe «sett i riktig rekkefølge» eller «fyll inn
+ * ordet som mangler», med grunnen modellen ga.
+ */
+function noQuestionOfTypeHtml(questionType, reason, questions) {
+  if ((questions ?? []).some((question) => question?.questionType === questionType)) return "";
+  const why = typeof reason === "string" && reason.trim() ? ` ${reason.trim()}` : "";
+  const key = questionType === "order" ? "shell.generating.noOrderQuestion" : "shell.generating.noFillQuestion";
+  return `<p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)" data-no-${questionType}-note>${escapeHtml(t(key))}${escapeHtml(why)}</p>`;
+}
+
 async function localizeMcqAcrossLocales(questions, sourceLocale) {
   const localizedQuestions = questions.map((question) => ({
     stem: buildLocalizedTextMap(sourceLocale, question.stem),
@@ -1444,6 +1486,33 @@ function firstBadMultipleIndex(questions) {
     && !(question.correctAnswers?.length > 0));
 }
 
+/**
+ * #1077 leveranse 2: første «sett i rekkefølge» som ikke har 3–6 elementer, eller -1. Samme grense som
+ * tjeneren (ORDER_MIN_ITEMS/ORDER_MAX_ITEMS i mcqQuestionTypes.ts), sagt før oversettelsen.
+ */
+const ORDER_MIN_ITEMS = 3;
+const ORDER_MAX_ITEMS = 6;
+function firstBadOrderIndex(questions) {
+  return (questions ?? []).findIndex((question) => question?.questionType === "order"
+    && ((question.options?.length ?? 0) < ORDER_MIN_ITEMS || (question.options?.length ?? 0) > ORDER_MAX_ITEMS));
+}
+
+/**
+ * #1077 leveranse 3: første «fyll inn» som ikke har nøyaktig én lukke (___) i stammen, eller 1–6
+ * godkjente svar, eller -1. Samme regel som tjeneren (FILL_BLANK_RE/FILL_MAX_ANSWERS), sagt før
+ * oversettelsen. Stammen sjekkes på hvert språk den har.
+ */
+const FILL_MAX_ANSWERS = 6;
+function firstBadFillIndex(questions) {
+  return (questions ?? []).findIndex((question) => {
+    if (question?.questionType !== "fill") return false;
+    const answers = (question.options ?? []).filter((option) => String(localizeValueForLocale(option, contentLocale) ?? "").trim());
+    const stems = typeof question.stem === "string" ? [question.stem] : Object.values(question.stem ?? {});
+    const blanksOk = stems.every((stem) => typeof stem !== "string" || (stem.match(/_{3,}/g) ?? []).length === 1);
+    return answers.length < 1 || answers.length > FILL_MAX_ANSWERS || !blanksOk;
+  });
+}
+
 function readMcqQuestionsFromForm(currentMcqQuestions) {
   return currentMcqQuestions.map((question, questionIndex) => {
     const container = previewContent.querySelector(`[data-preview-edit-question="${questionIndex}"]`);
@@ -1455,6 +1524,31 @@ function readMcqQuestionsFromForm(currentMcqQuestions) {
       Number.isInteger(checkedIndex) && checkedIndex >= 0 && checkedIndex < options.length
         ? checkedIndex
         : Math.max(0, options.findIndex((option) => option === question.correctAnswer));
+    // #1077 leveranse 2: «Sett i riktig rekkefølge» → elementene slik de står, i den rekkefølgen; det er
+    // fasiten. Tomme felt er ikke elementer (skjemaet viser alltid minst tre å fylle ut).
+    // Leveranse 3: «Fyll inn» → feltene er de godkjente svarene; det første står i `correctAnswer`.
+    const fill = container?.querySelector("[data-preview-edit-fill]")?.checked === true;
+    if (fill) {
+      const answers = optionInputs.map((input) => input.value.trim()).filter(Boolean);
+      return {
+        questionType: "fill",
+        stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
+        options: answers,
+        correctAnswer: answers[0] ?? "",
+        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
+      };
+    }
+    const order = container?.querySelector("[data-preview-edit-order]")?.checked === true;
+    if (order) {
+      const items = optionInputs.map((input) => input.value.trim()).filter(Boolean);
+      return {
+        questionType: "order",
+        stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
+        options: items,
+        correctAnswer: items[0] ?? "",
+        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
+      };
+    }
     // #1077: «Flere riktige svar» avkrysset → «velg alle som stemmer», med de avkryssede som fasit.
     const multiple = container?.querySelector("[data-preview-edit-multiple]")?.checked === true;
     if (multiple) {
@@ -1840,9 +1934,14 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
   const questions = result?.questions ?? [];
   const { questions: localizedQuestions, failedLocales } = await localizeMcqAcrossLocales(questions, locale);
   // #551: surface MCQ quality warnings (incl. the length-cue check) so the author can review.
-  const mcqWarnings = Array.isArray(result?.validation?.issues) ? result.validation.issues : [];
+  // #1119: lista blander tekster (#551) og objekter fra distraktorsjekken — objektene ble «[object Object]».
+  // Hint-kontrollen fra skillet kommer i tillegg, som tekst på forfatterens språk.
+  const mcqWarnings = [
+    ...(Array.isArray(result?.validation?.issues) ? result.validation.issues : []).map((w) => (typeof w === "string" ? w : w?.message ?? "")),
+    ...describeCueWarnings(result?.cueWarnings, t, tf),
+  ].filter(Boolean);
   const mcqWarningsHtml = mcqWarnings.length > 0
-    ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#b45309)">⚠ ${mcqWarnings.map(escapeHtml).join("<br>")}</p>`
+    ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#b45309)">⚠ ${mcqWarnings.map((w) => escapeHtml(w)).join("<br>")}</p>`
     : "";
   commitOrProposeGenerated({
     patch: { mcqQuestions: append ? [...existing, ...localizedQuestions] : localizedQuestions },
@@ -1853,7 +1952,10 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
     readyHtml: () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
     // #1014: kvalitetsadvarslene fra #551 OG spraakene som ikke ble oversatt, i samme spor.
-    warningHtml: `${mcqWarningsHtml}${describeFailedLocales(failedLocales, locale)}`,
+    // #1077 leveranse 2b: KI lager «sett i riktig rekkefølge» bare der kilden har en rekkefølge — og
+    // sier fra når den ikke fant noen (produkteier 2026-10-25), med modellens begrunnelse.
+    // Leveranse 3b: det samme for «fyll inn ordet som mangler» (produkteier 2026-10-31).
+    warningHtml: `${mcqWarningsHtml}${noQuestionOfTypeHtml("order", result?.noOrderReason, questions)}${noQuestionOfTypeHtml("fill", result?.noFillReason, questions)}${describeFailedLocales(failedLocales, locale)}`,
     onCommit: () => onAccept?.(questions),
   });
 }
@@ -1935,6 +2037,10 @@ async function reviseMcqInBackground(instruction, onAccept) {
     const multiple = question?.questionType === "multiple";
     return {
       ...(multiple ? { questionType: "multiple", correctAnswers: mcqCorrectPositions(question).map((i) => options[i]) } : {}),
+      // Leveranse 2b: en rekkefølge går med som type; elementene står i riktig rekkefølge i `options`.
+      ...(question?.questionType === "order" ? { questionType: "order" } : {}),
+      // Leveranse 3: en «fyll inn» går med som type; `options` er de godkjente svarene.
+      ...(question?.questionType === "fill" ? { questionType: "fill" } : {}),
       stem: localizeValueForLocale(question.stem, contentLocale),
       options,
       correctAnswer: localizeValueForLocale(question.correctAnswer, contentLocale),
@@ -2226,6 +2332,22 @@ async function saveDraftBundleInBackground(options = {}) {
     backToForm();
     return;
   }
+  const badOrder = isFreetextOnly ? -1 : firstBadOrderIndex(mcqQuestions);
+  if (badOrder >= 0) {
+    const message = tf("shell.save.mcqOrderNeedsItems", { n: badOrder + 1, min: ORDER_MIN_ITEMS, max: ORDER_MAX_ITEMS });
+    logBot(() => escapeHtml(message));
+    showToast(message, "error");
+    backToForm();
+    return;
+  }
+  const badFill = isFreetextOnly ? -1 : firstBadFillIndex(mcqQuestions);
+  if (badFill >= 0) {
+    const message = tf("shell.save.mcqFillNeedsBlank", { n: badFill + 1, max: FILL_MAX_ANSWERS });
+    logBot(() => escapeHtml(message));
+    showToast(message, "error");
+    backToForm();
+    return;
+  }
 
   const slot = logProgress("shell.save.progress");
   slot.abortBtn.remove();
@@ -2257,7 +2379,7 @@ async function saveDraftBundleInBackground(options = {}) {
       previewDraft = null;
       await loadModule(moduleId);
       logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`);
-      showToast(t("shell.save.success"), "success");
+      announceSaved(composed);
       announceStatus(t("shell.save.success"));
       if (afterSave) afterSave();
       return;
@@ -2327,6 +2449,11 @@ async function saveDraftBundleInBackground(options = {}) {
         taskText: dropBlankLocales(taskText) ?? taskText,
         assessorExpectedContent: dropBlankLocales(assessorExpectedContent) ?? assessorExpectedContent,
         candidateTaskConstraints: dropBlankLocales(candidateTaskConstraints),
+        // #1124 del 2: eksempelsvaret redigeres i Innstillinger; her bare når en oversettelse ved
+        // publisering har lagt det i utkastet. Utelatt beholder tjeneren det fra forrige versjon.
+        ...(sessionDraft?.modelAnswer !== undefined
+          ? { modelAnswer: dropBlankLocales(sessionDraft.modelAnswer) ?? sessionDraft.modelAnswer }
+          : {}),
         assessmentBlueprint: assessmentBlueprint || undefined,
         // Explicit criteria ride along; a rubric from ensure-rubric is referenced by id.
         ...(inlineRubric ? { rubric: inlineRubric } : { rubricVersionId: rubricBody?.rubricVersion?.id }),
@@ -2345,7 +2472,7 @@ async function saveDraftBundleInBackground(options = {}) {
     previewDraft = null;
     await loadModule(moduleId);
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`);
-    showToast(t("shell.save.success"), "success");
+    announceSaved(composed, rubricBody?.rubricWarnings);
     announceStatus(t("shell.save.success"));
     // #928: kriteriene fulgte ikke med (de ble gjenbrukt), og teksten er vesentlig endret. Valgte
     // forfatteren kriterier i samme lagring, er spørsmålet besvart alt.
@@ -2360,7 +2487,11 @@ async function saveDraftBundleInBackground(options = {}) {
     const issuesHtml = issueLines.length
       ? `<div class="save-error-issues">${issueLines.map((line) => escapeHtml(line)).join("<br>")}</div>`
       : "";
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}${issuesHtml}`, [
+    // #1151 skive 3c: modulen ble arkivert mens forfatteren skrev (i en annen fane, eller av en medeier). «Prøv igjen»
+    // kan ikke lykkes; det som er skrevet, står i skjemaet, så det kan kopieres før sida lastes på nytt. Meldingen
+    // står i en toast. `503 content_busy` (kriteriene, ledeteksten og flervalgssettet tas under innholdslåsen) får
+    // fortsatt «Prøv igjen»: der hjelper det å vente.
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}${issuesHtml}`, isArchivedRejection(err) ? [] : [
       { labelKey: "shell.action.retry", action: () => saveDraftBundleInBackground(options) },
     ]);
   }
@@ -2460,7 +2591,9 @@ async function loadModule(moduleId, options = {}) {
   await refreshBlueprintHash();
 
   // `resumeEditing`: the module list and old links use it to mean "open this module ready to edit".
-  const resumedIntoDraft = resumeEditing && createSessionDraftFromLoadedModule();
+  // #1151 skive 3c: ikke for en arkivert modul — et utkast der står som «ulagret» uten noe sted å lagre det.
+  // #1165: heller ikke for en annens modul (skrivebeskyttet).
+  const resumedIntoDraft = resumeEditing && !moduleIsLocked() && createSessionDraftFromLoadedModule();
   renderPreview();
   // QA round 6: reloading on `?tab=settings` selected the tab, drew the panel before the module
   // had arrived — "load a module to see the settings" — and then never drew it again. The author
@@ -2474,7 +2607,7 @@ async function loadModule(moduleId, options = {}) {
   const capturedTitle = localizeValue(bundle?.module?.title) || moduleId;
   const capturedIsLive = !!bundle?.module?.activeVersionId;
   const capturedIsArchived = !!bundle?.module?.archivedAt;
-  const capturedVersionNo = bundle?.selectedConfiguration?.moduleVersion?.versionNo ?? "?";
+  const capturedVersionNo = moduleVersionNumber(bundle?.selectedConfiguration?.moduleVersion) ?? bundle?.selectedConfiguration?.moduleVersion?.versionNo ?? "?";
   logResolveSlot(slot, () => {
     const statusNote = capturedIsArchived
       ? t("shell.module.archivedStatus")
@@ -2759,8 +2892,42 @@ function enterPreviewEditMode({ force = false } = {}) {
           const options = Array.isArray(question.options) ? question.options : [];
           // #1077: «velg alle som stemmer» har flere riktige — avkrysning i stedet for ett valg.
           const multiple = question.questionType === "multiple";
+          // Leveranse 2: «sett i rekkefølge» har ingen valg av fasit — elementene står nummerert, i
+          // riktig rekkefølge. Alltid minst tre felt å fylle ut.
+          const order = question.questionType === "order";
+          // Leveranse 3: «fyll inn» — feltene er de godkjente svarene for lukka i spørsmålet. Minst ett.
+          const fill = question.questionType === "fill";
           const correctPositions = new Set(multiple ? mcqCorrectPositions(question) : [Math.max(0, options.findIndex((option) => option === question.correctAnswer))]);
-          const optionsHtml = options
+          const orderItems = order ? [...options, ...Array(Math.max(0, ORDER_MIN_ITEMS - options.length)).fill("")] : [];
+          const fillAnswers = fill ? (options.length > 0 ? options : [""]) : [];
+          const fillHtml = fillAnswers
+            .map((answer, answerIndex) => `
+                <label class="preview-edit-mcq-option">
+                  <input
+                    type="text"
+                    id="previewEditMcqOption${questionIndex}_${answerIndex}"
+                    class="preview-edit-input"
+                    data-preview-edit-option
+                    value="${escapeHtml(answer)}"
+                    aria-label="${escapeHtml(`${questionLabel} ${tf("adminContent.dialog.mcq.fillAnswer", { n: answerIndex + 1 })}`)}"
+                  />
+                </label>`.trim())
+            .join("");
+          const orderHtml = orderItems
+            .map((item, itemIndex) => `
+                <label class="preview-edit-mcq-option">
+                  <span class="preview-edit-order-number" aria-hidden="true">${itemIndex + 1}.</span>
+                  <input
+                    type="text"
+                    id="previewEditMcqOption${questionIndex}_${itemIndex}"
+                    class="preview-edit-input"
+                    data-preview-edit-option
+                    value="${escapeHtml(item)}"
+                    aria-label="${escapeHtml(`${questionLabel} ${tf("adminContent.dialog.mcq.orderItem", { n: itemIndex + 1 })}`)}"
+                  />
+                </label>`.trim())
+            .join("");
+          const optionsHtml = fill ? fillHtml : order ? orderHtml : options
             .map((option, optionIndex) => {
               const optionLetter = String.fromCharCode(65 + optionIndex);
               return `
@@ -2809,13 +2976,31 @@ function enterPreviewEditMode({ force = false } = {}) {
                 <input type="checkbox" data-preview-edit-multiple="${questionIndex}" ${multiple ? "checked" : ""} />
                 ${escapeHtml(t("adminContent.dialog.mcq.multiple"))}
               </label>
+              <label class="preview-edit-mcq-multiple">
+                <input type="checkbox" data-preview-edit-order="${questionIndex}" ${order ? "checked" : ""} />
+                ${escapeHtml(t("adminContent.dialog.mcq.order"))}
+              </label>
+              <label class="preview-edit-mcq-multiple">
+                <input type="checkbox" data-preview-edit-fill="${questionIndex}" ${fill ? "checked" : ""} />
+                ${escapeHtml(t("adminContent.dialog.mcq.fill"))}
+              </label>
               <div class="preview-edit-mcq-options">
                 ${optionsHtml}
               </div>
-              <div class="preview-mcq-meta">
-                <span class="preview-mcq-meta-label">${correctAnswerLabel}</span>
-                <span class="preview-edit-mcq-help">${mcqHelp}</span>
-              </div>
+              ${fill
+                ? `<div class="preview-mcq-meta">
+                    <span class="preview-edit-mcq-help">${escapeHtml(t("adminContent.help.mcqFill"))}</span>
+                    ${fillAnswers.length < FILL_MAX_ANSWERS ? `<button type="button" class="row-action-btn" style="width:auto" data-add-fill-answer="${questionIndex}">${escapeHtml(t("adminContent.dialog.mcq.addFillAnswer"))}</button>` : ""}
+                  </div>`
+                : order
+                ? `<div class="preview-mcq-meta">
+                    <span class="preview-edit-mcq-help">${escapeHtml(t("adminContent.help.mcqOrder"))}</span>
+                    ${orderItems.length < ORDER_MAX_ITEMS ? `<button type="button" class="row-action-btn" style="width:auto" data-add-order-item="${questionIndex}">${escapeHtml(t("adminContent.dialog.mcq.addOrderItem"))}</button>` : ""}
+                  </div>`
+                : `<div class="preview-mcq-meta">
+                    <span class="preview-mcq-meta-label">${correctAnswerLabel}</span>
+                    <span class="preview-edit-mcq-help">${mcqHelp}</span>
+                  </div>`}
               <div class="preview-section-label">${rationaleLabel}</div>
               <textarea
                 id="previewEditMcqRationale${questionIndex}"
@@ -2869,18 +3054,27 @@ function enterPreviewEditMode({ force = false } = {}) {
       aria-label="${labelGuidance}">${escapedGuidance}</textarea>`;
 
   // Fanebytte uten å lagre: det som står i feltene nå, mot det skjemaet ble åpnet med.
-  editFormSnapshot = () => {
+  const readEditFormFields = () => {
     const val = (id) => document.getElementById(id)?.value.trim();
-    const title = val("previewEditTitle") ?? currentTitle;
-    const description = val("previewEditDescription") ?? currentDescription;
-    const taskText = editIsMcqOnly ? "" : (val("previewEditTaskText") ?? currentTaskText);
-    const assessorExpectedContent = editIsMcqOnly ? "" : (val("previewEditGuidanceText") ?? currentGuidanceText);
-    const candidateTaskConstraints = editIsMcqOnly ? "" : (val("previewEditCandidateTaskConstraints") ?? currentCandidateTaskConstraints);
-    const mcqQuestions = readMcqQuestionsFromForm(currentMcqQuestions);
-    const changed = title !== currentTitle || description !== currentDescription || taskText !== currentTaskText
-      || assessorExpectedContent !== currentGuidanceText || candidateTaskConstraints !== currentCandidateTaskConstraints
-      || JSON.stringify(mcqQuestions) !== JSON.stringify(currentMcqQuestions);
-    return { changed, editingLocale, title, description, taskText, assessorExpectedContent, candidateTaskConstraints, mcqQuestions };
+    return {
+      title: val("previewEditTitle") ?? currentTitle,
+      description: val("previewEditDescription") ?? currentDescription,
+      taskText: editIsMcqOnly ? "" : (val("previewEditTaskText") ?? currentTaskText),
+      assessorExpectedContent: editIsMcqOnly ? "" : (val("previewEditGuidanceText") ?? currentGuidanceText),
+      candidateTaskConstraints: editIsMcqOnly ? "" : (val("previewEditCandidateTaskConstraints") ?? currentCandidateTaskConstraints),
+      mcqQuestions: readMcqQuestionsFromForm(currentMcqQuestions),
+    };
+  };
+  // Prod 2.154.0: «endret» måles mot det SKJEMAET ga tilbake rett etter at det ble tegnet, ikke mot
+  // verdiene det ble tegnet med. Leseren trimmer, et <textarea> gjør CRLF om til LF, og spørsmål av
+  // typene «flere riktige», «sett i rekkefølge» og «fyll inn» leses tilbake med nøklene i en annen
+  // rekkefølge — så et urørt skjema var «endret», fanebyttet laget et utkast ingen hadde skrevet,
+  // og Innstillinger kunne ikke lagres (Lagre i hodet klikket en knapp som ikke var tegnet).
+  let editFormBaseline = null;
+  editFormSnapshot = () => {
+    const fields = readEditFormFields();
+    const changed = editFormBaseline === null || JSON.stringify(fields) !== editFormBaseline;
+    return { changed, editingLocale, ...fields };
   };
 
   // Produkteier 13.09: navnet er et vanlig felt med etikett («Navn (påkrevd)»), ikke en understreket
@@ -2905,6 +3099,7 @@ function enterPreviewEditMode({ force = false } = {}) {
   // `hasOpenEditForm` compares against these, and the form is now open the whole time Rediger is,
   // so an unstamped field would read as changed from the first render.
   stampEditFormValues();
+  editFormBaseline = JSON.stringify(readEditFormFields());
   // Legg til / fjern spørsmål: det som står i feltene tas med i utkastet, lista endres, skjemaet
   // tegnes på nytt fra utkastet. Ingenting går tapt, og tellingen stemmer.
   const rebuildWithQuestions = (mutate) => {
@@ -2919,10 +3114,90 @@ function enterPreviewEditMode({ force = false } = {}) {
   previewContent.querySelector("#previewEditAddQuestion")?.addEventListener("click", () => {
     rebuildWithQuestions((list) => list.push({ stem: "", options: ["", "", "", ""], correctAnswer: "", rationale: "" }));
   });
+  // #1077 leveranse 2: «Sett i riktig rekkefølge» skifter hvordan spørsmålet skrives (nummererte
+  // elementer i stedet for valg av fasit), så skjemaet tegnes på nytt med det som er skrevet. Den og
+  // «Flere riktige svar» utelukker hverandre.
+  for (const toggle of previewContent.querySelectorAll("[data-preview-edit-order]")) {
+    toggle.addEventListener("change", () => {
+      const index = Number(toggle.dataset.previewEditOrder);
+      // Skjemaet tegnes på nytt med den nye typen; da står «Flere riktige svar» av seg selv uten kryss.
+      rebuildWithQuestions((list) => {
+        const question = list[index];
+        if (!question) return;
+        if (toggle.checked) {
+          list[index] = { ...question, questionType: "order", correctAnswers: undefined };
+        } else {
+          const options = (question.options ?? []).length >= 2 ? question.options : [...(question.options ?? []), "", ""].slice(0, 4);
+          list[index] = { stem: question.stem, options, correctAnswer: options[0] ?? "", rationale: question.rationale };
+        }
+      });
+    });
+  }
+  // #1077 leveranse 3: «Fyll inn» skifter hvordan spørsmålet skrives (godkjente svar i stedet for
+  // alternativer med fasit), så skjemaet tegnes på nytt — som for «Sett i riktig rekkefølge». De tre
+  // typene utelukker hverandre: skjemaet tegnes fra typen, så de andre boksene står uten kryss.
+  for (const toggle of previewContent.querySelectorAll("[data-preview-edit-fill]")) {
+    toggle.addEventListener("change", () => {
+      const index = Number(toggle.dataset.previewEditFill);
+      rebuildWithQuestions((list) => {
+        const question = list[index];
+        if (!question) return;
+        if (toggle.checked) {
+          // Det som er skrevet, blir de første godkjente svarene — tomme felt er ikke svar.
+          const answers = (question.options ?? []).filter((option) => String(localizeValueForLocale(option, contentLocale) ?? "").trim());
+          list[index] = { stem: question.stem, questionType: "fill", options: answers.slice(0, FILL_MAX_ANSWERS), correctAnswer: answers[0] ?? "", rationale: question.rationale };
+        } else {
+          const options = (question.options ?? []).length >= 2 ? question.options : [...(question.options ?? []), "", ""].slice(0, 4);
+          list[index] = { stem: question.stem, options, correctAnswer: options[0] ?? "", rationale: question.rationale };
+        }
+      });
+    });
+  }
+  for (const btn of previewContent.querySelectorAll("[data-add-fill-answer]")) {
+    btn.addEventListener("click", () => {
+      const index = Number(btn.dataset.addFillAnswer);
+      rebuildWithQuestions((list) => {
+        const question = list[index];
+        if (!question) return;
+        const answers = (question.options ?? []).length > 0 ? [...question.options] : [""];
+        if (answers.length < FILL_MAX_ANSWERS) answers.push("");
+        list[index] = { ...question, options: answers };
+      });
+      previewContent.querySelector(`#previewEditMcqOption${index}_${(sessionDraft?.mcqQuestions?.[index]?.options?.length ?? 1) - 1}`)?.focus();
+    });
+  }
+  for (const btn of previewContent.querySelectorAll("[data-add-order-item]")) {
+    btn.addEventListener("click", () => {
+      const index = Number(btn.dataset.addOrderItem);
+      rebuildWithQuestions((list) => {
+        const question = list[index];
+        if (!question) return;
+        const items = [...(question.options ?? [])];
+        // Minst tre felt vises alltid; et nytt felt kommer etter dem.
+        while (items.length < ORDER_MIN_ITEMS) items.push("");
+        if (items.length < ORDER_MAX_ITEMS) items.push("");
+        list[index] = { ...question, options: items };
+      });
+      previewContent.querySelector(`#previewEditMcqOption${index}_${(sessionDraft?.mcqQuestions?.[index]?.options?.length ?? 1) - 1}`)?.focus();
+    });
+  }
   // #1077: «Flere riktige svar» bytter valget av fasit mellom ett (radio) og flere (avkrysning) — på
   // stedet, så det som er skrevet i spørsmålet står. Fra flere til ett beholdes det første avkryssede.
   for (const toggle of previewContent.querySelectorAll("[data-preview-edit-multiple]")) {
     toggle.addEventListener("change", () => {
+      // Leveranse 2: fra «sett i rekkefølge» til «flere riktige» tegnes skjemaet på nytt med valg av fasit.
+      const orderToggle = toggle.closest("[data-preview-edit-question]")?.querySelector("[data-preview-edit-order]");
+      const fillToggle = toggle.closest("[data-preview-edit-question]")?.querySelector("[data-preview-edit-fill]");
+      if (toggle.checked && (orderToggle?.checked || fillToggle?.checked)) {
+        const index = Number(toggle.dataset.previewEditMultiple);
+        rebuildWithQuestions((list) => {
+          const question = list[index];
+          if (!question) return;
+          const options = (question.options ?? []).length >= 2 ? question.options : [...(question.options ?? []), "", ""].slice(0, 4);
+          list[index] = { stem: question.stem, questionType: "multiple", options, correctAnswers: [], correctAnswer: "", rationale: question.rationale };
+        });
+        return;
+      }
       const container = toggle.closest("[data-preview-edit-question]");
       const inputs = Array.from(container?.querySelectorAll("[data-preview-edit-correct]") ?? []);
       const firstChecked = inputs.find((input) => input.checked) ?? inputs[0];
@@ -3021,6 +3296,18 @@ function enterPreviewEditMode({ force = false } = {}) {
     if (badMultiple >= 0) {
       showToast(t("shell.save.mcqMultipleNeedsCorrect").replace("{n}", String(badMultiple + 1)), "error");
       previewContent.querySelector(`input[name="previewEditCorrectAnswer${badMultiple}"]`)?.focus();
+      return;
+    }
+    const badOrder = firstBadOrderIndex(newMcqQuestions);
+    if (badOrder >= 0) {
+      showToast(tf("shell.save.mcqOrderNeedsItems", { n: badOrder + 1, min: ORDER_MIN_ITEMS, max: ORDER_MAX_ITEMS }), "error");
+      previewContent.querySelector(`#previewEditMcqOption${badOrder}_0`)?.focus();
+      return;
+    }
+    const badFill = firstBadFillIndex(newMcqQuestions);
+    if (badFill >= 0) {
+      showToast(tf("shell.save.mcqFillNeedsBlank", { n: badFill + 1, max: FILL_MAX_ANSWERS }), "error");
+      previewContent.querySelector(`#previewEditMcqStem${badFill}`)?.focus();
       return;
     }
 
@@ -3224,15 +3511,145 @@ function moduleStatusBadgesHtml() {
   const chains = bundle ? deriveModuleStatusChains(bundle) : null;
   const loaded = bundle?.selectedConfiguration?.moduleVersion ?? null;
   const loadedIsLive = !!loaded?.id && loaded.id === bundle?.module?.activeVersionId;
-  const liveNo = chains?.liveChain?.[0]?.versionNo ?? null;
+  // #934 skive 5b: «Publisert v2.1». Serveren uten nummer gir det merket viste før, «v5».
+  const liveVersion = (bundle?.versions?.moduleVersions ?? []).find((version) => version.id === bundle?.module?.activeVersionId);
+  const liveNo = moduleVersionNumber(liveVersion) ?? chains?.liveChain?.[0]?.versionNo ?? null;
   const parts = [];
   if (bundle?.module?.archivedAt) parts.push(lifecycleBadge({ lifecycle: "archived" }, t));
   else if (liveNo != null) parts.push(`<span class="status-badge status-badge--published">${escapeHtml(tf("stateRail.live.published", { versionNo: liveNo }))}</span>`);
-  const editingNo = loaded?.versionNo ?? null;
+  // Et utkast som aldri er publisert, har ikke noe nummer. Rekkefølgen av lagringer ved siden av «v2.1» ville sett ut som en høyere versjon.
+  const editingNo = moduleVersionNumber(loaded);
   if (sessionDraft && !loaded) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(t("stateRail.editing.workingDraft"))}</span>`);
   else if (editingNo != null && !loadedIsLive) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(tf("shell.header.draftVersion", { versionNo: editingNo }))}</span>`);
+  // Produkteier 13.11.2026: ved siden av «Publisert v1.2» sa «Utkast» for lite — forfatteren så ikke at skjemaet viste en
+  // nyere, upublisert lagring. Samme ord og samme brikke som kurs og seksjoner bruker: «Nyere utkast». Uten en live versjon
+  // er det fortsatt bare «Utkast».
+  else if (loaded && !loadedIsLive) parts.push(liveNo != null
+    ? `<span class="status-chip">${escapeHtml(t("adminContent.lifecycle.newerDraft"))}</span>`
+    : lifecycleBadge({ lifecycle: "draft" }, t));
   else if (liveNo == null && bundle) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
-  return parts.join(" ");
+  return parts.join(" ") + moduleArchivedNoticeHtml() + moduleDraftLineHtml(loaded, loadedIsLive, liveNo);
+}
+
+/**
+ * #1163: stripen under merket, som på kurset og seksjonen: «Utkast lagret … Deltakerne ser versjon X til utkastet er publisert.»
+ * Bare når det lastede utkastet er nyere enn en publisert versjon. Kursets tekst uten navn (`lineNoName`): ingen
+ * versjonstabell vet hvem som lagret.
+ */
+function moduleDraftLineHtml(loaded, loadedIsLive, liveNo) {
+  if (!bundle || moduleIsArchived() || !loaded || loadedIsLive || liveNo == null) return "";
+  const time = loaded.createdAt ? formatModuleDraftTime(loaded.createdAt) : "";
+  return `<p class="course-draft-line" data-module-draft-line>${escapeHtml(tf("courses.draft.lineNoName", { time, version: liveNo }))}</p>`;
+}
+
+// ---------------------------------------------------------------------------
+// #1151 skive 3c: en arkivert modul er urørlig. Tjeneren avviser alt som skriver (`module_archived`, doc/design/
+// CONTENT_LIFECYCLE.md G5); sida tilbyr det derfor ikke. Samme mønster som det arkiverte kurset (#1150 skive 2b,
+// `courseIsArchived` i admin-content-courses.js): linja under merket, ingen Lagre/Avbryt, feltene i en `<fieldset
+// disabled>` i alle fanene, og i handlingsraden bare det som er lov — «Eksporter», «Gjenopprett» og «Slett».
+// Eierpanelet står utenfor sperren (det lagrer for seg).
+// ---------------------------------------------------------------------------
+
+/** Er den lastede modulen arkivert? Leses hver gang (hodet, handlingsraden, «ulagret»), aldri lagret for seg. */
+function moduleIsArchived() {
+  return Boolean(bundle?.module?.archivedAt);
+}
+
+/**
+ * #1165 (produkteier 14.11.2026, «Produsenter bør kunne se hverandres innhold»): en annens modul åpnes skrivebeskyttet. Tjeneren
+ * sier `canManage` (eier eller administrator) i `/export`; skriverutene avviser den som ikke kan. Sida bruker den samme sperren
+ * som for en arkivert modul (#1151), med sin egen linje. Uten feltet (eldre tjener) regnes modulen som redigerbar, som lista.
+ */
+function moduleCanManage() {
+  return bundle?.canManage !== false;
+}
+
+/** Feltene og Lagre er sperret: modulen er arkivert, eller den som ser den, kan ikke endre den. */
+function moduleIsLocked() {
+  return moduleIsArchived() || (Boolean(bundle) && !moduleCanManage());
+}
+
+function moduleArchivedNoticeHtml() {
+  if (moduleIsArchived()) {
+    return `<p class="archived-notice" role="status" data-module-archived-notice>${escapeHtml(t("shell.module.archivedNotice"))}</p>`;
+  }
+  if (bundle && !moduleCanManage()) {
+    return `<p class="archived-notice" role="status" data-module-readonly-notice>${escapeHtml(t("adminContent.readOnlyNotice"))}</p>`;
+  }
+  return "";
+}
+
+/**
+ * Sperren ligger RUNDT innholdet i Rediger/Forhåndsvisning og Innstillinger (`data-module-archived-lock` i
+ * admin-content.html), ikke i det som tegnes: skjemaet, spørsmålene og kriteriene tegnes på nytt fra mange steder, og alt
+ * som havner inni en sperret `<fieldset>`, er sperret uten at noen av dem må huske det.
+ */
+function applyModuleArchivedLock() {
+  const on = moduleIsLocked();
+  // Rediger og Forhåndsvisning deler boksen. I Forhåndsvisning skal forfatteren prøve øvelsene («Sjekk deg selv») slik en
+  // deltaker gjør — det skriver ingenting (QA-porten #1151). `renderPreview` kalles ved hvert bytte inn og ut av Forhåndsvisning.
+  for (const lock of document.querySelectorAll("[data-module-archived-lock]")) {
+    lock.disabled = on && !(activeTab === "preview" && lock.hasAttribute("data-lock-shared-with-preview"));
+  }
+}
+
+/** Handlingsraden for en arkivert modul: lese og ta med seg, gjenopprette, slette. Ikke «Dupliser» (produkteier 13.11). */
+function archivedModuleActions() {
+  // #1165: den som ikke kan endre modulen, kan bare ta den med seg. Gjenopprett og Slett er eiernes.
+  if (!moduleCanManage()) return [{ key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() }];
+  return [
+    { key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
+    { key: "restore", labelKey: "ui.action.restore", action: () => restoreArchivedModule() },
+    { key: "delete", labelKey: "ui.action.delete", destructive: true, action: () => deleteArchivedModule() },
+  ];
+}
+
+// Én livssyklushandling om gangen: et dobbeltklikk skal ikke sende to kall.
+let moduleLifecycleBusy = false;
+
+function moduleLifecycleErrorToast(err) {
+  const { headline, detail } = describeApiError(err, t);
+  showToast(headline, "error", detail);
+}
+
+/** «Gjenopprett»: modulen lastes på nytt, og sida blir redigerbar igjen (sperren og handlingene følger `archivedAt`). */
+async function restoreArchivedModule() {
+  const moduleId = selectedModuleId;
+  if (!moduleId || moduleLifecycleBusy) return;
+  moduleLifecycleBusy = true;
+  try {
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/restore`, getHeaders, { method: "POST" });
+    // #1168: si hva som kom tilbake: et utkast, som må publiseres igjen (som kurset).
+    showToast(tf("library.restoredAsDraft", { title: localizeValue(bundle?.module?.title) || moduleId }), "success");
+    await loadModule(moduleId);
+  } catch (err) {
+    moduleLifecycleErrorToast(err);
+  } finally {
+    moduleLifecycleBusy = false;
+  }
+}
+
+/** «Slett»: bare for en arkivert modul (tjeneren krever det, `delete_requires_archived`). Etterpå er lista stedet. */
+async function deleteArchivedModule() {
+  const moduleId = selectedModuleId;
+  if (!moduleId || moduleLifecycleBusy) return;
+  const title = localizeValue(bundle?.module?.title) || moduleId;
+  // #1168: sidas egen dialog, den samme som i biblioteket, i stedet for nettleserens spørreboks. Opptatt mens den står åpen.
+  moduleLifecycleBusy = true;
+  const confirmed = await confirmModuleDelete({ title, t, tf, returnFocusTo: document.querySelector('#moduleFormHead [data-ws-key="delete"]') });
+  if (!confirmed) {
+    moduleLifecycleBusy = false;
+    return;
+  }
+  try {
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}`, getHeaders, { method: "DELETE" });
+    // I kø, ikke vist: sida byttes i neste linje (som modulimporten, #1119).
+    queueToast(t("library.deleted"), "success");
+    window.location.href = "/admin-content";
+  } catch (err) {
+    moduleLifecycleErrorToast(err);
+    moduleLifecycleBusy = false;
+  }
 }
 
 function createModuleFormPage() {
@@ -3247,8 +3664,9 @@ function createModuleFormPage() {
     title: moduleHeaderTitle,
     statusHtml: moduleStatusBadgesHtml,
     t,
+    // `data-ws-key`: hvilken handling knappen er (testene og #1151 leser den); klikket slås fortsatt opp på indeksen.
     actions: () => workspaceActionChoices.map((choice, i) =>
-      `<button type="button" class="row-action-btn workspace-action-btn" data-ws-action="${i}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
+      `<button type="button" class="row-action-btn workspace-action-btn${choice.destructive ? " destructive" : ""}" data-ws-action="${i}" data-ws-key="${escapeHtml(choice.key ?? "")}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
     languages: { locales: supportedLocales, labels: localeLabels, current: () => contentLocale, onChange: switchContentLocale },
     tabs: {
       label: t("shell.tab.listLabel"),
@@ -3258,7 +3676,8 @@ function createModuleFormPage() {
     },
     // Lagre-flyten kjøres av skallet (saveFromHeader); «false» lar form-page.js la tilstanden stå til
     // skallet melder fra gjennom isDirty.
-    save: { onSave: async () => { saveFromHeader(); return false; }, onDiscard: discardFromHeader },
+    // #1151 skive 3c: en arkivert modul har ingen Lagre/Avbryt. Leses hver gang hodet tegnes (som kursets).
+    save: { onSave: async () => { saveFromHeader(); return false; }, onDiscard: discardFromHeader, get hidden() { return moduleIsLocked(); } },
     isDirty: () => moduleDirtyKind() !== null,
     body: () => "",
   });
@@ -3272,7 +3691,20 @@ function createModuleFormPage() {
 
 function saveFromHeader() {
   const kind = moduleDirtyKind();
-  if (kind === "settings") { if (activeTab !== "settings") switchToTab("settings"); document.getElementById("settingsSave")?.click(); return; }
+  if (kind === "settings") {
+    if (activeTab !== "settings") switchToTab("settings");
+    const settingsSave = document.getElementById("settingsSave");
+    if (settingsSave) { settingsSave.click(); return; }
+    // Prod 2.154.0: med et ulagret utkast fra Rediger tegner Innstillinger ingen Lagre-knapp (en
+    // innstillingslagring ville skrevet det lagrede innholdet over utkastet), og klikket herfra traff
+    // ingenting — ingen lagring, ingen melding. Si hvorfor.
+    showToast(t("shell.settings.draftBlocks"), "warning");
+    return;
+  }
+  // Innholdslagringen tar ikke med ulagrede innstillinger, og modulen lastes på nytt etterpå — da er
+  // de borte. Si det FØR noe forsvinner (prod 2.154.0: avkrysningen forsvant uten et ord).
+  if ((kind === "form" || kind === "draft") && settingsTab.hasUnsavedSettingsEdits()
+    && !window.confirm(t("shell.save.settingsLostConfirm"))) return;
   if (kind === "form") { document.getElementById("previewEditConfirm")?.click(); return; }
   if (kind === "draft") {
     if (activeTab === "edit" && isEditFormOpen() && sessionDraftFromForm) { document.getElementById("previewEditConfirm")?.click(); return; }
@@ -3313,6 +3745,15 @@ document.addEventListener("change", (event) => {
 // Rekkefølgen i raden: det som endrer hva deltakerne ser først (Publiser/Avpubliser), så resten.
 const WS_ACTION_ORDER = ["publish", "unpublish", "generateContent", "resumeChatEdit", "revise", "generateMcq", "export", "import"];
 function renderWorkspaceActions(actions) {
+  // #1151 skive 3c: for en arkivert modul er raden alltid den samme, uansett hvilken flyt som tegner den (modulen lastet,
+  // et utkast klart, språkbytte). Ett sted, så ingen vei inn kan tegne «Publiser» eller «Erstatt fra fil» på den.
+  // #1165: det samme for en annens modul: bare «Eksporter» (`archivedModuleActions`).
+  if (moduleIsLocked()) {
+    workspaceActionChoices = archivedModuleActions();
+    formPage?.refreshHeader();
+    refreshModuleHeaderState();
+    return;
+  }
   // saveDraft og restart er Lagre og Avbryt i hodet.
   const live = (actions ?? []).filter(Boolean).filter((a) => a.key !== "saveDraft" && a.key !== "restart");
   live.sort((a, b) => {
@@ -4575,6 +5016,8 @@ function renderWorkspaceNavigation() {
 
 // Translates static text that lives in the HTML source (not rendered by chat flow).
 function translatePageStaticText() {
+  // #1173: HTML-en sier lang="en-GB"; uten dette leste skjermleseren norske menyer med engelsk uttale.
+  document.documentElement.lang = menuLocale();
   for (const el of document.querySelectorAll("[data-i18n]")) {
     const key = el.getAttribute("data-i18n");
     if (key) el.textContent = t(key);
@@ -4660,6 +5103,10 @@ function populateUiLocaleSelect() {
     settingsTab.renderSettingsPanel();
     // Handlingsraden og merkene i hodet bygges også i JS (#1046): tegn dem om med samme valg.
     renderWorkspaceActions(workspaceActionChoices);
+    // #1173 (rest): eierpanelet tegnes bare når modulen byttes (vakta på `dataset.moduleId`), så det sto på det forrige
+    // språket til noen klikket i det. Glem hvilken modul det ble tegnet for, så updateStateRail tegner det på nytt.
+    const ownerHost = document.getElementById("moduleOwnerPanelHost");
+    if (ownerHost) ownerHost.dataset.moduleId = "";
     updateStateRail();
     if (wasEditing) {
       enterPreviewEditMode({ force: true });
@@ -4706,6 +5153,8 @@ async function loadConsoleConfig() {
 async function initShell() {
   populateUiLocaleSelect();
   translatePageStaticText();
+  // #1119: en melding lagt i kø av siden som navigerte hit (modulimporten) — som kurssiden (#1095).
+  flushQueuedToast();
   createModuleFormPage();
   applyTabState(activeTab);
   renderPreview();
@@ -4753,7 +5202,7 @@ const publishFlow = createPublishFlow({
   get selectedModuleId() { return selectedModuleId; },
   get bundle() { return bundle; },
   get contentLocale() { return contentLocale; },
-  t, logBot, logProgress, logResolveSlot, announceStatus, apiErrorText, getHeaders, loadModule, saveDraftBundleInBackground, showModuleActions, startDirectEditFlow, commitSessionDraftPatch,
+  t, tf, logBot, logProgress, logResolveSlot, announceStatus, apiErrorText, getHeaders, loadModule, saveDraftBundleInBackground, showModuleActions, startDirectEditFlow, commitSessionDraftPatch,
 });
 
 const settingsTab = createSettingsTab({
@@ -4765,6 +5214,9 @@ const settingsTab = createSettingsTab({
   get previewDraft() { return previewDraft; }, set previewDraft(v) { previewDraft = v; },
   get latestSavedModuleVersionId() { return latestSavedModuleVersionId; }, set latestSavedModuleVersionId(v) { latestSavedModuleVersionId = v; },
   get formPage() { return formPage; },
+  // #1151 skive 3c: Innstillinger for en arkivert modul — lesbare, uten Lagre og uten «Gjenopprett» på versjonene.
+  // #1165: også en annens modul (skrivebeskyttet) — samme sperre.
+  get moduleArchived() { return moduleIsLocked(); },
   get newModulePlaceholder() { return newModulePlaceholder; }, set newModulePlaceholder(v) { newModulePlaceholder = v; },
   get LEVEL_SCOPE_DEFAULTS() { return LEVEL_SCOPE_DEFAULTS; },
   get CERTIFICATION_LEVELS() { return CERTIFICATION_LEVELS; },

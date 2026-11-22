@@ -1,6 +1,10 @@
 import request from "supertest";
+import { withRevision } from "./support/courseRevision.js";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { recordFixturePass } from "./support/modulePassFixture.js";
+import { getMyCoursesProgress } from "../src/modules/course/index.js";
+import { sortCoursesForParticipant } from "../src/modules/course/courseOrdering.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -161,6 +165,8 @@ describe("Participant courses API", () => {
         { courseId: mixedCourse.id, moduleId: passedModule.module.id, itemType: "MODULE", sortOrder: 2 },
       ],
     });
+    // #934: ModulePass, nummer og krav, som regelen prod bruker leser. Etter at kurset har fått modulen, så kravet skrives.
+    await recordFixturePass({ userId: participant!.id, moduleId: passedModule.module.id, moduleVersionId: passedModule.moduleVersion.id, submissionId: passedSubmission.id, decisionId: passedDecision.id });
 
     const listResponse = await request(app).get("/api/courses").set(participantHeaders);
     expect(listResponse.status).toBe(200);
@@ -201,6 +207,19 @@ describe("Participant courses API", () => {
       }),
     ]);
   });
+
+  // #1139 skive 0: framdriften er flyttet ut av ruta til `getMyCoursesProgress`, som den ukentlige e-posten skal bruke. Ruta og
+  // funksjonen skal si nøyaktig det samme, også for en deltaker med kurs i gang, beståtte moduler og kurs fra mange tester.
+  it("#1139: `getMyCoursesProgress` gir det samme som «Mine kurs»-ruta, kurs for kurs", async () => {
+    const participant = await prisma.user.findUniqueOrThrow({ where: { externalId: "participant-1" }, select: { id: true } });
+    const route = await request(app).get("/api/courses").set({ ...participantHeaders, "x-locale": "nb" });
+    expect(route.status).toBe(200);
+    const { items, classCourseDue } = await getMyCoursesProgress({ userId: participant.id, roles: ["PARTICIPANT"], locale: "nb" });
+    expect(items.length, "deltakeren har kurs i lista").toBeGreaterThan(0);
+    expect(items.some((item) => item.progress.courseStatus === "IN_PROGRESS"), "minst ett kurs i gang").toBe(true);
+    expect(JSON.parse(JSON.stringify(sortCoursesForParticipant(items, "nb")))).toEqual(route.body.courses);
+    expect(classCourseDue).toBeInstanceOf(Map);
+  });
 });
 
 // #1093: rekkefølgen i «Mine kurs» — alfabetisk på tittelen i deltakerens språk, kurs med satt
@@ -240,11 +259,11 @@ describe("«Mine kurs»: rekkefølge (#1093)", () => {
     const detalj = await request(app).get(`/api/admin/content/courses/${id}`).set(admin);
     expect(detalj.body.course.sortOrder).toBe(3);
 
-    const nullet = await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send({ sortOrder: null });
+    const nullet = await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send(await withRevision(id, { sortOrder: null }));
     expect(nullet.status).toBe(200);
     expect((await request(app).get(`/api/admin/content/courses/${id}`).set(admin)).body.course.sortOrder).toBeNull();
 
-    const ugyldig = await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send({ sortOrder: -1 });
+    const ugyldig = await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send(await withRevision(id, { sortOrder: -1 }));
     expect(ugyldig.status).toBe(400);
   });
 
@@ -255,7 +274,7 @@ describe("«Mine kurs»: rekkefølge (#1093)", () => {
     // Eksporten krever minst ett element i kurset.
     const seksjon = await request(app).post("/api/admin/content/sections").set(admin).send({ title: { nb: `Seksjon ${stempel}`, nn: `Seksjon ${stempel}`, "en-GB": `Section ${stempel}` }, bodyMarkdown: { nb: "Tekst.", nn: "Tekst.", "en-GB": "Text." } });
     expect(seksjon.status, JSON.stringify(seksjon.body).slice(0, 300)).toBe(201);
-    const elementer = await request(app).put(`/api/admin/content/courses/${id}/items`).set(admin).send({ items: [{ type: "SECTION", sectionId: seksjon.body.section.id }] });
+    const elementer = await request(app).put(`/api/admin/content/courses/${id}/items`).set(admin).send(await withRevision(id, { items: [{ type: "SECTION", sectionId: seksjon.body.section.id }] }));
     expect(elementer.status, JSON.stringify(elementer.body).slice(0, 300)).toBe(204);
     const eksport = await request(app).get(`/api/admin/content/courses/${id}/export-package`).set(admin);
     expect(eksport.status, JSON.stringify(eksport.body).slice(0, 300)).toBe(200);

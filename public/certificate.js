@@ -69,13 +69,23 @@ function showState(messageKey) {
 function renderCertificate(data) {
   document.getElementById("certName").textContent = data.participantName ?? "-";
   document.getElementById("certCourse").textContent = data.courseTitle ?? data.courseId ?? "-";
-  document.getElementById("certCompletedAt").textContent = formatDate(data.completedAt);
+  // #1145: et kurs tatt utenfor plattformen har ingen kjent dato. Da står «Status: Tatt utenfor plattformen», ikke
+  // «Fullført: Tatt utenfor plattformen».
+  const outside = data.source === "external";
+  const completedLabel = document.getElementById("certCompletedAtLabel");
+  completedLabel.textContent = t(outside ? "certificate.status" : "certificate.completedAt");
+  completedLabel.setAttribute("data-i18n", outside ? "certificate.status" : "certificate.completedAt");
+  document.getElementById("certCompletedAt").textContent = outside ? t("certificate.takenOutside") : formatDate(data.completedAt);
   // ⚠️ #1046: linja sto med «Certification level: -» når nivået manglet, mens modultallet rett
   // under skjules helt i samme tilfelle. To ulike svar på samme spørsmål, i samme fil — og på et
   // dokument som skrives ut og arkiveres.
   const nivå = data.certificationLevel ? localizeCertLevel(data.certificationLevel) : "";
   document.getElementById("certLevel").textContent = nivå;
   document.getElementById("certLevelWrap").hidden = !nivå;
+  // #934: et kursbevis gjelder sin hovedversjon. Vises fra versjon 2 (se certificate.html).
+  const versjon = Number.isInteger(data.versionMajor) && data.versionMajor > 1 ? String(data.versionMajor) : "";
+  document.getElementById("certVersion").textContent = versjon;
+  document.getElementById("certVersionWrap").hidden = !versjon;
   const modulesWrap = document.getElementById("certModulesWrap");
   if (typeof data.moduleCount === "number" && data.moduleCount > 0) {
     document.getElementById("certModules").textContent = String(data.moduleCount);
@@ -165,6 +175,16 @@ localeSelect.addEventListener("change", () => {
   // ⚠️ `applyTranslations` oversetter bare etikettene. Kursnavnet kommer fra serveren og må hentes.
   bevis.oppdaterVedSpråkbytte();
 });
+
+// #1162: kursbeviset åpnes i samme fane, og lenken tilbake fører dit deltakeren kom fra. Lenken i profilen bærer `fra=profil`;
+// alle andre (kursraden, det eldre beviset i kurset, en lenke uten opphav) fører til «Mine kurs». Teksten følger språkbyttet,
+// fordi den går gjennom data-i18n som resten av siden.
+const backLink = document.getElementById("certBackLink");
+if (backLink && new URLSearchParams(window.location.search).get("fra") === "profil") {
+  // QA 2.173.0: til fanen «Beståtte kurs», som nettleserens tilbake gjør. Uten fanen i adressen åpnet profilen på «Statistikk».
+  backLink.href = "/profile#courses";
+  backLink.setAttribute("data-i18n", "certificate.backToProfile");
+}
 
 populateLocaleSelect();
 applyTranslations();

@@ -105,6 +105,16 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).not.toContain("based on the source material below.");
   });
 
+  // #1121: oppgaven og spørsmålene bruker en annen situasjon enn eksemplene i kilden.
+  it("asks for another situation than the source's examples, in the task and in the questions", () => {
+    const base = { sourceMaterial: "Notes.", certificationLevel: "intermediate" as const, locale: "en-GB" as const, generationMode: "ordinary" as const };
+    expect(buildModuleDraftPrompts(base).userPrompt).toContain("Do not reuse a case, worked example or finished answer from the source material as the task.");
+    const { userPrompt } = buildMcqGenerationPrompts({ ...base, questionCount: 4, optionCount: 4 } as Parameters<typeof buildMcqGenerationPrompts>[0]);
+    expect(userPrompt).toContain("a related but different situation than the worked examples in the source material");
+    // #1134: generering har bedt om forklaring av hvert galt alternativ siden før; låst her.
+    expect(userPrompt).toContain("explanation of why the correct answer is right and why each distractor is wrong");
+  });
+
   it("includes generation mode guidance in module draft prompts", () => {
     const { userPrompt } = buildModuleDraftPrompts({
       sourceMaterial: "Internal policy notes about safe handling of customer data.",
@@ -312,6 +322,21 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).toContain("to British English");
     expect(userPrompt).toContain('If taskText starts with "Scenario:", preserve that label in the target language.');
     expect(userPrompt).toContain('"taskText": "translated task text in British English"');
+    // #1124 del 2: uten eksempelsvar spørres det ikke etter et.
+    expect(userPrompt).not.toContain("modelAnswer");
+  });
+
+  it("#1124 del 2: eksempelsvaret oversettes sammen med resten når modulen har et", () => {
+    const { userPrompt } = buildModuleDraftLocalizationPrompts({
+      taskText: "Skriv referatet.",
+      assessorExpectedContent: "Vedtaket står først.",
+      modelAnswer: "Vedtak: budsjettet ble godkjent.",
+      sourceLocale: "nb",
+      targetLocale: "nn",
+    });
+    expect(userPrompt).toContain("modelAnswer (a strong example answer, shown to the candidate after assessment):\nVedtak: budsjettet ble godkjent.");
+    expect(userPrompt).toMatch(/"modelAnswer": "translated example answer in [^"]+"/);
+    expect(userPrompt).toContain("- modelAnswer is a complete example answer");
   });
 
   it("builds MCQ localization prompts that preserve option structure", () => {
@@ -424,6 +449,8 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).toContain("Question 1");
     expect(userPrompt).toContain("A. A collective response");
     expect(userPrompt).toContain("Make the distractors more plausible.");
+    // #1134: forklarende tilbakemelding — også ved revisjon, som ved generering.
+    expect(userPrompt).toContain("why the correct answer is right, and why the most tempting wrong option is wrong");
   });
 
   // #245 — scenario generation decision
@@ -663,7 +690,7 @@ describe("section localization prompts (#514)", () => {
     });
     // Regelen om markørordene er én linje; ordene må stå i DEN, ikke bare et annet sted i prompten.
     const markerRule = userPrompt.split("\n").find((line) => line.startsWith("- Keep block markers exactly as written")) ?? "";
-    for (const marker of [":::kort", ":::tenk", ":::sjekk", ":::steg", ":::steps", ":::skriv", ":::write", ":::repetisjon", ":::flashcards", ":::par", ":::pairs"]) {
+    for (const marker of [":::kort", ":::tenk", ":::sjekk", ":::steg", ":::steps", ":::skriv", ":::write", ":::repetisjon", ":::flashcards", ":::par", ":::pairs", ":::feil", ":::errors"]) {
       expect(markerRule, marker).toContain(`\`${marker}\``);
     }
     expect(userPrompt).toMatch(/In a `:::skriv` \/ `:::write` block, the lines at the end that start with `- \[ \]` are the learner's checklist\. Keep that start EXACTLY and keep every line/);
@@ -671,6 +698,8 @@ describe("section localization prompts (#514)", () => {
     // #1110 og #1107
     expect(userPrompt).toContain("An indented line right under an option is that option's feedback: keep it indented right under the same option, and translate its text.");
     expect(userPrompt).toContain("In a `:::par` / `:::pairs` block, every line is `- term = explanation`. Keep the `- ` and the ` = ` exactly and keep every line; translate the term and the explanation.");
+    // #1123: feilen står i samme setning på alle språk.
+    expect(userPrompt).toContain("In a `:::feil` / `:::errors` block, each sentence line starts with `- [ ]` (right) or `- [x]` (contains an error). Keep that start EXACTLY on the same sentence and keep every line");
   });
 
   it("omits a field that was not provided", () => {

@@ -22,17 +22,22 @@ import {
   createModuleVersion,
   publishModuleVersion,
 } from "./adminContentCommands.js";
-import { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
-import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
+import { adminContentRepository, createAdminContentRepository, createAdminContentWriter } from "./adminContentRepository.js";
+import type { DbTransactionClient } from "../../db/transaction.js";
+import { runContentWrite, type ContentWriteTx } from "../../db/contentLock.js";
 import { prisma } from "../../db/prisma.js";
-import { courseRepository } from "../course/courseRepository.js";
+import { courseRepository, createCourseRepository } from "../course/courseRepository.js";
+import { findSectionReadCredit } from "../course/sectionReadCredit.js";
 import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
+import { findActiveUsesOfItems } from "../course/contentLifecycle.js";
+import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, renameSectionInVersionSnapshots, sameLocalizedText, type CourseVersionChoice, type CourseVersionRequest } from "../course/courseVersioning.js";
 import { randomUUID } from "node:crypto";
 import { createSection, evaluateSectionTranslationGate } from "../course/sectionCommands.js";
 import { moduleExportPayloadSchema, sectionExportPayloadSchema } from "./adminContentSchemas.js";
 import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "../course/assetCommands.js";
-import { DomainRuleError, ForbiddenError, ValidationError } from "../../errors/AppError.js";
+import { AppError, ConflictError, DomainRuleError, ForbiddenError, ValidationError } from "../../errors/AppError.js";
 import { assertContentOwnership } from "../content/contentOwnershipService.js";
+import { assertNotArchived } from "../content/archivedGuard.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import type { AuditAction, AuditEntityType } from "../../observability/auditEvents.js";
@@ -117,6 +122,8 @@ type StagedImportSection = {
   sectionId: string;
   title: string;
   bodyMarkdown: string;
+  // #1163: det deltakerne så ved kilden, når fila bar et utkast over det (`publishedVersion`). Samme bilder, samme omskriving.
+  published?: { title: string; bodyMarkdown: string };
   stagedAssets: Array<{ id: string; rowData: StagedSectionAsset["rowData"] }>;
   blobPaths: string[];
 };
@@ -134,9 +141,12 @@ async function stageSectionForImport(
   const serializedMarkdown = serializeRequired(section.bodyMarkdown);
   const title = serializeRequired(section.title);
   const assets = section.assets ?? [];
+  const published = section.publishedVersion
+    ? { title: serializeRequired(section.publishedVersion.title), bodyMarkdown: serializeRequired(section.publishedVersion.bodyMarkdown) }
+    : undefined;
 
   if (assets.length === 0) {
-    return { sectionId, title, bodyMarkdown: serializedMarkdown, stagedAssets: [], blobPaths: [] };
+    return { sectionId, title, bodyMarkdown: serializedMarkdown, ...(published ? { published } : {}), stagedAssets: [], blobPaths: [] };
   }
 
   let staged: StagedSectionAsset[];
@@ -166,6 +176,7 @@ async function stageSectionForImport(
     sectionId,
     title,
     bodyMarkdown: remapAssetRefs(serializedMarkdown, idMap),
+    ...(published ? { published: { title: published.title, bodyMarkdown: remapAssetRefs(published.bodyMarkdown, idMap) } } : {}),
     stagedAssets,
     blobPaths: staged.flatMap((asset) => asset.blobPaths),
   };
@@ -175,7 +186,7 @@ async function stageSectionForImport(
 // and already-remapped markdown) and its SectionAsset rows (with pre-generated ids referencing the staged
 // blobs). No blob I/O here.
 async function persistStagedSection(
-  tx: DbTransactionClient,
+  tx: ContentWriteTx,
   staged: StagedImportSection,
   actorId: string,
   // #916: the standalone section import lands UNPUBLISHED (the same rule module import follows
@@ -193,17 +204,28 @@ async function persistStagedSection(
   // The gate state is returned now, exactly as `importModulePayload` already does for modules.
   options?: { draft?: boolean; agent?: AgentAuthoringContext },
 ): Promise<{ sectionId: string; heldBackByTranslationGate: boolean }> {
+  // #1163: bar fila et utkast over den publiserte versjonen, og seksjonen skal publiseres (kursimporten «nytt kurs»), blir den
+  // publiserte versjonen v1 (aktiv, gjennom porten som før) og utkastet v2, upublisert over. Uten dette ville utkastet gått rett
+  // ut til deltakerne i det nye kurset. Lander seksjonen som utkast uansett (`draft: true`), er det bare utkastet som teller.
+  const published = options?.draft ? undefined : staged.published;
   const created = await createSection(
     {
       id: staged.sectionId,
-      title: staged.title,
-      bodyMarkdown: staged.bodyMarkdown,
+      title: published?.title ?? staged.title,
+      bodyMarkdown: published?.bodyMarkdown ?? staged.bodyMarkdown,
       actorId,
       draft: options?.draft,
       agent: options?.agent,
     },
     tx,
   );
+  if (published) {
+    await tx.courseSectionVersion.create({
+      data: { sectionId: staged.sectionId, versionNo: 2, title: staged.title, bodyMarkdown: staged.bodyMarkdown, publishedBy: null, publishedAt: null },
+    });
+    // Arbeidstittelen er utkastets, som etter en lagring.
+    await tx.courseSection.update({ where: { id: staged.sectionId }, data: { title: staged.title } });
+  }
   for (const asset of staged.stagedAssets) {
     await tx.sectionAsset.create({ data: { id: asset.id, sectionId: staged.sectionId, ...asset.rowData } });
   }
@@ -239,6 +261,12 @@ function samePayload(a: unknown, b: unknown): boolean {
   return JSON.stringify(stripAudit(a)) === JSON.stringify(stripAudit(b));
 }
 
+// #1163: det «Oppdater dette kurset» sammenligner for en seksjon — det en ny versjon ville bære: tittel, tekst og bilder.
+// `publishedVersion` er med i fila for import som nytt kurs og sammenlignes ikke (oppdateringen legger bare et utkast klar).
+function sectionUpdateComparable(p: SectionExportPayload) {
+  return { title: p.title, bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [] };
+}
+
 // Porten en modulpakke må gjennom for å publiseres ved import — samme som publiser-knappen (#956).
 // Egen funksjon (#1095) så byttet av et element forfatteren ikke eier kan spørre FØR transaksjonen
 // om den levende versjonen lar seg publisere på nytt som kopiens v1.
@@ -256,6 +284,9 @@ function moduleImportGate(payload: ModuleExportPayload) {
         : null) ?? null,
       assessorExpectedContent: (payload.activeVersion.assessorExpectedContent
         ? serializeLocalized(payload.activeVersion.assessorExpectedContent)
+        : null) ?? null,
+      modelAnswer: (payload.activeVersion.modelAnswer
+        ? serializeLocalized(payload.activeVersion.modelAnswer)
         : null) ?? null,
       assessmentBlueprint: payload.activeVersion.assessmentBlueprint
         ? JSON.stringify(payload.activeVersion.assessmentBlueprint)
@@ -283,7 +314,7 @@ async function importModulePayload(
   },
   // #796: the whole module graph is built on this single transaction client, so a failure partway
   // through rolls back every row (no standalone module / partial versions / missing audit).
-  tx: DbTransactionClient,
+  tx: ContentWriteTx,
   // #896 S4: `heldBackByTranslationGate` is true when the source was published but the package is
   // missing a locale, so this module stayed a draft. A course import needs to know, or it publishes
   // a course whose module is not live.
@@ -297,6 +328,8 @@ async function importModulePayload(
     if (!existing) {
       throw new Error("Target module not found for replaceExisting.");
     }
+    // #1151: en arkivert modul får ingen ny versjon (og publiseres ikke med `autoPublish`), også fra kursets «Oppdater». Vakta
+    // står i det som skrives under (komponentene og modulversjonen), før noe publiseres.
     moduleId = options.targetModuleId;
   } else {
     const newModule = await createModule({
@@ -362,6 +395,7 @@ async function importModulePayload(
       ? undefined
       : serializeRequired(payload.activeVersion.taskText),
     assessorExpectedContent: serializeLocalized(payload.activeVersion.assessorExpectedContent),
+    modelAnswer: isMcqOnly ? undefined : serializeLocalized(payload.activeVersion.modelAnswer),
     candidateTaskConstraints: serializeLocalized(payload.activeVersion.candidateTaskConstraints),
     assessmentBlueprint: payload.activeVersion.assessmentBlueprint ?? undefined,
     rubricVersionId: rubric?.id,
@@ -444,7 +478,8 @@ export async function importModuleFromEnvelope(
   // #796: the whole module graph (module + rubric/prompt/mcq versions + module version + publish) and its
   // import audit commit in ONE transaction. A failure on any step rolls the entire import back — no
   // standalone module, partial versions, or missing audit. Modules carry no blobs, so this is pure DB.
-  return runInTransaction(
+  // #934 skive 4a: innholdslåsen er det første transaksjonen gjør.
+  return runContentWrite(
     async (tx) => {
       const result = await importModulePayload(moduleEnvelope, options, tx);
       await recordAuditEvent(
@@ -486,14 +521,16 @@ export async function importModuleFromEnvelope(
 //   2. `replaceExisting` appends a NEW, inactive version to an existing section, so a live section
 //      keeps serving its current version until the author reviews the import and publishes.
 // #1095/#916: en ny, UPUBLISERT versjon på en seksjon som finnes. Den levende versjonen rører
-// vi ikke; forfatteren publiserer den nye i seksjonens egen flate. Tittelen følger samme regel som
-// seksjonsimporten (#931 pkt 3): en levende seksjon beholder sin, et utkast tar filas.
+// vi ikke; forfatteren publiserer den nye i seksjonens egen flate.
+// #1163: tittelen følger med i versjonen (erstatter #931 pkt 3s `keepLiveTitle`). Deltakerne leser den publiserte versjonens
+// tittel, så filas tittel kan alltid bli arbeidstittelen uten å nå noen før den er publisert.
 async function appendInactiveSectionVersion(
-  tx: DbTransactionClient,
+  tx: ContentWriteTx,
   staged: StagedImportSection,
   targetSectionId: string,
-  keepLiveTitle: boolean,
 ): Promise<{ sectionVersionId: string; versionNo: number }> {
+  // #1151: en arkivert seksjon får ingen ny versjon, verken fra seksjonsimporten eller fra kursets «Oppdater dette kurset».
+  await assertNotArchived(tx, { type: "SECTION", id: targetSectionId });
   const last = await tx.courseSectionVersion.findFirst({
     where: { sectionId: targetSectionId },
     orderBy: { versionNo: "desc" },
@@ -501,12 +538,13 @@ async function appendInactiveSectionVersion(
   });
   await tx.courseSection.update({
     where: { id: targetSectionId },
-    data: keepLiveTitle ? { updatedAt: new Date() } : { title: staged.title, updatedAt: new Date() },
+    data: { title: staged.title, updatedAt: new Date() },
   });
   const created = await tx.courseSectionVersion.create({
     data: {
       sectionId: targetSectionId,
       versionNo: (last?.versionNo ?? 0) + 1,
+      title: staged.title,
       bodyMarkdown: staged.bodyMarkdown,
       publishedBy: null,
       publishedAt: null,
@@ -517,6 +555,50 @@ async function appendInactiveSectionVersion(
     await tx.sectionAsset.create({ data: { id: asset.id, sectionId: targetSectionId, ...asset.rowData } });
   }
   return { sectionVersionId: created.id, versionNo: created.versionNo };
+}
+
+/**
+ * #934 skive 4a: det en «Oppdater dette kurset»-plan bygger på, som én tekst: kursets elementer i rekkefølge, om
+ * kurset er publisert, kursets teller (`contentRevision`), og for hvert element planen oppdaterer, den aktive og den nyeste versjonen. Planen regnes
+ * ut før innholdslåsen; inne i transaksjonen regnes dette ut på nytt, og er det endret, avvises importen (409).
+ * Ellers kunne planen for eksempel lagt en ny versjon oppå en versjon noen publiserte i mellomtiden, eller tatt ut
+ * et element som nettopp ble lagt inn.
+ */
+async function courseUpdateBasis(
+  reader: DbTransactionClient | typeof prisma,
+  courseId: string,
+  plan: CourseUpdatePlan,
+  // Det planen faktisk er regnet ut fra (QA-porten 2.131.0, runde 3). Leses grunnlaget på nytt etter planen, kan det
+  // vise en lagring planen ikke så, og sammenligningen etter låsen slipper den utdaterte planen gjennom.
+  seen?: {
+    course: { publishedAt: Date | null; contentRevision: number } | null;
+    items: Array<{ itemType: string; moduleId: string | null; sectionId: string | null }>;
+  },
+): Promise<string> {
+  // Telleren er med (QA-porten 2.131.0, runde 2): en lagring fra kursskjemaet som bare endret navn, innstillinger
+  // eller diskusjonsbryteren per element, endrer verken elementene eller versjonene — men importen ville skrevet
+  // over den. Telleren øker ved hver lagring, så den fanger alle.
+  const course = seen ? seen.course : await reader.course.findUnique({ where: { id: courseId }, select: { publishedAt: true, contentRevision: true } });
+  const items = seen ? seen.items : await createCourseRepository(reader).findAllCourseItems(courseId);
+  const entries: string[] = [];
+  for (const entry of plan.entries) {
+    if (entry.action !== "update") continue;
+    if (entry.type === "SECTION") {
+      const section = await reader.courseSection.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
+      const newest = await reader.courseSectionVersion.findFirst({ where: { sectionId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { id: true } });
+      entries.push(`SECTION:${entry.targetId}:${section?.activeVersionId ?? "-"}:${newest?.id ?? "-"}`);
+    } else {
+      const module = await reader.module.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
+      const newest = await reader.moduleVersion.findFirst({ where: { moduleId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { id: true } });
+      entries.push(`MODULE:${entry.targetId}:${module?.activeVersionId ?? "-"}:${newest?.id ?? "-"}`);
+    }
+  }
+  return JSON.stringify({
+    published: course?.publishedAt != null,
+    revision: course?.contentRevision ?? null,
+    items: items.map((item) => `${item.itemType}:${item.moduleId ?? item.sectionId}`),
+    entries,
+  });
 }
 
 export async function importSectionFromEnvelope(
@@ -537,12 +619,8 @@ export async function importSectionFromEnvelope(
   const payload = envelope.section;
 
   let targetSectionId: string | undefined;
-  // #931 pkt 3: en LEVENDE seksjon beholder tittelen sin til forfatteren publiserer. Kroppen lander
-  // som inaktiv versjon (riktig), men tittelen lå på seksjonsraden og ble skrevet med én gang:
-  // deltakeren fikk «Kapittel 9: Revisjon» over Kapittel 1-kroppen, og en fullt oversatt tittel
-  // kunne byttes mot en ettspråks uten at gaten så det. Tittelen er ikke versjonert, så det eneste
-  // ærlige er å la den stå på en publisert seksjon; forfatteren bytter den bevisst etterpå.
-  let keepLiveTitle = false;
+  // #931 pkt 3: en LEVENDE seksjon beholder tittelen sin til forfatteren publiserer. #1163: det gjør den nå av seg selv —
+  // tittelen ligger i den nye, upubliserte versjonen, og deltakerne leser den publiserte versjonens tittel.
   if (options.mode === "replaceExisting") {
     if (!options.targetSectionId) {
       throw new Error("targetSectionId is required when mode is replaceExisting.");
@@ -554,21 +632,25 @@ export async function importSectionFromEnvelope(
     if (!existing) {
       throw new Error("Target section not found for replaceExisting.");
     }
+    // #1151: en arkivert seksjon avvises i `appendInactiveSectionVersion`, etter låsen; bildene som alt er lastet opp, ryddes bort.
     targetSectionId = existing.id;
-    keepLiveTitle = existing.activeVersionId !== null;
   }
 
   // #796's split: blob I/O BEFORE the transaction, DB rows inside it.
   const staged = await stageSectionForImport(payload, targetSectionId);
 
   try {
-    return await runInTransaction(
+    return await runContentWrite(
       async (tx) => {
         let sectionId: string;
         if (targetSectionId) {
-          // Content becomes a new INACTIVE version — the section's live content does not change
+          // #934 skive 4a: om seksjonen er levende, avgjøres etter innholdslåsen — den kan være publisert eller
+          // slettet mens bildene ble lastet opp.
+          const current = await tx.courseSection.findUnique({ where: { id: targetSectionId }, select: { activeVersionId: true } });
+          if (!current) throw new Error("Target section not found for replaceExisting.");
+          // Content (and, #1163, title) becomes a new INACTIVE version — what participants see does not change
           // until the author publishes (and passes the gate).
-          await appendInactiveSectionVersion(tx, staged, targetSectionId, keepLiveTitle);
+          await appendInactiveSectionVersion(tx, staged, targetSectionId);
           sectionId = targetSectionId;
         } else {
           // Always a draft on this door, so the gate result adds nothing the caller does not
@@ -595,8 +677,6 @@ export async function importSectionFromEnvelope(
               sectionId,
               sectionVersionId: latest.id,
               mode: options.mode,
-              // #931 pkt 3: sant bare når importen lot den levende tittelen stå.
-              ...(keepLiveTitle ? { titleKeptLive: true } : {}),
               assetCount: staged.stagedAssets.length,
               sourcePublishedAt: payload.audit?.publishedAt ?? null,
               sourceVersionNo: payload.audit?.sourceVersionNo ?? null,
@@ -635,6 +715,12 @@ export async function importCourseFromEnvelope(
     // vakta trenger rollene (administrator går forbi). Uten roller behandles kalleren som vanlig
     // forfatter — strengt, ikke åpent.
     actorRoles?: string[];
+    // #934 skive 3: `replaceExisting` bytter ut alt innholdet. Har noen kursbevis for kursets nåværende
+    // hovedversjon, kreves forfatterens svar (mindre eller hovedversjon), som i dialogen. Uten kursbevis: som før.
+    version?: CourseVersionChoice;
+    // #934 skive 4b: tallet forfatteren bekreftet når en hovedversjon sender e-post til over 200 (se
+    // `applyCourseVersionChange`).
+    confirmEmailRecipients?: number;
   },
   // #957: samme form som søsterfunksjonene — `importModulePayload` (:336) og `persistStagedSection`
   // (:169) rapporterer begge `heldBackByTranslationGate` oppover. Kursimporten regnet ut flagget,
@@ -660,7 +746,7 @@ export async function importCourseFromEnvelope(
   type Replacement =
     | { type: "SECTION"; newId: string; liveSection: SectionExportPayload | null }
     | { type: "MODULE"; liveModule: ModuleExportPayload | null };
-  const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean; replace?: Replacement; keep?: boolean }>();
+  const updateTargets = new Map<number, { targetId: string; replace?: Replacement; keep?: boolean }>();
   const stagedCopies = new Map<number, StagedImportSection>();
   const keptUnownedIds: CourseUpdateSummary["keptUnownedIds"] = [];
   const unchangedIds: string[] = [];
@@ -668,6 +754,7 @@ export async function importCourseFromEnvelope(
   // en modul som ikke kan åpnes (I1). Den opprettes, men legges ikke inn i kurset før forfatteren
   // publiserer den og legger den inn selv — slik kursbyggeren krever (#440).
   let targetCourseIsPublished = false;
+  let planBasis: string | null = null;
   if (options.mode === "updateExisting") {
     // #999: domeneregler bærer koder, så klienten kan si det på brukerens språk.
     if (!options.targetCourseId) throw new DomainRuleError("import_target_required", "targetCourseId is required when mode is updateExisting.");
@@ -677,6 +764,8 @@ export async function importCourseFromEnvelope(
       throw new DomainRuleError("origin_mismatch", "The file was exported from a different course; it cannot update this one.", { originCourseId, targetCourseId: options.targetCourseId });
     }
     const courseRepo = (await import("../course/courseRepository.js")).courseRepository;
+    // Kurset leses FØR elementene: kommer en lagring mellom de to, er telleren den gamle, og importen avvises etter låsen.
+    const targetCourse = await prisma.course.findUnique({ where: { id: options.targetCourseId }, select: { publishedAt: true, contentRevision: true } });
     const existingItems = await courseRepo.findAllCourseItems(options.targetCourseId);
     const existingSectionIds = existingItems.filter((i) => i.itemType === "SECTION" && i.section).map((i) => i.section!.id);
     const existingModuleIds = existingItems.filter((i) => i.itemType === "MODULE").map((i) => (i.moduleId ?? i.module?.id) as string).filter(Boolean);
@@ -684,19 +773,19 @@ export async function importCourseFromEnvelope(
     if (updatePlan.problems.length > 0) {
       throw new DomainRuleError("origin_mismatch", `The file does not match this course: ${updatePlan.problems.join("; ")}.`, { problems: updatePlan.problems });
     }
-    const targetCourse = await prisma.course.findUnique({ where: { id: options.targetCourseId }, select: { publishedAt: true } });
     if (!targetCourse) throw new DomainRuleError("import_target_not_found", "Target course not found for updateExisting.");
     targetCourseIsPublished = targetCourse.publishedAt != null;
+    // #934 skive 4a: planen over er regnet ut FØR innholdslåsen (fila må leses og bildene lastes opp utenfor
+    // transaksjonen). Det den bygger på, sjekkes på nytt etter låsen; se `courseUpdateBasis`.
+    planBasis = await courseUpdateBasis(prisma, options.targetCourseId, updatePlan, { course: targetCourse, items: existingItems });
     for (const entry of updatePlan.entries) {
       if (entry.action !== "update") continue;
-      let keepLiveTitle = false;
       let currentVersionNo: number | null = null;
       let newestVersionId: string | null = null;
       let activeVersionId: string | null = null;
       if (entry.type === "SECTION") {
         const section = await prisma.courseSection.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
         activeVersionId = section?.activeVersionId ?? null;
-        keepLiveTitle = activeVersionId != null;
         const newest = await prisma.courseSectionVersion.findFirst({ where: { sectionId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { id: true, versionNo: true } });
         currentVersionNo = newest?.versionNo ?? null;
         newestVersionId = newest?.id ?? null;
@@ -745,39 +834,37 @@ export async function importCourseFromEnvelope(
         if (entry.type === "SECTION" && fileItem.type === "SECTION") {
           const newest = newestVersionId ? await queries.buildSectionExportPayload(entry.targetId, undefined, newestVersionId) : null;
           // Fila er lest gjennom skjemaet (standardverdier, ukjente nøkler); den ferske pakken må samme vei.
-          // Bare det byttet faktisk BRUKER teller: brødtekst og bilder. Tittelen følger elementet (#931)
-          // og brukes ikke av byttet — en ren tittelendring skal ikke bytte (og nullstille) noe.
-          // Tittelen teller når kopien ville brukt den: en fremmed seksjon uten levende versjon får
-          // kopien med fila sin tittel (ingen levende tittel å beholde).
-          const brukt = (p: SectionExportPayload) => ({ bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [], ...(activeVersionId ? {} : { title: p.title }) });
+          // Bare det byttet faktisk BRUKER teller: tittel, brødtekst og bilder. #1163: tittelen er en del av versjonen (kopiens
+          // v2 får filas tittel, deltakerne ser v1s til den er publisert), så en ren tittelendring er en endring som andre.
+          const brukt = sectionUpdateComparable;
           if (newest && samePayload(brukt(sectionExportPayloadSchema.parse(newest)), brukt(fileItem.section))) {
             keptUnownedIds.push({ type: "SECTION", id: entry.targetId, reason: "unchanged" });
-            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keep: true });
             continue;
           }
           const liveSection = activeVersionId ? await queries.buildSectionExportPayload(entry.targetId, undefined, activeVersionId) : null;
           if (liveSection && !evaluateSectionTranslationGate({ title: serializeRequired(liveSection.title), bodyMarkdown: serializeRequired(liveSection.bodyMarkdown) }).ok) {
             keptUnownedIds.push({ type: "SECTION", id: entry.targetId, reason: "not_publishable" });
-            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keep: true });
             continue;
           }
-          updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, replace: { type: "SECTION", newId: randomUUID(), liveSection } });
+          updateTargets.set(entry.index, { targetId: entry.targetId, replace: { type: "SECTION", newId: randomUUID(), liveSection } });
         } else if (entry.type === "MODULE" && fileItem.type === "MODULE") {
           const newest = newestVersionId ? (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null }, newestVersionId)).module ?? null : null;
           // Samme for moduler: byttet bruker versjonen (oppgave, rubrikk, prompt, flervalg), ikke
           // tittel, beskrivelse eller nivå.
           if (newest && samePayload(moduleExportPayloadSchema.parse(newest).activeVersion, fileItem.module.activeVersion)) {
             keptUnownedIds.push({ type: "MODULE", id: entry.targetId, reason: "unchanged" });
-            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keep: true });
             continue;
           }
           const liveModule = activeVersionId ? (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null })).module ?? null : null;
           if (liveModule && !moduleImportGate(liveModule).valid) {
             keptUnownedIds.push({ type: "MODULE", id: entry.targetId, reason: "not_publishable" });
-            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keep: true });
             continue;
           }
-          updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, replace: { type: "MODULE", liveModule } });
+          updateTargets.set(entry.index, { targetId: entry.targetId, replace: { type: "MODULE", liveModule } });
         }
         continue;
       }
@@ -788,21 +875,19 @@ export async function importCourseFromEnvelope(
         let same = false;
         if (entry.type === "SECTION" && fileItem.type === "SECTION") {
           const newest = sectionExportPayloadSchema.parse(await queries.buildSectionExportPayload(entry.targetId, undefined, newestVersionId));
-          // Tittelen teller bare når oppdateringen faktisk ville brukt den: på en seksjon uten
-          // levende versjon (keepLiveTitle er usann) følger tittelen fila (#931).
-          const brukt = (p: SectionExportPayload) => ({ bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [], ...(keepLiveTitle ? {} : { title: p.title }) });
-          same = samePayload(brukt(newest), brukt(fileItem.section));
+          // #1163: tittelen teller alltid — den er en del av versjonen oppdateringen ville lagt klar.
+          same = samePayload(sectionUpdateComparable(newest), sectionUpdateComparable(fileItem.section));
         } else if (entry.type === "MODULE" && fileItem.type === "MODULE") {
           const newest = (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null }, newestVersionId)).module;
           same = Boolean(newest) && samePayload(moduleExportPayloadSchema.parse(newest).activeVersion, fileItem.module.activeVersion);
         }
         if (same) {
           unchangedIds.push(entry.targetId);
-          updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle, keep: true });
+          updateTargets.set(entry.index, { targetId: entry.targetId, keep: true });
           continue;
         }
       }
-      updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle });
+      updateTargets.set(entry.index, { targetId: entry.targetId });
     }
   }
 
@@ -843,19 +928,44 @@ export async function importCourseFromEnvelope(
     // their version graphs, the ordered items, the publish flip, and the import audit — in ONE
     // transaction. A failure on any item rolls the entire import back (no standalone modules/sections,
     // partial versions, or a course with no final audit).
-    return await runInTransaction(
+    return await runContentWrite(
       async (tx) => {
+        // #1151: et arkivert målkurs, rett etter låsen, før kursraden og elementene skrives.
+        if (options.mode !== "createNew" && options.targetCourseId) {
+          await assertNotArchived(tx, { type: "COURSE", id: options.targetCourseId });
+        }
         let courseId: string;
+        let courseTextChanged = false;
+        if (options.mode === "updateExisting" && updatePlan && planBasis !== null) {
+          // #934 skive 4a: har kurset eller et av elementene endret seg siden planen ble laget (noen lagret
+          // kurset, publiserte et element, eller la klar en ny versjon), bygger planen på noe som ikke finnes
+          // lenger. Da skrives ingenting (409); forfatteren importerer på nytt.
+          const now = await courseUpdateBasis(tx, options.targetCourseId!, updatePlan);
+          if (now !== planBasis) {
+            throw new ConflictError(
+              "import_target_changed",
+              "The course changed while the file was being prepared. Import the file again; nothing was changed.",
+            );
+          }
+        }
         if (options.mode === "updateExisting") {
-          const existing = await tx.course.findUnique({ where: { id: options.targetCourseId! }, select: { id: true } });
+          const existing = await tx.course.findUnique({ where: { id: options.targetCourseId! }, select: { id: true, title: true, description: true } });
           if (!existing) throw new DomainRuleError("import_target_not_found", "Target course not found for updateExisting.");
           courseId = options.targetCourseId!;
+          // #934 skive 3: navn eller beskrivelse endret er en mindre versjon, som i kursskjemaet. Økningen
+          // gjøres etter innholdet under: endres også rekkefølgen, er det den som gir versjonen (én per import).
+          const newTitle = serializeRequired(payload.course.title);
+          const newDescription = serializeLocalized(payload.course.description);
+          // En fil uten beskrivelse lar beskrivelsen stå (Prisma hopper over `undefined`) — ingen endring.
+          courseTextChanged =
+            !sameLocalizedText(newTitle, existing.title) ||
+            (newDescription !== undefined && !sameLocalizedText(newDescription, existing.description));
           // Kursets egne felt følger fila; publiseringstilstanden rører vi ikke.
           await tx.course.update({
             where: { id: courseId },
             data: {
-              title: serializeRequired(payload.course.title),
-              description: serializeLocalized(payload.course.description),
+              title: newTitle,
+              description: newDescription,
               certificationLevel: payload.course.certificationLevel ? serializeLocalized(payload.course.certificationLevel as LocalizedText) : null,
               ...(payload.course.sortOrder !== undefined ? { sortOrder: payload.course.sortOrder } : {}),
             },
@@ -868,6 +978,9 @@ export async function importCourseFromEnvelope(
           if (!existing) {
             throw new Error("Target course not found for replaceExisting.");
           }
+          // #934 skive 3 (produkteier 2026-11-02): å bytte ut alt innholdet i et kurs noen har kursbevis for,
+          // krever forfatterens svar. Regelen bor i `applyCourseVersionChange` (spørsmålet sendes med
+          // innholdet under); uten svar avvises importen, og transaksjonen ruller alt tilbake.
           courseId = options.targetCourseId;
         } else {
           const newCourse = await createCourse(
@@ -901,6 +1014,13 @@ export async function importCourseFromEnvelope(
         // Holdes adskilt fra `anyContentHeldBack`, som er det som MELDES tilbake (#957): et utkast fra
         // kilden er ikke «holdt tilbake».
         let anyModuleUnpublished = false;
+        // #934 skive 3/4b: `replaceExisting` (og et nytt kurs, som aldri har vært ute) spør om versjonen, med
+        // forfatterens svar og — for en hovedversjon som sender e-post til mange — tallet hen bekreftet.
+        const replaceVersionRequest: CourseVersionRequest = {
+          kind: "question",
+          answer: options.version,
+          confirmEmailRecipients: options.confirmEmailRecipients,
+        };
 
         const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [], replacedUnownedIds: [], keptUnownedIds, unchangedIds };
         if (orderedItems && updatePlan) {
@@ -934,15 +1054,20 @@ export async function importCourseFromEnvelope(
                 if (persisted.heldBackByTranslationGate) {
                   throw new DomainRuleError("replacement_not_publishable", `The live version of section ${target.targetId} cannot be republished as your copy (publish gate).`, { type: "SECTION", id: target.targetId });
                 }
-                await appendInactiveSectionVersion(tx, staged, newId, true);
+                await appendInactiveSectionVersion(tx, staged, newId);
               } else {
                 await persistStagedSection(tx, staged, options.actorId, { draft: true });
               }
               // «Lest» følger med til kopien, i dette kurset.
-              const reads = await tx.courseSectionRead.findMany({ where: { courseId, sectionId: target.targetId }, select: { userId: true, readAt: true } });
+              // #1156: den seneste lesingen per deltaker fra ALLE kurs, slik dette kurset teller den (`findSectionReadCredit`: en
+              // lesing gjort et annet sted bare for den som ser kurset). Kopien beholder kurset lesingen ble gjort i og tidspunktet:
+              // den er den samme lesingen, teller etter de samme reglene, og aktivitetsrapporten kjenner den igjen (`distinctReads`).
+              const reads = (await findSectionReadCredit(tx, { courseIds: [courseId], items: "all", onlySectionIds: [target.targetId] })).rows;
               if (reads.length > 0) {
-                await tx.courseSectionRead.createMany({ data: reads.map((r) => ({ userId: r.userId, courseId, sectionId: newId, readAt: r.readAt })), skipDuplicates: true });
+                await tx.courseSectionRead.createMany({ data: reads.map((r) => ({ userId: r.userId, courseId: r.readInCourseId, sectionId: newId, readAt: r.readAt })), skipDuplicates: true });
               }
+              // #934 skive 3: øyeblikksbildet følger med til kopien, så de kopierte lesingene teller som før.
+              await renameSectionInVersionSnapshots(tx, courseId, target.targetId, newId);
               courseItemInputs.push({ type: "SECTION", sectionId: newId });
               sectionCount += 1;
               summary.replacedUnownedIds.push({ type: "SECTION", oldId: target.targetId, newId, oldArchived: false });
@@ -984,14 +1109,13 @@ export async function importCourseFromEnvelope(
               const staged = stagedSections.get(i);
               if (!staged) throw new Error("Internal: section was not staged before the import transaction.");
               if (target) {
-                const version = await appendInactiveSectionVersion(tx, staged, target.targetId, target.keepLiveTitle);
+                const version = await appendInactiveSectionVersion(tx, staged, target.targetId);
                 courseItemInputs.push({ type: "SECTION", sectionId: target.targetId });
                 summary.updatedSections += 1;
                 await elementAudit(auditEntityTypes.courseSection, target.targetId, auditActions.adminContent.sectionImported, {
                   sectionId: target.targetId,
                   sectionVersionId: version.sectionVersionId,
                   versionNo: version.versionNo,
-                  ...(target.keepLiveTitle ? { titleKeptLive: true } : {}),
                   assetCount: staged.stagedAssets.length,
                 });
               } else {
@@ -1031,21 +1155,48 @@ export async function importCourseFromEnvelope(
           }
           summary.removedSections = updatePlan.removed.sectionIds.length;
           summary.removedModules = updatePlan.removed.moduleIds.length;
-          await setCourseItems(courseId, courseItemInputs, undefined, tx);
+          // #934 skive 3: en oppdatering legger aldri nytt innhold inn i et publisert kurs (nye moduler blir
+          // utkast utenfor kurset, nye versjoner legges klar). Den kan ta ut, flytte og bytte ut elementer
+          // med en kopi av den levende versjonen — ingenting deltakerne må ta på nytt. Derfor mindre versjon
+          // her; de nye versjonene får spørsmålet når de publiseres («Publiser nye versjoner»).
+          const itemsBump = await setCourseItems(courseId, courseItemInputs, { actorId: options.actorId, versionRequest: { kind: "minor" } }, tx);
+          if (courseTextChanged && !itemsBump) {
+            await applyCourseVersionChange(tx, courseId, { kind: "minor" }, NO_SECTION_SNAPSHOT, options.actorId);
+          }
           // Det som ble byttet ut, er nå ute av dette kurset. Bruker ingen andre kurs det, arkiveres
           // det (som «Arkiver» i biblioteket: avpublisert + arkivert, I3) — det er bevart, ikke slettet.
           // Brukes det et annet sted, blir det liggende hos eieren sin.
+          // #1149: «andre kurs» er AKTIVE kurs, samme regel som «Arkiver» i biblioteket. Elementet arkiveres,
+          // det slettes ikke, så et arkivert kurs som også har det, stopper ikke.
+          // #1150: samme regel som «Arkiver» også for utkastene: står det i et lagret utkast til et annet aktivt kurs,
+          // blir det stående (`findActiveUsesOfItems`). Dette kurset har ikke noe utkast: låsen stopper importen da.
           const now = new Date();
+          const usedElsewhere = await findActiveUsesOfItems(
+            {
+              moduleIds: summary.replacedUnownedIds.filter((r) => r.type === "MODULE").map((r) => r.oldId),
+              sectionIds: summary.replacedUnownedIds.filter((r) => r.type === "SECTION").map((r) => r.oldId),
+            },
+            {},
+            tx,
+          );
           for (const replaced of summary.replacedUnownedIds) {
+            // #1151: et element som alt er arkivert (et gjenopprettet kurs kan ha et), røres ikke: en ny arkivering ville flyttet
+            // `archivedAt`, og dermed slettefristen (#1152).
+            const alreadyArchived = replaced.type === "SECTION"
+              ? (await tx.courseSection.findUnique({ where: { id: replaced.oldId }, select: { archivedAt: true } }))?.archivedAt
+              : (await tx.module.findUnique({ where: { id: replaced.oldId }, select: { archivedAt: true } }))?.archivedAt;
+            if (alreadyArchived) {
+              replaced.oldArchived = true;
+              continue;
+            }
             if (replaced.type === "SECTION") {
-              const elsewhere = await tx.courseItem.count({ where: { sectionId: replaced.oldId } });
-              if (elsewhere > 0) continue;
-              await tx.courseSection.update({ where: { id: replaced.oldId }, data: { archivedAt: now, activeVersionId: null } });
+              if (usedElsewhere.sections.has(replaced.oldId)) continue;
+              // #1150 skive 2a-2: importens arkivering setter ikke merket fra kursarkiveringen (nullstiller et som er blitt stående).
+              await tx.courseSection.update({ where: { id: replaced.oldId }, data: { archivedAt: now, activeVersionId: null, archivedWithCourseId: null, activeVersionIdBeforeArchive: null } });
               await recordAuditEvent({ entityType: auditEntityTypes.courseSection, entityId: replaced.oldId, action: auditActions.section.archived, actorId: options.actorId, metadata: { sectionId: replaced.oldId } }, tx);
             } else {
-              const elsewhere = await tx.courseItem.count({ where: { moduleId: replaced.oldId } });
-              if (elsewhere > 0) continue;
-              await createAdminContentRepository(tx).archiveModule(replaced.oldId, now);
+              if (usedElsewhere.modules.has(replaced.oldId)) continue;
+              await createAdminContentWriter(tx).archiveModule(replaced.oldId, now);
               await recordAuditEvent({ entityType: auditEntityTypes.module, entityId: replaced.oldId, action: auditActions.adminContent.moduleArchived, actorId: options.actorId, metadata: { moduleId: replaced.oldId } }, tx);
             }
             replaced.oldArchived = true;
@@ -1071,7 +1222,7 @@ export async function importCourseFromEnvelope(
               importedModuleIds.push(imported.moduleId);
             }
           }
-          await setCourseItems(courseId, courseItemInputs, undefined, tx);
+          await setCourseItems(courseId, courseItemInputs, { actorId: options.actorId, versionRequest: replaceVersionRequest }, tx);
         } else {
           const importedModules: Array<{ moduleId: string; sortOrder: number }> = [];
           for (const item of payload.course.modules ?? []) {
@@ -1086,6 +1237,8 @@ export async function importCourseFromEnvelope(
             courseId,
             importedModules.map((m) => ({ moduleId: m.moduleId, sortOrder: m.sortOrder })),
             tx,
+            options.actorId,
+            replaceVersionRequest,
           );
         }
 

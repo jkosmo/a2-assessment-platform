@@ -40,9 +40,8 @@ function Wait-ResourceDeleted([string]$resourceId, [string]$label) {
 }
 
 function Invoke-AzResourceUpdateBestEffort([string]$resourceId, [string]$label) {
-  $escapedResourceId = $resourceId.Replace('"', '\"')
-  $command = "az resource update --ids ""$escapedResourceId"" --set properties.enabled=false --output none"
-  $result = cmd /d /c $command 2>&1
+  # Call az directly: the workflow runs on ubuntu-latest (pwsh), where cmd does not exist (failed 2026-11-22).
+  $result = az resource update --ids $resourceId --set properties.enabled=false --output none 2>&1
   if ($LASTEXITCODE -eq 0) {
     return
   }
@@ -71,7 +70,7 @@ Write-Host "Resource group: $ResourceGroupName"
 az account set --subscription $SubscriptionId
 Assert-LastExitCode "az account set"
 
-# Safety guards (#414) — refuse to act if the current Azure context doesn't match what
+# Safety guards (#414) - refuse to act if the current Azure context doesn't match what
 # the caller declared. The May 2026 incident was a workflow that ran against the wrong
 # subscription/RG with no checks. Belt-and-suspenders with the workflow-level guard.
 $currentSubscription = (az account show --query id -o tsv).Trim()
@@ -92,7 +91,7 @@ if (-not $rgEnvTag) {
   throw "SAFETY ABORT: resource group '$ResourceGroupName' is missing the 'environment' tag. Refusing to act on an unidentified RG."
 }
 if ($rgEnvTag -ne $EnvironmentName) {
-  throw "SAFETY ABORT: resource group '$ResourceGroupName' has environment tag '$rgEnvTag' but caller declared EnvironmentName='$EnvironmentName'. Resource group tag is the source of truth — refusing to act on mismatched environments."
+  throw "SAFETY ABORT: resource group '$ResourceGroupName' has environment tag '$rgEnvTag' but caller declared EnvironmentName='$EnvironmentName'. Resource group tag is the source of truth - refusing to act on mismatched environments."
 }
 Write-Host "Safety guard passed: subscription='$currentSubscription', RG='$ResourceGroupName', environment tag='$rgEnvTag'."
 

@@ -367,8 +367,11 @@ button:focus-visible {
   margin-bottom: 0;
 }
 
-/* Hide nav when 0 or 1 visible links — nothing useful to navigate to */
-.page-top-bar > .workspace-nav:not(:has(> .workspace-nav-link ~ .workspace-nav-link)) {
+/* Hide nav when there is nothing useful to navigate to: no link that leads AWAY from this page.
+   #1159: the rule was «fewer than two links». On /profile a participant-only user has exactly one
+   link, «Mine kurs», and it is not the page they are on — the rule hid the only way back, and the
+   profile became a dead end. One link to the page you are already on is still hidden. */
+.page-top-bar > .workspace-nav:not(:has(> .workspace-nav-link:not(.active))) {
   display: none;
 }
 
@@ -776,6 +779,52 @@ body.auth-resolving .mock-identity-card {
 .mcq-review-correct { color: #1f7a4d; font-weight: 600; }
 .mcq-review-rationale { font-size: 13px; margin-top: 4px; line-height: 1.5; }
 
+/* #1124 del 2: eksempelsvaret ved siden av deltakerens eget svar. Mobil: eksempelsvaret først, eget
+   svar sammenfoldet under (order). Bred skjerm: side om side, eget svar til venstre. Teksten er ren tekst
+   med linjeskift (pre-wrap), så avsnitt og lister i svaret står som de ble skrevet. */
+.model-answer-compare { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.model-answer-example { order: -1; border: 1px solid var(--color-module-border); border-radius: var(--radius-card); background: var(--color-surface); overflow: hidden; }
+.model-answer-own { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: var(--color-surface); }
+.model-answer-head { padding: 10px 14px; background: var(--color-module-summary-bg); font-weight: 650; font-size: 14px; }
+.model-answer-own > summary { display: flex; align-items: center; min-height: 44px; box-sizing: border-box; padding: 10px 14px; font-weight: 650; font-size: 14px; cursor: pointer; background: var(--color-module-summary-bg); }
+.model-answer-own > summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+/* `display: flex` tar bort nettleserens trekant; pila sier at eget svar kan foldes ut (som kriteriepanelet). */
+.model-answer-own > summary::-webkit-details-marker { display: none; }
+.model-answer-own > summary::after { content: ""; flex-shrink: 0; margin-left: auto; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+.model-answer-own[open] > summary::after { transform: rotate(-135deg); }
+.model-answer-text { padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
+.model-answer-note { padding: 8px 14px; border-top: 1px solid var(--color-table-border); font-size: 13px; color: var(--color-meta); }
+@media (min-width: 900px) {
+  .model-answer-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .model-answer-example { order: 0; }
+}
+
+/* #1124: kriteriene for deltakeren. Før levering: et sammenleggbart panel under oppgaveteksten.
+   Etter vurdering: ett kort per kriterium med «1 av 2». Overskriften (`summary`) er minst 44 px høy —
+   den er det eneste deltakeren trykker på her. */
+.criteria-panel { border: 1px solid var(--color-module-border); border-radius: var(--radius-card); background: var(--color-module-summary-bg); }
+.criteria-panel-summary { display: flex; align-items: center; gap: 10px; min-height: 44px; box-sizing: border-box; padding: 10px 14px; font-weight: 650; cursor: pointer; color: var(--color-text); list-style: none; }
+/* `display: flex` tar bort nettleserens trekant; pila her sier at panelet kan foldes. */
+.criteria-panel-summary::-webkit-details-marker { display: none; }
+.criteria-panel-summary::after { content: ""; flex-shrink: 0; margin-left: auto; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+.criteria-panel[open] > .criteria-panel-summary::after { transform: rotate(-135deg); }
+.criteria-panel-summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.criteria-panel-body { display: grid; gap: 14px; padding: 0 14px 14px; }
+.criteria-panel-lead { margin: 0; font-size: 14px; line-height: 1.5; color: var(--color-meta); }
+.criteria-item { display: grid; gap: 6px; }
+.criteria-item-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.criteria-item-label { font-weight: 650; overflow-wrap: anywhere; }
+.criteria-item-scale { flex-shrink: 0; font-size: 13px; color: var(--color-meta); white-space: nowrap; }
+.criteria-item-intro { margin: 0; font-size: 14px; line-height: 1.5; }
+.criteria-steps { margin: 0; padding-left: 18px; display: grid; gap: 2px; font-size: 14px; line-height: 1.5; }
+.criterion-score-list { display: grid; gap: 10px; }
+.criterion-score-note { margin: 0; font-size: 14px; line-height: 1.5; color: var(--color-meta); }
+.criterion-score { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); background: var(--color-surface); }
+.criterion-score.is-short { border-color: var(--color-link-hover-border); background: var(--color-module-summary-bg); }
+.criterion-score-value { flex-shrink: 0; font-weight: 650; white-space: nowrap; }
+.criterion-score-rationale { margin: 0; font-size: 14px; line-height: 1.5; }
+.criterion-score-top { margin: 0; font-size: 13px; line-height: 1.5; color: var(--color-meta); }
+
 .summary-list {
   margin: 0;
   padding-left: calc(var(--space-2) + 4px);
@@ -869,6 +918,28 @@ body.auth-resolving .mock-identity-card {
 
 .mcq-option-label {
   line-height: 1.4;
+}
+
+/* #1077 leveranse 3: «fyll inn» — ett tekstfelt under spørsmålet med lukka. Minst 44 px høyt. */
+.mcq-fill {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.mcq-fill-label {
+  color: var(--color-meta);
+}
+
+.mcq-fill-input {
+  min-height: 44px;
+  box-sizing: border-box;
+  max-width: 24rem;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font: inherit;
 }
 
 .button-busy {
@@ -1077,6 +1148,32 @@ dialog::backdrop {
   background: rgba(0, 0, 0, 0.4);
 }
 
+/* #1168: modulens dialoger for «Arkiver» og «Slett» (module-lifecycle-dialogs.js), i biblioteket og på modulsida. Samme form
+   som kursets (.course-lifecycle-dialog i admin-content-courses.html): lista ruller inne i dialogen, og tittelen og knappene
+   ses alltid, også med lange kursnavn på en telefon. Her, ikke på sidene, fordi to sider bruker den. */
+.module-lifecycle-dialog {
+  box-sizing: border-box;
+  max-width: min(560px, calc(100vw - 24px));
+}
+.module-lifecycle-dialog[open] { display: flex; flex-direction: column; }
+.module-lifecycle-dialog > .dialog-title { overflow-wrap: anywhere; }
+.module-lifecycle-body { flex: 1 1 auto; overflow-y: auto; overflow-wrap: anywhere; }
+.module-lifecycle-body ul { margin: 0 0 var(--space-1); padding-left: 20px; }
+.module-lifecycle-body li { margin: 4px 0; }
+.module-lifecycle-note { display: block; font-size: 12px; color: var(--color-meta); }
+/* Modulsida (admin-content.html) har ikke bibliotekets og kurssidens regler for teksten og «Avbryt» (QA 2.178.0). */
+.module-lifecycle-dialog .dialog-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
+.module-lifecycle-dialog .dialog-cancel {
+  background: none;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-button);
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--color-meta);
+}
+.module-lifecycle-dialog .dialog-cancel:hover { background: var(--color-row-hover); }
+
 .hidden {
   display: none;
 }
@@ -1254,6 +1351,31 @@ dialog::backdrop {
   color: #8a5a00;
 }
 
+/* #934 skive 3: «Hva slags endring er dette?», to valg med konsekvensen skrevet ut under. Her fordi kurssiden og modulsiden bruker samme valg (5b). */
+.course-version-choices { border: none; padding: 0; margin: var(--space-2) 0; min-width: 0; display: grid; gap: 8px; }
+.course-version-legend { font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 4px; }
+.course-version-choice { display: flex; gap: 12px; align-items: flex-start; min-width: 0; padding: 12px 14px; border: 1px solid var(--color-border-soft); border-radius: 10px; background: var(--color-surface); font-weight: 400; cursor: pointer; }
+.course-version-choice:has(input:checked) { border: 2px solid var(--color-primary); padding: 11px 13px; background: var(--color-primary-tint); }
+.course-version-choice input { width: 18px; height: 18px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--color-primary); }
+.course-version-choice > span { min-width: 0; overflow-wrap: anywhere; }
+.course-version-hint { display: block; margin-top: 2px; font-size: 13px; color: var(--color-meta); }
+.course-version-consequence { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--color-border-soft); background: var(--color-module-summary-bg); font-size: 14px; }
+.course-version-consequence.is-major { border-color: var(--color-link-hover-border); }
+.course-version-consequence p { margin: 0; }
+.course-version-consequence ul { margin: 6px 0 0; padding-left: 20px; }
+.course-version-consequence li + li { margin-top: 4px; }
+/* #934 skive 4b: det ekstra «ja» når en hovedversjon sender e-post til over 200. */
+.course-version-email-confirm { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; font-weight: 600; cursor: pointer; }
+.course-version-email-confirm input { width: 18px; height: 18px; margin: 1px 0 0; flex-shrink: 0; accent-color: var(--color-primary); }
+.course-version-email-confirm span { min-width: 0; overflow-wrap: anywhere; }
+.course-version-consequence .course-version-email-missing { margin-top: 6px; color: var(--color-error); font-weight: 600; }
+/* #934 skive 5b: ett valg per kurs. Lange kurstitler brekker, også et langt ord uten mellomrom. */
+.course-version-course { min-width: 0; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border-soft); }
+.course-version-course-title { margin: 0 0 4px; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.course-version-course-this { font-size: 13px; font-weight: 400; color: var(--color-meta); }
+.course-version-course-facts { margin: 0; font-size: 13px; color: var(--color-meta); overflow-wrap: anywhere; }
+.course-version-notice { margin: 0 0 var(--space-2); font-size: 14px; font-weight: 600; color: var(--color-error); }
+
 /* #705-UX(B): felles handlings-knapperad + knapp i admin-listene, så alle fire listene (kurs/
    moduler/seksjoner/klasser) ser like ut. Tidligere definerte hver side sin egen .row-action-btn
    med ulik font/padding. Kanonisk definisjon her; sidene kan fortsatt overstyre om nødvendig.
@@ -1314,6 +1436,15 @@ dialog::backdrop {
       smalere, ville holdt til neste kolonne kom; denne holder uansett hva raden inneholder. */
 .list-table .col-status { line-height: 1.9; }
 .list-table .col-status > * { white-space: nowrap; }
+/* #1152 skive 4b: «Slettes 13.05.2027» / «Beholdes: <grunn>» under statusmerket på en arkivert rad. Egen linje i metafargen, som
+   datoen i «Sist endret»; grunnen får brekke (regelen over holder merkene på én linje), så raden ikke blir bredere enn kortet på
+   en telefon. */
+.list-table .col-status > .retention-line { display: block; white-space: normal; overflow-wrap: anywhere; min-width: 9em; color: var(--color-meta); font-size: 12.5px; line-height: 1.4; margin-top: 2px; }
+/* I kortet på telefon er cellen en rad (navnet til venstre, merket til høyre). Linja får sin egen rad under merket. */
+@media (max-width: 600px) {
+  .list-table td.col-status { flex-wrap: wrap; }
+  .list-table .col-status > .retention-line { flex-basis: 100%; min-width: 0; text-align: right; margin-top: 0; }
+}
 .list-table th.col-actions, .list-table td.col-actions { position: sticky; right: 0; }
 .list-table td.col-actions { background: var(--color-surface); }
 .list-table tr:hover td.col-actions { background: var(--color-row-hover); }
@@ -1347,6 +1478,26 @@ dialog::backdrop {
   background: var(--color-surface); color: var(--color-text); max-width: 260px;
 }
 .list-course-select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+/* 2.126.0: valget «etter tema / alfabetisk» står ytterst til høyre i filterraden, og gruppenavnet er en
+   overskrift i tabellen — samme messingfarge som temaoverskriftene i «Mine kurs». */
+.course-view-toggle { display: inline-flex; border: 1px solid var(--color-module-border); border-radius: 999px; background: var(--color-surface); padding: 3px; }
+.course-view-btn { border: none; border-radius: 999px; padding: 0 16px; min-height: 36px; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; color: var(--color-meta); width: auto; }
+.course-view-btn[aria-pressed="true"] { background: var(--color-primary); color: #ffffff; }
+.course-view-btn:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+.list-view-toggle { margin-left: auto; }
+.list-table tr.list-group-row th {
+  padding: 18px 12px 8px; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 400;
+  background: var(--color-bg); border-bottom: 1px solid var(--color-table-border);
+}
+.list-table tr.list-group-row:hover th { background: var(--color-bg); }
+.list-group-heading { display: inline; margin: 0; font-size: 17px; font-weight: 700; color: var(--color-link-active); }
+.list-group-count { margin-left: 8px; color: var(--color-meta); }
+.list-group-themes { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--color-meta); }
+@media (max-width: 600px) {
+  .list-table tr.list-group-row { border: none; padding: 0; margin: var(--space-2) 0 var(--space-1); }
+  .list-table tr.list-group-row th { display: block; padding: 0; background: none; border: none; }
+  .list-view-toggle { margin-left: 0; }
+}
 .list-table th.sortable { cursor: pointer; user-select: none; }
 .list-table th.sortable:hover { color: var(--color-link-active); }
 /* Ikke inline-block: da kan linja brekke foran pila, og den blir stående alene under overskriften (#1084). */
@@ -1412,6 +1563,10 @@ dialog::backdrop {
    sier «du har ulagrede endringer», ikke «her er en knapp». Slett beholder sin røde RAMME; det er
    en annen ting. */
 .form-page-actions .row-actions { align-items: center; }
+/* 2.130.0: på 360 px fløt handlingsraden 13 px ut over kanten (bokmål). Raden får krympe og bryte —
+   målt i test/e2e/admin-content-course-form-phone.spec.ts. */
+.form-page-actions { min-width: 0; max-width: 100%; }
+.form-page-actions .row-actions { flex-wrap: wrap; }
 .btn-save, .btn-cancel { font-weight: 700; }
 .btn-save:not(:disabled) { background: #e6f4ea; border-color: #9fcfad; color: #14603a; }
 .btn-save:not(:disabled):hover { background: #d7ecdd; border-color: #6fb586; }
@@ -1447,6 +1602,17 @@ dialog::backdrop {
 .form-field textarea { resize: vertical; min-height: 72px; }
 .form-field input:focus, .form-field textarea:focus, .form-field select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
 .form-field input:disabled, .form-field textarea:disabled { background: var(--color-bg); color: var(--color-meta); }
+/* #1150 skive 2b / #1151 skive 3c: det åpnede elementet er arkivert (kurs, modul, seksjon). Linja under statusmerket,
+   i samme nøytrale tone som utkastlinja, og skjemaet i en `<fieldset disabled>` som skal se ut som før: ingen ramme,
+   og ingen min-content-bredde som skyver over på en telefon. Flyttet hit fra kurssida da modul og seksjon fikk det samme
+   (kursets klassenavn står som før). */
+/* #1163: stripen «Deltakerne ser versjon X til utkastet er publisert» på seksjonen og modulen, som på kurset. */
+.course-archived-notice, .archived-notice, .course-draft-line { flex-basis: 100%; order: 1; margin: 0; font-size: 13px; border-radius: var(--radius-card); padding: 7px 10px; overflow-wrap: anywhere; color: #8a5a00; background: #fff5e6; border: 1px solid #e3c58a; }
+.course-archived-lock, .archived-lock { border: 0; padding: 0; margin: 0; min-width: 0; min-inline-size: 0; display: contents; }
+/* Felt med egen hvit bakgrunn ser ut som de andre sperrede feltene (`.form-field input:disabled` over). */
+.course-archived-lock select:disabled, .course-archived-lock .combobox-input:disabled,
+.archived-lock input:disabled, .archived-lock textarea:disabled, .archived-lock select:disabled { background: var(--color-bg); color: var(--color-meta); }
+.archived-lock input:disabled, .archived-lock textarea:disabled, .archived-lock select:disabled { border-color: var(--color-border-soft); }
 .required-note { font-size: 12px; color: var(--color-meta); margin-left: 4px; font-weight: 400; }
 .form-field .field-hint { font-size: 12px; color: var(--color-meta); margin: 4px 0 0; }
 /* «Mer»-menyen (#1046 D5): <details> så åpne/lukke virker uten skript og med tastatur. */
@@ -1731,7 +1897,7 @@ dialog::backdrop {
 /* Steg for steg (#1075), skriv selv (#1076) og repetisjonskort (#1078): samme ramme og merkelapp som
    «sjekk deg selv». Uten skript står stegene som en nummerert liste og kortene som en definisjonsliste;
    content-blocks.js setter data-ready="true" når blokken er gjort interaktiv. */
-.content-steps, .content-write, .content-flash, .content-pairs {
+.content-steps, .content-write, .content-flash, .content-pairs, .content-errors {
   margin: 0 0 12px;
   padding: 10px 12px 12px;
   min-width: 0;
@@ -1740,18 +1906,18 @@ dialog::backdrop {
   border-radius: 8px;
   background: #fff;
 }
-.content-steps-head, .content-write-head, .content-flash-head, .content-pairs-head { margin: 0 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-.content-steps-label, .content-write-label, .content-flash-label, .content-pairs-label {
+.content-steps-head, .content-write-head, .content-flash-head, .content-pairs-head, .content-errors-head { margin: 0 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.content-steps-label, .content-write-label, .content-flash-label, .content-pairs-label, .content-errors-label {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--color-primary);
 }
-.content-steps-title, .content-write-task, .content-flash-title, .content-pairs-title { flex: 1 1 16rem; min-width: 0; font-weight: 600; color: var(--color-text); }
+.content-steps-title, .content-write-task, .content-flash-title, .content-pairs-title, .content-errors-task { flex: 1 1 16rem; min-width: 0; font-weight: 600; color: var(--color-text); }
 /* Knappene i blokkene. To klasser: sidene har egne regler for button (full bredde, høyde). Skriptet
    skjuler ingenting med [hidden]: det tegner bare det som skal vises (cascade-fella i CLAUDE.md). */
-.content-steps .content-block-btn, .content-write .content-write-show, .content-flash .content-block-btn {
+.content-steps .content-block-btn, .content-write .content-write-show, .content-flash .content-block-btn, .content-errors .content-errors-check, .content-errors .content-errors-reset {
   width: auto;
   min-height: 0;
   margin: 0;
@@ -1877,6 +2043,45 @@ dialog::backdrop {
 .content-flash-done { display: grid; justify-items: center; gap: 8px; padding: 10px 0; text-align: center; }
 .content-flash-done-title { margin: 0; font-size: 17px; font-weight: 700; }
 .content-flash-score { margin: 0; }
+
+/* #1123 «Finn feilene»: setningene som knapper i full bredde (min. 44 px). Markert = aria-pressed; etter
+   «Sjekk» bærer knappen is-found / is-missed / is-false, og forklaringen står rett under. Skriptet skjuler
+   knappene og tilbakemeldingen med setHidden (cascade-fella i CLAUDE.md). */
+.content-errors-hint { margin: 0 0 10px; font-size: 14px; color: var(--color-meta); }
+.content-errors-list { display: grid; gap: 8px; margin: 0 0 12px; padding: 0; list-style: none; }
+.content-errors-row { display: grid; gap: 6px; min-width: 0; }
+.content-errors .content-errors-item {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.content-errors .content-errors-item[aria-pressed="true"] { background: var(--color-primary-tint); border: 2px solid var(--color-primary); padding: 9px 11px; }
+.content-errors .content-errors-item[aria-disabled="true"] { cursor: default; }
+.content-errors .content-errors-item:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+.content-errors .content-errors-item.is-found { border-color: var(--color-success); }
+.content-errors .content-errors-item.is-missed { border: 2px dashed var(--color-warning); padding: 9px 11px; }
+.content-errors-feedback { padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.5; border: 1px solid var(--color-border-soft); background: var(--color-surface); }
+.content-errors-feedback[data-kind="found"] { background: #edf5ef; border-color: #b7dcc0; }
+.content-errors-feedback[data-kind="missed"] { background: #fbf3e2; border-color: #e3c98f; }
+.content-errors-verdict { margin: 0; font-weight: 650; }
+.content-errors-feedback[data-kind="found"] .content-errors-verdict { color: var(--color-success); }
+.content-errors-feedback[data-kind="missed"] .content-errors-verdict { color: var(--color-warning); }
+.content-errors-feedback[data-kind="false"] .content-errors-verdict { color: var(--color-meta); font-weight: 600; }
+.content-errors-explain { margin: 4px 0 0; }
+.content-errors-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.content-errors-status { margin: 8px 0 0; font-weight: 650; }
+.content-errors-status:empty { display: none; }
 
 /* Finn parene (#1107). Uten skript står parene som en liste; når spillet er bygget, står lista igjen bare
    for skjermlesere. To kolonner også på telefon — teksten brekker i knappene. */

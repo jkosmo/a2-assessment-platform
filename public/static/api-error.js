@@ -22,6 +22,7 @@
 // `path: ["bodyMarkdown"]` til å finne feilen i fila si, en kandidat midt i en test kan ikke.
 // Derfor returnerer denne fila `detail` som et EGET felt, og lar kallstedet bestemme om det skal
 // vises. Deltakerflaten (participant.js) sender sitt kall videre uten `detail`.
+import { formatRetentionDate } from "./content-status-badge.js";
 
 /** Generisk nøkkel når koden er ukjent. Bærer `{status}`. */
 export const API_ERROR_GENERIC_KEY = "errors.apiGeneric";
@@ -72,6 +73,17 @@ export function apiErrorCode(error) {
   return typeof code === "string" && code.length > 0 ? code : null;
 }
 
+/**
+ * #1151 skive 3c: avslag fordi elementet er arkivert (tjeneren sperrer alt som skriver, `assertNotArchived`). Et nytt
+ * forsøk kan ikke lykkes før elementet er gjenopprettet, så flatene tilbyr ikke «Prøv igjen» for disse.
+ */
+const ARCHIVED_ERROR_CODES = new Set(["course_archived", "module_archived", "section_archived"]);
+
+/** @returns {boolean} */
+export function isArchivedRejection(error) {
+  return ARCHIVED_ERROR_CODES.has(apiErrorCode(error));
+}
+
 // Kallernes `t()` returnerer nøkkelen uendret når den mangler (samme kontrakt i alle konsollene).
 // Vi må kunne skille «oversatt» fra «ingen oversettelse», ellers ville en ukjent kode gitt
 // `errors.api.thread_locked` som overskrift — verre enn den rå JSON-en vi prøver å bli kvitt.
@@ -106,6 +118,11 @@ export function apiErrorCodeText(code, t, variants = [], details = null) {
   // tilbake paa den generiske, lokaliserte setningen i stedet for aa vise en oedelagt.)
 }
 
+/** Sidens språk (`<html lang>`, satt av språkvelgeren). Uten dokument (enhetstester): bokmål. */
+function pageLocale() {
+  return globalThis.document?.documentElement?.lang || "nb";
+}
+
 /**
  * #999: setter tallene fra `details` inn i den oversatte setningen.
  *
@@ -119,11 +136,16 @@ export function apiErrorCodeText(code, t, variants = [], details = null) {
  * @param {Record<string, unknown> | null} details
  * @returns {string}
  */
-export function fillErrorPlaceholders(template, details) {
+export function fillErrorPlaceholders(template, details, locale = pageLocale()) {
   if (typeof template !== "string") return "";
   let out = template;
   for (const [key, value] of Object.entries(details ?? {})) {
-    const shown = Array.isArray(value) ? value.join(", ") : String(value);
+    // #1185: en kalenderdato (`untilDate: "2026-11-28"`) skrives på sidens språk, 28.11.2026 eller 28 November 2026. Navnet
+    // avgjør, ikke formen: et felt som slutter på «Date», er en dato. Kan den ikke leses, overlever plassholderen, og setningen
+    // byttes mot den generiske (under).
+    const shown = key.endsWith("Date")
+      ? formatRetentionDate(value, locale) || `{${key}}`
+      : Array.isArray(value) ? value.join(", ") : String(value);
     out = out.split(`{${key}}`).join(shown);
   }
   // ⚠️ Overlever en plassholder, mangler avsenderen dataene setningen krever. Da er den oversatte

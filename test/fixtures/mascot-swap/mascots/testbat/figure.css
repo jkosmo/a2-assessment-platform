@@ -1,0 +1,21 @@
+/* Testpakken (test/unit/mascot-swap-*.test.ts, test/e2e/mascot-swap.spec.ts): en ball i stedet for båten. Samme
+   plassering på linja som seilbåten; egne farger, og feiringen varer 3 s (som `celebrationMs` i mascot.json). */
+.course-progress-bar { justify-content: flex-end; }
+.course-progress--boat, .course-progress--celebrating { height: 34px; overflow: hidden; }
+.course-progress--boat .course-progress-bar,
+.course-progress--celebrating .course-progress-bar { position: absolute; left: 0; right: 0; top: 25px; }
+.course-boat { position: absolute; top: 0; width: 60px; height: 34px; pointer-events: none; }
+.course-boat-svg { display: block; overflow: visible; }
+.course-boat .tb-ball { fill: var(--color-primary); stroke: var(--color-text); stroke-width: 2; }
+.course-boat .tb-ball--small { fill: var(--color-surface); }
+.course-boat .tb-stripes { stroke: var(--color-meta); stroke-width: 2; stroke-linecap: round; fill: none; }
+.course-boat .tb-c { fill: var(--color-success); }
+.course-boat--leaving { animation: test-ball-leave 3s linear forwards; }
+@keyframes test-ball-leave {
+  0% { transform: translateX(36px); opacity: 0; }
+  20% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(-28px); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .course-boat--leaving { animation: none; }
+}

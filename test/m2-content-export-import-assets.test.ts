@@ -15,7 +15,7 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { createSectionAsset, MAX_ASSET_BYTES } from "../src/modules/course/assetCommands.js";
-import { updateSectionContent } from "../src/modules/course/sectionCommands.js";
+import { saveSection } from "../src/modules/course/sectionCommands.js";
 import { putAsset, getAsset } from "../src/modules/course/assetStorage.js";
 import { renderSectionMarkdown } from "../src/modules/course/sectionContent.js";
 
@@ -33,6 +33,13 @@ const PNG_BYTES = Buffer.from(
   "base64",
 );
 
+// Lagrer den serialiserte teksten nøyaktig som gitt, gjennom redigererens lagring (2.168.0: den gamle `updateSectionContent` er borte).
+async function storeBody(sectionId: string, bodyMarkdownJson: string): Promise<void> {
+  const section = await prisma.courseSection.findUniqueOrThrow({ where: { id: sectionId }, select: { title: true } });
+  const latest = await prisma.courseSectionVersion.findFirstOrThrow({ where: { sectionId }, orderBy: { versionNo: "desc" }, select: { versionNo: true } });
+  await saveSection(sectionId, { title: section.title, bodyMarkdown: bodyMarkdownJson }, { expectedVersionNo: latest.versionNo });
+}
+
 async function createCourseWithSection(bodyMarkdownJson: string): Promise<{ courseId: string; sectionId: string }> {
   const sectionRes = await request(app)
     .post("/api/admin/content/sections")
@@ -41,7 +48,7 @@ async function createCourseWithSection(bodyMarkdownJson: string): Promise<{ cour
   expect(sectionRes.status).toBe(201);
   const sectionId = sectionRes.body.section.id as string;
   // Store the markdown (with asset refs) directly to control the exact serialized value.
-  await updateSectionContent(sectionId, bodyMarkdownJson, "admin-1");
+  await storeBody(sectionId, bodyMarkdownJson);
 
   const courseRes = await request(app)
     .post("/api/admin/content/courses")
@@ -100,7 +107,7 @@ describe("#749 section-asset export/import round-trip", () => {
     });
 
     const markdown = JSON.stringify({ nb: `# Figurer\n\n![Flyt](asset:${svg.id})\n\n![Diagram](asset:${png.id})` });
-    await updateSectionContent(sectionId, markdown, "admin-1");
+    await storeBody(sectionId, markdown);
 
     // Export — the envelope must carry both assets inline.
     const exportRes = await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(adminHeaders);

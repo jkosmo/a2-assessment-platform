@@ -74,7 +74,7 @@ Read the file when you reach the work it covers — not before.
 
 | When you | Read |
 |---|---|
-| propose objectives, structure, test form or level | [references/course-design.md](references/course-design.md) |
+| propose objectives, structure, test form or level — also for a revision course | [references/course-design.md](references/course-design.md) |
 | choose which exercise a section gets (or none), and write a section's text: headings, lists, tables, highlighted boxes, prompts, cards, think-first and check-yourself questions, cases, step-by-step walk-throughs, write-it-yourself tasks, flashcards, match the pairs, pictures | [references/section-content.md](references/section-content.md) |
 | draw or check a figure | [references/figure-design.md](references/figure-design.md) |
 | give a card or a step an icon | [references/icons.md](references/icons.md) |
@@ -102,6 +102,7 @@ to this skill's folder.
 | `node scripts/mcq-plan.mjs <questions> [options]` | draws which questions in a new test are select-all-that-apply, and how many options in each are right ([modules.md](references/modules.md#select-all-that-apply)) |
 | `node scripts/mcq-cue-check.mjs work/package.json` | checks that no option gives the answer away |
 | `node scripts/course-state.mjs review work/course-state.json <clientRef> work/revised.md` | checks that a shortened text has lost nothing the author approved |
+| `node scripts/objective-map-check.mjs work/course-state.json` | checks that every question and task is linked to an objective and to a section before its test, and names an objective no question tests ([course-design.md](references/course-design.md#linking-questions-to-objectives)) |
 | `node scripts/slide-coverage.mjs work/treatment.json work/package.json` | checks that every slide got what the approved slide list says |
 | `node scripts/produce-course.mjs work/package.json --out <file> --state work/course-state.json` | gate 6: attaches the pictures, runs every check, and writes the validated import file |
 | `node scripts/adjust-from-export.mjs <export.json> work` | turns the platform's export of a course into the working set for adjusting it: package, course state (everything approved), change list, baseline |
@@ -116,6 +117,9 @@ Most authors work in a chat that cannot reach the platform. There you deliver an
 the author uploads in the admin UI. Where you can reach the platform and have a token, you create
 the drafts through the API instead. Both are described in
 [references/check-and-produce.md](references/check-and-produce.md).
+
+A new course — created through the API or imported as a new course — is **restricted**: only the
+participants it is assigned to see it until the author opens it to everyone. Tell the author.
 
 Close every delivery with what was made, which checks ran, where the author imports it, and:
 *"Alt er opprettet som utkast — gjennomgå og publiser manuelt i admin-UI."*

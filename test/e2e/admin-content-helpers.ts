@@ -38,12 +38,16 @@ type MockCourse = {
   description?: Record<string, string> | string | null;
   /** #1093: plassering i «Mine kurs»; null/utelatt = alfabetisk. */
   sortOrder?: number | null;
+  /** 2.102.0: temaene kurset står under, med navnet på leserens språk. */
+  themes?: Array<{ id: string; name: string }>;
   modules?: Array<{
     moduleId: string;
     sortOrder: number;
     moduleTitle?: Record<string, string> | string;
   }>;
   archivedAt?: string | null;
+  /** #1165: kan den som ser kurset, endre det? Utelatt = ja (som tjeneren før feltet fantes). */
+  canManage?: boolean;
 };
 
 type MockNavigationItem = {
@@ -79,6 +83,8 @@ export type MockModuleExport = {
   // #464-standard: baandet under terskelen. Fiksturen maa BAERE det — plassholderen i
   // innstillingspanelet regnes fra det, og uten feltet ville testen maalt fallbacken «Ingen».
   platformDefaults: { totalMin: number; borderlineBelowMin?: number | null };
+  /** #1165: kan den som ser modulen, endre den? Utelatt = ja (som tjeneren før feltet fantes). */
+  canManage?: boolean;
 };
 
 export function localizedText(base: string): Record<string, string> {
@@ -882,6 +888,17 @@ export async function mockCommonApis(page: Page, {
     });
   });
 
+  // #1168: «Arkiver» spør tjeneren først. Standard: ingen kurs holder modulen igjen. En test som vil ha et annet svar, legger
+  // sin egen rute etter denne (Playwright prøver den sist lagte først).
+  await page.route("**/api/admin/content/modules/*/archive-preview", async (route: Route) => {
+    const moduleId = decodeURIComponent(route.request().url().split("?")[0].split("/").slice(-2, -1)[0] ?? "");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ moduleId, archived: false, published: true, uses: [] }),
+    });
+  });
+
   await page.route("**/api/admin/content/modules/*/archive", async (route: Route) => {
     const moduleId = decodeURIComponent(route.request().url().split("/").slice(-2, -1)[0] ?? "");
     const moduleExport = exportMap.get(moduleId);
@@ -1043,6 +1060,51 @@ export async function mockCommonApis(page: Page, {
     });
   });
 
+  // #934 skive 3: endret innhold lagres med navnet i ett kall til PUT …/content.
+  await page.route("**/api/admin/content/courses/*/content", async (route: Route) => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    const courseId = decodeURIComponent(new URL(route.request().url()).pathname.split("/").slice(-2)[0] ?? "");
+    const course = mutableCourses.find((item) => item.id === courseId);
+    if (!course) {
+      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
+      return;
+    }
+    const body = route.request().postDataJSON() as { title?: Record<string, string> | string; description?: Record<string, string> | string; certificationLevel?: string };
+    course.title = body.title ?? course.title;
+    course.description = body.description ?? course.description;
+    course.certificationLevel = body.certificationLevel ?? course.certificationLevel;
+    course.updatedAt = "2026-04-23T12:00:00.000Z";
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course }) });
+  });
+
+  // #934 skive 3: kursskjemaet lagrer innholdet (PUT …/items) FØR navnet, så en endring aldri står levende
+  // uten versjon. Uten et svar her feilet lagringen av innholdet i mockmiljøet, og navnet ble aldri sendt.
+  // Bare PUT: GET faller videre, så spesifikasjoner som bruker modul-fallbacken (course.modules) er urørt.
+  // Spesifikasjoner som registrerer sin egen items-rute, vinner (registrert senere).
+  // #934 skive 4a: skjemaet har ingen reserveliste lenger — feiler GET …/items, kan kurset ikke lagres. Mockens
+  // GET svarer derfor med kursets moduler som elementer (det reservelista tidligere laget av `course.modules`).
+  await page.route("**/api/admin/content/courses/*/items", async (route: Route) => {
+    if (route.request().method() === "GET") {
+      const courseId = decodeURIComponent(new URL(route.request().url()).pathname.split("/").slice(-2)[0] ?? "");
+      const course = mutableCourses.find((item) => item.id === courseId);
+      if (!course) return route.fallback();
+      const items = (course.modules ?? []).map((m: { moduleId: string; sortOrder?: number; moduleTitle?: unknown }, index: number) => ({
+        id: `ci-${m.moduleId}`,
+        type: "MODULE",
+        sortOrder: m.sortOrder ?? index,
+        moduleId: m.moduleId,
+        sectionId: null,
+        title: m.moduleTitle ?? m.moduleId,
+        discussionsEnabled: true,
+        archivedAt: null,
+      }));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items }) });
+      return;
+    }
+    if (route.request().method() !== "PUT") return route.fallback();
+    await route.fulfill({ status: 204, body: "" });
+  });
+
   // #734: the courses page GETs a publish-preview before publishing. Default to "everything already
   // published" so the plain publish path applies; specs that exercise the cascade dialog register
   // their own publish-preview route (which wins, being registered later).
@@ -1054,6 +1116,12 @@ export async function mockCommonApis(page: Page, {
       contentType: "application/json",
       body: JSON.stringify({ courseId, allPublished: true, publishable: true, unpublishedItems: [] }),
     });
+  });
+
+  // #1164: «Publiser» spør alltid, og dialogen sier hvem som ser kurset etterpå. Standard: et åpent kurs (alle deltakere).
+  // Spesifikasjoner som måler teksten, registrerer sin egen rute (den vinner, registrert senere).
+  await page.route("**/api/admin/content/courses/*/publish-audience*", async (route: Route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ audience: { policy: "OPEN" } }) });
   });
 
   await page.route("**/api/admin/content/courses/*/publish", async (route: Route) => {

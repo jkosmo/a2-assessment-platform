@@ -11,6 +11,12 @@ export type ModuleAssessmentPolicy = {
     // #1061: deltakeren får se feil svar med riktig svar og begrunnelse etter innlevering.
     reviewAfterSubmit?: boolean;
   };
+  // #1124 del 2: fritekstdelen. Eksempelsvaret (`ModuleVersion.modelAnswer`) vises deltakeren etter
+  // vurderingen. Av som standard: forfatteren slår det på der læring veier tyngre enn sertifisering,
+  // fordi den neste som tar testen, kan få eksempelsvaret fra den forrige.
+  practical?: {
+    modelAnswerAfterAssessment?: boolean;
+  };
   passRules?: {
     totalMin?: number;
     mcqMinPercent?: number;

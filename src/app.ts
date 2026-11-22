@@ -17,6 +17,7 @@ import { errorHandlingMiddleware } from "./middleware/errorHandling.js";
 import { requireConsent } from "./middleware/consentMiddleware.js";
 import { meRouter } from "./routes/me.js";
 import { iconsRouter } from "./routes/icons.js";
+import { mascotRouter } from "./routes/mascot.js";
 import { coursesRouter } from "./routes/courses.js";
 import { contentAssetsRouter } from "./routes/contentAssets.js";
 import { modulesRouter } from "./routes/modules.js";
@@ -91,6 +92,9 @@ app.use(express.json({ limit: "5mb" }));
 // Ikonbiblioteket (Lucide): /static/icons/<navn>.svg tegnes av ruta, ikke lest fra disk. Står foran
 // de statiske mappene så ruta vinner; selve biblioteksfila og lisensen ligger i public/static/icons.
 app.use("/static/icons", iconsRouter);
+// Maskotpakken (doc/design/MASKOTPAKKE.md): bildene, figuren på fremdriftslinja og faviconet kommer fra
+// mascots/<valgt>/. Står foran de statiske mappene, så faviconet på de faste adressene kommer fra pakken.
+app.use("/static", mascotRouter);
 app.use("/static", express.static(publicStaticPath));
 app.use("/static", express.static(publicRootPath));
 
@@ -134,8 +138,18 @@ app.get("/participant", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "participant.html"));
 });
 
+// 2.121.0: delingslenka til et kurs. Siden avgjør selv hva mottakeren får se: «Mine kurs» kjenner bare
+// kursene brukeren har tilgang til, og viser en melding når lenka ikke peker på et av dem. Ingen
+// tilgangssjekk her — da ville lenka svart ulikt for kurs som finnes og ikke finnes.
+app.get("/kurs/:slug", (request, response) => {
+  response.redirect(302, `/participant?kurs=${encodeURIComponent(request.params.slug)}`);
+});
+
+// 2.126.0: «Fullførte» er fjernet (produkteier 2026-11-01). «Mine kurs» viser de fullførte kursene
+// med kursbeviset, og en modul viser siste resultat — med anke ved stryk — når den åpnes. Adressen
+// svarer fortsatt, som en permanent videresending, fordi den står i bokmerker.
 app.get("/participant/completed", (_request, response) => {
-  response.sendFile(path.resolve(process.cwd(), "public", "participant-completed.html"));
+  response.redirect(301, "/participant");
 });
 
 // #550: printable course certificate view (reads ?id=<certificateId>).
@@ -239,7 +253,7 @@ app.get("/deltakere/status", (_request, response) => {
 });
 
 // #1099: samlet aktivitet over tid og hvem som er aktive — en fane under «Deltakere». Dataene er
-// rollestyrt i /api/reports/activity (administrator og rapportleser).
+// rollestyrt i /api/reports/activity (bare administrator, 2.128.0).
 app.get("/deltakere/aktivitet", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "participant-activity.html"));
 });

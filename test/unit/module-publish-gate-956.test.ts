@@ -99,7 +99,17 @@ function walk(dir: string): string[] {
     return statSync(full).isDirectory() ? walk(full) : full.endsWith(".ts") ? [full] : [];
   });
 }
+const GATE_CALL = /\b(validateModuleVersionForPublish|validateMcqTranslationCompleteness)\s*\(/;
 describe("#956 — vakt: én gate", () => {
+  // Testgjennomgangen 2026-11 (avsnitt 5.3): kontrollen. Får funksjonene nye navn, er vakta under grønn uten å se noe;
+  // da skal denne bli rød og be om at mønsteret oppdateres.
+  it("kontroll: den delte gaten kaller begge validatorene, så mønsteret treffer", () => {
+    const gate = readFileSync(join(SRC, "modules", "adminContent", "modulePublishGate.ts"), "utf8");
+    for (const name of ["validateModuleVersionForPublish", "validateMcqTranslationCompleteness"]) {
+      expect(gate.split("\n").some((line) => GATE_CALL.test(line) && line.includes(name)), `${name}( står ikke i modulePublishGate.ts`).toBe(true);
+    }
+  });
+
   it("⚠️ validateModuleVersionForPublish / validateMcqTranslationCompleteness kalles bare fra modulePublishGate", () => {
     const treff: string[] = [];
     for (const file of walk(SRC)) {
@@ -107,7 +117,7 @@ describe("#956 — vakt: én gate", () => {
       if (rel.endsWith("modulePublishGate.ts") || rel.endsWith("contentValidationService.ts")) continue;
       readFileSync(file, "utf8").split("\n").forEach((line, i) => {
         if (line.trim().startsWith("//") || line.trim().startsWith("*")) return;
-        if (/\b(validateModuleVersionForPublish|validateMcqTranslationCompleteness)\s*\(/.test(line)) treff.push(`${rel}:${i + 1}`);
+        if (GATE_CALL.test(line)) treff.push(`${rel}:${i + 1}`);
       });
     }
     expect(treff.join("\n")).toBe("");

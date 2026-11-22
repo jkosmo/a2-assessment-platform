@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { seenModuleVersionId } from "./support/participantFlow.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -29,6 +30,7 @@ describe("M1 core flow", () => {
       .set(participantHeaders)
       .send({
         moduleId,
+        moduleVersionId: await seenModuleVersionId(app, participantHeaders, moduleId),
         deliveryType: "text",
         responseJson: {
           response: "A practical submission with analysis and responsible use notes.",

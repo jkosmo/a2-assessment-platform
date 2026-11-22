@@ -3,6 +3,7 @@ import { allLocaleValues } from "../../i18n/allLocaleValues.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { manualReviewRepository, createManualReviewRepository } from "./manualReviewRepository.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
+import { runLearnerWrite } from "../../db/contentLock.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
 import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
@@ -200,7 +201,8 @@ async function finalizeManualReviewOverrideCommand(
   latestDecision: LatestDecision,
   finalisedAt: Date,
 ) {
-  return runInTransaction(async (tx) => {
+  // #934 skive 5a-1: deltakerlåsen, som første setning. Innleveringens eier endres aldri, så den kan leses før.
+  return runLearnerWrite(review.submission.userId, async (tx) => {
     const repo = createManualReviewRepository(tx);
 
     // #791: guarded transition FIRST. If a concurrent override already resolved this review, count===0 →

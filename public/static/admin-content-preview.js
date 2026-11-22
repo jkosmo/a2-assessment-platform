@@ -71,6 +71,45 @@ function renderPreviewMcqQuestions(questions, locale, t, tf, audience = "author"
       // #1077: i «velg alle som stemmer» er fasiten flere alternativer; alle markeres, og alle står
       // som riktig svar. Deltakerens visning viser ingen av dem.
       const multiple = question?.questionType === "multiple";
+      // Leveranse 2: «sett i rekkefølge» — elementene står i riktig rekkefølge for forfatteren, og
+      // baklengs for deltakerens visning (deltakeren får dem stokket, aldri i riktig rekkefølge).
+      // Leveranse 3: «fyll inn» — spørsmålet med lukka og et tekstfelt for deltakeren; forfatteren ser
+      // i tillegg de godkjente svarene. Deltakerens visning viser dem aldri.
+      if (question?.questionType === "fill") {
+        return `
+        <article class="preview-mcq-item">
+          <div class="preview-mcq-question-header">${escapeHtml(tf("shell.preview.questionNumber", { number: index + 1 }))}</div>
+          <div class="preview-mcq-stem">${escapeHtml(stem)}</div>
+          <input type="text" class="preview-mcq-fill" disabled aria-label="${escapeHtml(t("shell.preview.fillField"))}" />
+          ${forParticipant ? "" : `<div class="preview-mcq-meta">
+            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.acceptedAnswers"))}</span>
+            <span>${escapeHtml(options.join(" · "))}</span>
+          </div>`}
+          ${rationale && !forParticipant ? `<div class="preview-mcq-meta">
+            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.rationale"))}</span>
+            <span>${escapeHtml(rationale)}</span>
+          </div>` : ""}
+        </article>`;
+      }
+      if (question?.questionType === "order") {
+        const items = forParticipant ? [...options].reverse() : options;
+        return `
+        <article class="preview-mcq-item">
+          <div class="preview-mcq-question-header">${escapeHtml(tf("shell.preview.questionNumber", { number: index + 1 }))}</div>
+          <div class="preview-mcq-stem">${escapeHtml(stem)}</div>
+          <ol class="preview-mcq-options" type="1">
+            ${items.map((item) => `<li class="preview-mcq-option">${escapeHtml(item)}</li>`).join("")}
+          </ol>
+          ${forParticipant ? "" : `<div class="preview-mcq-meta">
+            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.correctAnswer"))}</span>
+            <span>${escapeHtml(t("shell.preview.orderIsAnswer"))}</span>
+          </div>`}
+          ${rationale && !forParticipant ? `<div class="preview-mcq-meta">
+            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.rationale"))}</span>
+            <span>${escapeHtml(rationale)}</span>
+          </div>` : ""}
+        </article>`;
+      }
       const correctAnswers = multiple
         ? (question?.correctAnswers ?? []).map((answer) => localize(answer)).filter(Boolean)
         : [localize(question?.correctAnswer ?? "")].filter(Boolean);
@@ -216,6 +255,16 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
   `.trim();
 }
 
+// #1124: SAMME regel som serveren (`isCandidateVisible` i src/modules/assessment/participantCriteria.ts).
+// Manglende flagg er synlig (produkteier 2026-10-26) — skillet skriver aldri flagget, og
+// forhåndsvisningen sa «skjult» om kriterier deltakeren faktisk får se. Bare `true` eller ingen verdi
+// viser; `false` og alt annet holder tilbake. En streng («0–4: …») har ikke noe flagg, og er synlig.
+export function isCandidateVisible(raw) {
+  // (Et språkkart over en streng — { nb, nn, en-GB } — har ikke noe flagg, og faller ut som synlig.)
+  if (!raw || typeof raw !== "object") return true;
+  return raw.candidateVisible === undefined || raw.candidateVisible === true;
+}
+
 // B2 (#449 redesign): render assessment criteria as content in the preview pane.
 // `criteria` is the record-keyed shape stored on RubricVersion: { id: { label, description,
 // maxScore, weight, candidateVisible } }. Tolerates two historical shapes — rich (with label
@@ -225,7 +274,7 @@ function renderPreviewCriteria(criteria, t, tf, localize = (v) => (typeof v === 
   if (!criteria || typeof criteria !== "object") return "";
   // A criterion with candidateVisible:false is deliberately withheld from the learner.
   const entries = Object.entries(criteria).filter(
-    ([, raw]) => audience !== "participant" || Boolean(raw && typeof raw === "object" && raw.candidateVisible),
+    ([, raw]) => audience !== "participant" || isCandidateVisible(raw),
   );
   if (entries.length === 0) return "";
 
@@ -254,7 +303,7 @@ function renderPreviewCriteria(criteria, t, tf, localize = (v) => (typeof v === 
       return typeof v === "string" ? v : "";
     })();
     const maxScore = resolveMaxScore(c);
-    const candidateVisible = Boolean(c.candidateVisible);
+    const candidateVisible = isCandidateVisible(raw);
     const weightHtml = maxScore > 0
       ? `<span class="preview-criterion-weight">${escapeHtml(t("shell.criteria.weight"))}: ${maxScore}</span>`
       : "";

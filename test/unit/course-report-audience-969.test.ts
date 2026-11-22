@@ -13,9 +13,10 @@ import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 const findPublishedCoursesWithModuleDetails = vi.fn();
 const findCourseCompletionsForLearnerReport = vi.fn();
 const countCourseCompletions = vi.fn();
-const countPassedUsersForModule = vi.fn();
 const countUsersWithSubmissionsForModule = vi.fn();
-const findPassedUserIdsForModule = vi.fn();
+// #934 skive 5a-3: den ene veien til fremdrift i kurs. Regelen måles i test/m2-module-pass-per-course-934-5a3.test.ts.
+const findModuleProgress = vi.fn();
+const noProgress = { passedUserIds: () => new Set<string>() };
 // #996: kursets publikum er nå en UNION av tildelte, fullførere og AKTIVE — det siste dekker
 // ENTRA-klasser, som ikke er oppløsbare via `resolveCourseAudience`.
 const findLearnerSubmissionsForModules = vi.fn();
@@ -35,13 +36,32 @@ vi.mock("../../src/modules/course/courseRepository.js", () => ({
     findPublishedCoursesWithModuleDetails,
     findCourseCompletionsForLearnerReport,
     countCourseCompletions,
-    countPassedUsersForModule,
     countUsersWithSubmissionsForModule,
-    findPassedUserIdsForModule,
+    findModuleProgress,
     findLearnerSubmissionsForModules,
     findCourseItemsForParticipant,
-    findReadSectionIdsForCourseParticipants,
-    findLearnerSectionReadersForCourse,
+  },
+}));
+
+// #1156: lesingene telles på tvers av kurs gjennom `findSectionReadCredit` (regelen måles i test/unit/section-read-credit-1156.test.ts
+// og gjennom rutene i test/m2-section-read-across-courses-1156.test.ts). Her svarer de to gamle navnene for hver sin bruk: lista
+// `all` gir «har lest i kurset» (publikummet), lista `participant` gir de leste seksjonene per deltaker.
+vi.mock("../../src/modules/course/sectionReadCredit.js", () => ({
+  findSectionReadCredit: async (
+    _client: unknown,
+    input: { courseIds: string[]; items: string; userIds?: string[]; filters?: Record<string, unknown> },
+  ) => {
+    const courseId = input.courseIds[0]!;
+    if (input.items === "all") {
+      const readers = (await findLearnerSectionReadersForCourse(courseId, input.filters)) as Array<{ userId: string }>;
+      return { readerIds: () => new Set(readers.map((r) => r.userId)), readSectionIds: () => new Set(), rows: [] };
+    }
+    const rows = ((await findReadSectionIdsForCourseParticipants(courseId, input.userIds, input.filters)) ?? []) as Array<{ userId: string; sectionId: string; readAt: Date }>;
+    return {
+      readerIds: () => new Set(rows.map((r) => r.userId)),
+      readSectionIds: (userId: string) => new Set(rows.filter((r) => r.userId === userId).map((r) => r.sectionId)),
+      rows: rows.map((r) => ({ ...r, courseId, counts: true })),
+    };
   },
 }));
 
@@ -96,9 +116,8 @@ describe("#969 course report — enrolledParticipants is the course audience", (
     findPublishedCoursesWithModuleDetails.mockReset();
     findCourseCompletionsForLearnerReport.mockReset().mockResolvedValue([]);
     countCourseCompletions.mockReset().mockResolvedValue(0);
-    countPassedUsersForModule.mockReset().mockResolvedValue(0);
     countUsersWithSubmissionsForModule.mockReset().mockResolvedValue(0);
-    findPassedUserIdsForModule.mockReset().mockResolvedValue([]);
+    findModuleProgress.mockReset().mockResolvedValue(noProgress);
     findLearnerSubmissionsForModules.mockReset().mockResolvedValue([]);
     resolveCourseAudience.mockReset().mockResolvedValue([]);
     findUserIdsInDepartment.mockReset().mockResolvedValue([]);
@@ -231,8 +250,7 @@ describe("#996: publikummet dekker også dem som bare har vært aktive", () => {
   beforeEach(() => {
     findPublishedCoursesWithModuleDetails.mockReset();
     findCourseCompletionsForLearnerReport.mockReset().mockResolvedValue([]);
-    countPassedUsersForModule.mockReset().mockResolvedValue(0);
-    findPassedUserIdsForModule.mockReset().mockResolvedValue([]);
+    findModuleProgress.mockReset().mockResolvedValue(noProgress);
     findLearnerSubmissionsForModules.mockReset().mockResolvedValue([]);
     resolveCourseAudience.mockReset().mockResolvedValue([]);
     findUserIdsInDepartment.mockReset().mockResolvedValue([]);
@@ -299,7 +317,7 @@ describe("#996: kursdrilldownen bruker samme publikum som sammendraget", () => {
     findPublishedCoursesWithModuleDetails.mockReset();
     findCourseCompletionsForLearnerReport.mockReset().mockResolvedValue([]);
     findLearnerSubmissionsForModules.mockReset().mockResolvedValue([]);
-    findPassedUserIdsForModule.mockReset().mockResolvedValue([]);
+    findModuleProgress.mockReset().mockResolvedValue(noProgress);
     resolveCourseAudience.mockReset().mockResolvedValue([]);
     findUserIdsInDepartment.mockReset().mockResolvedValue([]);
     findUsersByIds.mockReset().mockResolvedValue([]);
@@ -319,6 +337,47 @@ describe("#996: kursdrilldownen bruker samme publikum som sammendraget", () => {
     expect(report.rows[0].participantId).toBe("venter");
     expect(report.rows[0].status).toBe("NOT_STARTED");
     expect(report.totals.learners).toBe(1);
+  });
+
+  it("rekkefølgen: status med Fullført øverst, så nyeste aktivitet, og den uten aktivitet sist", async () => {
+    findPublishedCoursesWithModuleDetails.mockResolvedValue([{ ...course("c1", ["m1", "m2"]), versionMajor: 2 }]);
+    const person = (id: string) => ({ id, name: id, email: `${id}@example.com`, department: null });
+    const levert = (id: string, dag: string) => ({
+      userId: id,
+      moduleId: "m1",
+      submittedAt: new Date(`2026-08-${dag}T00:00:00Z`),
+      submissionStatus: "COMPLETED",
+      decisions: [],
+      user: person(id),
+    });
+    const bevis = (id: string, dag: string, versionMajor: number) => ({
+      userId: id,
+      versionMajor,
+      completedAt: new Date(`2026-08-${dag}T00:00:00Z`),
+      certificateId: `bevis-${id}`,
+      user: person(id),
+    });
+    findLearnerSubmissionsForModules.mockResolvedValue([levert("pågår-ny", "20"), levert("pågår-gammel", "10")]);
+    findCourseCompletionsForLearnerReport.mockResolvedValue([
+      bevis("fullført-gammel", "01", 2),
+      bevis("eldre-versjon", "28", 1),
+      bevis("fullført-ny", "05", 2),
+    ]);
+    resolveCourseAudience.mockResolvedValue(audience("venter-b", "venter-a"));
+    findUsersByIds.mockResolvedValue([person("venter-b"), person("venter-a")]);
+
+    const { getCourseLearnerReport } = await import("../../src/modules/course/courseReport.js");
+    const { rows } = await getCourseLearnerReport("c1");
+
+    expect(rows.map((row) => row.participantId)).toEqual([
+      "fullført-ny",
+      "fullført-gammel",
+      "eldre-versjon",
+      "pågår-ny",
+      "pågår-gammel",
+      "venter-a",
+      "venter-b",
+    ]);
   });
 
   it("KONTROLLCASE: en deltaker med aktivitet får radene sine fra innleveringen, ikke fra oppslaget", async () => {

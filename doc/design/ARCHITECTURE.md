@@ -131,10 +131,10 @@ The platform separates human tasks by workspace and role. Workspace pages are st
 - primary capability roles: `PARTICIPANT`, `REVIEWER`, `ADMINISTRATOR`
 - purpose: browse modules, submit work, monitor progress, view results, create appeals
 
-### Completed modules workspace
-- route: `/participant/completed`
+### Completed modules workspace — retired in 2.126.0
+- route: `/participant/completed` (301 → `/participant`)
 - primary capability roles: `PARTICIPANT`, `REVIEWER`, `ADMINISTRATOR`
-- purpose: review historical completion and result state across modules
+- replaced by: certificates on the course card in «Mine kurs», the latest result and appeal in the module, history in `/profile`
 
 ### Review workspace
 - route: `/review`

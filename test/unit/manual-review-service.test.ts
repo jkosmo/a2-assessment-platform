@@ -19,6 +19,9 @@ const logOperationalEvent = vi.fn();
 // #1007: resultatvarselet legges på outboxen (prisma.outboxEvent.createMany) etter at overstyringen
 // er committet — ikke sendt direkte. `outboxCreateMany` er beviset.
 const outboxCreateMany = vi.fn().mockResolvedValue({ count: 1 });
+// #934 skive 5a-1: låsene er SQL; her går de rett gjennom den falske transaksjonen.
+vi.mock("../../src/db/contentLock.js", () => import("../support/contentLockThroughTransaction.js"));
+
 vi.mock("../../src/db/prisma.js", () => ({
   prisma: {
     $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 1 }) } })),

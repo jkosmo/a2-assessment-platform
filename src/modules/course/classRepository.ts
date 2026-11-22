@@ -104,13 +104,16 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
       return client.classMember.findMany({ where: { userId }, select: { classId: true } });
     },
 
-    // Assign a course to a class (idempotent on the course+class pair; updates the due date).
-    assignCourseToClass(courseId: string, classId: string, dueAt: Date | null, assignedById: string | null) {
-      return client.courseGroupAssignment.upsert({
-        where: { courseId_classId: { courseId, classId } },
-        create: { courseId, classId, dueAt, assignedById },
-        update: { dueAt },
+    // Tildeler et kurs til en klasse. Finnes tildelingen, oppdateres bare fristen. To kall samtidig (dobbeltklikk) gir én
+    // tildeling, fordi den unike nøkkelen avgjør, og ingen av dem feiler. #1142: om tildelingen var ny, leses ikke lenger
+    // her (e-posten om nye kurs lages av jobben fra det som er lagret), så funksjonen gir ingenting tilbake.
+    async assignCourseToClass(courseId: string, classId: string, dueAt: Date | null, assignedById: string | null): Promise<void> {
+      const { count } = await client.courseGroupAssignment.createMany({
+        data: [{ courseId, classId, dueAt, assignedById }],
+        skipDuplicates: true,
       });
+      if (count === 1) return;
+      await client.courseGroupAssignment.updateMany({ where: { courseId, classId }, data: { dueAt } });
     },
 
     unassignCourseFromClass(courseId: string, classId: string) {

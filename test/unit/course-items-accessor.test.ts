@@ -19,7 +19,11 @@ import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 //   4. la deltakerdøra returnere `item.section` med `archivedAt`      → «bærer ikke feltene
 //      regelen bygger på» blir rød.
 
-vi.mock("../../src/db/prisma.js", () => ({ prisma: {} }));
+// #934 skive 5a-1: utstedelsen åpner sin egen låste transaksjon, så den falske klienten står nå der `prisma` står.
+const prismaHolder = vi.hoisted(() => ({}) as Record<string, unknown>);
+vi.mock("../../src/db/prisma.js", () => ({ prisma: prismaHolder }));
+// #934 skive 5a-1: låsene er SQL; her går de rett gjennom den falske transaksjonen.
+vi.mock("../../src/db/contentLock.js", () => import("../support/contentLockThroughTransaction.js"));
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent: vi.fn() }));
 
 const COURSE_ID = "course-1";
@@ -71,7 +75,15 @@ function matchesClause(row: ItemRow, clause: Record<string, unknown>): boolean {
     } else if (key === "module") {
       if (!matchesRelation(row.module as never, value as Record<string, unknown>)) return false;
     } else if (key === "courseId") {
-      if (row.courseId !== value) return false;
+      // #1156: lesingene telles mot kursets seksjoner for flere kurs på én gang (`findSectionItemsForCourses`).
+      if (typeof value === "object" && value !== null && "in" in value) {
+        if (!(value as { in: string[] }).in.includes(row.courseId)) return false;
+      } else if (row.courseId !== value) return false;
+    } else if (key === "sectionId") {
+      if (!(typeof value === "object" && value !== null && "not" in value && (value as { not: unknown }).not === null)) {
+        throw new Error("Testtolken kjenner bare `sectionId: { not: null }`.");
+      }
+      if (row.sectionId === null) return false;
     } else {
       throw new Error(`Testtolken kjenner ikke filteret «${key}» — utvid den, ikke ignorer det.`);
     }
@@ -287,17 +299,30 @@ describe("#958 bevisporten og deltakersekvensen får radene fra samme dør", () 
   // holde i takt: porten leser det døra ga den.
   async function issue(items: ItemRow[], reads: string[]) {
     const created: Array<{ courseId: string }> = [];
+    // #934: versjonen er påkrevd i utstedelsen; uten den sto `undefined` i oppslaget og testen ble grønn.
+    const courseRow = { id: COURSE_ID, publishedAt: new Date("2026-01-01"), archivedAt: null, versionMajor: 1, versionMinor: 0, items: [] };
     const client = createClient(items, {
+      $transaction: (cb: (tx: unknown) => unknown) => cb(client),
       course: {
-        findMany: async () => [
-          { id: COURSE_ID, publishedAt: new Date("2026-01-01"), archivedAt: null, items: [] },
-        ],
+        findMany: async () => [courseRow],
+        findUnique: async () => courseRow,
       },
       certificationStatus: { count: async () => 0 },
-      courseSectionRead: { findMany: async () => reads.map((sectionId) => ({ sectionId })) },
+      // #1156: lesingene hentes for kursets seksjoner fra alle kurs (sectionReadCredit.ts); her er alle gjort i kurset selv.
+      courseSectionRead: {
+        findMany: async ({ where }: { where: { sectionId: { in: string[] } } }) =>
+          reads.filter((sectionId) => where.sectionId.in.includes(sectionId)).map((sectionId) => ({ userId: "user-1", courseId: COURSE_ID, sectionId, readAt: new Date("2026-02-01") })),
+      },
+      // #934 skive 3: ingen hovedversjon er laget — alle lesinger teller.
+      courseVersion: { findMany: async () => [] },
       courseCompletion: {
-        findUnique: async () => null,
-        create: async ({ data }: { data: { courseId: string } }) => {
+        findUnique: async ({ where }: { where: { userId_courseId_versionMajor?: { versionMajor?: unknown } } }) => {
+          // #934: oppslaget skal bære kursets hovedversjon; ekte Prisma avviser `undefined` her.
+          expect(where.userId_courseId_versionMajor?.versionMajor).toBe(1);
+          return null;
+        },
+        create: async ({ data }: { data: { courseId: string; versionMajor?: unknown } }) => {
+          expect(data.versionMajor).toBe(1);
           created.push({ courseId: data.courseId });
           return { ...data, certificateId: "cert-1" };
         },
@@ -305,7 +330,8 @@ describe("#958 bevisporten og deltakersekvensen får radene fra samme dør", () 
     });
 
     const { checkAndIssueCourseCompletions } = await import("../../src/modules/course/courseCompletionService.js");
-    await checkAndIssueCourseCompletions({ userId: "user-1", moduleId: "mod-x" }, client as never);
+    Object.assign(prismaHolder, client);
+    await checkAndIssueCourseCompletions({ userId: "user-1", moduleId: "mod-x" });
     return created;
   }
 

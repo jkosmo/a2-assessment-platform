@@ -1,8 +1,17 @@
+import type { AppRole as AppRoleType } from "@prisma/client";
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
+import { prisma } from "../../db/prisma.js";
+import type { DbTransactionClient } from "../../db/transaction.js";
 import { ConflictError } from "../../errors/AppError.js";
+import {
+  findVersionToSubmitOn,
+  prepareShownMajorScope,
+  ShownMajorScopeOutdatedError,
+  type ShownMajorClient,
+} from "../module/participantModuleVersion.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
-import { submissionRepository, createSubmissionRepository, getModuleWithActiveVersion } from "./submissionRepository.js";
-import { runInTransaction } from "../../db/transaction.js";
+import { submissionRepository, createSubmissionRepository, getModuleWithActiveVersion, queryRubricCriteriaJson } from "./submissionRepository.js";
+import { runContentReadForLearner } from "../../db/contentLock.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -14,7 +23,14 @@ import { toSubmissionHistoryResponseView, toSubmissionResultView } from "./submi
 
 export type CreateSubmissionInput = {
   userId: string;
+  // #1140 etappe 1: rollene og gruppene fra innloggingen, for kursene deltakeren har tilgang til (hvilken versjon hen skal ha).
+  roles: AppRoleType[];
+  groupIds?: string[];
+  // #1140 etappe 1: kurset modulen ble åpnet fra. Har deltakeren modulen i det, bestemmer det kurset versjonen.
+  courseId?: string;
   moduleId: string;
+  // #934 skive 5a-1: modulversjonen siden viste da deltakeren skrev svaret. Mangler den, er fanen fra før utrullingen.
+  moduleVersionId?: string;
   locale: SupportedLocale;
   deliveryType: string;
   responseJson: Record<string, unknown>;
@@ -34,17 +50,58 @@ export type CreateSubmissionInput = {
 
 type ParseOutcome = Awaited<ReturnType<typeof resolveSubmissionResponseJson>>;
 
+function moduleVersionUnavailable(moduleId: string) {
+  // #999: modulen har ingen publisert aktiv versjon akkurat nå — en TILSTANDSKONFLIKT (409), ikke
+  // et skjema som feilet. Egen kode så deltakerflaten kan si «modulen er ikke tilgjengelig» på
+  // sitt språk; setningen her er reserven for API-konsumenter og loggen.
+  return new ConflictError("module_version_unavailable", "Module active version is not available.", { moduleId });
+}
+
+function moduleVersionChanged(moduleId: string) {
+  return new ConflictError(
+    "module_version_changed",
+    "The module has a new version since this page was opened. Nothing was submitted; reload the page.",
+    { moduleId },
+  );
+}
+
+/**
+ * #1140 etappe 1: versjonen deltakeren skal levere på. Modulens aktive versjon, eller en eldre hovedversjon når kursene
+ * deltakeren har modulen i, har låst den (`participantModuleVersion.ts`). `null` når modulen ikke har en publisert versjon.
+ * En lås som dukket opp etter at kursene ble regnet ut, svares som en endret versjon: deltakeren laster siden på nytt.
+ */
+async function versionToSubmitOn(client: ShownMajorClient & Pick<DbTransactionClient, "module">, moduleId: string, scope: string[] | null) {
+  const module = await getModuleWithActiveVersion(moduleId, client);
+  if (!module?.activeVersion?.publishedAt) return null;
+  try {
+    const version = await findVersionToSubmitOn(client, module.id, module.activeVersion, scope);
+    return version.publishedAt ? { moduleId: module.id, versionId: version.id } : null;
+  } catch (error) {
+    if (error instanceof ShownMajorScopeOutdatedError) throw moduleVersionChanged(moduleId);
+    throw error;
+  }
+}
+
 async function createSubmissionCommand(
   input: CreateSubmissionInput,
-  moduleId: string,
-  moduleVersionId: string,
+  seenVersionId: string,
   parseOutcome: ParseOutcome,
+  scope: string[] | null,
 ) {
-  return runInTransaction(async (tx) => {
-    const submission = await createSubmissionRepository(tx).create({
+  // #934 skive 5a-1: innholdslåsen delt, så deltakerlåsen. Versjonen leses og sjekkes ETTER låsene: en publisering
+  // står enten ferdig (409 under) eller venter til innleveringen er skrevet. Den registreres aldri på en annen versjon
+  // enn den deltakeren så.
+  // #1140: «versjonen» er den deltakeren skal ha, og hovedversjonene kursene har låst, leses også her, under låsen.
+  return runContentReadForLearner(input.userId, async (tx) => {
+    const target = await versionToSubmitOn(tx, input.moduleId, scope);
+    if (!target) throw moduleVersionUnavailable(input.moduleId);
+    if (target.versionId !== seenVersionId) throw moduleVersionChanged(input.moduleId);
+    const moduleId = target.moduleId;
+
+    const submission = await createSubmissionRepository(tx).create(tx, {
       userId: input.userId,
       moduleId,
-      moduleVersionId,
+      moduleVersionId: target.versionId,
       locale: input.locale,
       deliveryType: input.deliveryType,
       responseJson: JSON.stringify(parseOutcome.resolvedResponseJson),
@@ -87,14 +144,28 @@ async function createSubmissionCommand(
 }
 
 export async function createSubmission(input: CreateSubmissionInput) {
-  const module = await getModuleWithActiveVersion(input.moduleId);
+  // #1140 etappe 1: kursene deltakeren har modulen i, regnes ut her, før låsene (som kursporten i ruta). `null` når ingen
+  // kurs har låst en hovedversjon av modulen, og da er versjonen modulens aktive, som før.
+  const scope = await prepareShownMajorScope(
+    { userId: input.userId, roles: input.roles, groupIds: input.groupIds },
+    input.moduleId,
+    input.courseId,
+  );
+  // Bare en rask sjekk, så et dokument ikke tolkes til ingen nytte. Det som avgjør, skjer under låsene.
+  const target = await versionToSubmitOn(prisma, input.moduleId, scope);
 
-  if (!module || !module.activeVersion || !module.activeVersion.publishedAt) {
-    // #999: modulen har ingen publisert aktiv versjon akkurat nå — en TILSTANDSKONFLIKT (409), ikke
-    // et skjema som feilet. Egen kode så deltakerflaten kan si «modulen er ikke tilgjengelig» på
-    // sitt språk; setningen her er reserven for API-konsumenter og loggen.
-    throw new ConflictError("module_version_unavailable", "Module active version is not available.", { moduleId: input.moduleId });
+  if (!target) {
+    throw moduleVersionUnavailable(input.moduleId);
   }
+  // #934 skive 5a-1: en fane fra før utrullingen sender ikke versjonen. Den kan ikke vite hva deltakeren så.
+  if (!input.moduleVersionId) {
+    throw new ConflictError(
+      "client_outdated",
+      "This page is out of date. Nothing was submitted; reload the page.",
+      { moduleId: input.moduleId },
+    );
+  }
+  if (target.versionId !== input.moduleVersionId) throw moduleVersionChanged(input.moduleId);
 
   const parseOutcome = await resolveSubmissionResponseJson({
     responseJson: input.responseJson,
@@ -103,7 +174,7 @@ export async function createSubmission(input: CreateSubmissionInput) {
     attachmentMimeType: input.attachmentMimeType,
   });
 
-  const submission = await createSubmissionCommand(input, module.id, module.activeVersion.id, parseOutcome);
+  const submission = await createSubmissionCommand(input, input.moduleVersionId, parseOutcome, scope);
 
   logOperationalEvent(operationalEvents.submission.documentParse, {
     submissionId: submission.id,
@@ -143,8 +214,11 @@ export async function getOwnedSubmissionHistoryView(input: {
   return toSubmissionHistoryResponseView(submissions, input.locale);
 }
 
-export async function getOwnedSubmissionResultView(submissionId: string, userId: string) {
+export async function getOwnedSubmissionResultView(submissionId: string, userId: string, locale: SupportedLocale = "en-GB") {
   const submission = await getOwnedSubmission(submissionId, userId);
+  if (!submission) return null;
 
-  return submission ? toSubmissionResultView(submission) : null;
+  // #1124: poengene per kriterium trenger kriteriene (etikett, egen skala, toppnivåets trinn).
+  const criteriaJson = await queryRubricCriteriaJson(submission.moduleVersion?.rubricVersionId);
+  return toSubmissionResultView(submission, { criteriaJson, locale });
 }

@@ -25,6 +25,15 @@ const smoHeaders = {
   "x-user-roles": "SUBJECT_MATTER_OWNER",
 };
 
+// #934 skive 4a: slettingen får det forhåndsvisningen viste (det klienten sender). Uten det: 409.
+async function asPreviewed(courseId: string) {
+  const preview = await request(app).get(`/api/admin/content/courses/${courseId}/cascade-delete-preview`).set(adminHeaders);
+  return {
+    expectedDeletedModuleIds: (preview.body.deletableModules ?? []).map((m: { id: string }) => m.id),
+    expectedDeletedSectionIds: (preview.body.deletableSections ?? []).map((s: { id: string }) => s.id),
+  };
+}
+
 let seq = 0;
 const uniq = () => `ccd-${Date.now()}-${seq++}`;
 
@@ -35,8 +44,10 @@ const userIds: string[] = [];
 
 // A module with a full version chain (moduleVersion → rubric/prompt/mcq-set + mcqQuestion) and an
 // active (published) version, so the cascade must null the active pointer and clean up every row.
+// #1152 skive 4a-2: ARKIVERT, som om den fulgte kurset inn i arkivet. Kaskaden sletter bare arkiverte elementer; et aktivt
+// eksklusivt element blir stående (test/m2-course-delete-1152.test.ts).
 async function makeRichModule(): Promise<string> {
-  const module = await prisma.module.create({ data: { title: `CCD Module ${uniq()}` }, select: { id: true } });
+  const module = await prisma.module.create({ data: { title: `CCD Module ${uniq()}`, archivedAt: new Date() }, select: { id: true } });
   moduleIds.push(module.id);
   const rubric = await prisma.rubricVersion.create({
     data: { moduleId: module.id, versionNo: 1, criteriaJson: "{}", scalingRuleJson: "{}", active: true },
@@ -69,8 +80,9 @@ async function makeRichModule(): Promise<string> {
   return module.id;
 }
 
-async function makeSection(): Promise<string> {
-  const section = await prisma.courseSection.create({ data: { title: `CCD Section ${uniq()}` }, select: { id: true } });
+async function makeSection(archived = true): Promise<string> {
+  // #1152 skive 4a-2: arkivert, som modulen over. `false`: et bilde skal lastes opp først (et arkivert element tar ikke imot).
+  const section = await prisma.courseSection.create({ data: { title: `CCD Section ${uniq()}`, archivedAt: archived ? new Date() : null }, select: { id: true } });
   sectionIds.push(section.id);
   const version = await prisma.courseSectionVersion.create({
     data: { sectionId: section.id, versionNo: 1, bodyMarkdown: "Body", publishedAt: new Date() },
@@ -86,6 +98,9 @@ async function makeCourse(
   const course = await prisma.course.create({
     data: {
       title: JSON.stringify({ "en-GB": "CCD Course", nb: "CCD Kurs", nn: "CCD Kurs" }),
+      // #1151: kaskaden krever et arkivert kurs (elementene som bare brukes i det, fulgte det inn i arkivet). Den som deler en
+      // modul, er også arkivert her: sletting teller alle kurs (#1149).
+      archivedAt: new Date(),
       items: {
         create: items.map((item, index) => ({
           itemType: item.itemType,
@@ -156,7 +171,7 @@ describe("Course cascade delete (#762)", () => {
 
     const res = await request(app)
       .post(`/api/admin/content/courses/${courseId}/cascade-delete`)
-      .set(adminHeaders);
+      .set(adminHeaders).send(await asPreviewed(courseId));
     expect(res.status).toBe(200);
     expect(res.body.deletedCourseId).toBe(courseId);
     expect(res.body.deletedModuleIds).toContain(moduleId);
@@ -181,7 +196,7 @@ describe("Course cascade delete (#762)", () => {
   // #758: cascade-deleting a course must reclaim the exclusive sections' asset blobs from storage,
   // not just the DB rows — otherwise the images accumulate in storage forever.
   it("reclaims the exclusive sections' asset blobs from storage on cascade delete", async () => {
-    const sectionId = await makeSection();
+    const sectionId = await makeSection(false);
     await createSectionAsset({
       sectionId,
       filename: "fig.svg",
@@ -190,9 +205,10 @@ describe("Course cascade delete (#762)", () => {
     });
     const before = await prisma.sectionAsset.findFirstOrThrow({ where: { sectionId }, select: { blobPath: true } });
     await expect(getAsset(before.blobPath)).resolves.toBeInstanceOf(Buffer);
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { archivedAt: new Date() } });
 
     const courseId = await makeCourse([{ itemType: "SECTION", sectionId }]);
-    const res = await request(app).post(`/api/admin/content/courses/${courseId}/cascade-delete`).set(adminHeaders);
+    const res = await request(app).post(`/api/admin/content/courses/${courseId}/cascade-delete`).set(adminHeaders).send(await asPreviewed(courseId));
     expect(res.status).toBe(200);
     expect(res.body.deletedSectionIds).toContain(sectionId);
 
@@ -210,7 +226,7 @@ describe("Course cascade delete (#762)", () => {
 
     const res = await request(app)
       .post(`/api/admin/content/courses/${deleteCourseId}/cascade-delete`)
-      .set(adminHeaders);
+      .set(adminHeaders).send(await asPreviewed(deleteCourseId));
     expect(res.status).toBe(200);
     expect(res.body.deletedModuleIds).not.toContain(sharedModuleId);
     expect(res.body.sparedModuleIds).toContain(sharedModuleId);
@@ -232,7 +248,7 @@ describe("Course cascade delete (#762)", () => {
 
     const res = await request(app)
       .post(`/api/admin/content/courses/${courseId}/cascade-delete`)
-      .set(adminHeaders);
+      .set(adminHeaders).send(await asPreviewed(courseId));
     expect(res.status).toBe(400);
     const blockerModuleIds = (res.body.details?.blockers ?? []).map((b: { id: string }) => b.id);
     expect(blockerModuleIds).toContain(moduleId);
@@ -251,7 +267,7 @@ describe("Course cascade delete (#762)", () => {
 
     const res = await request(app)
       .post(`/api/admin/content/courses/${courseId}/cascade-delete`)
-      .set(adminHeaders);
+      .set(adminHeaders).send(await asPreviewed(courseId));
     expect(res.status).toBe(400);
     const blockerIds = (res.body.details?.blockers ?? []).map((b: { id: string }) => b.id);
     expect(blockerIds).toContain(courseId);
@@ -282,7 +298,7 @@ describe("Course cascade delete (#762)", () => {
     expect(res.body.blockers).toEqual([]);
 
     // Clean this fixture up explicitly so the preview-only course does not linger.
-    await request(app).post(`/api/admin/content/courses/${courseId}/cascade-delete`).set(adminHeaders);
+    await request(app).post(`/api/admin/content/courses/${courseId}/cascade-delete`).set(adminHeaders).send(await asPreviewed(courseId));
   });
 
   // Route-level guard: a SUBJECT_MATTER_OWNER (allowed onto the admin_content mount) gets 403 on both

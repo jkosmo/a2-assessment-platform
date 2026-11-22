@@ -15,6 +15,8 @@ import { getActiveConsentVersion } from "../modules/platformConfig/consentConfig
 const CONSENT_EXEMPT_PATHS = new Set([
   "/me",
   "/me/consent",
+  // #1139 (planen 12.7): å melde seg av den ukentlige e-posten skal aldri sperres av samtykket.
+  "/me/preferences",
 ]);
 
 /**

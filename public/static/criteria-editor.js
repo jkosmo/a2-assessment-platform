@@ -19,7 +19,7 @@
  * uttrekket bare vært en flytting, og logikken hadde fortsatt bare vært nådd gjennom e2e.
  */
 import { escapeHtml } from "./html-escape.js";
-import { localizeValueForLocale } from "./admin-content-preview.js";
+import { isCandidateVisible, localizeValueForLocale } from "./admin-content-preview.js";
 
 /**
  * #1049-oppfoelging / uttrekksplanen steg 1: spraaket sendes INN, det leses ikke fra modulen.
@@ -62,7 +62,7 @@ export function computeCriteriaDiff(existing, next, locale) {
     const labelChanged = driftText(a.label, locale) !== driftText(b.label, locale);
     const descChanged = driftText(a.description, locale) !== driftText(b.description, locale);
     const scoreChanged = Number(a.maxScore ?? 0) !== Number(b.maxScore ?? 0);
-    const visChanged = Boolean(a.candidateVisible) !== Boolean(b.candidateVisible);
+    const visChanged = isCandidateVisible(a) !== isCandidateVisible(b);
     if (labelChanged || descChanged || scoreChanged || visChanged) {
       changed.push({ id, prev: a, next: b, fields: { labelChanged, descChanged, scoreChanged, visChanged } });
     } else {
@@ -104,7 +104,7 @@ export function buildEditorStateFromCriteriaRecord(source, locale) {
       label: typeof rawLabel === "string" && rawLabel.trim() ? rawLabel : humaniseCriterionId(String(id)),
       description: typeof rawDesc === "string" ? rawDesc : "",
       maxScore: Math.max(1, Math.min(10, initialMaxScore)),
-      candidateVisible: Boolean(c.candidateVisible),
+      candidateVisible: isCandidateVisible(c),
       // #902: the editor shows ONE language, but the stored value may hold three. Carry the whole
       // stored value and the locale it is being edited in, so the save can merge instead of
       // replacing — writing back a bare string deleted the two languages never shown.
@@ -237,7 +237,7 @@ export function buildDriftDiffModalHtml(diff, locale, t, tf) {
     if (fields.labelChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.label"))}:</em> <s>${escapeHtml(driftText(prev?.label, locale))}</s> → <strong>${escapeHtml(driftText(next?.label, locale))}</strong></p>`);
     if (fields.descChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.description"))}:</em> ${escapeHtml(driftText(next?.description, locale))}</p>`);
     if (fields.scoreChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.maxScore"))}:</em> ${escapeHtml(String(prev?.maxScore ?? ""))} → ${escapeHtml(String(next?.maxScore ?? ""))}</p>`);
-    if (fields.visChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.candidateVisible"))}:</em> ${Boolean(prev?.candidateVisible) ? "✓" : "—"} → ${Boolean(next?.candidateVisible) ? "✓" : "—"}</p>`);
+    if (fields.visChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.candidateVisible"))}:</em> ${isCandidateVisible(prev) ? "✓" : "—"} → ${isCandidateVisible(next) ? "✓" : "—"}</p>`);
     return renderRow(id, "changed", `
       <span class="drift-diff-row-tag drift-diff-row-tag--changed">${escapeHtml(t("shell.drift.diff.changed"))}</span>
       <strong>${escapeHtml(driftText(next?.label, locale) || id)}</strong>

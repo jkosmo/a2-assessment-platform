@@ -16,7 +16,6 @@ const workerUrl = workerUrlInput.trim()
 
 const htmlRoutes = [
   { path: "/participant", marker: '/static/participant.js' },
-  { path: "/participant/completed", marker: '/static/participant-completed.js' },
   { path: "/review", marker: '/static/review.js' },
   { path: "/admin-content/calibration", marker: '/static/admin-content-calibration.js' },
   { path: "/results", marker: '/static/results.js' },
