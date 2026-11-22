@@ -11,9 +11,9 @@ on:
         required: false
         default: "false"
       skip_staging:
-        description: "Skip staging deploy — use only when staging is already verified green"
+        description: "Skip the Azure staging job. Default true: Azure stage is passive since 2026-11-22; false recreates it"
         required: false
-        default: "false"
+        default: "true"
       git_ref:
         description: "Git ref (tag/SHA) to build & deploy. Empty = main HEAD. Pin a verified tag to promote it while main advances. NOTE: for infra this also applies that ref's Bicep — usually leave empty for infra deploys."
         required: false
@@ -32,9 +32,9 @@ concurrency:
 
 jobs:
   deploy-staging:
-    # Only run on manual workflow_dispatch — push to main deploys production directly.
-    # This prevents main-branch commits from overwriting a feature-branch staging deploy.
-    # Set skip_staging=true to bypass when staging is already verified green.
+    # Only run on manual workflow_dispatch; a push to main runs no job at all.
+    # Skipped by default since 2026-11-22: the Azure staging app layer is removed (stage is self-hosted), and
+    # running this job applies the full Bicep, which recreates App Services, plan and PostgreSQL in staging.
     if: github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch && github.event.inputs.skip_staging != 'true'
     runs-on: ubuntu-latest
     environment: staging

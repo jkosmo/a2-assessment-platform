@@ -21,7 +21,9 @@ one core, and 640 MB shared by web, worker and parser. B1 has 1.75 GB, but the p
 - **Stage tests:** `npm run test:stage` reads the address from `STAGE_BASE_URL` or `baseUrl` in the gitignored
   `.stage-service.json` (`scripts/test/stage-base-url.mjs`). Run file by file.
 - **Prod deploy: always `skip_staging=true`.** Without it `deploy-app.yml` fails in the stage job (prod is skipped),
-  and `deploy-azure.yml` would recreate the whole Azure stage, cost included.
+  and `deploy-azure.yml` would recreate the whole Azure stage, cost included. It is the default in both workflows from
+  the commit after 4159bf69, but workflows run from `main`: until that commit is on `main`, the default there is still
+  `false`, so keep passing it explicitly.
 - **Infra changes** (Bicep, workflows, `scripts/azure`) can no longer be tried on an Azure stage first. Run the prod
   what-if (below), deploy outside working hours, and watch `/version` and `/healthz` on web and worker. If an Azure
   stage is ever needed again: `activate-staging-app-layer` (untested; starts with an empty database).

@@ -15,8 +15,10 @@ name: Deploy App Only (no infra)
 # - Secret rotation that needs KV-ref refresh
 #
 # Workflow inputs:
-# - deploy_production=true: also deploy to prod after staging
-# - skip_staging=true: skip staging job (only valid with deploy_production=true)
+# - deploy_production=true: deploy to prod (after the Azure staging job, unless it is skipped)
+# - skip_staging: default true since 2026-11-22. The Azure staging app layer is removed (stage is
+#   self-hosted, see doc/AZURE_ENVIRONMENTS.md), so the staging job would fail and skip prod.
+#   Set false only after the Azure stage has been brought back with activate-staging-app-layer.
 
 on:
   workflow_dispatch:
@@ -26,9 +28,9 @@ on:
         required: false
         default: "false"
       skip_staging:
-        description: "Skip staging deploy — only valid when staging is already verified"
+        description: "Skip the Azure staging job. Default true: Azure stage is passive since 2026-11-22 (stage is self-hosted)"
         required: false
-        default: "false"
+        default: "true"
       git_ref:
         description: "Git ref (tag/SHA) to build & deploy. Empty = main HEAD. Use a verified tag (e.g. v1.3.67) to promote a pinned version to prod while main advances."
         required: false
