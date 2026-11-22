@@ -35,6 +35,11 @@ gjennom spørreboksen for klassens «Arkiver»; rettet).
 forhåndsvisningen ble hentet, kunne bytte hvilket tema bekreftelsen slettet (nå én forhåndsvisning om gangen); og uten spørsmål
 kunne et dobbeltklikk på «Gjenopprett» sende to gjenopprettinger av en klasse (knappen er opptatt mens den første går).
 
+**Stage (hjemme, 22.11.2026):** `test/stage/release-2-181-klasse-tema.spec.ts` 3/3 mot ekte data: klassens «Arkiver» med sidas
+dialog (Avbryt arkiverer ikke, bekreft arkiverer), «Gjenopprett» uten spørsmål med klassens navn i meldingen, «Slett» i hodet med
+rød knapp; temaets forhåndsvisning gir 403 for en fagansvarlig. Ingen spørreboks. Temaets telling med ekte arkiverte kurs krever
+en administrator og står på den manuelle lista.
+
 **#1168:** med dette er alle flatene i saken gjort (modul, seksjon, kurs, klasse, tema).
 
 ## 2.180.0 - 2026-11-22
