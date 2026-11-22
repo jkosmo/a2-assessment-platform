@@ -30,8 +30,9 @@ async function openLibrary(page: import("@playwright/test").Page, deleteResponse
 }
 
 async function clickDelete(page: import("@playwright/test").Page) {
-  page.once("dialog", (dialog) => dialog.accept());
   await (await revealRowAction(page, page.locator('[data-action="delete"][data-module-id="module-1152"]'))).click();
+  // #1168: sidas egen dialog, ikke nettleserens spørreboks.
+  await page.locator("#moduleLifecycleDialogConfirmBtn").click();
 }
 
 test.describe("#1152 — «Slett» på en arkivert modul i biblioteket", () => {

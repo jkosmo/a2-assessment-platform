@@ -2,6 +2,42 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.178.0 - 2026-11-22
+
+#1168, første skive: modulens «Arkiver», «Gjenopprett» og «Slett» følger kursets mønster (#1150): sjekk først, vis
+konsekvensene før forfatteren trykker, på brukerens språk, og fokus tilbake etterpå. Ingen migrering.
+
+**Hva brukerne merker:**
+- **Arkiver** i modullista spør først. Holder et aktivt kurs eller et lagret kursutkast modulen igjen, viser dialogen kursene
+  med lenker og bare «Lukk». Før arkiverte knappen uten spørsmål og fikk et avslag etterpå. Ellers sier dialogen hva som skjer
+  (ute av de aktive, kan ikke legges i kurs, resultatene beholdes, og en publisert modul avpubliseres), med «Arkiver modulen».
+- **Slett** (lista og modulsida) har sidas egen dialog i stedet for nettleserens spørreboks.
+- **Gjenopprett** spør fortsatt ikke, men sier hva som kom tilbake: «… er gjenopprettet som utkast. Publiser den når du er klar.»
+  Før: «Modul gjenopprettet.»
+- Alle dialogene i modullista passer nå på en telefon. Bibliotekets dialogregel manglet `box-sizing`, så de fløt 48 px over på
+  390 px (kurssiden rettet det samme i #934).
+
+**Tjeneren:** ny lesing `GET /api/admin/content/modules/:moduleId/archive-preview` (`{ moduleId, archived, published, uses }`).
+`uses` kommer fra den samme regelen som sperren i `POST …/archive`, så klienten etterligner ikke regelen. Eierskapsvaktet, som
+`passed-count`.
+
+**Tester:** `m2-module-archive-preview-1168` (forhåndsvisningen = sperren), `admin-content-module-lifecycle-dialogs-1168` (e2e,
+seks tilfeller inkludert fokus og 390 px), og fire eksisterende e2e-filer som klikket gjennom nettleserens spørreboks. Seks
+mutasjoner, alle røde: en annen regel i forhåndsvisningen, arkivering uten ja, bekreftknapp i den sperrede dialogen, den gamle
+gjenopprettingsmeldingen, `window.confirm` på modulsida, og fokus til en knapp i en lukket meny.
+
+**QA 2.178.0** (Claude-agent): GO. Rettet etterpå: dekningsvakta for «brukes andre steder» (`content-in-use-guard`) kjente ikke
+ruta; to klikk på «Arkiver» i to rader mens forhåndsvisningen ble hentet kunne fylt den samme dialogen (nå én om gangen);
+modulsida manglet stilene for teksten og «Avbryt»; entall og flertall i teksten om kurset som holder modulen igjen; og
+integrasjonstesten fanget ikke et kurs med titler på flere språk (ny test, mutasjon 7: språket fjernet fra ruta → rød).
+
+**Kjent:**
+- Etter «Arkiver modulen» står knappen opptatt til lista er tegnet på nytt, så fokuset går tapt i det korte øyeblikket. En rad
+  som er utdatert (modulen er arkivert i en annen fane), får dialogen og deretter `module_already_archived`.
+- Resten av #1168 står: seksjon (spør etter, ikke før), klasse og tema (spørreboks, temaets telling), kursets slettetekst og
+  «Avpubliser» på kurs.
+- Modulsida har ingen «Arkiver» for en aktiv modul; det gjøres fra lista.
+
 ## 2.177.0 - 2026-11-22
 
 #1180: seksjoner følger kursets og modulens eierregel (produkteier 21.11.2026, `doc/DECISIONS.md`). Alle produsenter kan lese og

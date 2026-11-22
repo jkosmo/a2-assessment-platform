@@ -29,6 +29,7 @@ import { queueToast, showToast } from "/static/toast.js";
 import { runWithBusyButton } from "/static/busy-button.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
+import { confirmModuleArchive, confirmModuleDelete } from "./module-lifecycle-dialogs.js";
 import {
   manglendeSpraak,
   medHullAv,
@@ -258,8 +259,8 @@ function getListPage() {
         canManage && isPublished ? `<button class="row-action-btn" data-action="unpublish" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.unpublish"))}</button>` : "",
         // #705-UX: Slett vises kun for arkiverte moduler (terminal steg etter arkivering).
         canManage ? (isArchived
-          ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}">${escapeHtml(t("ui.action.restore"))}</button>`
-          : `<button class="row-action-btn" data-action="archive" data-module-id="${id}">${escapeHtml(t("ui.action.archive"))}</button>`) : "",
+          ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.restore"))}</button>`
+          : `<button class="row-action-btn" data-action="archive" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.archive"))}</button>`) : "",
         canManage && isArchived ? `<button class="row-action-btn destructive" data-action="delete" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
         canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("library.ownerOnlyHint"))}">${escapeHtml(t("ui.ownerOnly"))}</span>`,
       ];
@@ -391,8 +392,8 @@ function handleTableClick(btn) {
   if (!btn) return;
   const moduleId = btn.dataset.moduleId;
   const action = btn.dataset.action;
-  if (action === "archive") archiveModule(moduleId, btn);
-  else if (action === "restore") restoreModule(moduleId, btn);
+  if (action === "archive") archiveModule(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
+  else if (action === "restore") restoreModule(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
   else if (action === "delete") deleteModuleFromRow(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
   else if (action === "duplicate") duplicateModule(moduleId, btn);
   else if (action === "export") exportModulePackage(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
@@ -403,7 +404,8 @@ function handleTableClick(btn) {
 // melding hvis modulen brukes i et kurs eller et lagret kursutkast, eller har innleveringer eller
 // sertifiseringer (#1152: hver grunn har sin kode, og teksten slås opp i `errors.api.*`).
 async function deleteModuleFromRow(moduleId, moduleTitle, btn) {
-  if (!window.confirm(tf("library.deleteConfirm", { title: moduleTitle }))) return;
+  // #1168: sidas egen dialog, som kursets, i stedet for nettleserens spørreboks.
+  if (!(await confirmModuleDelete({ title: moduleTitle, t, tf, returnFocusTo: btn }))) return;
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}`, getHeaders, { method: "DELETE" });
@@ -450,23 +452,33 @@ async function downloadModulePackage(moduleId, moduleTitle) {
 // Archive / Restore
 // ---------------------------------------------------------------------------
 
-async function archiveModule(moduleId, btn) {
+async function archiveModule(moduleId, moduleTitle, btn) {
+  // #1168: sjekk først (kursene som holder modulen igjen), vis hva som skjer, og arkiver bare etter ja. Knappen er opptatt
+  // mens forhåndsvisningen hentes (se confirmModuleArchive) og mens arkiveringen sendes.
+  const answer = await confirmModuleArchive({ moduleId, title: moduleTitle, t, tf, apiFetch, getHeaders, returnFocusTo: btn });
+  if (answer.error) {
+    apiErrorToast(answer.error);
+    return;
+  }
+  if (!answer.confirmed) return;
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/archive`, getHeaders, { method: "POST" });
     showToast(t("library.archived"), "success");
     await loadModules();
   } catch (err) {
+    // Noen kan ha lagt modulen inn i et kurs etter forhåndsvisningen: tjenerens grunn, oversatt, som før.
     apiErrorToast(err);
     btn.disabled = false;
   }
 }
 
-async function restoreModule(moduleId, btn) {
+/** Gjenoppretting spør ikke, men sier hva som kom tilbake: modulen er et utkast og må publiseres igjen (#1168, som kurset). */
+async function restoreModule(moduleId, moduleTitle, btn) {
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/restore`, getHeaders, { method: "POST" });
-    showToast(t("library.restored"), "success");
+    showToast(tf("library.restoredAsDraft", { title: moduleTitle }), "success");
     await loadModules();
   } catch (err) {
     apiErrorToast(err);

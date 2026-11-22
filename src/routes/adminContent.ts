@@ -92,7 +92,7 @@ import { mcqCueWarnings, packageCueWarnings } from "../modules/adminContent/mcqC
 import { packageRubricWarnings, rubricWarnings } from "../modules/adminContent/rubricWarnings.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { isExtractionJobOwner, rememberExtractionJobOwner } from "../modules/adminContent/extractionJobOwners.js";
-import { describeModuleDeleteBlock } from "../modules/course/contentLifecycle.js";
+import { describeModuleDeleteBlock, findActiveUsesOfItems } from "../modules/course/contentLifecycle.js";
 import { retentionRequested } from "../modules/content/archivedRetention.js";
 import {
   submitParseJob,
@@ -1254,6 +1254,34 @@ adminContentRouter.get("/modules/archive", async (request, response) => {
     response.json({ modules });
   } catch {
     response.status(500).json({ error: "list_archive_failed" });
+  }
+});
+
+// #1168: hva en arkivering av modulen ville møtt, så dialogen kan sjekke først (kursets mønster, #1150). Kursene som holder
+// modulen igjen kommer fra den SAMME utregningen som sperren i `archiveModule` (`findActiveUsesOfItems`, «brukes andre steder»):
+// klienten etterligner ikke regelen. Bare lesing; arkiveringen sjekker på nytt under innholdslåsen. Samme vakt som
+// `POST …/archive`, så den står blant de vaktede lesingene i test/m2-content-read-by-producers-1165.test.ts.
+adminContentRouter.get("/modules/:moduleId/archive-preview", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  try {
+    const moduleId = request.params.moduleId;
+    await assertModuleOwnership(moduleId, actorId, request.context?.roles ?? []);
+    const module = await prisma.module.findUnique({ where: { id: moduleId }, select: { archivedAt: true, activeVersionId: true } });
+    if (!module) throw new NotFoundError("Module", "module_not_found", "Module not found.");
+    const uses = (await findActiveUsesOfItems({ moduleIds: [moduleId], sectionIds: [] }, { locale: requestLocale(request) }))
+      .modules.get(moduleId) ?? [];
+    response.json({ moduleId, archived: module.archivedAt !== null, published: module.activeVersionId !== null, uses });
+  } catch (error) {
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
+    response.status(400).json({ error: "archive_preview_failed", message: "Could not check the module." });
   }
 });
 

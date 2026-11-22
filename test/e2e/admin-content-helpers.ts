@@ -888,6 +888,17 @@ export async function mockCommonApis(page: Page, {
     });
   });
 
+  // #1168: «Arkiver» spør tjeneren først. Standard: ingen kurs holder modulen igjen. En test som vil ha et annet svar, legger
+  // sin egen rute etter denne (Playwright prøver den sist lagte først).
+  await page.route("**/api/admin/content/modules/*/archive-preview", async (route: Route) => {
+    const moduleId = decodeURIComponent(route.request().url().split("?")[0].split("/").slice(-2, -1)[0] ?? "");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ moduleId, archived: false, published: true, uses: [] }),
+    });
+  });
+
   await page.route("**/api/admin/content/modules/*/archive", async (route: Route) => {
     const moduleId = decodeURIComponent(route.request().url().split("/").slice(-2, -1)[0] ?? "");
     const moduleExport = exportMap.get(moduleId);

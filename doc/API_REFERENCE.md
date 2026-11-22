@@ -310,6 +310,14 @@ All of it runs in one transaction under the exclusive content lock; a rejection 
 
 **«Used in courses» (#1149).** `GET /api/admin/content/modules/library`: `courses: [{ id, title }]` and `courseCount` are the **active** courses that contain the module; an archived course is not listed or counted. `POST …/modules/:moduleId/unpublish` and `…/archive` are blocked (`400 content_in_use`) only by active courses. #1150: `…/archive` is also blocked by a saved draft (#1140) of an active course whose item list includes the module (`400 content_in_course_draft`); `…/unpublish` is not.
 
+**`GET /api/admin/content/modules/:moduleId/archive-preview` (#1168, 2.178.0).** What archiving the module would meet, so
+the library can ask first (the course pattern, #1150). Read-only; same access as `POST …/archive` (module owner or
+ADMINISTRATOR, **`403 content_ownership`** otherwise). Returns `{ moduleId, archived, published, uses: [{ courseId, title,
+via: "course" | "draft" }] }`. `uses` comes from the **same** rule as the block in `POST …/archive` («used elsewhere»: active
+courses and saved drafts of them, not archived courses), titles in the request's locale; empty means nothing holds the module
+back. `published`: the module has a live version (archiving unpublishes it, I3). The archive re-checks under the content lock,
+so a module added to a course in between is still refused there. `404 module_not_found`.
+
 **Version numbers (2.136.0), additive; `versionNo` stands as before.** `GET /api/admin/content/modules/library`: `activeVersionMajor`, `activeVersionMinor` (`null` without an active version). `GET /api/modules` and `GET /api/modules/:moduleId`: `versionMajor`, `versionMinor` on `activeVersion`. `GET /api/admin/content/modules/:moduleId/export`: `versionMajor`, `versionMinor` on each of `versions.moduleVersions` (`null` for a version never published).
 
 #### Restore an earlier module version (#896 S5)
@@ -527,7 +535,8 @@ open to every author**, like the course detail; it was owner-or-administrator. T
 **`canManage`** (owner or ADMINISTRATOR): the module page shows the module read-only when it is `false`. Every write on
 `/modules/:moduleId/…` is still owner-guarded (`403 content_ownership`). `GET /modules/:moduleId/export-package` is
 open the same way (export and «Dupliser» on someone else's module; the copy is owned by whoever imports it).
-`passed-count` and `publish-preview-versioned` (preludes to a publish) stay owner-guarded. The answer key is not
+`passed-count`, `publish-preview-versioned` (preludes to a publish) and (#1168) `archive-preview` (prelude to an archive)
+stay owner-guarded. The answer key is not
 protected from other authors either: product owner 2026-09-08 (#1031), `doc/DECISIONS.md` «Fagansvarlige deler innsyn».
 Until v2.11.11 the answer key was stripped for non-administrators; that redaction was removed (#392).
 

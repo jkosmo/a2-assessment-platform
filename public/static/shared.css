@@ -1148,6 +1148,32 @@ dialog::backdrop {
   background: rgba(0, 0, 0, 0.4);
 }
 
+/* #1168: modulens dialoger for «Arkiver» og «Slett» (module-lifecycle-dialogs.js), i biblioteket og på modulsida. Samme form
+   som kursets (.course-lifecycle-dialog i admin-content-courses.html): lista ruller inne i dialogen, og tittelen og knappene
+   ses alltid, også med lange kursnavn på en telefon. Her, ikke på sidene, fordi to sider bruker den. */
+.module-lifecycle-dialog {
+  box-sizing: border-box;
+  max-width: min(560px, calc(100vw - 24px));
+}
+.module-lifecycle-dialog[open] { display: flex; flex-direction: column; }
+.module-lifecycle-dialog > .dialog-title { overflow-wrap: anywhere; }
+.module-lifecycle-body { flex: 1 1 auto; overflow-y: auto; overflow-wrap: anywhere; }
+.module-lifecycle-body ul { margin: 0 0 var(--space-1); padding-left: 20px; }
+.module-lifecycle-body li { margin: 4px 0; }
+.module-lifecycle-note { display: block; font-size: 12px; color: var(--color-meta); }
+/* Modulsida (admin-content.html) har ikke bibliotekets og kurssidens regler for teksten og «Avbryt» (QA 2.178.0). */
+.module-lifecycle-dialog .dialog-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
+.module-lifecycle-dialog .dialog-cancel {
+  background: none;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-button);
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--color-meta);
+}
+.module-lifecycle-dialog .dialog-cancel:hover { background: var(--color-row-hover); }
+
 .hidden {
   display: none;
 }

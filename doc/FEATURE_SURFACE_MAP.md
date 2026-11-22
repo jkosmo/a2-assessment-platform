@@ -1692,6 +1692,29 @@ og et arkivert kurs med et gammelt utkast). Den gamle
 `admin-content-workspaces.spec.ts` «course list can archive a course …» går nå gjennom 404-reserven (den statiske testtjeneren
 har ingen forhåndsvisning).
 
+### 33d-2. Modulens «Arkiver», «Gjenopprett» og «Slett» i kursets mønster (#1168, 2.178.0)
+
+Én dialog for begge sidene, laget ved behov: `public/static/module-lifecycle-dialogs.js` (`#moduleLifecycleDialog`, stilene
+`.module-lifecycle-*` i `shared.css`).
+
+| Handling | Flate | Hvor | Hva |
+|---|---|---|---|
+| Arkiver | Biblioteket, raden (eller «Mer») | `archiveModule` i `admin-content-library.js` → `confirmModuleArchive` | Henter `GET …/modules/:id/archive-preview`. `uses` ikke tom: kursene med lenker (`via: "draft"` merkes), bare «Lukk». Tom: hva som skjer (+ avpublisering når `published`), «Arkiver modulen». Nei sendes ikke. En sperre fra `POST …/archive` etter ja (noen la modulen inn i mellomtiden) vises som før, oversatt |
+| Arkiver | Modulsida | finnes ikke (bare biblioteket har «Arkiver» for en aktiv modul) | — |
+| Gjenopprett | Biblioteket og modulsida (`restoreArchivedModule` i `admin-content-shell.js`) | ingen dialog | Meldingen `library.restoredAsDraft`: «… er gjenopprettet som utkast. Publiser den når du er klar.» |
+| Slett | Biblioteket (`deleteModuleFromRow`) og modulsida (`deleteArchivedModule`) | `confirmModuleDelete` | Sidas dialog i stedet for `window.confirm`. Avslag fra tjeneren som før (`errors.api.*`) |
+| Fokus | begge | `focusBack` | Til knappen, eller til «Mer» i samme rad når knappen står i menyen (menyen lukkes av klikket i dialogen) |
+
+Regelen for «brukes andre steder» bor på tjeneren (`findActiveUsesOfItems`); forhåndsvisningen og sperren bruker den samme.
+Bibliotekets generelle `dialog`-regel fikk `box-sizing` og `calc(100vw - 24px)` som kurssiden (#934): før fløt alle
+bibliotekets dialoger 48 px over på en 390 px-skjerm.
+
+**Vakter:** `test/m2-module-archive-preview-1168.test.ts` (forhåndsvisningen = sperren, med kurs, utkast og arkivert kurs;
+kontroll uten bruk), `test/m2-content-read-by-producers-1165.test.ts` (eierskapsvakta),
+`test/e2e/admin-content-module-lifecycle-dialogs-1168.spec.ts` (sperret, bekreftet, Avbryt, upublisert kontroll,
+gjenoppretting, sletting, fokus, 390 px), og `admin-content-archived-readonly-1151.spec.ts` (modulsida). Seks mutasjoner,
+alle røde. **Ikke gjort i #1168 ennå:** seksjon, klasse, tema og kursets «Avpubliser» (se saken).
+
 ### 33e. Arkivert er urørlig, og slett krever arkivert (#1151 skive 3a, 3b og 3c)
 
 Regelen (`doc/design/CONTENT_LIFECYCLE.md`, G5 og G4) bor i ÉN vakt, `assertNotArchived` i
@@ -1736,7 +1759,7 @@ sperren finnes bare her. Mønsteret er det arkiverte kurset (33d): linja under s
 | Kalibreringen | `admin-content-calibration.js` | Uendret: arkiverte moduler var alt filtrert bort fra velgeren (`status !== "archived"`), så tersklene kan ikke lagres for dem herfra |
 | Feilene | `isArchivedRejection` i `api-error.js` | Lagringen på modulsida og «Gjenopprett» på en eldre versjon tilbyr ikke «Prøv igjen» for de arkiverte kodene (kan ikke lykkes); `503 content_busy` får det fortsatt. Alle kodene vises gjennom `describeApiError` på brukerens språk |
 
-Tekstene: `shell.module.archivedNotice`, `shell.module.deleteConfirm`, `sections.archivedNotice`,
+Tekstene: `shell.module.archivedNotice`, `sections.archivedNotice` (slettespørsmålet er `library.deleteDialog.*` fra #1168),
 `adminContent.courses.importChoice.archived*`, `adminContent.courses.importArchived*` i `public/i18n/admin-content-translations.js`
 (nb, nn, en-GB). Feilkodene står i `public/i18n/participant-translations.js`.
 

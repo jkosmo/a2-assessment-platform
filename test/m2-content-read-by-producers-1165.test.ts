@@ -179,6 +179,7 @@ describe("#1165: en annen produsent kan lese kurs og moduler hen ikke eier", () 
       K(courseId, "/enrollments"),
       K(courseId, "/publish-audience"),
       M(moduleId, "/passed-count"),
+      M(moduleId, "/archive-preview"),
       M(moduleId, `/module-versions/${moduleVersionId}/publish-preview-versioned`),
     ];
     for (const path of guarded) {

@@ -1,4 +1,5 @@
 import { escapeHtml } from "./html-escape.js";
+import { confirmModuleDelete } from "./module-lifecycle-dialogs.js";
 import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
 import { lifecycleBadge } from "./content-status-badge.js";
 import { createFormPage, formPageTexts } from "./form-page.js";
@@ -3618,7 +3619,8 @@ async function restoreArchivedModule() {
   moduleLifecycleBusy = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/restore`, getHeaders, { method: "POST" });
-    showToast(t("library.restored"), "success");
+    // #1168: si hva som kom tilbake: et utkast, som må publiseres igjen (som kurset).
+    showToast(tf("library.restoredAsDraft", { title: localizeValue(bundle?.module?.title) || moduleId }), "success");
     await loadModule(moduleId);
   } catch (err) {
     moduleLifecycleErrorToast(err);
@@ -3632,8 +3634,13 @@ async function deleteArchivedModule() {
   const moduleId = selectedModuleId;
   if (!moduleId || moduleLifecycleBusy) return;
   const title = localizeValue(bundle?.module?.title) || moduleId;
-  if (!window.confirm(tf("shell.module.deleteConfirm", { title }))) return;
+  // #1168: sidas egen dialog, den samme som i biblioteket, i stedet for nettleserens spørreboks. Opptatt mens den står åpen.
   moduleLifecycleBusy = true;
+  const confirmed = await confirmModuleDelete({ title, t, tf, returnFocusTo: document.querySelector('#moduleFormHead [data-ws-key="delete"]') });
+  if (!confirmed) {
+    moduleLifecycleBusy = false;
+    return;
+  }
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}`, getHeaders, { method: "DELETE" });
     // I kø, ikke vist: sida byttes i neste linje (som modulimporten, #1119).

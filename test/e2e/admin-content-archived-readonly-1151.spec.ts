@@ -188,6 +188,8 @@ test.describe("#1151 skive 3c — modulsida", () => {
     await (await revealRowAction(page, page.locator('#moduleFormHead [data-ws-key="restore"]'))).click();
 
     await expect.poll(() => restores.length).toBe(1);
+    // #1168: meldingen sier hva som kom tilbake.
+    await expect(page.locator(".toast__message")).toHaveText("«Arbeidsmiljø i praksis (NB)» er gjenopprettet som utkast. Publiser den når du er klar.");
     await expect(page.locator("[data-module-archived-notice]")).toHaveCount(0);
     await expect(page.locator("#previewEditTitle")).toBeEnabled();
     await expect(page.locator("#formSaveBtn")).toHaveCount(1);
@@ -202,14 +204,22 @@ test.describe("#1151 skive 3c — modulsida", () => {
       deletes.push(route.request().url());
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ moduleId: MODULE_ID }) });
     });
-    const questions: string[] = [];
-    page.on("dialog", (dialog) => { questions.push(dialog.message()); void dialog.accept(); });
+    // #1168: sidas egen dialog (den samme som i biblioteket), ikke nettleserens spørreboks.
+    const browserQuestions: string[] = [];
+    page.on("dialog", (dialog) => { browserQuestions.push(dialog.message()); void dialog.dismiss(); });
     await page.goto(MODULE_PAGE);
     await page.locator("#previewEditTitle").waitFor();
     await (await revealRowAction(page, page.locator('#moduleFormHead [data-ws-key="delete"]'))).click();
 
+    const dialog = page.locator("#moduleLifecycleDialog");
+    await expect(dialog).toBeVisible();
+    await expect(page.locator("#moduleLifecycleDialogTitle")).toHaveText("Slett «Arbeidsmiljø i praksis (NB)»");
+    await expect(page.locator("#moduleLifecycleDialogText")).toHaveText("Modulen slettes for godt. Det kan ikke angres.");
+    expect(deletes).toEqual([]);
+    await page.locator("#moduleLifecycleDialogConfirmBtn").click();
+
     await expect.poll(() => deletes.length).toBe(1);
-    expect(questions[0]).toContain("Slette modulen «Arbeidsmiljø i praksis (NB)» for godt?");
+    expect(browserQuestions).toEqual([]);
     await expect(page).toHaveURL(/\/admin-content$/);
   });
 

@@ -198,6 +198,8 @@ test("C: «Slett» på en arkivert modul i biblioteket fjerner raden uten feilme
   const slett = rad.locator('[data-action="delete"], button:has-text("Slett")').first();
   if (!(await slett.isVisible())) await rad.locator("details.row-more > summary").click();
   await slett.click();
+  // 2.178.0 (#1168): sidas egen dialog i stedet for nettleserens spørreboks.
+  await page.locator("#moduleLifecycleDialogConfirmBtn").click();
   const r = await svar;
   noter("C, svaret", r.status());
   expect(r.status()).toBeLessThan(300);

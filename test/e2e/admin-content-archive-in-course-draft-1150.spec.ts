@@ -132,6 +132,9 @@ test.describe("#1150 — arkivering stoppet av et lagret utkast: meldingen sier 
     const row = page.locator(".list-table tbody tr", { hasText: "Published module" });
     await expect(row).toHaveCount(1);
     await (await revealRowAction(page, page.locator('[data-action="archive"][data-module-id="module-1150"]'))).click();
+    // #1168: forhåndsvisningen (fellesmocken) sier at ingen kurs holder modulen igjen; utkastet kommer til mellom forhåndsvisningen
+    // og arkiveringen. Sperren fra tjeneren vises da som før.
+    await page.locator("#moduleLifecycleDialogConfirmBtn").click();
     await expect.poll(() => archiveCalls).toBe(1);
 
     await expect(page.locator(".toast__message")).toHaveText(EXPECTED["en-GB"]);

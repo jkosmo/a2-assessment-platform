@@ -56,17 +56,23 @@ API:
 
 ### 3. Arkivere en modul og gjenopprette fra arkivbiblioteket
 
-**Arkivere:**
-1. Finn modulen i listen
-2. Klikk **Arkiver** (kun tilgjengelig på avpubliserte moduler)
-3. Bekreft i dialogboksen
-4. Modulen flyttes til **Arkivbiblioteket**
+**Arkivere (fra 2.178.0, #1168):**
+1. Finn modulen i lista og klikk **Arkiver** (i raden eller under «Mer»).
+2. Dialogen sjekker først om et kurs holder modulen igjen:
+   - **Står den i et aktivt kurs, eller i et lagret utkast av et kurs,** viser dialogen kursene med lenker og bare «Lukk».
+     Ta modulen ut av kursene (eller utkastene) først.
+   - **Ellers** sier dialogen hva som skjer: modulen forsvinner fra de aktive og kan ikke legges inn i kurs, deltakerne
+     beholder besvarelsene og resultatene, og en publisert modul avpubliseres. Klikk **Arkiver modulen** for å arkivere.
+3. Modulen står under filteret **Arkiverte**.
 
-**Gjenopprette fra arkiv:**
-1. Gå til **Arkivbiblioteket** under **Moduler**-fanen
-2. Finn ønsket modul
-3. Klikk **Gjenopprett**
-4. Modulen gjenopprettes som kladd — publiser på nytt for å gjøre den tilgjengelig
+**Gjenopprette:**
+1. Velg **Arkiverte** i modullista (eller åpne den arkiverte modulen).
+2. Klikk **Gjenopprett**. Det kommer ikke noe spørsmål.
+3. Meldingen sier at modulen er gjenopprettet **som utkast**: publiser den på nytt for å gjøre den tilgjengelig.
+
+**Slette:** bare en arkivert modul. **Slett** åpner en dialog («Slett «…»»), og modulen slettes først når du klikker
+**Slett modulen**. Kan den ikke slettes (besvarelser, kursbevis, et kurs eller et kursutkast holder den igjen), sier meldingen
+hvorfor.
 
 #### Hva du ser på en arkivert modul eller seksjon
 

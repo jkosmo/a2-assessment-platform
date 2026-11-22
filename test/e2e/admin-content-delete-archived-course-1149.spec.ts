@@ -138,8 +138,9 @@ test.describe("#1149 — sletting stoppet av et arkivert kurs: meldingen sier hv
     // Lista viser modulen som ubrukt: det arkiverte kurset teller ikke som bruk.
     await expect(row.locator(".course-count-zero")).toHaveText("0");
 
-    page.once("dialog", (dialog) => dialog.accept());
     await (await revealRowAction(page, page.locator('[data-action="delete"][data-module-id="module-1149"]'))).click();
+    // #1168: sidas egen dialog, ikke nettleserens spørreboks.
+    await page.locator("#moduleLifecycleDialogConfirmBtn").click();
     await expect.poll(() => deleteCalls).toBe(1);
 
     await expect(page.locator(".toast__message")).toHaveText(EXPECTED["en-GB"]);

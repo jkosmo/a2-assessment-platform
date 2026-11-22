@@ -94,7 +94,11 @@ describe("#1173 nye nøkler finnes på alle tre språk, og bokmål er ikke engel
     "shell.preview.paneAria",
     // #1173 (rest)
     "classes.archiveConfirm", "classes.deleteConfirm", "classes.restoreConfirm",
-    "library.deleteConfirm", "library.unpublishConfirm", "library.purge.title", "library.purge.intro",
+    // #1168: «library.deleteConfirm» (nettleserens spørreboks) er erstattet av dialogens tekster.
+    "library.deleteDialog.title", "library.deleteDialog.text", "library.deleteDialog.confirm",
+    "library.archiveDialog.title", "library.archiveDialog.intro", "library.archiveDialog.published",
+    "library.archiveDialog.confirm", "library.archiveDialog.blockedOne", "library.archiveDialog.blockedMany", "library.archiveDialog.viaDraft", "library.restoredAsDraft",
+    "library.unpublishConfirm", "library.purge.title", "library.purge.intro",
     "library.purge.loading", "library.purge.willDelete", "library.purge.skipped", "library.purge.typeBefore",
     "library.purge.typeAfter", "library.purge.confirm", "library.purge.previewFailed", "library.purge.failed",
     "library.purge.doneWithFailures", "library.purge.done",
