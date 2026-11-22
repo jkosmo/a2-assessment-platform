@@ -24,7 +24,11 @@ egne ord, 390 px), `admin-content-workspaces` (avpublisering fra lista gjennom d
 seksjonenes fra 2.179.0, er oversatt). Mutasjoner, alle røde: spørreboksen tilbake, publiseringens ord i avpubliseringen,
 den gamle slettedialogteksten, avpubliseringens ord i publiseringen og i versjonsdialogen. Én mutasjon overlevde først (en
 standardverdi bare versjonsdialogen brukte, og ingen test leste overskriften der): standardverdien er fjernet, og testen leser
-den nå.
+den nå. Full runde grønn: enhet 3484, DOM 109, e2e 1253, integrasjon 1495. **QA 2.180.0** (Codex): GO, ingen funn i skiven.
+
+**Stage (hjemme, 22.11.2026):** `test/stage/release-2-180-kurs-avpubliser.spec.ts` 3/3 mot ekte data: «Avpubliser» i kurssidas hode
+viser sidas dialog med «Hvem mister tilgangen» fra tjenerens tall (et begrenset kurs uten tildelinger: «Ingen»), Avbryt lar kurset
+stå publisert, bekreft avpubliserer; slettedialogen på det arkiverte kurset nevner modulene og seksjonene. Ingen spørreboks.
 
 **Gjenstår i #1168:** klasse og tema (spørreboks, temaets telling).
 
