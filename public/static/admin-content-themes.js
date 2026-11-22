@@ -97,10 +97,10 @@ function getListPage() {
       : [],
     load: async () => (await apiFetch("/api/admin/content/themes", getHeaders)).themes ?? [],
     describeError: (err) => describeApiError(err, t).headline,
-    onAction: (action, _id, _btn, theme) => {
+    onAction: (action, _id, btn, theme) => {
       if (!theme) return;
       if (action === "edit") openThemeDialog(theme);
-      else if (action === "delete") openDeleteDialog(theme);
+      else if (action === "delete") openDeleteDialog(theme, btn);
     },
     afterRender: () => {
       document.getElementById("newThemeBtn")?.addEventListener("click", () => openThemeDialog(null));
@@ -221,12 +221,35 @@ document.getElementById("themeDialogCancelBtn")?.addEventListener("click", () =>
 const deleteDialog = document.getElementById("themeDeleteDialog");
 let deletingTheme = null;
 
-function openDeleteDialog(theme) {
+// #1168: tallet hentes fra tjeneren når dialogen åpnes (`GET …/themes/:id/delete-preview`), ikke fra lista. Lista teller bare
+// aktive kurs, og kan være gammel; slettingen kobler fra alle, også arkiverte. Dialogen sier derfor hvor mange av dem som er
+// arkivert: gjenopprettes et av dem, står det uten temaet.
+// Én forhåndsvisning om gangen (QA 2.181.0): et klikk på «Slett» for et annet tema mens denne hentes, kunne ellers åpnet
+// dialogen for det ene og latt svaret for det andre bytte hvilket tema bekreftelsen sletter.
+let deletePreviewPending = false;
+async function openDeleteDialog(theme, button = null) {
+  if (deleteDialog.open || deletePreviewPending) return;
+  deletePreviewPending = true;
+  if (button) button.disabled = true;
+  let preview;
+  try {
+    preview = await apiFetch(`/api/admin/content/themes/${encodeURIComponent(theme.id)}/delete-preview`, getHeaders);
+  } catch (error) {
+    apiErrorToast(error);
+    return;
+  } finally {
+    deletePreviewPending = false;
+    if (button) button.disabled = false;
+  }
+  const count = Number(preview?.courseCount) || 0;
+  const archived = Number(preview?.archivedCourseCount) || 0;
   deletingTheme = theme;
   document.getElementById("themeDeleteTitle").textContent = tf("themes.delete.title", { name: displayName(theme) });
-  document.getElementById("themeDeleteText").textContent = theme.courseCount > 0
-    ? tf("themes.delete.text", { count: theme.courseCount })
-    : t("themes.delete.textNone");
+  document.getElementById("themeDeleteText").textContent = count === 0
+    ? t("themes.delete.textNone")
+    : archived > 0
+      ? tf("themes.delete.textWithArchived", { count, archived })
+      : tf("themes.delete.text", { count });
   document.getElementById("themeDeleteConfirmBtn").textContent = t("themes.delete.confirm");
   document.getElementById("themeDeleteCancelBtn").textContent = t("themes.dialog.cancel");
   deleteDialog.showModal();

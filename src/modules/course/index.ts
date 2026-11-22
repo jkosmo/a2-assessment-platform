@@ -19,6 +19,7 @@ export {
   createCourseTheme,
   updateCourseTheme,
   deleteCourseTheme,
+  previewCourseThemeDelete,
   findThemeIdsForCourse,
   findLocalizedThemesForCourses,
   sortThemesByName,

@@ -304,9 +304,10 @@ function captureConfirm(page: Page) {
 }
 
 test.describe("#1173 bekreftelsene står på sidens språk", () => {
+  // #1168: klassens «Arkiver» har sidas dialog, ikke nettleserens spørreboks. Språket sjekkes i dialogens tittel.
   for (const [locale, expected] of [
-    ["en-GB", "Archive the class «Kull 2026»?"],
-    ["nb", "Arkivere klassen «Kull 2026»?"],
+    ["en-GB", "Archive «Kull 2026»?"],
+    ["nb", "Arkivere «Kull 2026»?"],
   ] as const) {
     test(`arkiver klasse (${locale})`, async ({ page }) => {
       await useLocale(page, locale);
@@ -315,7 +316,8 @@ test.describe("#1173 bekreftelsene står på sidens språk", () => {
       const messages = captureConfirm(page);
       await page.goto("/deltakere/klasser");
       await (await revealRowAction(page, page.locator('[data-action="archive"][data-id="cls-1"]'))).click();
-      await expect.poll(() => messages).toEqual([expected]);
+      await expect(page.locator("#moduleLifecycleDialogTitle")).toHaveText(expected);
+      expect(messages).toEqual([]);
     });
   }
 

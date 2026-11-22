@@ -51,6 +51,8 @@ auto-publish. No new route; the behaviour is on
 `GET /api/admin/content/modules/:moduleId/archive-preview` and `GET /api/admin/content/sections/:sectionId/archive-preview`
 (owner-guarded, the same rule as the block in `POST …/archive`); the library, the module page, the section list and the section
 editor show a page dialog instead of the browser's confirm. See `doc/API_REFERENCE.md` and `doc/FEATURE_SURFACE_MAP.md` §33d-2.
+2.181.0: `GET /api/admin/content/themes/:themeId/delete-preview` (administrator only) gives the theme's delete dialog a fresh
+count of all courses that lose the theme, archived ones separately. No new page.
 
 **#1140 etappe 2, skive 2c — the course builder saves a published course to a draft (2.157.0).** No new page. On `/admin-content/courses/:courseId` «Lagre» on a published course writes the draft; «Publiser utkastet» and «Forkast utkast» are new buttons; the course list shows «Publisert» + «Nyere utkast». Author guide: `doc/COURSE_DRAFTS_GUIDE.md`.
 

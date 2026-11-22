@@ -93,7 +93,10 @@ describe("#1173 nye nøkler finnes på alle tre språk, og bokmål er ikke engel
     "library.courseCountAria", "library.coursesPopoverAria", "library.unpublishedToast", "library.duplicatedToast",
     "shell.preview.paneAria",
     // #1173 (rest)
-    "classes.archiveConfirm", "classes.deleteConfirm", "classes.restoreConfirm",
+    // #1168: klassens spørrebokser er erstattet av sidas dialog.
+    "classes.archiveDialog.title", "classes.archiveDialog.text", "classes.archiveDialog.confirm",
+    "classes.deleteDialog.title", "classes.deleteDialog.text", "classes.deleteDialog.confirm", "classes.restoredNamed",
+    "themes.delete.textWithArchived",
     // #1168: «library.deleteConfirm» (nettleserens spørreboks) er erstattet av dialogens tekster.
     "library.deleteDialog.title", "library.deleteDialog.text", "library.deleteDialog.confirm",
     "library.archiveDialog.title", "library.archiveDialog.intro", "library.archiveDialog.published",

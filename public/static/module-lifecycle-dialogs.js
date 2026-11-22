@@ -172,6 +172,22 @@ function confirmItemDelete(item, { title, t, tf, returnFocusTo = null }) {
   });
 }
 
+/**
+ * #1168 (klasser): en enkel bekreftelse i den samme dialogen, for en handling uten forhåndsvisning fra tjeneren. `danger`: rød
+ * knapp (sletting). Svarer `true` når forfatteren bekrefter.
+ */
+export function confirmLifecycleStep({ kind, title, text, confirmLabel, danger = false, t, returnFocusTo = null }) {
+  return showModuleDialog({
+    kind,
+    title,
+    text,
+    confirmLabel,
+    confirmClass: danger ? "btn-danger" : "btn-primary",
+    cancelLabel: t("ui.action.cancel"),
+    returnFocusTo,
+  });
+}
+
 export function confirmModuleArchive({ moduleId, ...rest }) {
   return confirmItemArchive("module", { id: moduleId, ...rest });
 }

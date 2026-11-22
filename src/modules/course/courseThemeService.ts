@@ -99,6 +99,26 @@ export async function updateCourseTheme(themeId: string, input: { name: string; 
   });
 }
 
+/**
+ * #1168: hva en sletting av temaet ville gjort, så dialogen viser et ferskt tall før administratoren svarer. Før viste den
+ * `courseCount` fra lista: bare AKTIVE kurs (#1149), og så gammelt som lista var. Slettingen under kobler fra ALLE kurs, også
+ * arkiverte (gjenopprettes et arkivert kurs, mangler temaet). `courseCount` er det samme tallet slettingen teller
+ * (`detachedCourseCount`); `archivedCourseCount` er de av dem som er arkivert.
+ */
+export async function previewCourseThemeDelete(themeId: string) {
+  const theme = await prisma.courseTheme.findUnique({
+    where: { id: themeId },
+    select: { id: true, _count: { select: { courses: true } } },
+  });
+  if (!theme) throw new NotFoundError("Course theme", "course_theme_not_found", "Course theme not found.");
+  const activeCourseCount = await prisma.courseThemeAssignment.count({ where: { themeId, course: activeCourseWhere } });
+  return {
+    themeId,
+    courseCount: theme._count.courses,
+    archivedCourseCount: theme._count.courses - activeCourseCount,
+  };
+}
+
 /** Sletter temaet. Kursene mister bare koblingen (onDelete: Cascade på koblingstabellen). */
 export async function deleteCourseTheme(themeId: string, actorId?: string) {
   return runInTransaction(async (tx) => {

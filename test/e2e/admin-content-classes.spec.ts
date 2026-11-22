@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { revealRowAction } from "./admin-content-helpers.js";
 
 // #645/CL-3: browser e2e for the classes (cohort) admin page — runs the real front-end JS against
 // mocked APIs, covering the client wiring (list, create, add student via search, assign course).
@@ -190,10 +191,10 @@ test("classes admin: Aktive/Arkiverte filter, Type column, and restore action", 
   await expect(body).toContainText("Arkivert");
   await expect(body.locator('[data-action="restore"][data-id="cls-arch"]')).toBeVisible();
 
-  // Restore → confirm dialog → POST /:classId/restore.
-  page.once("dialog", (dialog) => dialog.accept());
+  // Restore → POST /:classId/restore. #1168: uten spørsmål (kursets mønster), meldingen sier hvilken klasse.
   await body.locator('[data-action="restore"][data-id="cls-arch"]').click();
   await expect.poll(() => restoreUrl).toContain("/classes/cls-arch/restore");
+  await expect(page.locator(".toast__message").first()).toContainText("Kull Arkivert");
 });
 
 // #765: the «Deltakere» sub-navigation (Klasser | Manuell behandling | Resultater) role-gates its tabs
@@ -496,11 +497,93 @@ test("arkivert klasse: ingen felt for å legge til deltakere eller tildele kurs,
   await expect(notes.first()).toHaveText("Klassen er arkivert. Gjenopprett den for å legge til deltakere eller tildele kurs.");
   await expect(notes.first()).toBeVisible();
 
-  page.once("dialog", (dialog) => dialog.accept());
+  // #1168: gjenoppretting spør ikke.
   await page.locator('.form-page-actions [data-action="restore"]').click();
   await expect(page.locator("#studentSearch")).toBeVisible();
   await expect(page.locator("#assignCourseBtn")).toBeVisible();
   await expect(page.locator("[data-class-archived-note]")).toHaveCount(0);
+});
+
+// #1168: «Arkiver» og «Slett» på en klasse har sidas dialog (som modulene og seksjonene), ikke nettleserens spørreboks.
+async function classLifecycleCalls(page: Page) {
+  const calls = { archive: 0, del: 0, browserQuestions: [] as string[] };
+  await page.route("**/api/admin/content/classes/*/archive", (route: Route) => {
+    calls.archive += 1;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.route("**/api/admin/content/classes/cls-1", (route: Route) => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    calls.del += 1;
+    return route.fulfill({ status: 204, body: "" });
+  });
+  page.on("dialog", (dialog) => { calls.browserQuestions.push(dialog.message()); void dialog.dismiss(); });
+  return calls;
+}
+
+test("#1168: «Arkiver» i lista: sidas dialog sier hva som skjer med kursene; Avbryt sender ingenting, bekreft arkiverer én gang", async ({ page }) => {
+  await mockOneClass(page, { archivedAt: null });
+  const calls = await classLifecycleCalls(page);
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser");
+  const archive = async () => (await revealRowAction(page, page.locator('[data-action="archive"][data-id="cls-1"]'))).click();
+
+  await archive();
+  const dialog = page.locator("#moduleLifecycleDialog");
+  await expect(dialog).toHaveAttribute("data-module-dialog", "archive");
+  await expect(page.locator("#moduleLifecycleDialogTitle")).toHaveText("Arkivere «Kull 2025»?");
+  await expect(page.locator("#moduleLifecycleDialogText")).toContainText("forsvinner fra Mine kurs; påbegynte og fullførte blir stående, og påminnelsene stopper");
+  await expect(page.locator("#moduleLifecycleDialogConfirmBtn")).toHaveText("Arkiver klassen");
+  await expect(page.locator("#moduleLifecycleDialogCancelBtn")).toBeFocused();
+  await page.locator("#moduleLifecycleDialogCancelBtn").click();
+  expect(calls.archive).toBe(0);
+
+  await archive();
+  await page.locator("#moduleLifecycleDialogConfirmBtn").click();
+  await expect.poll(() => calls.archive).toBe(1);
+  expect(calls.browserQuestions).toEqual([]);
+});
+
+test("#1168: «Slett» på en arkivert klasse i hodet: sidas dialog med rød knapp; Avbryt sender ingenting, bekreft sletter", async ({ page }) => {
+  await mockOneClass(page, { archivedAt: "2026-01-01T00:00:00.000Z" });
+  const calls = await classLifecycleCalls(page);
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser?id=cls-1");
+  const del = async () => (await revealRowAction(page, page.locator('.form-page-actions [data-action="delete"]'))).click();
+
+  await del();
+  await expect(page.locator("#moduleLifecycleDialog")).toHaveAttribute("data-module-dialog", "delete");
+  await expect(page.locator("#moduleLifecycleDialogTitle")).toHaveText("Slette «Kull 2025» for godt?");
+  await expect(page.locator("#moduleLifecycleDialogText")).toHaveText("Medlemslista og kurstildelingene forsvinner. Deltakernes egen fremdrift beholdes. Det kan ikke angres.");
+  await expect(page.locator("#moduleLifecycleDialogConfirmBtn")).toHaveClass(/btn-danger/);
+  await page.locator("#moduleLifecycleDialogCancelBtn").click();
+  expect(calls.del).toBe(0);
+
+  await del();
+  await page.locator("#moduleLifecycleDialogConfirmBtn").click();
+  await expect.poll(() => calls.del).toBe(1);
+  expect(calls.browserQuestions).toEqual([]);
+});
+
+test("#1168: «Gjenopprett» spør ikke, og et dobbeltklikk sender bare én gjenoppretting (QA 2.181.0)", async ({ page }) => {
+  await mockOneClass(page, { archivedAt: "2026-01-01T00:00:00.000Z" });
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let restores = 0;
+  await page.route("**/api/admin/content/classes/*/restore", async (route: Route) => {
+    restores += 1;
+    await gate;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser");
+  await page.locator('.list-filter-btn[data-filter="archived"]').click();
+  const restore = await revealRowAction(page, page.locator('[data-action="restore"][data-id="cls-1"]'));
+  await restore.dblclick();
+  await expect.poll(() => restores).toBe(1);
+  await page.waitForTimeout(300);
+  expect(restores).toBe(1);
+  release();
+  await expect(page.locator(".toast__message").first()).toHaveText("Klassen «Kull 2025» er gjenopprettet.");
 });
 
 test("aktiv klasse: ingen forklaring om arkivering, og feltene står (kontroll)", async ({ page }) => {

@@ -10,6 +10,7 @@ import { renderOwnerPanel } from "/static/owner-panel.js";
 import { createListPage } from "/static/list-page.js";
 import { createFormPage, formPageTexts } from "/static/form-page.js";
 import { lifecycleOf } from "/static/content-status-badge.js";
+import { confirmLifecycleStep } from "/static/module-lifecycle-dialogs.js";
 
 // #645/CL-3: admin UI for classes (cohorts) — list, create, manage members, assign courses.
 
@@ -133,9 +134,9 @@ function getListPage() {
     describeError: (err) => apiErrorText(err),
     onAction: (action, id, btn) => {
       if (action === "open") goToClass(id);
-      if (action === "archive") archiveClass(id, btn.dataset.name);
-      if (action === "restore") restoreClassInAdmin(id, btn.dataset.name);
-      if (action === "delete") deleteClassInAdmin(id, btn.dataset.name);
+      if (action === "archive") archiveClass(id, btn.dataset.name, { button: btn });
+      if (action === "restore") restoreClassInAdmin(id, btn.dataset.name, { button: btn });
+      if (action === "delete") deleteClassInAdmin(id, btn.dataset.name, { button: btn });
     },
     afterRender: () => {
       document.getElementById("newClassBtn")?.addEventListener("click", createClassFlow);
@@ -225,8 +226,19 @@ function createClassFlow() {
   return goToClass(null);
 }
 
-async function archiveClass(id, name, { stay = false } = {}) {
-  if (!window.confirm(tf("classes.archiveConfirm", { name }))) return;
+// #1168: sidas dialog, som modulene og seksjonene, i stedet for nettleserens spørreboks («Arkivere klassen …?»). Den sier hva
+// arkiveringen gjør med medlemmenes kurs (classService.ts, `getClassAssignedCourseDueDates`): kurs de bare har fått gjennom
+// klassen og ikke har begynt på, forsvinner fra Mine kurs; påbegynte og fullførte blir stående; påminnelsene stopper.
+async function archiveClass(id, name, { stay = false, button = null } = {}) {
+  const confirmed = await confirmLifecycleStep({
+    kind: "archive",
+    title: tf("classes.archiveDialog.title", { name }),
+    text: tNav("classes.archiveDialog.text"),
+    confirmLabel: tNav("classes.archiveDialog.confirm"),
+    t: tNav,
+    returnFocusTo: button,
+  });
+  if (!confirmed) return;
   try {
     // #1046 D3: POST /archive, som kurs og seksjoner. DELETE sletter nå for godt.
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/archive`, getHeaders, { method: "POST" });
@@ -239,8 +251,18 @@ async function archiveClass(id, name, { stay = false } = {}) {
 }
 
 // #1046 D3: sletting for godt, bare fra en arkivert rad. Produkteier ba om «er du helt sikker».
-async function deleteClassInAdmin(id, name) {
-  if (!window.confirm(tf("classes.deleteConfirm", { name }))) return;
+// #1168: sidas dialog med rød knapp; teksten er den samme som spørreboksen hadde.
+async function deleteClassInAdmin(id, name, { button = null } = {}) {
+  const confirmed = await confirmLifecycleStep({
+    kind: "delete",
+    title: tf("classes.deleteDialog.title", { name }),
+    text: tNav("classes.deleteDialog.text"),
+    confirmLabel: tNav("classes.deleteDialog.confirm"),
+    danger: true,
+    t: tNav,
+    returnFocusTo: button,
+  });
+  if (!confirmed) return;
   try {
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}`, getHeaders, { method: "DELETE" });
     showToast(tNav("classes.deleted"), "success");
@@ -253,15 +275,20 @@ async function deleteClassInAdmin(id, name) {
 }
 
 // #705-family: reverse of archiveClass — restore an archived class so it is active again.
-async function restoreClassInAdmin(id, name, { stay = false } = {}) {
-  if (!window.confirm(tf("classes.restoreConfirm", { name }))) return;
+// #1168: gjenoppretting spør ikke (kursets mønster: den kan gjøres om med «Arkiver»), men meldingen sier hvilken klasse som kom
+// tilbake.
+// Uten spørsmål kunne et dobbeltklikk sende to gjenopprettinger (QA 2.181.0): knappen er opptatt mens den første går.
+async function restoreClassInAdmin(id, name, { stay = false, button = null } = {}) {
+  if (button?.disabled) return;
+  if (button) button.disabled = true;
   try {
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/restore`, getHeaders, { method: "POST" });
-    showToast(tNav("classes.restored"), "success");
+    showToast(tf("classes.restoredNamed", { name }), "success");
     if (stay) { await openClass(id); return; }
     await renderListView();
   } catch (err) {
     apiErrorToast(err);
+    if (button) button.disabled = false;
   }
 }
 
@@ -512,9 +539,9 @@ function bindClassFormHandlers() {
     if (!btn || !st.klass) return;
     if (!getFormPage().confirmLeave()) return;
     const k = st.klass;
-    if (btn.dataset.action === "archive") { await archiveClass(k.id, k.name, { stay: true }); return; }
-    if (btn.dataset.action === "restore") { await restoreClassInAdmin(k.id, k.name, { stay: true }); return; }
-    if (btn.dataset.action === "delete") { await deleteClassInAdmin(k.id, k.name); }
+    if (btn.dataset.action === "archive") { await archiveClass(k.id, k.name, { stay: true, button: btn }); return; }
+    if (btn.dataset.action === "restore") { await restoreClassInAdmin(k.id, k.name, { stay: true, button: btn }); return; }
+    if (btn.dataset.action === "delete") { await deleteClassInAdmin(k.id, k.name, { button: btn }); }
   });
 
   if (!id) return;

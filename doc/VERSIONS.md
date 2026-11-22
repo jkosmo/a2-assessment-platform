@@ -2,6 +2,41 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.181.0 - 2026-11-22
+
+#1168, fjerde og siste skive: klassen og temaet. Ingen migrering.
+
+**Hva brukerne merker:**
+- **Arkiver** på en klasse har sidas dialog i stedet for nettleserens spørreboks («Arkivere klassen …?»), og den sier hva som skjer
+  med medlemmenes kurs: kurs de bare har fått gjennom klassen og ikke har begynt på, forsvinner fra Mine kurs; påbegynte og
+  fullførte blir stående; påminnelsene stopper.
+- **Slett** på en arkivert klasse har sidas dialog med rød knapp (samme innhold som spørreboksen).
+- **Gjenopprett** på en klasse spør ikke lenger (kursets mønster), og meldingen sier hvilken klasse som kom tilbake.
+- **Slett** på et tema teller kursene på nytt når dialogen åpnes, også de arkiverte. Før viste dialogen listas tall (bare aktive
+  kurs, og så gammelt som lista), mens slettingen kobler fra alle: et tema som bare et arkivert kurs hadde, sto som «Ingen kurs
+  har dette temaet», og kurset kom tilbake uten temaet da det ble gjenopprettet. Nå sier dialogen hvor mange som er arkivert.
+
+**Tjeneren:** ny lesing `GET /api/admin/content/themes/:themeId/delete-preview` (`{ themeId, courseCount, archivedCourseCount }`),
+bare administrator, samme telling som slettingen (`detachedCourseCount`). Klassens ruter er uendret.
+
+**Klienten:** `confirmLifecycleStep` i `module-lifecycle-dialogs.js` (en enkel bekreftelse i den samme dialogen) brukes av
+klassesida. Nøklene `classes.archiveConfirm`, `classes.deleteConfirm`, `classes.restoreConfirm` og `classes.restored` er borte.
+
+**Tester:** `admin-content-classes` (arkiver og slett gjennom dialogen, Avbryt, rød knapp, gjenoppretting uten spørsmål),
+`language-accessibility-1173` (dialogens tittel på sidas språk), `admin-content-themes` (de arkiverte telles),
+`m2-archived-courses-not-in-use-1149` (forhåndsvisningen = slettingens tall, kontroll, bare administrator), `language-chrome-1173`
+(nøklene er oversatt). Seks mutasjoner, alle røde: spørreboksen tilbake ved arkiver og slett, sletteknappen ikke rød,
+gjenopprettingen spør igjen, tjeneren teller bare aktive, dialogen bruker listas tall.
+
+Full runde grønn: enhet 3489, DOM 109, e2e 1256, integrasjon 1497 (én e2e-fil, `form-page-asks-once-1155`, klikket fortsatt
+gjennom spørreboksen for klassens «Arkiver»; rettet).
+
+**QA 2.181.0** (Codex): GO. Rettet etterpå, med tester som er røde uten fiksen: et klikk på «Slett» for et annet tema mens
+forhåndsvisningen ble hentet, kunne bytte hvilket tema bekreftelsen slettet (nå én forhåndsvisning om gangen); og uten spørsmål
+kunne et dobbeltklikk på «Gjenopprett» sende to gjenopprettinger av en klasse (knappen er opptatt mens den første går).
+
+**#1168:** med dette er alle flatene i saken gjort (modul, seksjon, kurs, klasse, tema).
+
 ## 2.180.0 - 2026-11-22
 
 #1168, tredje skive: kurset. Ingen migrering, ingen ny rute.

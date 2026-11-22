@@ -266,6 +266,16 @@ publiseres før kurset. Elementer som ble arkivert for seg, arkivert før 2.159.
 blir stående arkivert: gjenopprett dem hver for seg. Kurset selv kommer alltid tilbake som utkast. Publiser det når du er
 klar. Meldingen etterpå sier hva som faktisk kom tilbake.
 
+### 5b. Arkivere, gjenopprette og slette en klasse, og slette et tema (fra 2.181.0, #1168)
+
+**Arkiver** på en klasse åpner en dialog som sier hva som skjer: klassen forsvinner fra de aktive, kurs medlemmene bare har fått
+gjennom klassen og ikke har begynt på, forsvinner fra «Mine kurs», påbegynte og fullførte kurs blir stående, og påminnelsene
+stopper. **Gjenopprett** spør ikke, og sier hvilken klasse som kom tilbake. **Slett** (bare en arkivert klasse) åpner en dialog
+med rød knapp; medlemslista og kurstildelingene forsvinner, deltakernes egen fremdrift beholdes.
+
+**Slett** på et tema (administratorer) teller kursene på nytt når dialogen åpnes: alle kurs som mister temaet, også arkiverte.
+Er noen av dem arkivert, sier dialogen det: et arkivert kurs som gjenopprettes, kommer tilbake uten temaet.
+
 ### 6. Klasser: hva medlemmene får på e-post
 
 Når du gir en klasse et kurs, eller legger noen til i en klasse som har kurs, får medlemmene en e-post om de nye kursene.

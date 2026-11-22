@@ -1737,7 +1737,21 @@ alle røde.
 
 **Kurset (2.180.0):** «Avpubliser» og slettedialogens tekst, se §36 («Avpubliseringen»).
 
-**Ikke gjort i #1168 ennå:** klasse og tema (se saken).
+**Klassen og temaet (2.181.0):**
+
+| Handling | Flate | Hvor | Hva |
+|---|---|---|---|
+| Arkiver klasse | Klasselista og hodet | `archiveClass` i `admin-content-classes.js` → `confirmLifecycleStep` | Sidas dialog (`classes.archiveDialog.*`): kurs medlemmene bare har fått gjennom klassen og ikke har begynt på, forsvinner fra Mine kurs; påbegynte og fullførte blir stående; påminnelsene stopper. Før: `window.confirm` |
+| Slett klasse | Lista og hodet (arkivert) | `deleteClassInAdmin` → `confirmLifecycleStep` (`danger`) | Sidas dialog, rød knapp, samme innhold som spørreboksen hadde |
+| Gjenopprett klasse | Lista og hodet | ingen dialog | `classes.restoredNamed`: «Klassen «…» er gjenopprettet.» Før: spørreboks og «Klasse gjenopprettet.» |
+| Slett tema | Temalista (administrator) | `openDeleteDialog` i `admin-content-themes.js` | Henter `GET …/themes/:id/delete-preview` når dialogen åpnes: alle kurs som mister temaet (som slettingen), de arkiverte for seg (`themes.delete.textWithArchived`). Før: listas tall, bare aktive kurs og så gammelt som lista |
+
+**Vakter (klasse og tema):** `admin-content-classes.spec.ts` (arkiver og slett gjennom dialogen, Avbryt, rød knapp, gjenoppretting
+uten spørsmål), `language-accessibility-1173.spec.ts` (dialogens tittel på sidas språk), `admin-content-themes.spec.ts` (de arkiverte
+telles), `m2-archived-courses-not-in-use-1149.test.ts` (forhåndsvisningen = slettingens tall, kontroll uten kurs, bare
+administrator). Seks mutasjoner, alle røde.
+
+Med dette er alle flatene i #1168 gjort.
 
 ### 33e. Arkivert er urørlig, og slett krever arkivert (#1151 skive 3a, 3b og 3c)
 
