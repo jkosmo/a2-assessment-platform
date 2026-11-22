@@ -35,6 +35,22 @@ rad per skriverute på `/sections/:sectionId`, med dekningsvakt mot ruteren, plu
   «Utkast lagret … Deltakerne ser versjon X» forklarer det.
 - Linja «Seksjoner er ikke skrivebeskyttet for andre enn eieren» under 2.165.0 er rettet her.
 
+**På stage 22.11.2026** (dev 6ca0ae75), både i Azure og på stage hjemme. Stage-testen `release-2-177-seksjon-andres` 4/4 i
+begge mot en annens seksjon i prod-kopien: «Åpne» i lista, sperret editor med Eksporter som eneste handling, og `PATCH` av
+tittelen gir 403 `content_ownership` uten at noe endres. Hele stage-runden fil for fil: ingen feil fra 2.177.0. Feilene som
+gjenstår, er kjente og gjelder testene, ikke appen: fire krever administrator (stage-testkontoen er fagansvarlig), og
+`release-2-157-kursutkast` og `manuell-934-versjonsvalg-ui` venter fortsatt på en toast fra før publiseringsdialogen i 2.164.0.
+Hjemme kjørte de viktigste filene på nytt under taket som ligner B1 (én kjerne, 640 MB delt av web, worker og parser): grønne,
+minnet toppet på 368 MB.
+
+**I prod 22.11.2026** fra 2.175.0 (tar med 2.176.0), `deploy-app.yml` med `skip_staging=true`; web og worker svarer 2.177.0.
+Første prod-utrulling etter at stage i Azure ble satt passiv samme dag (appene og planen slettet, databasen slettet, varsler og
+pingtester av). Stage er nå stage hjemme.
+
+Samme commit retter `scripts/azure/deactivate-app-layer.ps1`: den kalte `cmd`, som ikke finnes på Linux-runneren, så
+`deactivate-staging-app-layer` feilet før den gjorde noe. Den kaller nå `az` direkte og har bare ASCII, slik at Windows
+PowerShell 5.1 også kan lese den.
+
 ## 2.176.0 - 2026-11-21
 
 Resten av #1173 (språk og tilgjengelighet i innholdsforvaltningen), det 2.171.0 førte som kjent. Bare klientkode; ingen migrering.
