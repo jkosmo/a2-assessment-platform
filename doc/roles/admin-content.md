@@ -169,13 +169,13 @@ Har kurset innhold som ikke er publisert, står det i den samme dialogen, og pub
 og innholdet er endret, spør den samme dialogen om det er en mindre eller en hovedversjon. **Avbryt** eller Esc publiserer
 ingenting. Ved **Publiser utkastet** gjelder synligheten slik den står i utkastet.
 
-#### Andres kurs og moduler (#1165)
+#### Andres kurs, moduler og seksjoner (#1165, seksjoner fra 2.177.0, #1180)
 
-Du kan åpne kurs og moduler andre produsenter eier, for å lese dem. Under statusmerket står «Du kan lese, men bare eierne kan
-endre». Feltene er sperret, Lagre og Avbryt er borte, og i handlingsraden står bare **Eksporter**. Eierne ser du under
+Du kan åpne kurs, moduler og seksjoner andre produsenter eier, for å lese dem. Under statusmerket står «Du kan lese, men bare
+eierne kan endre». Feltene er sperret, Lagre og Avbryt er borte, og i handlingsraden står bare **Eksporter**. Eierne ser du under
 **Innstillinger**. I listene står **Åpne** og **Eksporter** på andres kurs, og **Åpne**, **Dupliser** og **Eksporter** på andres
-moduler, med merket «Kun for eier». En kopi du lager med **Dupliser**, eier du selv. Vil du endre noe i en annens kurs eller
-modul, ber du en av eierne legge deg til som eier.
+moduler og seksjoner, med merket «Kun for eier». En kopi du lager med **Dupliser**, eier du selv. Vil du endre noe i en annens
+kurs, modul eller seksjon, ber du en av eierne legge deg til som eier.
 
 #### Endre en seksjon: lagre er et utkast (fra 2.166.0, #1163)
 

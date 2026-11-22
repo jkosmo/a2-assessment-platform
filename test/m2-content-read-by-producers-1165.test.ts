@@ -5,6 +5,7 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { adminContentRouter } from "../src/routes/adminContent.js";
 import { adminCoursesRouter } from "../src/routes/adminCourses.js";
+import { adminSectionsRouter } from "../src/routes/adminSections.js";
 import { withRevision } from "./support/courseRevision.js";
 
 // #1165 (produkteier 14.11.2026, «Produsenter bør kunne se hverandres innhold»; doc/DECISIONS.md): en produsent som ikke eier et
@@ -17,6 +18,8 @@ import { withRevision } from "./support/courseRevision.js";
 //     (et fingeravtrykk før og etter). Tabellen er en dekningsvakt: rutene leses fra ruterne, og en ny skriverute uten rad i
 //     tabellen gjør testen rød.
 //   - Lesinger som er forspill til en skriving (og `/enrollments`, med personopplysninger), er fortsatt vaktet.
+//   - #1180 (produkteier 21.11.2026): seksjoner følger samme regel. Detaljen svarer `canManage`, og HVER skriverute på
+//     `/sections/:sectionId` står i tabellen med sin egen dekningsvakt.
 
 const RUN = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
 let seq = 0;
@@ -60,6 +63,7 @@ const admin = as(ADMIN);
 
 const K = (id: string, action = "") => `${C}/courses/${id}${action}`;
 const M = (id: string, action = "") => `${C}/modules/${id}${action}`;
+const S = (id: string, action = "") => `${C}/sections/${id}${action}`;
 
 // ── Fiksturer: alt eies av A, opprettet gjennom API-et ─────────────────────────────────────────────────────────────────────
 
@@ -112,7 +116,11 @@ async function fingerprint() {
       _count: { select: { versions: true, rubricVersions: true, promptTemplateVersions: true, mcqSetVersions: true } },
     },
   });
-  return JSON.stringify({ course, draft, module });
+  const section = await prisma.courseSection.findUniqueOrThrow({
+    where: { id: sectionId },
+    select: { title: true, archivedAt: true, activeVersionId: true, updatedAt: true, _count: { select: { versions: true, assets: true } } },
+  });
+  return JSON.stringify({ course, draft, module, section });
 }
 
 // ── Lesingen ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -136,6 +144,19 @@ describe("#1165: en annen produsent kan lese kurs og moduler hen ikke eier", () 
     expect(seen.moduleExport.canManage).toBe(false);
     expect((await ok(owner.get(M(moduleId, "/export")), "eier")).moduleExport.canManage).toBe(true);
     expect((await ok(admin.get(M(moduleId, "/export")), "admin")).moduleExport.canManage).toBe(true);
+  });
+
+  it("#1180 seksjonen: detaljen svarer 200 for alle tre, og `canManage` sier hvem som kan endre", async () => {
+    const seen = await ok(other.get(S(sectionId)), "annen");
+    expect(seen.section.id).toBe(sectionId);
+    expect(seen.section.canManage).toBe(false);
+    expect((await ok(owner.get(S(sectionId)), "eier")).section.canManage).toBe(true);
+    expect((await ok(admin.get(S(sectionId)), "admin")).section.canManage).toBe(true);
+    // Lista merker raden likt.
+    const list = await ok(other.get(`${C}/sections`), "lista");
+    expect(list.sections.find((row: { id: string }) => row.id === sectionId)?.canManage).toBe(false);
+    // «Eksporter» (og dermed «Dupliser») er lesing.
+    expect((await other.get(S(sectionId, "/export-package"))).status).toBe(200);
   });
 
   it("«Eksporter» og «Dupliser» på en annens modul: eksportpakken er åpen, og kopien eies av den som kopierte", async () => {
@@ -223,6 +244,18 @@ const moduleRows: Row[] = [
   { route: "POST /modules/:moduleId/restore", call: () => other.post(M(moduleId, "/restore")) },
 ];
 
+// #1180: seksjonsruterens stier er relative til `/sections`.
+const sectionRows: Row[] = [
+  { route: "PATCH /:sectionId/title", call: () => other.patch(S(sectionId, "/title"), { title: L("Kapret"), expectedVersionNo: 1 }) },
+  { route: "PUT /:sectionId", call: () => other.put(S(sectionId), { title: L("Kapret"), bodyMarkdown: L("Kapret."), expectedVersionNo: 1 }) },
+  { route: "POST /:sectionId/assets", call: () => other.post(S(sectionId, "/assets")) },
+  { route: "POST /:sectionId/publish", call: () => other.post(S(sectionId, "/publish")) },
+  { route: "POST /:sectionId/unpublish", call: () => other.post(S(sectionId, "/unpublish")) },
+  { route: "POST /:sectionId/archive", call: () => other.post(S(sectionId, "/archive")) },
+  { route: "POST /:sectionId/restore", call: () => other.post(S(sectionId, "/restore")) },
+  { route: "DELETE /:sectionId", call: () => other.del(S(sectionId)) },
+];
+
 // Skrivinger som ikke har id-en i stien, men i kroppen.
 const bodyRows: Row[] = [
   {
@@ -237,6 +270,13 @@ const bodyRows: Row[] = [
     call: async () => {
       const exported = await ok(other.get(M(moduleId, "/export-package")), "eksport");
       return other.post(`${C}/modules/import`, { payload: exported.envelope, mode: "replaceExisting", targetId: moduleId });
+    },
+  },
+  {
+    route: "seksjon: import inn i seksjonen (replaceExisting)",
+    call: async () => {
+      const exported = await ok(other.get(S(sectionId, "/export-package")), "eksport");
+      return other.post(`${C}/sections/import`, { payload: exported.envelope, mode: "replaceExisting", targetId: sectionId });
     },
   },
   { route: "modul: kalibrering (terskler)", call: () => other.post("/api/calibration/workspace/publish-thresholds", { moduleId, totalMin: 55 }) },
@@ -256,17 +296,20 @@ function writeRoutes(router: Router, param: string): string[] {
 }
 
 describe("#1165: skrivingen er fortsatt eiernes", () => {
-  it("dekningsvakt: hver skriverute på et kurs eller en modul har en rad i tabellen", () => {
+  it("dekningsvakt: hver skriverute på et kurs, en modul eller en seksjon har en rad i tabellen", () => {
     const courseRoutes = writeRoutes(adminCoursesRouter, ":courseId");
     const moduleRoutes = writeRoutes(adminContentRouter, ":moduleId");
+    const sectionRoutes = writeRoutes(adminSectionsRouter, ":sectionId");
     // Kontrollcase: finner oppslaget ingen ruter, måler vakta ingenting.
     expect(courseRoutes.length).toBeGreaterThan(10);
     expect(moduleRoutes.length).toBeGreaterThan(10);
+    expect(sectionRoutes.length).toBeGreaterThan(5);
     expect(courseRoutes, "ny skriverute på kurset uten rad i tabellen").toEqual(courseRows.map((row) => row.route).sort());
     expect(moduleRoutes, "ny skriverute på modulen uten rad i tabellen").toEqual(moduleRows.map((row) => row.route).sort());
+    expect(sectionRoutes, "ny skriverute på seksjonen uten rad i tabellen").toEqual(sectionRows.map((row) => row.route).sort());
   });
 
-  for (const row of [...courseRows, ...moduleRows, ...bodyRows]) {
+  for (const row of [...courseRows, ...moduleRows, ...sectionRows, ...bodyRows]) {
     it(`en annen produsent: ${row.route} gir 403 og endrer ingenting`, async () => {
       const before = await fingerprint();
       const refused = await row.call();
@@ -278,6 +321,12 @@ describe("#1165: skrivingen er fortsatt eiernes", () => {
 
   it("kontroll: eieren kan skrive (samme vakt slipper henne inn)", async () => {
     const renamed = await owner.patch(M(moduleId, "/title"), { title: L(tag("nytt navn")) });
+    expect(renamed.status, show(renamed)).toBeLessThan(300);
+  });
+
+  it("kontroll #1180: eieren kan endre seksjonen (samme vakt slipper henne inn)", async () => {
+    const latest = await prisma.courseSectionVersion.findFirstOrThrow({ where: { sectionId }, orderBy: { versionNo: "desc" }, select: { versionNo: true } });
+    const renamed = await owner.patch(S(sectionId, "/title"), { title: L(tag("nytt seksjonsnavn")), expectedVersionNo: latest.versionNo });
     expect(renamed.status, show(renamed)).toBeLessThan(300);
   });
 });

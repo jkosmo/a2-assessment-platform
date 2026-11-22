@@ -2443,7 +2443,8 @@ store ombyggingene med plan og planlesing først (#1177, #1179, #1170); resten l
 
 - **Seksjoner følger kursets og modulens eierregel** (produkteier 21.11.2026, «Ja», #1180): alle produsenter kan lese og
   duplisere en seksjon, bare eierne kan endre den. Samme sperre og linje i redigereren som for kurs og moduler (2.165.0, #1165).
-  Det var ikke et bevisst valg at seksjoner kunne endres av alle; de ble bare ikke tatt med i #1165.
+  Tjeneren har vaktet hver skriverute på en seksjon siden #787; det som manglet etter #1165, var «Åpne» i lista for andres
+  seksjoner, og linja og sperren i redigereren (rettet i 2.177.0). Seksjoner har aldri kunnet endres av andre enn eierne.
 - **Begreper med flere betydninger slås ikke sammen; hver betydning får sitt eget navn** (fra #1175, lukket som arbeidsregel).
   «I bruk», «aktiv/publisert», «synlig/tilgjengelig/påkrevd», «påbegynt», «fullført/lest», «eier/kan endre» og «arkivert» betyr
   hver litt forskjellige ting der de står, og hver er riktig der. Når kode som avgjør et slikt begrep røres, skal betydningen ha

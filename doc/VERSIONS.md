@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.177.0 - 2026-11-22
+
+#1180: seksjoner følger kursets og modulens eierregel (produkteier 21.11.2026, `doc/DECISIONS.md`). Alle produsenter kan lese og
+duplisere en seksjon; bare eierne og administrator kan endre den. Bare klientkode; ingen migrering.
+
+**Hva brukerne merker:**
+- I seksjonslista har også andres seksjoner «Åpne». Før manglet knappen, og hjelpeteksten sa at bare eieren kunne åpne seksjonen.
+  Nå sier den «Bare en eier eller en administrator kan endre denne seksjonen. Du kan åpne den for å lese.», som for moduler.
+- En annens seksjon åpnes skrivebeskyttet med linja «Du kan lese, men bare eierne kan endre», som kurs og moduler. Feltene står i
+  samme sperre som en arkivert seksjon; før var bare navnet og teksten skrivebeskyttet. Forhåndsvisning, språkvalget, eierlista og
+  «Eksporter» virker som før.
+
+**Tjeneren** vaktet allerede hver skriverute på en seksjon. Det er nå målt: tabellen i `m2-content-read-by-producers-1165` har en
+rad per skriverute på `/sections/:sectionId`, med dekningsvakt mot ruteren, pluss import som erstatter seksjonen.
+
+**Tester:**
+- `admin-content-readonly-others-1165.spec.ts`: seksjonen (1280 og 390 px), eierens kontroll og seksjonslista.
+- `section-publish-new-version-1095` og `content-owner-surfaces` festet den gamle oppførselen (`readonly`, ingen «Åpne») og er
+  rettet.
+- Fem mutasjoner, alle røde: «Åpne» bare for eieren, sperren bare for arkivert, ingen linje, den gamle hjelpeteksten, og vakta
+  fjernet fra «Avpubliser» på tjeneren.
+
+**QA 2.177.0** (Claude-agent): GO. Ingen vei der en ikke-eier kan endre en seksjon. Rettet etterpå: begrunnelsen i DECISIONS
+(tjeneren har vaktet skrivingen siden #787; det var klienten som manglet), overskriften i kartet og fire utdaterte kommentarer.
+
+**Kjent:**
+- Feltene i en annens seksjon er nå sperret (`disabled`), ikke bare skrivebeskyttet. Tab hopper over dem, teksten er grå, og i
+  Chromium kan den ikke markeres for å kopieres. Det er den samme sperren som kurs og moduler har; Forhåndsvisning, Eksporter og
+  Dupliser dekker lesing og kopiering.
+- En ikke-eier ser eierens siste lagrede utkast, ikke den publiserte versjonen (beslutningen 2026-09-08 om åpen lesing). Stripen
+  «Utkast lagret … Deltakerne ser versjon X» forklarer det.
+- Linja «Seksjoner er ikke skrivebeskyttet for andre enn eieren» under 2.165.0 er rettet her.
+
 ## 2.176.0 - 2026-11-21
 
 Resten av #1173 (språk og tilgjengelighet i innholdsforvaltningen), det 2.171.0 førte som kjent. Bare klientkode; ingen migrering.

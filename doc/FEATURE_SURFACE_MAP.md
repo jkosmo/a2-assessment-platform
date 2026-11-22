@@ -1904,7 +1904,7 @@ kurset i versjonsdialogen (`askCourseVersion` med `audience`).
 **Vakter:** `test/unit/new-course-default-guard-1164.test.ts` (dekningsvakt: ingen kode i `src/` oppretter en kursrad utenom
 `createCourse`), `test/m2-course-publish-1164.test.ts` (hver vei, kontrollene, publikummet), `test/e2e/admin-content-course-publish-dialog-1164.spec.ts`.
 
-## 37. Andres kurs og moduler — skrivebeskyttet lesing (#1165)
+## 37. Andres kurs, moduler og seksjoner — skrivebeskyttet lesing (#1165, #1180)
 
 Produkteier 14.11.2026: «Produsenter bør kunne se hverandres innhold.» Lesingen er åpen; skrivingen er eiernes. Tjeneren sier
 `canManage` (eier eller administrator), klienten bruker sperren fra arkivert innhold (#1151).
@@ -1916,13 +1916,18 @@ Produkteier 14.11.2026: «Produsenter bør kunne se hverandres innhold.» Lesing
 | Modullista | `GET /modules/library` (`canManage` per rad) | «Åpne», «Dupliser», «Eksporter», merket |
 | Modulsida | `GET /modules/:id/export` (`moduleExport.canManage`) | linja `data-module-readonly-notice`, `[data-module-archived-lock]`, ingen Lagre/Avbryt, bare «Eksporter», Innstillinger uten Lagre og «Gjenopprett» på versjoner |
 | «Dupliser»/«Eksporter» modul | `GET /modules/:id/export-package` | kopien eies av den som kopierer |
-| Seksjoner | uendret (hadde det fra før, `canManage` i detaljen) | |
+| Seksjonslista (#1180) | `GET /sections` (`canManage` per rad) | «Åpne», «Dupliser», «Eksporter», merket «Kun for eier» med «Du kan åpne den for å lese» |
+| Seksjonen (#1180) | `GET /sections/:id` (`canManage`), `…/export-package` | linja `data-section-readonly-notice`, `fieldset[data-section-archived-lock]`, ingen Lagre/Avbryt/Last opp bilde, bare «Eksporter»; Forhåndsvisning og eierpanelet leses |
+
+#1180 (produkteier 21.11.2026): seksjonene fikk samme sperre og linje i 2.177.0. Tjeneren vaktet allerede hver skriverute; før
+manglet «Åpne» i lista for den som ikke eier seksjonen, og redigereren hadde bare `readonly` på to felt, uten linja.
 
 Vaktet som før (forspill til en skriving, eller personopplysninger): `…/pending-versions`, `…/archive-preview`,
 `…/restore-preview`, `…/enrollments`, `…/publish-audience`, `modules/:id/passed-count`, `…/publish-preview-versioned`.
 
-**Vakter:** `test/m2-content-read-by-producers-1165.test.ts` (lesingen; HVER skriverute på `/courses/:courseId` og
-`/modules/:moduleId` som tabell, dekningsvakt mot ruterne), `test/e2e/admin-content-readonly-others-1165.spec.ts` (1280 og 390 px).
+**Vakter:** `test/m2-content-read-by-producers-1165.test.ts` (lesingen; HVER skriverute på `/courses/:courseId`,
+`/modules/:moduleId` og `/sections/:sectionId` som tabell, dekningsvakt mot ruterne, og import som erstatter),
+`test/e2e/admin-content-readonly-others-1165.spec.ts` (kurs, moduler og seksjoner; 1280 og 390 px).
 
 ## 38. En seksjon: «Lagre» er et utkast, og tittelen er en del av versjonen (#1163 skive 1, 2.166.0)
 

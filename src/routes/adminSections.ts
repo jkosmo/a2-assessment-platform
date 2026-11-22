@@ -475,9 +475,8 @@ adminSectionsRouter.get(
 // tilbakeholdte utkast. Samme klasse som #903, og eksportruta rett over ble vaktet med nettopp den
 // begrunnelsen; det hjelper lite når naboruta gir samme kaller samme innhold.
 //
-// Trygt å stramme: ruta brukes kun av seksjonseditoren (`renderEditorView`), som er der eierskap
-// skal kreves. Lista (`GET /`) merker allerede hver rad med `canManage` og skjuler handlingene en
-// ikke-eier ville fått 403 på.
+// (Teksten over er historikk: vakta ble tatt bort igjen, se beslutningen under. #1180: redigereren viser en annens seksjon
+// skrivebeskyttet ut fra `canManage`, og lista viser bare handlingene en ikke-eier kan bruke.)
 // ⚠️ LESING AV KURSINNHOLD ER ÅPEN FOR ALLE FORFATTERE — DET ER EN BESLUTNING, IKKE ET HULL.
 //
 // Produkteier 2026-09-08:

@@ -256,8 +256,8 @@ function getListPage() {
     actions: (s) => {
       const lifecycle = lifecycleOf(s);
       const id = escapeHtml(s.id);
-      // #787 slice 5: skjul åpne/livssyklus for innhold brukeren ikke eier (og ikke er admin for) — samme
-      // regel som eierskaps-vakta, så vi ikke viser knapper som gir 403.
+      // #787 slice 5: skjul livssyklus og «Døp om» for innhold brukeren ikke eier (og ikke er admin for) — samme
+      // regel som eierskaps-vakta, så vi ikke viser knapper som gir 403. «Åpne» står for alle (#1180).
       const canManage = s.canManage !== false;
       const isLive = lifecycle === "published" || lifecycle === "published_with_draft";
       // #1095: en publisert seksjon med en nyere, upublisert versjon (lagt klar av en kursoppdatering,
@@ -282,7 +282,9 @@ function getListPage() {
       return [
         // Først, så den står synlig og ikke under «Mer»: det er det forfatteren kom for.
         canManage ? publishNew : "",
-        canManage ? `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>` : "",
+        // #1180: «Åpne» også for den som ikke eier seksjonen, som for kurs og moduler (#1165). Redigereren viser den
+        // skrivebeskyttet; skriverutene er vaktet på tjeneren.
+        `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>`,
         // #894: å døpe om er ikke å redigere innholdet, og skal ikke koste en tur gjennom editoren.
         canManage && !archived ? `<button class="row-action-btn" data-action="rename" data-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
         archived ? "" : `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
@@ -971,9 +973,23 @@ function sectionHeaderItem() {
   return { lifecycle: status === "published" && editing.hasUnpublishedChanges ? "published_with_draft" : status };
 }
 
+/**
+ * #1180 (produkteier 21.11.2026, doc/DECISIONS.md): seksjoner følger kursets og modulens eierregel fra #1165. Den som ikke kan
+ * styre seksjonen, ser den skrivebeskyttet: samme sperre som en arkivert seksjon (#1151), med kursets og modulens linje.
+ */
+function sectionIsLocked() {
+  return Boolean(editing?.id) && (Boolean(editing.archivedAt) || !sectionCanManage());
+}
+
 function sectionArchivedNoticeHtml() {
-  if (!editing?.id || !editing.archivedAt) return "";
-  return `<p class="archived-notice" role="status" data-section-archived-notice>${escapeHtml(L("archivedNotice"))}</p>`;
+  if (!editing?.id) return "";
+  if (editing.archivedAt) {
+    return `<p class="archived-notice" role="status" data-section-archived-notice>${escapeHtml(L("archivedNotice"))}</p>`;
+  }
+  if (!sectionCanManage()) {
+    return `<p class="archived-notice" role="status" data-section-readonly-notice>${escapeHtml(t("adminContent.readOnlyNotice"))}</p>`;
+  }
+  return "";
 }
 
 /** #1163: legg det fanen nå har sett (versjon, tittel) og det deltakerne ser, inn i seksjonen. */
@@ -1005,7 +1021,7 @@ function sectionActions() {
     id ? `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>` : "",
     // #1095: den nye versjonen redigereren viser, er ikke den deltakerne ser — publiser den.
     // Livssyklus og «Erstatt fra fil» bare for den som kan styre seksjonen (eier eller administrator) —
-    // en ikke-eier fikk 403 (QA-porten 2.88.3). Oversett og Eksporter er lese-/kopihandlinger.
+    // en ikke-eier fikk 403 (QA-porten 2.88.3). Eksporter er en lese-/kopihandling.
     id && manage && status === "published" && editing.hasUnpublishedChanges
       ? `<button type="button" class="row-action-btn" id="sectionPublishNewBtn" data-editor-action="publish">${escapeHtml(L("publishNewVersion"))}</button>`
       : "",
@@ -1027,17 +1043,18 @@ function sectionActions() {
 // Forhåndsvisning for seg, og Innstillinger med eierne.
 function sectionEditorBodyHtml() {
   const sectionId = editing?.id ?? null;
-  // #1151 skive 3c: en arkivert seksjon står sperret i en `<fieldset disabled>`, som det arkiverte kurset. En ikke-eier
-  // har fortsatt `readonly` (som før). Eierpanelet under Innstillinger står utenfor og lagrer for seg.
-  const archivedLock = Boolean(sectionId && editing.archivedAt);
-  const lockOpen = archivedLock ? `<fieldset class="archived-lock" disabled data-section-archived-lock>` : "";
-  const lockClose = archivedLock ? "</fieldset>" : "";
+  // #1151 skive 3c: en arkivert seksjon står sperret i en `<fieldset disabled>`, som det arkiverte kurset. #1180: den som ikke
+  // kan styre seksjonen, får den samme sperren (før bare `readonly` på to felt), som kurs og moduler (#1165). Eierpanelet under
+  // Innstillinger står utenfor og lagrer for seg; Forhåndsvisning er ren lesing.
+  const lock = sectionIsLocked();
+  const lockOpen = lock ? `<fieldset class="archived-lock" disabled data-section-archived-lock>` : "";
+  const lockClose = lock ? "</fieldset>" : "";
   return `
     <div data-form-tab="rediger">${lockOpen}
       <div class="section-editor card">
         <div class="form-field">
           <label for="titleInput">${escapeHtml(L("titleLabel"))}${editing.editLocale === "nb" ? ` <span class="required-note">${escapeHtml(t("form.required"))}</span>` : ""}</label>
-          <input type="text" id="titleInput" data-form-title value="${escapeHtml(editing.title[editing.editLocale])}" autocomplete="off" ${editing.canManage === false ? "readonly" : ""} />
+          <input type="text" id="titleInput" data-form-title value="${escapeHtml(editing.title[editing.editLocale])}" autocomplete="off" />
         </div>
         <div class="editor-single">
           <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -1047,7 +1064,7 @@ function sectionEditorBodyHtml() {
               <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />
             </span>
           </div>
-          <textarea id="markdownInput" aria-labelledby="markdownInputLabel" ${editing.canManage === false ? "readonly" : ""}>${escapeHtml(editing.body[editing.editLocale])}</textarea>
+          <textarea id="markdownInput" aria-labelledby="markdownInputLabel">${escapeHtml(editing.body[editing.editLocale])}</textarea>
         </div>
         <input type="file" id="replaceFromFileInput" accept="${SECTION_FILE_ACCEPT}" hidden data-form-untracked />
         <span class="editor-status" id="editorStatus"></span>

@@ -97,10 +97,10 @@ test("klasse: owner panel renders in the class detail view", async ({ page }) =>
   await expect(panel.locator(".owner-compact-names")).toContainText("Alice Owner");
 });
 
-// #787 slice 5 — the section LIST hides edit/lifecycle actions for rows the viewer can't manage
-// (canManage:false), so a non-owner never sees a button the server would 403 on save. Drives the real
+// #787 slice 5 — the section LIST hides lifecycle actions for rows the viewer can't manage
+// (canManage:false), so a non-owner never sees a button the server would 403 on. «Åpne» stays (#1180). Drives the real
 // admin-content-sections.js list render with a mixed owned/not-owned payload.
-test("seksjon-liste: edit/lifecycle hidden for canManage:false, shown for canManage:true", async ({ page }) => {
+test("seksjon-liste: lifecycle hidden for canManage:false (Åpne stays, #1180), shown for canManage:true", async ({ page }) => {
   await page.route("**/participant/config", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authMode: "mock", navigation: { items: [], workspaceItems: [] }, identityDefaults: { userId: "c1", email: "c@x.no", name: "C", roles: ["SUBJECT_MATTER_OWNER"] } }) }));
   await page.route("**/version", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: "e2e" }) }));
@@ -117,9 +117,9 @@ test("seksjon-liste: edit/lifecycle hidden for canManage:false, shown for canMan
   // Owned row: edit + lifecycle present.
   await expect(page.locator('[data-action="edit"][data-id="sec-mine"]')).toBeVisible();
   await expect(await revealRowAction(page, page.locator('[data-action="unpublish"][data-id="sec-mine"]'))).toBeVisible();
-  // Not-owned row: no edit, no lifecycle — but Dupliser/Eksporter stay (read/copy actions, as on
-  // Moduler; #1046 12.09), and the marker says «Kun for eier» like the course list (#1029).
-  await expect(page.locator('[data-action="edit"][data-id="sec-theirs"]')).toHaveCount(0);
+  // Not-owned row: no lifecycle — but Dupliser/Eksporter stay (read/copy actions, as on Moduler; #1046 12.09), and the marker
+  // says «Kun for eier» like the course list (#1029). #1180: «Åpne» stays too; the editor shows the section read-only.
+  await expect(page.locator('[data-action="edit"][data-id="sec-theirs"]')).toBeVisible();
   await expect(page.locator('[data-action="unpublish"][data-id="sec-theirs"]')).toHaveCount(0);
   await expect(page.locator('[data-action="duplicate"][data-id="sec-theirs"]')).toBeVisible();
   await expect(page.locator('[data-action="export"][data-id="sec-theirs"]')).toBeVisible();

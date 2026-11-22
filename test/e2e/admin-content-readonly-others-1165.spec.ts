@@ -246,3 +246,116 @@ test.describe("#1165 modullista", () => {
     await expect(mine.locator(".row-readonly-note")).toHaveCount(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Seksjoner (#1180, produkteier 21.11.2026: seksjoner følger kursets og modulens eierregel)
+// ---------------------------------------------------------------------------
+
+type SectionFixture = Record<string, unknown> & { id: string };
+
+function sectionFixture(id: string, title: string, canManage: boolean): SectionFixture {
+  return {
+    id,
+    title: JSON.stringify({ nb: title, nn: title, "en-GB": title }),
+    bodyMarkdown: JSON.stringify({ nb: "# Innhold", nn: "# Innhald", "en-GB": "# Content" }),
+    activeVersionId: "sv-1",
+    versionNo: 2,
+    latestVersionNo: 2,
+    hasUnpublishedChanges: false,
+    updatedAt: "2026-11-01T08:00:00.000Z",
+    archivedAt: null,
+    canManage,
+    courseCount: 0,
+    courses: [],
+    titleLocales: ["nb", "nn", "en-GB"],
+    lifecycle: "published",
+  };
+}
+
+async function sectionSetup(page: Page, sections: SectionFixture[], ownerPanelCanManage: boolean) {
+  await nb(page);
+  await mockCommonApis(page, {});
+  await ownersPanel(page, ownerPanelCanManage);
+  await page.route("**/api/admin/content/sections/preview", (route: Route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ html: "<p>Innhold</p>" }),
+  }));
+  const byId = new Map(sections.map((s) => [s.id, s]));
+  await page.route(/\/api\/admin\/content\/sections(\/[^/?]+)?(\?.*)?$/, (route: Route) => {
+    const id = /\/sections(?:\/([^/?]+))?/.exec(new URL(route.request().url()).pathname)?.[1] ?? null;
+    if (!id) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [...byId.values()] }) });
+    if (id === "preview" || id === "localize" || id === "import") return route.fallback();
+    const target = byId.get(id);
+    if (!target) return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: target }) });
+  });
+}
+
+const sectionHeaderActions = (page: Page) =>
+  page.locator(".form-page-actions [data-editor-action]").evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.editorAction));
+
+for (const viewport of VIEWPORTS) {
+  test.describe(`#1180 seksjonen, en annens (${viewport.width} px)`, () => {
+    test.use({ viewport });
+
+    test("skrivebeskyttet: linja, ingen Lagre/Avbryt, bare Eksporter, sperrede felt, Forhåndsvisning og eierpanelet leses", async ({ page }) => {
+      await sectionSetup(page, [sectionFixture("sec-1", "Annens seksjon", false)], false);
+      const writes = recordWrites(page);
+      await page.goto("/admin-content/sections?id=sec-1");
+      await page.locator("#titleInput").waitFor();
+      await expect(page.locator("[data-section-readonly-notice]")).toHaveText(NOTICE);
+      await expect(page.locator("[data-section-archived-notice]")).toHaveCount(0);
+      await expect(page.locator("#formSaveBtn")).toHaveCount(0);
+      await expect(page.locator("#formCancelLink")).toHaveCount(0);
+      await expect.poll(() => sectionHeaderActions(page)).toEqual(["export"]);
+      await expect(page.locator("#titleInput")).toBeDisabled();
+      await expect(page.locator("#markdownInput")).toBeDisabled();
+      await expect(page.locator("#titleInput")).toHaveValue("Annens seksjon");
+      await expect(page.locator("#uploadImageBtn")).toHaveCount(0);
+      await noHorizontalScroll(page);
+      await page.screenshot({ path: `test-results/1180-seksjon-annens-${viewport.width}.png`, fullPage: true });
+
+      await page.locator("#formTab-forhandsvisning").click();
+      await expect(page.locator("#previewPane")).toContainText("Innhold");
+      await page.locator("#formTab-innstillinger").click();
+      await expect(page.locator("#ownerPanelHost")).toContainText("Kari Eier");
+      expect(await outsideDisabledFieldset(page.locator("#ownerPanelHost"))).toBe(true);
+      expect(writes).toEqual([]);
+    });
+
+    test("KONTROLL: eieren har Lagre, Avpubliser og Arkiver, og feltene er åpne", async ({ page }) => {
+      await sectionSetup(page, [sectionFixture("sec-1", "Egen seksjon", true)], true);
+      await page.goto("/admin-content/sections?id=sec-1");
+      await page.locator("#titleInput").waitFor();
+      await expect(page.locator("#titleInput")).toBeEnabled();
+      await expect(page.locator("#markdownInput")).toBeEnabled();
+      await expect(page.locator("#formSaveBtn")).toHaveCount(1);
+      await expect(page.locator("[data-section-readonly-notice]")).toHaveCount(0);
+      await expect(page.locator("[data-section-archived-lock]")).toHaveCount(0);
+      await expect.poll(() => sectionHeaderActions(page)).toEqual(expect.arrayContaining(["export", "unpublish", "archive"]));
+    });
+  });
+}
+
+test.describe("#1180 seksjonslista", () => {
+  test("en annens seksjon: «Åpne», «Dupliser», «Eksporter» og merket; ingen omdøping eller livssyklus. Eierens rad har dem (kontroll)", async ({ page }) => {
+    await sectionSetup(page, [sectionFixture("sec-theirs", "Annens seksjon", false), sectionFixture("sec-mine", "Egen seksjon", true)], false);
+    await page.goto("/admin-content/sections");
+    const others = page.locator("tr").filter({ hasText: "Annens seksjon" });
+    await expect(others.locator('[data-action="edit"]')).toHaveText("Åpne");
+    await expect(others.locator('[data-action="duplicate"]')).toHaveCount(1);
+    await expect(others.locator('[data-action="export"]')).toHaveCount(1);
+    await expect(others.locator(".row-readonly-note")).toHaveText("Kun for eier");
+    await expect(others.locator(".row-readonly-note")).toHaveAttribute("title", /kan endre denne seksjonen\. Du kan åpne den for å lese\./);
+    for (const action of ["rename", "publish", "publish-new", "unpublish", "archive", "restore"]) {
+      await expect(others.locator(`[data-action="${action}"]`), action).toHaveCount(0);
+    }
+    const mine = page.locator("tr").filter({ hasText: "Egen seksjon" });
+    await expect(mine.locator('[data-action="rename"]')).toHaveCount(1);
+    await expect(mine.locator(".row-readonly-note")).toHaveCount(0);
+
+    // «Åpne» fører til seksjonen, skrivebeskyttet.
+    await others.locator('[data-action="edit"]').click();
+    await expect(page).toHaveURL(/\/admin-content\/sections\?id=sec-theirs$/);
+    await expect(page.locator("[data-section-readonly-notice]")).toHaveText(NOTICE);
+  });
+});
