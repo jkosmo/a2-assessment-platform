@@ -23,13 +23,43 @@ describe("MVP manual review workspace", () => {
     await prisma.$disconnect();
   });
 
-  it("exposes at least one seeded pending manual review in the reviewer queue", async () => {
-    const queueResponse = await request(app).get("/api/reviews?status=OPEN").set(reviewerHeaders);
-    expect(queueResponse.status).toBe(200);
-    expect(Array.isArray(queueResponse.body.reviews)).toBe(true);
-    expect(queueResponse.body.reviews.length).toBeGreaterThan(0);
-    expect(queueResponse.body.reviews[0].reviewStatus).toBe("OPEN");
-    expect(queueResponse.body.reviews[0].submission?.id).toBeTruthy();
+  it("exposes a pending manual review in the reviewer queue", async () => {
+    // Egen fikstur, ikke seed-vurderingen (2026-11-22): seed-deltakeren leverer på nytt i samme modul i andre testfiler, og
+    // da blir seed-vurderingen SUPERSEDED. Testen var grønn bare når den tilfeldigvis kjørte før dem; i parallellkjøringen
+    // (test:integration:parallel) kjørte den etter. Eldgammel createdAt: køen sorteres eldst først og kuttes ved `limit`.
+    const moduleVersion = await prisma.moduleVersion.findFirstOrThrow({ select: { id: true, moduleId: true } });
+    const tag = `mr-queue-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const user = await prisma.user.create({
+      data: { externalId: tag, name: "Queue Participant", email: `${tag}@x.test` },
+      select: { id: true },
+    });
+    const submission = await prisma.submission.create({
+      data: {
+        userId: user.id,
+        moduleId: moduleVersion.moduleId,
+        moduleVersionId: moduleVersion.id,
+        deliveryType: "text",
+        submissionStatus: "UNDER_REVIEW",
+      },
+      select: { id: true },
+    });
+    const review = await prisma.manualReview.create({
+      data: { submissionId: submission.id, triggerReason: "queue fixture", reviewStatus: "OPEN", createdAt: new Date("2000-01-01T00:00:00Z") },
+      select: { id: true },
+    });
+
+    try {
+      const queueResponse = await request(app).get("/api/reviews?status=OPEN&limit=200").set(reviewerHeaders);
+      expect(queueResponse.status).toBe(200);
+      expect(Array.isArray(queueResponse.body.reviews)).toBe(true);
+      const listed = queueResponse.body.reviews.find((entry: { id: string }) => entry.id === review.id);
+      expect(listed?.reviewStatus).toBe("OPEN");
+      expect(listed?.submission?.id).toBe(submission.id);
+      expect(queueResponse.body.reviews.every((entry: { reviewStatus: string }) => entry.reviewStatus === "OPEN")).toBe(true);
+    } finally {
+      // Ikke la en evig åpen vurdering ligge først i køen for testene etter.
+      await prisma.manualReview.delete({ where: { id: review.id } });
+    }
   });
 
   it("creates immutable override decision layer through reviewer workspace", async () => {
@@ -81,7 +111,7 @@ describe("MVP manual review workspace", () => {
       .send({ sync: true });
     expect(runAssessmentResponse.status).toBe(202);
 
-    const queueResponse = await request(app).get("/api/reviews?status=OPEN").set(reviewerHeaders);
+    const queueResponse = await request(app).get("/api/reviews?status=OPEN&limit=200").set(reviewerHeaders);
     expect(queueResponse.status).toBe(200);
     const review = (queueResponse.body.reviews as Array<{ id: string; submission: { id: string } }>).find(
       (item) => item.submission.id === submissionId,

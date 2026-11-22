@@ -282,7 +282,9 @@ en rød kjøring uten forklaring.
 
 1. Bygg med tester som **kan feile** — verifiser ved mutasjon.
 2. `lint` → `test:unit` → `test:dom` → `test:e2e:admin-content` lokalt.
-3. Integrasjon mot ekte Postgres når backend er rørt (`npm run test:integration:native`).
+3. Integrasjon mot ekte Postgres når backend er rørt (`npm run test:integration:native`). Fire filer om gangen, hver mot
+   sin egen kopi av testdatabasen: `npm run test:integration:parallel` (~5 min mot ~19, samme 1490 tester 2026-11-22).
+   Krever at testbrukeren kan lage databaser — se `doc/LOCAL_DEV_NO_DOCKER.md`.
 4. QA-gaten — kryssmodell eller lokal agent, samme prompt. **Verifiser funnene.**
 5. Deploy til stage. Verifiser `/version`.
 6. `npm run test:stage` — uautentisert.

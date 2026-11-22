@@ -225,7 +225,8 @@ describe("#1152 4b: migreringen", () => {
     expect(floor!.getTime()).toBeGreaterThan(Date.now() - 24 * 60 * 60 * 1000);
 
     const indexes = await prisma.$queryRawUnsafe<Array<{ indexname: string }>>(
-      `SELECT indexname FROM pg_indexes WHERE indexname IN ('Course_archivedAt_idx', 'Module_archivedAt_idx', 'CourseSection_archivedAt_idx') ORDER BY indexname`,
+      // Bare skjemaet testen kjører i: en database kan ha flere (2026-11-22, parallelle integrasjonstester fant dem alle).
+      `SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname IN ('Course_archivedAt_idx', 'Module_archivedAt_idx', 'CourseSection_archivedAt_idx') ORDER BY indexname`,
     );
     expect(indexes.map((row) => row.indexname)).toEqual(["CourseSection_archivedAt_idx", "Course_archivedAt_idx", "Module_archivedAt_idx"]);
   });

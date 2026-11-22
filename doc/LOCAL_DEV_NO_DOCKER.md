@@ -51,10 +51,40 @@ Run it once after a fresh setup or a DB reset. Idempotent.
 To reset the local DB: `dotenv -e .env.postgres.local -- npx prisma migrate reset` (then it
 re-applies migrations + seeds), followed by `npm run dev:seed:consent`.
 
+## Separate Postgres for the integration tests (2026-11-22)
+
+The integration tests can run four files at a time (`npm run test:integration:parallel`), each against its own copy of the
+test database (`CREATE DATABASE … TEMPLATE`, see `test/support/integrationDbNames.ts`). That needs a test user with
+`CREATEDB`. On a machine where Postgres is an admin-installed Windows service with an unknown `postgres` password, the
+user can't be given that right — so the tests get their own cluster instead, in a user folder, started without admin:
+
+```powershell
+$bin = "C:\Program Files\PostgreSQL\17\bin"
+& "$bin\initdb.exe" -D C:\Dev\pg-test\data -U postgres -A trust -E UTF8 --locale=Norwegian_Norway.1252 --no-instructions
+# append to C:\Dev\pg-test\data\postgresql.conf:
+#   port = 5434                  (5432/5433 are the installed services)
+#   listen_addresses = 'localhost'
+#   max_connections = 300        (four processes, each with its own Prisma pool)
+#   shared_buffers = 256MB
+#   fsync = off / synchronous_commit = off / full_page_writes = off
+#     — test data is always rebuilt, so nothing waits for the disk. Never use these for data worth keeping.
+#   timezone = 'Europe/Berlin'
+& "$bin\pg_ctl.exe" -D C:\Dev\pg-test\data -l C:\Dev\pg-test\postgres.log -w start
+& "$bin\psql.exe" -U postgres -h 127.0.0.1 -p 5434 -d postgres -c "CREATE ROLE a2_app LOGIN CREATEDB;" -c "CREATE DATABASE a2_assessment_test OWNER a2_app;"
+```
+
+`a2_app` is not a superuser there, so permissions otherwise match the shared database. Use the same locale as the
+database the tests ran against before: the collation decides how Norwegian names sort.
+
+Then in `.env.test.local` (gitignored): `DATABASE_URL` on port `5434` (the password is ignored, trust auth on
+localhost only), and `A2_TEST_PG_DATA=C:\Dev\pg-test\data`. With that set, `npm run db:reset:native` — and so every
+`test:integration:native` / `test:integration:parallel` run — first starts the cluster if it isn't running
+(`scripts/test/ensure-test-postgres.mjs`). Without it the script does nothing.
+
 ## Notes
 
 - Integration tests (`npm test`) still need Postgres; they run in **CI** — you don't need them
-  locally. The two loops above cover local development.
+  locally. The two loops above cover local development. For running them locally, see the section above.
 - Definition of done for user-facing changes (see CLAUDE.md): a Playwright e2e of the primary
   flow, written with the feature and run locally before deploy.
 

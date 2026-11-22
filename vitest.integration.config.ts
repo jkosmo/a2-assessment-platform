@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import unitConfig from "./vitest.unit.config";
+import { integrationWorkerCount } from "./test/support/integrationDbNames";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -61,6 +62,14 @@ export default defineConfig({
     // dette gjør den lokale kommandoen lik CI.
     //
     // Prisen er 4 minutter mot 1. En suite man ikke kan stole på er verdt mindre enn de tre.
-    fileParallelism: false,
+    //
+    // 2026-11-22: parallelt igjen, men ALDRI mot én delt database. `INTEGRATION_WORKERS=N`
+    // (npm run test:integration:parallel) gir hver arbeidsprosess sin egen kopi av testdatabasen
+    // (test/support/integrationDbNames.ts), så filene i hver prosess går serielt mot sin egen, som før.
+    // Uten variabelen: én database, én fil om gangen, uendret.
+    fileParallelism: integrationWorkerCount() > 1,
+    poolOptions: { forks: { maxForks: integrationWorkerCount(), minForks: 1 } },
+    globalSetup: ["test/support/integrationDbClones.ts"],
+    setupFiles: ["test/support/integrationWorkerDb.ts"],
   },
 });
