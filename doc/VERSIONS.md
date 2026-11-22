@@ -31,6 +31,10 @@ seksjonen som vises nå, ikke den handlingen startet i (forfatteren byttet seksj
 i `doc/route-map.md` (heller ikke modulens fra 2.178.0). Den første har fått en e2e-test (gjenoppretting holdt tilbake mens
 forfatteren åpner en annen seksjon), rød med den gamle linjen. De andre funnene er resten av #1168, under.
 
+**Stage (hjemme, 22.11.2026):** `test/stage/release-2-179-seksjon-dialoger.spec.ts` 4/4 mot ekte data: forhåndsvisningen og
+sperren navngir samme kurs, en annens seksjon gir 403 `content_ownership`, lista viser den sperrede dialogen med lenke,
+redigereren arkiverer (og avpubliserer), gjenoppretter som utkast og sletter. Ingen spørreboks fra nettleseren.
+
 **Gjenstår i #1168:** klasse og tema (spørreboks, temaets telling), kursets slettetekst, og «Avpubliser» på kurs.
 
 ## 2.178.1 - 2026-11-22
