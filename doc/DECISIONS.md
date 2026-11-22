@@ -2469,4 +2469,9 @@ Kartlagt i `doc/design/PLAN_1162_DELTAKERFLYT.md`. Produkteier avgjorde:
 
 Skive 5 (modulen åpnes som seksjonen) vises som prototype før den bygges.
 
+**Tillegg 2026-11-22 (2.178.1):** på engelsk heter lenken **«View certificate»**, ikke «View course certificate» (også «View
+certificate for version {n}» og i profilen). Den lange teksten tok så mye av kursraden på 360 px at en kort tittel ble delt midt
+i ordet. Lenken står på kursraden, så hvilket kurs beviset gjelder er tydelig. Bevissiden heter fortsatt «Course certificate»;
+bokmål og nynorsk er uendret. Avgjort av produkteier.
+
 **Sak:** #1162, #1170 · **Dato:** 2026-11-21 · **Status:** avgjort av produkteier

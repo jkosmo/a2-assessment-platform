@@ -283,7 +283,7 @@ test.describe("Profil: konto, så tre faner, så rettighetene (#1138)", () => {
     await expect(link).toBeVisible();
     await expect(link).toHaveText("Vis kursbevis");
     // #1162: kursbeviset åpnes i samme fane (før: ny fane), og `fra=profil` gir beviset «← Tilbake til profilen». Den
-    // engelske teksten, «View course certificate», sjekkes i profile-locale-switch.spec.ts; tilbake i participant-flow-1162.
+    // engelske teksten, «View certificate», sjekkes i profile-locale-switch.spec.ts; tilbake i participant-flow-1162.
     await expect(link).not.toHaveAttribute("target", /.+/);
   });
 

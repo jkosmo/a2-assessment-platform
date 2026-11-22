@@ -96,6 +96,8 @@ Knappen står der den står i dag. Bare teksten endres (skive 2), bortsett fra k
 - Overskriften på beviset er fortsatt «Kursbevis».
 - «Sertifikat» og den ubrukte «Sertifikat utstedt» fjernes fra tabellene.
 - Engelsk: «View course certificate» / «Course certificate». Nynorsk: «Vis kursbevis».
+  ⚠️ Endret i 2.178.1 (produkteier 2026-11-22): lenken heter «View certificate» på engelsk — den lange teksten delte korte
+  kurstitler midt i ordet på 360 px. Bevissiden heter fortsatt «Course certificate». Se `doc/DECISIONS.md`, «Deltakerflyten».
 
 ### Kursbeviset åpnes i samme fane
 

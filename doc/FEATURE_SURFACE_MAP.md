@@ -110,9 +110,13 @@ change to issuance, fetch-wiring, or rendering must be verified on all three:
 | Printable `/certificate?id=…` | `public/certificate.js` | fetches `/api/courses/completions/:id` |
 
 **One name (#1162, 2026-11-21):** the certificate is «Kursbevis» («Course certificate»), and every link to it says
-**«Vis kursbevis»** («View course certificate»), also on a phone: the course row (`courses.certificate.view`), the older-version
+**«Vis kursbevis»** («View certificate» — shortened 2026-11-22, see below), also on a phone: the course row (`courses.certificate.view`), the older-version
 note (`courses.certificate.earlier`, «Vis kursbevis for versjon {n}») and the profile (`profile.courses.view`). «Sertifikat» is
-not used for it. Guard: `test/e2e/participant-flow-1162.spec.ts` (three languages, 390 and 360 px).
+not used for it. Guard: `test/e2e/participant-flow-1162.spec.ts` (three languages, 390 and 360 px, in Arial — the widest
+font we measured; Windows' Segoe UI hid the problem locally).
+
+English link text shortened in 2.178.1: «View course certificate» left a 360 px course row about 80 px for the title, so a
+short title broke mid-word («Personve-rn»). The guard now also asserts that a short title stays on one line.
 
 **Same tab (#1162):** none of the three links has `target="_blank"`, so the browser's Back returns to where the participant was:
 the course with the open item (#1158 keeps both in the address), the list, or the profile on the tab «Beståtte kurs» (the profile

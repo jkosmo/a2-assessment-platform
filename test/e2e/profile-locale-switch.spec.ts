@@ -85,7 +85,7 @@ test("profile: switching locale re-renders the completed tables, not just the he
   await expect(page.locator("#statsMoodLine")).toHaveText("We're stuck in dead water. I'm not saying anything. I'm just mentioning it.");
   await expect(page.locator("#modulesBody")).toContainText("Module A");
   await expect(page.locator("#modulesBody")).toContainText("Jun 2026");
-  await expect(page.locator("#coursesBody")).toContainText("View course certificate");
+  await expect(page.locator("#coursesBody")).toContainText("View certificate");
 
   // Switch to Norwegian bokmål.
   await page.selectOption("#localeSelect", "nb");
@@ -97,7 +97,7 @@ test("profile: switching locale re-renders the completed tables, not just the he
   await expect(page.locator("#modulesBody")).toContainText("juni 2026");
   await expect(page.locator("#coursesBody")).toContainText("Vis kursbevis");
   await expect(page.locator("#modulesBody")).not.toContainText("Module A");
-  await expect(page.locator("#coursesBody")).not.toContainText("View course certificate");
+  await expect(page.locator("#coursesBody")).not.toContainText("View certificate");
 });
 
 // Profilsiden hadde én nøkkel uten tekst i noen bunt (`identity.load`), så knappen i testbrukerpanelet

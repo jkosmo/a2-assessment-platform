@@ -12,11 +12,17 @@ const LOCALES: Locale[] = ["nb", "nn", "en-GB"];
 const TEXT: Record<Locale, { view: string; earlier: string; toCourse: string; toList: string; toPosts: string }> = {
   nb: { view: "Vis kursbevis", earlier: "Vis kursbevis for versjon 2", toCourse: "← Tilbake til kurset", toList: "← Tilbake til Mine kurs", toPosts: "← Tilbake til innleggene" },
   nn: { view: "Vis kursbevis", earlier: "Vis kursbevis for versjon 2", toCourse: "← Tilbake til kurset", toList: "← Tilbake til Mine kurs", toPosts: "← Tilbake til innlegga" },
-  "en-GB": { view: "View course certificate", earlier: "View course certificate for version 2", toCourse: "← Back to the course", toList: "← Back to My courses", toPosts: "← Back to the posts" },
+  // Engelsk «View certificate», ikke «View course certificate» (produkteier 2026-11-22): den lange teksten tok så mye av kursraden
+  // på 360 px at tittelen ble delt midt i ordet. Bevissiden heter fortsatt «Course certificate».
+  "en-GB": { view: "View certificate", earlier: "View certificate for version 2", toCourse: "← Back to the course", toList: "← Back to My courses", toPosts: "← Back to the posts" },
 };
 
-// Ordet som er borte. «Sertifikat» står fortsatt i «Sertifiseringsnivå» på beviset, men ikke som navn på beviset.
-const OLD_WORDS = /Sertifikat\b|Vis bevis\b|View certificate\b|Certificate,/;
+// Ordene som er borte. «Sertifikat» står fortsatt i «Sertifiseringsnivå» på beviset, men ikke som navn på beviset.
+const OLD_WORDS = /Sertifikat\b|Vis bevis\b|Certificate,/;
+
+// Arial: Mac, iPhone og Linux (CI) har den og ikke Segoe UI, som Windows viser. Arial er bredest av dem vi har målt, så telefontesten
+// tvinger den — ellers er testen grønn på Windows og rød i CI (2.176.0–2.178.0: kursraden 59 px lokalt, 77,6 px i CI).
+const WIDEST_FONT = "body, body * { font-family: Arial, sans-serif !important; }";
 
 const LONG_TITLE = "Informasjonssikkerhetsopplæringsprogrammetsrepetisjonskurs";
 
@@ -123,6 +129,7 @@ test.describe("#1162 skive 1: kursbeviset heter «Kursbevis», lenken «Vis kurs
         await mockBase(page, locale);
         await mockCertificates(page);
         await page.goto("/participant");
+        await page.addStyleTag({ content: WIDEST_FONT });
 
         for (const id of ["done", "lang"]) {
           const link = item(page, id).locator(".course-certificate-link");
@@ -135,7 +142,11 @@ test.describe("#1162 skive 1: kursbeviset heter «Kursbevis», lenken «Vis kurs
           // Lenken står på én linje (13 px tekst).
           expect(linkBox.height).toBeLessThan(26);
         }
-        // Raden med kort tittel er høyst to linjer. Engelsk på 360 px brekker tittel og telling over to (målt 59 px).
+        // Den korte tittelen («Personvern») står på én linje, ikke delt midt i ordet. Med «View course certificate» fikk tittelen
+        // rundt 80 px på 360 px og ble «Personve-rn» — på Windows også; bare høyden under avslørte det, og bare med Arial.
+        const title = (await item(page, "done").locator(".course-accordion-title").boundingBox())!;
+        expect(title.height).toBeLessThan(26);
+        // Raden med kort tittel er høyst to linjer: tittel og telling (målt 40,8 px med Arial).
         const row = (await item(page, "done").locator(".course-done-row").boundingBox())!;
         expect(row.height).toBeLessThanOrEqual(64);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

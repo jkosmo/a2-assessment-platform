@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.178.1 - 2026-11-22
+
+Engelsk lenke til kursbeviset heter **«View certificate»** (før «View course certificate»): på kursraden, ved en eldre
+versjon («View certificate for version {n}») og i profilen. Avgjort av produkteier (tillegg i `doc/DECISIONS.md`,
+«Deltakerflyten»). Bokmål og nynorsk er uendret; bevissiden heter fortsatt «Course certificate». Ingen migrering.
+
+**Hvorfor:** på en 360 px telefon på engelsk ga den lange lenketeksten tittelen rundt 80 px, så en kort tittel ble delt midt i
+ordet («Personve-rn»), på alle plattformer. CI har vært rød på `participant-flow-1162` (360 px, en-GB) siden 2.176.0.
+
+**Rotårsak — hvorfor det slapp gjennom:** testen målte bare radens høyde, og lokalt viser Windows Segoe UI, der raden ble 59 px
+(under grensen på 64). Mac, iPhone og Linux (CI) har Arial, som er bredere: 77,6 px. Ordbruddet var der i begge, men ingen sjekk
+så på tittelen. Sjekken som nå kjører: telefontesten tvinger Arial, og krever at en kort tittel står på én linje.
+Prøvd og forkastet: `overflow-wrap: break-word` (et langt sammensatt ord gikk inn under lenken og ble kuttet), og lenken over to
+linjer (ga «Vis / kursbevis» også på bokmål, der det ikke trengs).
+
+**Tester:** `participant-flow-1162` (Arial; tittelen på én linje), `profile-locale-switch`, `profile-stats-1138`. To mutasjoner,
+begge røde: den gamle engelske teksten (tekstsjekken), og en bredere lenke med riktig tekst (tittelen 34 px, to linjer).
+Full runde grønn: enhet 3467, DOM 109, e2e 1241, integrasjon 1490 (parallell, 5,5 min).
+
+**QA 2.178.1** (Codex): GO. Ett funn, rettet: designplanen for #1162 oppga fortsatt den gamle engelske teksten.
+
 ## 2.178.0 - 2026-11-22
 
 #1168, første skive: modulens «Arkiver», «Gjenopprett» og «Slett» følger kursets mønster (#1150): sjekk først, vis
