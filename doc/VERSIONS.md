@@ -4,6 +4,9 @@ This document tracks release versions and what each version includes.
 
 ## 2.181.0 - 2026-11-22
 
+**Prod 22.11.2026, 22:45** (sammen med 2.178.1, 2.179.0 og 2.180.0; `git_ref` 0963881d, `skip_staging`). App og worker svarer
+2.181.0, workeren startet på nytt, `/healthz` ok, og prod viser «View certificate».
+
 #1168, fjerde og siste skive: klassen og temaet. Ingen migrering.
 
 **Hva brukerne merker:**
