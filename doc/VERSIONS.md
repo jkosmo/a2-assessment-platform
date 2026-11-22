@@ -31,6 +31,11 @@ ruta; to klikk på «Arkiver» i to rader mens forhåndsvisningen ble hentet kun
 modulsida manglet stilene for teksten og «Avbryt»; entall og flertall i teksten om kurset som holder modulen igjen; og
 integrasjonstesten fanget ikke et kurs med titler på flere språk (ny test, mutasjon 7: språket fjernet fra ruta → rød).
 
+**På stage 22.11.2026** (dev 0bf0fe6e, stage hjemme under taket som ligner B1). Stage-testen `release-2-178-modul-dialoger` 4/4
+med ekte data: forhåndsvisningen og sperren navngir det samme kurset (`content_in_use`), en annens modul gir 403
+`content_ownership`, den sperrede dialogen viser kurset med lenke og ingen bekreftknapp, og arkiver → gjenopprett («… som
+utkast») → slett går gjennom dialogene. `release-2-161-slett-arkivert` (rettet for dialogen) 4/4.
+
 **Kjent:**
 - Etter «Arkiver modulen» står knappen opptatt til lista er tegnet på nytt, så fokuset går tapt i det korte øyeblikket. En rad
   som er utdatert (modulen er arkivert i en annen fane), får dialogen og deretter `module_already_archived`.
