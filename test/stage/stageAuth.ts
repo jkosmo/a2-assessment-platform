@@ -53,10 +53,24 @@ export function readServiceAuth(): { auth: StageAuth | null; reason: string } {
   return readAuthFile(".stage-service-auth.json", "npm run stage:auth:service");
 }
 
+/**
+ * Adressen påloggingen ble hentet mot, ellers STAGE_BASE_URL, ellers `baseUrl` i den gitignorerte `.stage-service.json`.
+ * Stage i Azure er passiv fra 2026-11-22, og adressen til stage står ikke i dette offentlige repoet (doc/ENVIRONMENTS.local.md).
+ * Samme regel som scripts/test/stage-base-url.mjs. Mangler alt, gir den en `.invalid`-adresse som feiler med et navn som sier
+ * hva som er galt, i stedet for å treffe et miljø som ikke finnes lenger.
+ */
 export function stageBaseUrl(auth: StageAuth | null): string {
-  return (
-    auth?.baseUrl
-    ?? process.env.STAGE_BASE_URL
-    ?? "https://a2-assessment-platform-stg-app-x6eyx4.azurewebsites.net"
-  );
+  // Påloggingsfila vinner: testene skal treffe det miljøet tokenet ble hentet mot. Tokenet varer en time, så en gammel fil
+  // fra stage i Azure kan ikke bli liggende lenge.
+  const fromEnv = process.env.STAGE_BASE_URL?.trim().replace(/\/+$/, "") || null;
+  return auth?.baseUrl ?? fromEnv ?? localStageBaseUrl() ?? "https://stage-adresse-mangler.invalid";
+}
+
+function localStageBaseUrl(): string | null {
+  try {
+    const config = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), ".stage-service.json"), "utf8")) as { baseUrl?: unknown };
+    return typeof config.baseUrl === "string" && config.baseUrl.trim() ? config.baseUrl.trim().replace(/\/+$/, "") : null;
+  } catch {
+    return null;
+  }
 }

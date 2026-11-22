@@ -56,6 +56,30 @@ const SKIP = [
   "test/environment-identifier-guard.test.js", // denne fila, som nødvendigvis nevner verdiene
 ];
 
+// Adressen til stage (fra 2026-11-22 på en egen server, ikke i Azure) skal heller ikke inn i repoet. Den kan ikke skrives
+// her, fordi denne fila er sporet. Vakta leser den fra feltet `baseUrl` i den gitignorerte `.stage-service.json`, i denne
+// arbeidskopien eller i hovedarbeidskopien (git worktree), og hopper over sjekken der fila mangler, som i CI.
+const SHARED_DOMAINS = new Set(["azurewebsites.net", "azure.com", "windows.net", "localhost"]);
+
+function localStageHost() {
+  const roots = [ROOT];
+  try {
+    const common = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: ROOT, encoding: "utf8" }).trim();
+    roots.push(`${common.replace(/[\\/]+\.git$/, "")}/`);
+  } catch {
+    // Ikke en git-arbeidskopi: bare ROOT.
+  }
+  for (const root of roots) {
+    try {
+      const { baseUrl } = JSON.parse(readFileSync(`${root}.stage-service.json`, "utf8"));
+      if (typeof baseUrl === "string" && baseUrl.trim()) return new URL(baseUrl.trim()).hostname.toLowerCase();
+    } catch {
+      // Ingen fil her; prøv neste.
+    }
+  }
+  return null;
+}
+
 /** Kun SPOREDE filer. En lokal, ignorert fil er nettopp der verdiene skal ligge. */
 function trackedFiles() {
   const out = execFileSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
@@ -111,6 +135,33 @@ describe("miljøidentifikatorer lekker ikke ut i det offentlige repoet", () => {
       `\nDriftskontoer i sporede filer:\n${hits.join("\n")}\n\n`
       + "Bruk <PROD_ADMIN_UPN> / <STAGING_ADMIN_UPN>, eller en åpenbart generisk adresse\n"
       + "som person@example.com i et eksempel.\n",
+    ).toEqual([]);
+  });
+
+  const stageHost = localStageHost();
+  it.skipIf(!stageHost)("adressen til stage (fra den lokale .stage-service.json) står ikke i sporede filer", () => {
+    // Domenet også, ikke bare vertsnavnet: en annen adresse på samme domene beskriver det samme stedet. Unntatt delte
+    // domener, der domenet alene ikke sier noe om oss.
+    const domain = stageHost.split(".").slice(-2).join(".");
+    const needles = SHARED_DOMAINS.has(domain) ? [stageHost] : [stageHost, domain];
+    // Alle sporede tekstfiler, også kildekode og tester: en adresse havner like gjerne som standardverdi i et skript.
+    const textFiles = trackedFiles().filter((f) => !SKIP.includes(f) && !/\.(png|jpe?g|gif|webp|ico|pdf|zip|woff2?|ttf|pptx|docx|xlsx)$/i.test(f));
+    // KONTROLLASSERTION: vakta skanner faktisk noe.
+    expect(textFiles.length).toBeGreaterThan(500);
+    const hits = [];
+    for (const file of textFiles) {
+      let src;
+      try { src = readFileSync(`${ROOT}${file}`, "utf8").toLowerCase(); } catch { continue; }
+      for (const needle of needles) {
+        const i = src.indexOf(needle);
+        if (i >= 0) hits.push(`${file}:${src.slice(0, i).split("\n").length}`);
+      }
+    }
+    expect(
+      hits,
+      `\nAdressen til stage står i sporede filer:\n${hits.join("\n")}\n\n`
+      + "Les den fra STAGE_BASE_URL eller .stage-service.json (scripts/test/stage-base-url.mjs), og skriv den i\n"
+      + "doc/ENVIRONMENTS.local.md, ikke i repoet.\n",
     ).toEqual([]);
   });
 

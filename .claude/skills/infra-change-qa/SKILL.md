@@ -30,4 +30,4 @@ For any change touching `infra/`, `scripts/azure/`, or `.github/workflows/`, Cla
 - Do prod-destructive scripts assert the correct subscription before acting?
 
 **ARM validation gap**
-- A green ARM deploy does NOT prove runtime correctness. Verify MSI sidecar, KV reference resolution, and `/healthz` on staging before promoting to prod.
+- A green ARM deploy does NOT prove runtime correctness. Verify MSI sidecar, KV reference resolution, and `/healthz` after the deploy. Since 2026-11-22 there is no Azure stage to try this on first (deploy-runbook, «Stage is not in Azure»): run the prod what-if, deploy outside working hours, check web and worker `/version` and `/healthz` straight after, and have the previous tag ready to redeploy.

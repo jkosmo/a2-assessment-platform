@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { requireStageBaseUrl } from "../test/stage-base-url.mjs";
 
 // #1023: MÅL om den strukturerte konfidensutløseren i det hele tatt fyrer.
 //
@@ -35,7 +36,7 @@ if (!fs.existsSync(AUTH_FILE)) {
   process.exit(1);
 }
 const auth = JSON.parse(fs.readFileSync(AUTH_FILE, "utf8"));
-const BASE = auth.baseUrl ?? "https://a2-assessment-platform-stg-app-x6eyx4.azurewebsites.net";
+const BASE = auth.baseUrl ?? requireStageBaseUrl();
 // ⚠️ VURDERINGSSPRÅKET FØLGER `x-locale`, ikke besvarelsens tekst. Første kjøring leverte norske
 // besvarelser uten headeren, fikk `en-GB` som standard, og målte dermed den ENGELSKE veien — mens
 // hele spørsmålet i #1023 er hva som skjer på den norske. Uten dette valget måler skriptet feil sak.

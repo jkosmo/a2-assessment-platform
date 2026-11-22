@@ -14,9 +14,9 @@
 // Mot et annet miljø:  STAGE_BASE_URL=https://… npm run test:stage
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { stageBaseUrl } from "./stageAuth.js";
 
-const BASE = process.env.STAGE_BASE_URL
-  ?? "https://a2-assessment-platform-stg-app-x6eyx4.azurewebsites.net";
+const BASE = stageBaseUrl(null);
 
 test.describe("utrullet stage — flate og sikkerhet", () => {
   test("appen svarer, og versjonen er den vi tror", async ({ request }) => {

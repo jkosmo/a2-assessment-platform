@@ -127,7 +127,7 @@ test("1. et lesekurs publiseres som 1.0, og testkontoen får kursbevis for versj
   await lagSeksjon("C");
 });
 
-test("2. kursskjemaet: v1.0, legg til en seksjon, «Hva slags endring er dette?», hovedversjon → v2.0", async ({ page }) => {
+test("2. kursskjemaet: v1.0, legg til en seksjon, lagre utkastet, «Publiser utkastet» → «Hva slags endring er dette?», hovedversjon → v2.0", async ({ page }) => {
   test.setTimeout(240_000);
   await forberedSide(page);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -146,9 +146,15 @@ test("2. kursskjemaet: v1.0, legg til en seksjon, «Hva slags endring er dette?�
   await expect(page.locator("#addItemBtn")).toBeEnabled();
   await page.locator("#addItemBtn").click();
   await page.locator("#formSaveBtn").click();
+  // 2.157.0 (#1140): «Lagre» på et publisert kurs lagrer et utkast. Ingenting går ut, og versjonen spørres ikke om ennå.
+  await expect(page.locator('[data-action="publish-draft"]')).toBeVisible({ timeout: 45_000 });
+  expect(await versjon()).toEqual({ versionMajor: 1, versionMinor: 0, certificateHolders: 1 });
+  // #1164 (2.164.0): spørsmålet om versjon kommer ved «Publiser utkastet», i samme dialog som hvem som ser kurset.
+  await page.locator('[data-action="publish-draft"]').click();
 
   const dialog = page.locator("#courseVersionDialog");
   await expect(dialog).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("#courseVersionAudience")).toBeVisible();
   await expect(page.locator("#courseVersionTitle")).toHaveText("Hva slags endring er dette?");
   const forklaring = (await page.locator("#courseVersionText").innerText()).trim();
   noter("dialogtekst", forklaring);
@@ -259,6 +265,9 @@ test("4. bevis for 1 uten versjonslinje; ny seksjon lest → bevis for 2 med «V
   await bilde(page, "4b-kursbevis-v2", false);
 
   await page.goto(`${BASE}/profile`, { waitUntil: "domcontentloaded" });
+  // Profilen har faner; kursbevisene står under «Beståtte kurs», som ikke er åpen fra start.
+  await page.locator("#profileTab-courses").click();
+  await expect(page.locator("#profilePanel-courses")).toBeVisible({ timeout: 45_000 });
   // #1162: lenken i profilen bærer `&fra=profil`.
   const v2rad = page.locator("#coursesBody tr", { has: page.locator(`a[href="/certificate?id=${tilstand.bevisV2}&fra=profil"]`) });
   await expect(v2rad).toBeVisible({ timeout: 45_000 });

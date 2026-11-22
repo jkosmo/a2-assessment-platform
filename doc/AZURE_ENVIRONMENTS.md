@@ -27,6 +27,21 @@ Automated provisioning and deployment for:
 
 Each environment must use a dedicated resource group and be deployable via CI/CD.
 
+## Staging is passive in Azure (since 2026-11-22)
+
+The staging **app layer** was removed to save cost: the three App Services, the B1 plan, the PostgreSQL server, the
+log and metric alerts and the two availability tests. Before that, staging cost about 570 kr a month: availability
+tests 208, PostgreSQL 174, plan 121, log alerts 54, OpenAI ~10. What remains in the staging resource group is used by
+the self-hosted stage and costs about 10 kr a month: Blob Storage (`course-assets`, through an app registration with
+Storage Blob Data Contributor on that container only), Azure OpenAI, ACS e-mail, Key Vault, Log Analytics and the
+action group.
+
+- Stage itself runs on a self-hosted server. Its address and access are only in `doc/ENVIRONMENTS.local.md`.
+- **Every prod deploy passes `skip_staging=true`** to `deploy-app.yml` or `deploy-azure.yml`. Without it,
+  `deploy-app.yml` fails in the stage job and skips prod, and `deploy-azure.yml` recreates the Azure stage.
+- The staging Bicep what-if on PRs still runs against the resource group; it now shows the app layer as new resources.
+- To bring the Azure stage back: `activate-staging-app-layer` (not tried since; the database starts empty).
+
 ## Artifacts
 - Infrastructure template: `infra/azure/main.bicep`
 - Deployment script: `scripts/azure/deploy-environment.ps1`

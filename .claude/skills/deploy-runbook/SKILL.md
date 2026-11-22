@@ -8,6 +8,24 @@ description: How to deploy the A2 Assessment Platform — which GitHub workflow 
 Moved from CLAUDE.md (2026-11-14) so it loads only when deploying. The prohibitions (never run the deploy script
 locally, infra invariants, deploy discipline) stay in CLAUDE.md.
 
+## Stage is not in Azure (since 2026-11-22)
+
+The Azure stage app layer (App Services, plan, PostgreSQL, alerts, availability tests) was removed to save about
+560 of 570 kr a month. Blob, OpenAI, ACS and Key Vault in the stage resource group remain, and the self-hosted stage
+uses them. Stage now runs on a self-hosted server under a resource cap that mimics what the apps get on prod's B1 plan:
+one core, and 640 MB shared by web, worker and parser. B1 has 1.75 GB, but the platform itself uses ~1.2 GB of it
+(measured 2026-11-22), so the apps share ~600 MB. The app directory is read-only, like Run-From-Package.
+
+- **Stage deploy:** `srv utrull a2 <full sha>` over SSH. The exact commands, the address and what needs the owner's
+  password are in `doc/ENVIRONMENTS.local.md`. Never put the address in a tracked file.
+- **Stage tests:** `npm run test:stage` reads the address from `STAGE_BASE_URL` or `baseUrl` in the gitignored
+  `.stage-service.json` (`scripts/test/stage-base-url.mjs`). Run file by file.
+- **Prod deploy: always `skip_staging=true`.** Without it `deploy-app.yml` fails in the stage job (prod is skipped),
+  and `deploy-azure.yml` would recreate the whole Azure stage, cost included.
+- **Infra changes** (Bicep, workflows, `scripts/azure`) can no longer be tried on an Azure stage first. Run the prod
+  what-if (below), deploy outside working hours, and watch `/version` and `/healthz` on web and worker. If an Azure
+  stage is ever needed again: `activate-staging-app-layer` (untested; starts with an empty database).
+
 ## Which deploy workflow to use
 
 | Type of change | Use workflow | Why |
@@ -30,7 +48,7 @@ promoted to prod" from "what's currently on `main`" — so feature work can keep
 1. Tag the stage-verified commit: `git tag v1.3.67 <sha> && git push origin v1.3.67`.
 2. Promote that tag to prod (skipping a redundant stage redeploy):
    `gh workflow run deploy-app.yml --ref main -f git_ref=v1.3.67 -f deploy_production=true -f skip_staging=true`
-3. `main` keeps moving; stage deploys still default to `main` HEAD (empty `git_ref`).
+3. `main` keeps moving. A full SHA works as `git_ref` too (a short SHA fails the checkout).
 
 Use `deploy-app.yml` for code-only promotions. For infra, leave `git_ref` empty (pinning an old tag would
 also re-apply that ref's Bicep). `/version` on prod reflects the deployed tag — verify it after promotion.

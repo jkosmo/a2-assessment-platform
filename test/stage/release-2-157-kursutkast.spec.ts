@@ -279,10 +279,19 @@ test("den ekte kursbyggeren: «Lagre» går til utkastet, merket og linja vises,
   await rad.scrollIntoViewIfNeeded();
   await bilde(page, "kursliste-nyere-utkast");
 
-  // Publiser utkastet fra knappen (ingen kursbevis: ingen spørsmål).
+  // Publiser utkastet fra knappen (ingen kursbevis: ingen spørsmål om versjon).
   await page.goto(`${BASE}/admin-content/courses/${tilstand.kursId}`, { waitUntil: "domcontentloaded" });
   await expect(page.locator("#title-nb")).toHaveValue(navnFraSkjemaet, { timeout: 45_000 });
   await page.locator('[data-action="publish-draft"]').click();
+  // #1164 (2.164.0): knappen åpner dialogen «Publisere utkastet?» med hvem som ser kurset. Ingenting publiseres før den er bekreftet.
+  const publiser = page.locator("#cascadePublishDialog");
+  await expect(publiser).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator("#cascadePublishTitle")).toHaveText("Publisere utkastet?");
+  await expect(publiser.locator("[data-publish-audience]")).toHaveCount(1);
+  expect(kall.filter((k) => k.sti === "/draft/publish")).toEqual([]);
+  await bilde(page, "kursbygger-publiser-dialog-1280");
+  await page.locator("#cascadePublishConfirmBtn").click();
+  await expect(publiser).toBeHidden({ timeout: 45_000 });
   await expect(page.locator(".toast__message").first()).toHaveText("Utkastet er publisert.", { timeout: 45_000 });
   await expect(page.locator(".form-page-state .status-chip", { hasText: "Nyere utkast" })).toHaveCount(0);
   noter("kursbyggeren: publiser", kall.filter((k) => k.sti === "/draft/publish"));

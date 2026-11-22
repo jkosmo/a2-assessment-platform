@@ -345,7 +345,9 @@ Deliberately does **not** touch genuine translations, partial translations (two 
 single-locale maps (`{"nb":"…"}` records *which* language the text is in), or values that are already plain
 strings. Covers `Module.title`, `CourseSection.title`, `Course.title`, `Course.description`.
 
-**Against staging** the resource group has no lock, so the firewall step is straightforward:
+**Against staging:** the Azure stage database was deleted 2026-11-22 (`doc/AZURE_ENVIRONMENTS.md`); stage now runs
+self-hosted, and the commands for its database are in `doc/ENVIRONMENTS.local.md`. The recipe below is kept for the
+day an Azure stage is brought back. That resource group has no lock, so the firewall step is straightforward:
 
 ```powershell
 az account set --subscription <STAGING_SUBSCRIPTION_ID>

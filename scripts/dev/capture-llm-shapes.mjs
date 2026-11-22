@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { requireStageBaseUrl } from "../test/stage-base-url.mjs";
 
 // #1025: henter FORMEN på ekte LLM-svar fra stage, uten innholdet.
 //
@@ -29,7 +30,7 @@ if (!fs.existsSync(AUTH_FILE)) {
   process.exit(1);
 }
 const auth = JSON.parse(fs.readFileSync(AUTH_FILE, "utf8"));
-const BASE = auth.baseUrl ?? "https://a2-assessment-platform-stg-app-x6eyx4.azurewebsites.net";
+const BASE = auth.baseUrl ?? requireStageBaseUrl();
 const H = { Authorization: `Bearer ${auth.accessToken}` };
 
 async function get(url) {

@@ -98,7 +98,13 @@ forfaller.
 
 - Always bump `package.json` version and `doc/VERSIONS.md` in the same commit as code changes.
 - Create GitHub issue → specify/plan → implement → test → document, in that order.
-- Deploy cadence: staging and production both require manual `workflow_dispatch`. Push to `main` does NOT auto-deploy.
+- Deploy cadence: production requires manual `workflow_dispatch`. Push to `main` does NOT auto-deploy.
+- **Stage is not in Azure (since 2026-11-22).** The Azure stage app layer (App Services, plan, PostgreSQL, alerts,
+  availability tests) was removed to save cost; Blob, OpenAI, ACS and Key Vault remain and the self-hosted stage uses
+  them. Stage runs on a self-hosted server and is deployed with `srv utrull` over SSH. Its address and access are ONLY
+  in `doc/ENVIRONMENTS.local.md` — never in tracked files (`test/environment-identifier-guard.test.js` checks it).
+  Every prod deploy uses `skip_staging=true`; without it `deploy-app.yml` fails in the stage job and `deploy-azure.yml`
+  would recreate the Azure stage. See the deploy-runbook skill.
 
 ### Documentation is a MANDATORY step — not optional (standing order)
 
@@ -282,7 +288,7 @@ stopper. Regelen står i `scripts/ai-qa.ps1`. Alt annet føres som kjent mangel 
 
 ### Cross-model QA gate before every stage deploy (standing order, 2026-08-13)
 
-A stage deploy costs 16–22 min plus a manual test round. The automated suites catch what they were
+A stage round costs a deploy plus a manual test round. The automated suites catch what they were
 written for; the recurring loss is the class they were *not* written for — "correct fix, incomplete
 surface" and client-layer integration. So: **once the automated suites are green and before the
 stage deploy, run a cross-model review.**
@@ -373,7 +379,7 @@ These rules exist because their violation caused or worsened the May 2026 produc
 7. **Never** treat successful ARM validation or a green deploy step as proof of runtime correctness — always verify `/healthz` and smoke test.
 8. **Never** run prod-destructive scripts without first asserting the correct subscription (`az account show`) and resource group.
 9. **Always** include rollback notes for infra changes in the PR description.
-10. **Always** verify staging `/healthz` is healthy before triggering a production deploy.
+10. **Always** verify staging `/healthz` is healthy before triggering a production deploy. Stage is self-hosted since 2026-11-22, so it cannot prove Azure-only behaviour (MSI, KV references, Bicep); for those, see the deploy-runbook skill, «Stage is not in Azure».
 11. **Always** propose `az deployment group what-if` output for staging (and prod) before implementing non-trivial Bicep changes. ARM what-if is the only check that catches schema drift before deploy.
 12. **Always** apply credential changes atomically: a KV secret and the underlying resource (PostgreSQL server, Storage account, etc.) must be updated in the same deploy, or one must explicitly re-read the existing value. Drift between KV and the underlying resource is silent until the next app restart.
 13. **Always** keep DB migrations expand/contract-safe (#811) — see Deploy discipline → Process rule 5. Both web and worker run `prisma migrate deploy` on startup, so old containers run against the new schema and new code runs briefly against the old schema during a rollout. Additive within a deploy; drop/rename in a follow-up; never both on the same object in one deploy.

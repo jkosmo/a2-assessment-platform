@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { requireStageBaseUrl } from "../test/stage-base-url.mjs";
 
 // #1023, lesedelen: hent resultatene for innleveringer gjort etter et tidspunkt, og tell de
 // STRUKTURERTE verdiene som avgjør om en andre vurdering utløses.
@@ -16,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const auth = JSON.parse(fs.readFileSync(path.join(ROOT, ".stage-auth.json"), "utf8"));
-const BASE = auth.baseUrl ?? "https://a2-assessment-platform-stg-app-x6eyx4.azurewebsites.net";
+const BASE = auth.baseUrl ?? requireStageBaseUrl();
 const H = { Authorization: `Bearer ${auth.accessToken}` };
 
 const arg = (navn, standard) =>

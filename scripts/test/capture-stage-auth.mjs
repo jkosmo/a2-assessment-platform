@@ -18,9 +18,9 @@
 import { chromium } from "playwright";
 import fs from "node:fs";
 import path from "node:path";
+import { requireStageBaseUrl } from "./stage-base-url.mjs";
 
-const BASE = process.env.STAGE_BASE_URL
-  ?? "https://a2-assessment-platform-stg-app-x6eyx4.azurewebsites.net";
+const BASE = requireStageBaseUrl((message) => log(message));
 const OUT = path.resolve(process.cwd(), ".stage-auth.json");
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 

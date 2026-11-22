@@ -21,12 +21,13 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { requireStageBaseUrl } from "./stage-base-url.mjs";
 
-const BASE = process.env.STAGE_BASE_URL ?? "https://a2-assessment-platform-stg-app-x6eyx4.azurewebsites.net";
 const SECRET_FILE = path.resolve(process.cwd(), ".stage-service.json");
 const OUT = path.resolve(process.cwd(), ".stage-service-auth.json");
 
 const log = (message) => console.log(`[stage-auth:service] ${message}`);
+const BASE = requireStageBaseUrl(log);
 
 if (!fs.existsSync(SECRET_FILE)) {
   log("fant ikke .stage-service.json — se kommentaren øverst i dette skriptet");

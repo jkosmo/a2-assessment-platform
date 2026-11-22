@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { stageBaseUrl } from "./stageAuth.js";
 
 // Kontroller mot det UTRULLEDE artefaktet, ikke mot git. En feilslått build som serverer et gammelt
 // bundle ser identisk ut i kildekoden — og de fleste punktene på produkteiers manuelle testliste er
@@ -11,8 +12,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 // Hver bom så ut som et FUNN: null treff på en grep leser som «endringen mangler». Testene under
 // feiler på ikke-200 i stedet for å telle null treff i en tom respons.
 
-const BASE = process.env.STAGE_BASE_URL
-  ?? "https://a2-assessment-platform-stg-app-x6eyx4.azurewebsites.net";
+const BASE = stageBaseUrl(null);
 
 async function fetchText(request: APIRequestContext, path: string): Promise<string> {
   const response = await request.get(`${BASE}${path}`);
