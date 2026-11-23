@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.181.1 - 2026-11-23
+
+Stage-testkontoen kan være **administrator** (produkteier 2026-11-23: «en testkonto i stage med app admin, vi trenger å kunne
+teste all funksjonalitet»). Ingen endring for brukerne, og ingen i prod: kontoen godtas bare der `DEPLOY_ENVIRONMENT` er `staging`.
+
+Med hodet `x-stage-test-role: ADMINISTRATOR` er tokenet til «A-2 stage-testkonto» en tredje, egen bruker med bare rollen
+administrator (`stage-test-service-admin:<appId>`, `stage-testkonto-admin@stage.invalid`), ved siden av fagansvarlig (uten hodet)
+og deltakeren (`PARTICIPANT`). Rollen lagres ikke. Det betyr at det bare administratoren når — temaene, plattformsida, andres
+klasser — nå kan prøves mot stage uten at et menneske logger inn. Først ut er de to sjekkene som holder #1168 åpen.
+
+**Tester:** `stage-test-service` (enhet: hvitelisten, tre ulike brukere, ingen hjelp utenfor stage eller fra en annen app) og
+`m2-stage-test-participant` (gjennom rutene: `/api/me` sier administrator, plattformruta slipper inn administratoren og stenger
+for fagansvarlig og deltaker, rollen er ikke lagret). Tre mutasjoner røde: uten grenen, med fagansvarligs rolle, og med
+fagansvarligs bruker.
+
 ## 2.181.0 - 2026-11-22
 
 **Prod 22.11.2026, 22:45** (sammen med 2.178.1, 2.179.0 og 2.180.0; `git_ref` 0963881d, `skip_staging`). App og worker svarer

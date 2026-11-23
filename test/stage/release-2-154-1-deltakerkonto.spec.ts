@@ -207,8 +207,9 @@ test("deltakeren er en egen bruker med bare deltakerrollen, og en ukjent rolle a
   expect(adminSomDeltaker.status).toBe(403);
   expect(adminSomFagansvarlig.status).toBe(200);
 
-  // Hvitelisten: alt annet enn nøyaktig PARTICIPANT gir 401, ikke fagansvarlig.
-  for (const verdi of ["participant", "ADMINISTRATOR"]) {
+  // Hvitelisten: en verdi utenfor den gir 401, ikke fagansvarlig. 2.181.1: ADMINISTRATOR er nå på lista
+  // (release-2-181-1-administrator.spec.ts); `administrator` med små bokstaver er det ikke.
+  for (const verdi of ["participant", "administrator", "REVIEWER"]) {
     const avvist = await kall(verdi, "GET", "/api/me");
     noter(`ukjent rolle «${verdi}»`, avvist.status);
     expect(avvist.status, `verdi «${verdi}»`).toBe(401);

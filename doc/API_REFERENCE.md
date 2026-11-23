@@ -2,7 +2,7 @@
 
 All `/api/*` routes require authentication. In local/test `AUTH_MODE=mock`, use the `x-user-roles` header to set roles. Shared Azure environments must use `AUTH_MODE=entra`, where a valid JWT is required and mock identity headers are ignored.
 
-**Stage only — the stage test account (2.105.0, 2.154.1).** An app-only token is accepted only when `DEPLOY_ENVIRONMENT` is exactly `staging` and the token's app is `STAGE_TEST_SERVICE_APP_ID` (`src/auth/stageTestService.ts`); neither is set in prod. Without further headers it is a subject-matter owner. With `x-stage-test-role: PARTICIPANT` it is a separate user (`stage-test-service-participant:<appId>`, `stage-testkonto-deltaker@stage.invalid`) with only the `PARTICIPANT` role; any other value of the header gives `401`. The header is read for nothing else: user tokens and agent tokens (`aat_…`) ignore it.
+**Stage only — the stage test account (2.105.0, 2.154.1, 2.181.1).** An app-only token is accepted only when `DEPLOY_ENVIRONMENT` is exactly `staging` and the token's app is `STAGE_TEST_SERVICE_APP_ID` (`src/auth/stageTestService.ts`); neither is set in prod. Without further headers it is a subject-matter owner. With `x-stage-test-role: PARTICIPANT` it is a separate user (`stage-test-service-participant:<appId>`, `stage-testkonto-deltaker@stage.invalid`) with only the `PARTICIPANT` role. With `x-stage-test-role: ADMINISTRATOR` it is a third separate user (`stage-test-service-admin:<appId>`, `stage-testkonto-admin@stage.invalid`) with only the `ADMINISTRATOR` role. Any other value of the header gives `401`. The roles come from the header on each request and are not stored. The header is read for nothing else: user tokens and agent tokens (`aat_…`) ignore it.
 
 ## Source of truth
 

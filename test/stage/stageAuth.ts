@@ -34,7 +34,8 @@ function readAuthFile(name: string, renew: string): { auth: StageAuth | null; re
 /**
  * Den personlige sesjonen (`npm run stage:auth`, med brukerens roller) når den er gyldig; ellers
  * stage-testkontoen (2.105.0, `npm run stage:auth:service` — fagansvarlig, henter seg selv uten
- * innlogging). En test som trenger administrator, får da 403 og må hoppe over på det.
+ * innlogging). En test som trenger administrator, bruker `readServiceAuth()` med hodet `x-stage-test-role: ADMINISTRATOR`
+ * (2.181.1).
  */
 export function readAuth(): { auth: StageAuth | null; reason: string } {
   const personal = readAuthFile(".stage-auth.json", "npm run stage:auth");
@@ -47,7 +48,7 @@ export function readAuth(): { auth: StageAuth | null; reason: string } {
 /**
  * Bare stage-testkontoen, også når en personlig sesjon finnes. 2.154.1: en test som skal opptre som DELTAKER (hodet
  * `x-stage-test-role: PARTICIPANT`, src/auth/stageTestService.ts) trenger kontoens token — hodet virker ikke på et
- * brukertoken.
+ * brukertoken. 2.181.1: det samme for ADMINISTRATOR.
  */
 export function readServiceAuth(): { auth: StageAuth | null; reason: string } {
   return readAuthFile(".stage-service-auth.json", "npm run stage:auth:service");

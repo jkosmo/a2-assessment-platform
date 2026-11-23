@@ -22,8 +22,14 @@
 //   - nøyaktig `PARTICIPANT` → en EGEN bruker (`stage-test-service-participant:<appId>`) med bare
 //                              rollen deltaker. Egen bruker, så fagansvarliges roller, innleveringer
 //                              og klasser aldri blandes inn;
+//   - nøyaktig `ADMINISTRATOR` → en tredje, EGEN bruker (`stage-test-service-admin:<appId>`) med bare
+//                              rollen administrator (2.181.1, produkteier 2026-11-23: «en testkonto i
+//                              stage med app admin, vi trenger å kunne teste all funksjonalitet»). Det
+//                              som bare administratoren når — temaene, plattforminnstillingene, andres
+//                              klasser — kunne før bare prøves av et menneske som logget inn;
 //   - alt annet              → avslag (401). Ingen stille tilbakefall til fagansvarlig: en skrivefeil
 //                              i testen skal gi en feil, ikke en test som prøver feil rolle.
+// De tre er tre brukere i databasen, så roller, innleveringer og klasser aldri blandes.
 // Hodet har ingen virkning for brukertokens eller agent-tokens: det leses bare her, og hit kommer
 // bare app-only tokens (`authenticate.ts`).
 import type { JWTPayload } from "jose";
@@ -36,6 +42,9 @@ export const STAGE_TEST_ROLE_HEADER = "x-stage-test-role";
 
 /** Den ene verdien hodet kan ha. */
 export const STAGE_TEST_PARTICIPANT_ROLE = "PARTICIPANT";
+
+/** Verdien som gjør kontoen til administrator (2.181.1). */
+export const STAGE_TEST_ADMIN_ROLE = "ADMINISTRATOR";
 
 export interface StageTestServiceSettings {
   deployEnvironment: string | undefined;
@@ -81,6 +90,15 @@ export function stageTestServicePrincipal(
       email: "stage-testkonto-deltaker@stage.invalid",
       name: "Stage-testkonto (deltaker)",
       tokenRoles: [STAGE_TEST_PARTICIPANT_ROLE],
+      groupIds: [],
+    };
+  }
+  if (requestedRole === STAGE_TEST_ADMIN_ROLE) {
+    return {
+      externalId: `stage-test-service-admin:${appId}`,
+      email: "stage-testkonto-admin@stage.invalid",
+      name: "Stage-testkonto (administrator)",
+      tokenRoles: [STAGE_TEST_ADMIN_ROLE],
       groupIds: [],
     };
   }
