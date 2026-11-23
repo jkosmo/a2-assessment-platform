@@ -15,7 +15,7 @@ import { arkiverKurs } from "./arkiver.js";
 //   C. Klassen: én deltaker, to begrensede kurs fra samme klasse. Deltakeren har lest en seksjon i det ene. Klassen arkiveres
 //      gjennom sidas dialog. Kurset deltakeren ikke har begynt på, forsvinner fra Mine kurs; det påbegynte blir stående.
 //
-// Det testen skriver på stage, alt med «Stage-test 2.181.1» og et tidsstempel i navnet: ett tema, fire kurs, to seksjoner og
+// Det testen skriver på stage, alt med «Stage-test 2.181.1» og et tidsstempel i navnet: ett tema, fire kurs, fire seksjoner og
 // én klasse. Ryddingen sletter alt, også når noe feilet underveis. ⚠️ Tokenet leses fra den gitignorerte
 // `.stage-service-auth.json` og skal ALDRI logges.
 
@@ -65,7 +65,12 @@ async function meg(som: Som): Promise<{ id: string; roles: string[] }> {
     noter(`${som}: godtok personvernerklæringen`, godtatt.status);
     expect(godtatt.status).toBeLessThan(300);
   }
-  return { id: svar.json.user.id, roles: svar.json.user.roles };
+  // /api/me har ikke den interne id-en; /api/me/data har den (som i release-2-154-1).
+  const data = await kall(som, "GET", "/api/me/data");
+  expect(data.status, data.tekst.slice(0, 300)).toBe(200);
+  const id = data.json.profile?.id;
+  expect(id, "fant ikke den interne id-en i /api/me/data").toBeTruthy();
+  return { id, roles: svar.json.user.roles };
 }
 
 let configCache: Record<string, unknown> | null = null;
@@ -109,15 +114,24 @@ async function nyttKurs(hva: string, ekstra: Record<string, unknown> = {}): Prom
   return kurs.json.course.id;
 }
 
-/** Et publisert begrenset kurs med én publisert seksjon. */
+/**
+ * Et publisert begrenset kurs med TO publiserte seksjoner. To, fordi en lest seksjon i et kurs med bare én fullfører kurset og gir
+ * kursbevis, og et kurs med kursbevis kan ikke slettes (`course_has_completions`, med vilje): testen skal begynne, ikke fullføre,
+ * og ryddingen skal kunne slette. Første kjøring 2026-11-23 etterlot to slike kurs på stage.
+ */
 async function publisertKurs(hva: string): Promise<{ kursId: string; seksjonId: string }> {
-  const seksjon = await admin("POST", "/api/admin/content/sections", { title: L(navn(`seksjon ${hva}`)), bodyMarkdown: L("Innhold.") });
-  expect(seksjon.status, seksjon.tekst.slice(0, 300)).toBe(201);
-  const seksjonId = seksjon.json.section.id;
-  opprettet.seksjoner.push(seksjonId);
-  expect((await admin("POST", `${seksjonssti(seksjonId)}/publish`)).status).toBe(200);
+  const seksjonIder: string[] = [];
+  for (const del of ["1", "2"]) {
+    const seksjon = await admin("POST", "/api/admin/content/sections", { title: L(navn(`seksjon ${hva} ${del}`)), bodyMarkdown: L("Innhold.") });
+    expect(seksjon.status, seksjon.tekst.slice(0, 300)).toBe(201);
+    seksjonIder.push(seksjon.json.section.id);
+    opprettet.seksjoner.push(seksjon.json.section.id);
+    expect((await admin("POST", `${seksjonssti(seksjon.json.section.id)}/publish`)).status).toBe(200);
+  }
+  const seksjonId = seksjonIder[0];
   const kursId = await nyttKurs(hva);
-  expect((await admin("PUT", `${kurssti(kursId)}/items`, { items: [{ type: "SECTION", sectionId: seksjonId }] })).status).toBe(204);
+  const elementer = seksjonIder.map((sectionId) => ({ type: "SECTION", sectionId }));
+  expect((await admin("PUT", `${kurssti(kursId)}/items`, { items: elementer })).status).toBe(204);
   const pub = await admin("POST", `${kurssti(kursId)}/publish`, { publishItems: true });
   expect(pub.status, pub.tekst.slice(0, 300)).toBe(200);
   return { kursId, seksjonId };
@@ -232,7 +246,7 @@ test("C (#1168): klassen arkiveres; kurset deltakeren ikke har begynt på forsvi
   const før = await mineKurs();
   expect(før, "begge kursene skal stå i Mine kurs før arkiveringen").toEqual(expect.arrayContaining([ikkeBegynt.kursId, begynt.kursId]));
 
-  // Deltakeren leser seksjonen i det ene kurset: det kurset er påbegynt.
+  // Deltakeren leser den første av to seksjoner i det ene kurset: det kurset er påbegynt, ikke fullført.
   const vist = await kall("deltaker", "GET", `/api/courses/${begynt.kursId}/sections/${begynt.seksjonId}`);
   expect(vist.status, vist.tekst.slice(0, 300)).toBe(200);
   const lest = await kall("deltaker", "POST", `/api/courses/${begynt.kursId}/sections/${begynt.seksjonId}/read`, { sectionVersionId: vist.json.sectionVersionId });
