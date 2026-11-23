@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.181.2 - 2026-11-23
+
+Pingtestene mot `/healthz` (web og worker, to steder hver) kjøres hvert **15. minutt** i stedet for hvert 5.
+(`infra/azure/main.bicep`, `Frequency: 900`). Varslene ser på et 15-minutters vindu (`windowSize: 'PT15M'`), så hvert vindu
+har et resultat. Ingen kodeendring.
+
+Hvorfor: de var den største posten i prod, 231 av ca. 694 kr de 30 dagene til 2026-11-22. Nå koster de ca. 77 kr. Produkteier
+valgte fast 15 minutter 2026-11-23, framfor 5 minutter i arbeidstid og 15 ellers (ca. 115 kr og en Logic App som bytter).
+Azure tillater ikke sjeldnere enn 15 minutter. Ulempen er at et utfall kan bli varslet opptil 10 minutter senere.
+
+Krever en infrastrukturendring i prod (`deploy-azure.yml`), eller de samme to verdiene satt med `az` på de fire ressursene.
+
 ## 2.181.1 - 2026-11-23
 
 Stage-testkontoen kan være **administrator** (produkteier 2026-11-23: «en testkonto i stage med app admin, vi trenger å kunne

@@ -1765,6 +1765,9 @@ resource notificationFailureAlert 'Microsoft.Insights/scheduledQueryRules@2021-0
 // availability test runs from outside Azure and keeps reporting — so it fires even if the whole
 // App Service is deleted (the May 2026 incident scenario). Gated on createObservabilityActionGroup
 // so it lands in any environment that has an alert receiver wired (stage included → testable there).
+// Frequency 900 s (2.181.2, product owner 2026-11-23): at 300 s the two tests cost ~231 kr a month in prod, the
+// largest line in the resource group. 900 is Azure's maximum; the alerts' windowSize is PT15M to match, so every
+// window holds a result. Cost: an outage can be reported up to 10 minutes later.
 resource healthzAvailabilityTest 'Microsoft.Insights/webtests@2022-06-15' = if (createObservabilityActionGroup) {
   name: toLower('${appNamePrefix}-${envCode}-healthz-ping')
   location: location
@@ -1782,7 +1785,7 @@ resource healthzAvailabilityTest 'Microsoft.Insights/webtests@2022-06-15' = if (
     Name: '${appNamePrefix}-${envCode} /healthz availability'
     Description: 'External ping of /healthz from EMEA — fires even if the App Service is deleted (#405).'
     Enabled: true
-    Frequency: 300
+    Frequency: 900
     Timeout: 30
     Kind: 'standard'
     RetryEnabled: true
@@ -1821,7 +1824,7 @@ resource healthzAvailabilityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' =
       appInsights.id
     ]
     evaluationFrequency: 'PT5M'
-    windowSize: 'PT5M'
+    windowSize: 'PT15M'
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
       webTestId: healthzAvailabilityTest.id
@@ -1855,7 +1858,7 @@ resource workerHealthzAvailabilityTest 'Microsoft.Insights/webtests@2022-06-15' 
     Name: '${appNamePrefix}-${envCode} worker /healthz availability'
     Description: 'External ping of the WORKER role /healthz from EMEA — catches a worker-role outage that the web-app test cannot see (#497-incident).'
     Enabled: true
-    Frequency: 300
+    Frequency: 900
     Timeout: 30
     Kind: 'standard'
     RetryEnabled: true
@@ -1892,7 +1895,7 @@ resource workerHealthzAvailabilityAlert 'Microsoft.Insights/metricAlerts@2018-03
       appInsights.id
     ]
     evaluationFrequency: 'PT5M'
-    windowSize: 'PT5M'
+    windowSize: 'PT15M'
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
       webTestId: workerHealthzAvailabilityTest.id
