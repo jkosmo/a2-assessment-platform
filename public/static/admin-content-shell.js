@@ -3481,6 +3481,14 @@ let workspaceActionChoices = [];
 // #1046 A1: et nytt, tomt element har et plassholder-utkast som ikke teller som «ulagret» før noe
 // er skrevet. Flagget slås av når skjemaet bekreftes, assistenten fyller utkastet, eller modulen lages.
 let newModulePlaceholder = false;
+// #1189: Publiser og Avpubliser bruker det som er lagret og laster modulen på nytt. Ulagrede endringer forsvant uten et ord
+// (kurset lagrer først, seksjon og klasse spør). Spør, som importen gjør. Alle slags ulagret teller: også et utkast, som er der
+// Rediger legger endringene når forfatteren går til Forhåndsvisning (QA 2026-11-23).
+function confirmDiscardUnsavedEdits(key) {
+  if (!moduleDirtyKind()) return true;
+  return window.confirm(t(key));
+}
+
 function moduleDirtyKind() {
   if (activeTab === "settings" && settingsTab.hasUnsavedSettingsEdits()) return "settings";
   if (hasOpenEditForm()) return "form";
@@ -3794,11 +3802,15 @@ function showModuleActions() {
       hintKey: "shell.draftReady.publishHint",
       // #997: kalles uten argumenter — funksjonen tar valget «erstatter tidligere bestått» som
       // parameter, og en klikkhendelse skal ikke havne der.
-      action: () => publishFlow.publishLatestDraftInBackground(),
+      // Sier forfatteren nei, tegnes handlingene på nytt (som importen): valget kan ha slått av menyen.
+      action: () => {
+        if (!confirmDiscardUnsavedEdits("shell.module.publishConfirmDiscardEdits")) { showModuleActions(); return; }
+        publishFlow.publishLatestDraftInBackground();
+      },
     },
     unpublish: {
       labelKey: "shell.module.unpublish",
-      action: () => confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", publishFlow.unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
+      action: () => (confirmDiscardUnsavedEdits("shell.module.unpublishConfirmDiscardEdits") ? true : (showModuleActions(), false)) && confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", publishFlow.unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
     },
   };
   const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
@@ -3889,7 +3901,8 @@ function startImportPackageFlow() {
 
   // Same combined guard as restore: the settings inputs are DOM-only until Lagre, so `sessionDraft`
   // alone does not know whether the reload after import would throw work away.
-  if ((sessionDraft || settingsTab.hasUnsavedSettingsEdits()) && !window.confirm(t("shell.module.importConfirmDiscardDraft"))) {
+  // #1189: også et åpent, endret skjema i Rediger — importen laster modulen på nytt, og det som var skrevet forsvant.
+  if ((sessionDraft || hasOpenEditForm() || settingsTab.hasUnsavedSettingsEdits()) && !window.confirm(t("shell.module.importConfirmDiscardDraft"))) {
     // Choosing this action already disabled the menu. Declining must not leave the workspace with
     // no actions at all.
     showModuleActions();

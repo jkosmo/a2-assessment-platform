@@ -2,6 +2,49 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.181.3 - 2026-11-23
+
+Tre feil fra kompleksitetsskanningen 2026-11-23, alle verifisert i koden før de ble rettet.
+
+- **#1189 · Modulsida forkastet ulagrede endringer.** «Publiser», «Avpubliser» og «Importer» brukte det som var lagret og lastet
+  modulen på nytt, så en rettelse i Rediger eller Innstillinger forsvant uten et ord. Nå spør de først, som seksjon og klasse.
+  Nei rører ingenting, og skjemaet står. Importen spurte allerede ved et utkast eller ulagrede innstillinger, men ikke ved et
+  endret skjema i Rediger.
+- **#1190 · «Deltakere» i toppmenyen gav 403** for vurderer, ankebehandler og rapportleser. Lenken går til Klasser, som bare
+  fagansvarlig og administrator har tilgang til. Undermenyen sender dem nå videre til den første undersiden de har tilgang til
+  (rapportleser til Status, vurderer og ankebehandler til Manuell behandling).
+- **#1191 · Startspråket.** Nettlesere med «no», «da» eller «sv» fikk engelsk, og fordi klientens språk blir mottakerens språk
+  i e-postene, fikk de engelske påminnelser og ukentlig e-post. «no» betyr nå bokmål i klienten og i tjeneren
+  (`normalizeLocale`), og et ukjent språk gir organisasjonens standardspråk, som tjeneren alltid har gjort. Standardspråket
+  huskes i nettleseren (`org.defaultLocale`) fordi startspråket velges før konfigurasjonen er lest.
+  Sidene lagrer språket ved oppstart, også når det bare er gjettet, så et gjettet en-GB ble et fast valg. Nå merkes et språk
+  brukeren velger i språkvelgeren (`participant.localeChosen`, én lytter i `i18n-locale.js` for alle sidene). Et lagret en-GB som
+  ikke er valgt, i en nettleser som ikke er engelsk, regnes som den gamle reserven og gjettes på nytt. Det retter også brukerne som
+  alt er rammet. Annet lagret står, også valg fra før merket fantes. Unntak: den som før valgte engelsk i en dansk eller svensk
+  nettleser, får standardspråket én gang og må velge engelsk igjen.
+  Vurderingskvalitet hadde sin egen kopi av startspråk-regelen; den bruker nå den felles (`resolveInitialLocale`).
+  **Kjente mangler:** første besøk uten et husket standardspråk gir fortsatt en-GB til konfigurasjonen er lest, og blir rettet
+  ved neste sidelasting. Undermenyen under Deltakere sender `x-locale: undefined` på sitt `/api/me`-kall; tjeneren overser
+  verdien og bruker nettleserens språk, så det lagres ikke noe feil språk.
+
+Valgene står i `doc/DECISIONS.md` («Startspråk og ulagrede endringer på modulsida»).
+
+Tester: `test/e2e/admin-content-module-publish-unsaved-1189.spec.ts` (6), `test/e2e/deltakere-landing-1190.spec.ts` (5),
+`test/unit/i18n-locale.test.js` (+9), `test/unit/locale-no-1191.test.ts` (3), `test/e2e/start-locale-1191.spec.ts` (6, måler
+`x-locale` tjeneren får, med nettleserspråket satt). Hver fiks er mutasjonsverifisert: med fiksen tatt
+ut ble testene for den røde, og kontrollene sto.
+
+**Rotårsak, QA-porten NO-GO i første runde (tre funn):**
+1. Spørsmålet på modulsida så bare på «skjema» og «innstillinger». Rediger legger endringene i et utkast når forfatteren går til
+   Forhåndsvisning, og den veien inn var ikke talt. Sjekken som skulle fanget det (pre-flight 3, «tilfellene jeg ikke listet»),
+   ble ikke kjørt: jeg skrev en hviteliste over to tilstander i stedet for å spørre `moduleDirtyKind()` om alt. Nå spør den om
+   alt.
+2. Startspråket: jeg rettet den som gjetter, men ikke de 15 stedene som lagrer gjetningen (pre-flight 2, «hvem skriver tilstanden
+   jeg leser»). Et grep etter `participant.locale` ville vist det.
+3. Den positive e2e-testen talte forhåndsvisningen, ikke publiseringen. Mutasjonen tok bare ut spørsmålet, ikke publiseringen, så
+   den så aldri at telleren målte feil kall. Nå er det en egen mutasjon som tar ut publiseringskallet.
+Ingen ny regel: sjekkene finnes. Lærdommen er at mutasjoner også må ta ut det den positive testen påstår skjer.
+
 ## 2.181.2 - 2026-11-23
 
 Pingtestene mot `/healthz` (web og worker, to steder hver) kjøres hvert **15. minutt** i stedet for hvert 5.

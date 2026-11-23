@@ -2475,3 +2475,18 @@ i ordet. Lenken står på kursraden, så hvilket kurs beviset gjelder er tydelig
 bokmål og nynorsk er uendret. Avgjort av produkteier.
 
 **Sak:** #1162, #1170 · **Dato:** 2026-11-21 · **Status:** avgjort av produkteier
+
+## Startspråk og ulagrede endringer på modulsida (2.181.3, 2026-11-23)
+
+**Startspråk for et ukjent nettleserspråk.** Klienten falt til en-GB for alt som ikke begynte på nb, nn eller en. Tjeneren
+bruker organisasjonens standardspråk (`DEFAULT_LOCALE`) i samme situasjon. Klienten sender språket som `x-locale`, og det blir
+mottakerens språk i e-postene, så «da» og «sv» ga engelske e-poster. Nå bruker klienten også organisasjonens standardspråk,
+husket i nettleseren fra forrige gang konfigurasjonen ble lest (første besøk: en-GB til den er lest). «no» og «no-NO» betyr
+bokmål i begge lag. Et lagret en-GB som brukeren ikke har valgt i språkvelgeren (`participant.localeChosen`), i en nettleser som
+ikke er engelsk, gjettes på nytt. Valgt under byggingen av #1191, ikke av produkteier: det følger regelen tjeneren allerede hadde.
+
+**Publiser, Avpubliser og Importer med ulagrede endringer på modulsida** spør nå (`window.confirm`), som seksjon og klasse, i
+stedet for å forkaste det som var skrevet uten et ord. Kurset lagrer først («Publiser utkastet», #1140); modulen gjør ikke det,
+fordi lagringen i Rediger ikke kan ventes på uten en omskriving. Valgt under byggingen av #1189.
+
+**Sak:** #1189, #1191 · **Dato:** 2026-11-23 · **Status:** valgt under byggingen

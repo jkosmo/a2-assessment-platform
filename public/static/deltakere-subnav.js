@@ -79,6 +79,20 @@ async function initDeltakereSubnav() {
     }
   }
   nav.dataset.rolesResolved = "true";
+  if (roleSet) leavePageWithoutAccess(nav, roleSet);
+}
+
+// #1190: «Deltakere» i toppmenyen går alltid til Klasser (capabilities.ts), men vurderer, ankebehandler og rapportleser har ikke
+// tilgang dit: lista svarte 403. Står brukeren på en underside hen ikke har tilgang til, går vi videre til den første hen har.
+// Bare når rollene er kjent (fail-open over står), og bare når det finnes en side å gå til.
+function leavePageWithoutAccess(nav, roleSet) {
+  const path = window.location.pathname;
+  const current = ACTIVE_BY_PREFIX.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1];
+  const allowed = current ? LINK_ROLES[current] : null;
+  if (!allowed || allowed.some((role) => roleSet.has(role))) return;
+  const firstAllowed = Object.keys(LINK_ROLES).map((id) => nav.querySelector(`#${id}`)).find(Boolean);
+  const href = firstAllowed?.getAttribute("href");
+  if (href) window.location.replace(href);
 }
 
 if (document.readyState === "loading") {
