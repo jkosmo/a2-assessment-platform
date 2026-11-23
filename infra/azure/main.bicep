@@ -146,6 +146,15 @@ param azureOpenAiAuthoringTokenLimitParameter string = ''
 @description('Azure OpenAI deployment for assessment (scoring). Empty = use azureOpenAiDeployment. Set in prod and stage since 2026-10-11 (gpt-5.4-mini); without it here, a full infra deploy would drop the app setting and move assessment back to the default deployment.')
 param azureOpenAiAssessmentDeployment string = ''
 
+@description('Temperature for assessment (scoring) only. Do not pass empty: the app reads an empty value as 0, not as a fallback to azureOpenAiTemperature. Not yet a GitHub variable; change the default here. Set by hand in prod (0) before it was in Bicep; the default keeps that value, so a full infra deploy does not move scoring to the general temperature (2.181.2).')
+param azureOpenAiAssessmentTemperature string = '0'
+
+@description('Worker override of config/assessment-rules.json aiInfluence.contentSimilarity.enabled (#475). Set by hand in prod (true) before it was in Bicep; the default keeps the shadow signal on there (2.181.2).')
+param aiContentSimilarityEnabled string = 'true'
+
+@description('Worker override of aiInfluence.contentSimilarity.shadowMode (#475). true = compute and store, route no one.')
+param aiContentSimilarityShadow string = 'true'
+
 @description('Azure OpenAI deployment for authoring (content generation). Empty = use azureOpenAiDeployment.')
 param azureOpenAiAuthoringDeployment string = ''
 
@@ -857,6 +866,10 @@ resource webAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
           value: azureOpenAiAssessmentDeployment
         }
         {
+          name: 'AZURE_OPENAI_ASSESSMENT_TEMPERATURE'
+          value: azureOpenAiAssessmentTemperature
+        }
+        {
           name: 'AZURE_OPENAI_AUTHORING_DEPLOYMENT'
           value: azureOpenAiAuthoringDeployment
         }
@@ -1110,6 +1123,18 @@ resource workerAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         {
           name: 'AZURE_OPENAI_ASSESSMENT_DEPLOYMENT'
           value: azureOpenAiAssessmentDeployment
+        }
+        {
+          name: 'AZURE_OPENAI_ASSESSMENT_TEMPERATURE'
+          value: azureOpenAiAssessmentTemperature
+        }
+        {
+          name: 'AI_CONTENT_SIMILARITY_ENABLED'
+          value: aiContentSimilarityEnabled
+        }
+        {
+          name: 'AI_CONTENT_SIMILARITY_SHADOW'
+          value: aiContentSimilarityShadow
         }
         {
           name: 'AZURE_OPENAI_AUTHORING_DEPLOYMENT'

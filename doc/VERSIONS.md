@@ -12,7 +12,19 @@ Hvorfor: de var den største posten i prod, 231 av ca. 694 kr de 30 dagene til 2
 valgte fast 15 minutter 2026-11-23, framfor 5 minutter i arbeidstid og 15 ellers (ca. 115 kr og en Logic App som bytter).
 Azure tillater ikke sjeldnere enn 15 minutter. Ulempen er at et utfall kan bli varslet opptil 10 minutter senere.
 
-Krever en infrastrukturendring i prod (`deploy-azure.yml`), eller de samme to verdiene satt med `az` på de fire ressursene.
+Rulles ut med `deploy-azure.yml`, den første vellykkede siden 2026-07-25 (516dced3).
+
+**Tre innstillinger som var satt for hånd i prod, står nå i Bicep**, med prods verdier som standard. Uten dem ville den
+fulle utrullingen fjernet dem, fordi Bicep skriver hele lista med app-innstillinger:
+
+- `AZURE_OPENAI_ASSESSMENT_TEMPERATURE=0` (web og worker). Uten den bruker vurderingen den generelle temperaturen (1).
+- `AI_CONTENT_SIMILARITY_ENABLED=true` og `AI_CONTENT_SIMILARITY_SHADOW=true` (worker). Uten dem gjelder regelfila
+  (`enabled: false`), og likhetssignalet i skyggemodus (#475) slutter å bli regnet ut.
+
+Funnet ved å sammenligne hvert navn i prods app-innstillinger med `main.bicep`; etter endringen mangler ingen. Prod-what-if
+viser ikke dette: den sender bare noen av parameterne, så resten får standardverdier (`LLM_MODE=stub`, ingen Entra).
+Rotårsak: innstillinger satt med `az` i prod uten å legges i Bicep samtidig, slik `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` også ble
+(2026-10-11). Sjekken er mekanisk og bør kjøres før hver full utrulling.
 
 ## 2.181.1 - 2026-11-23
 
