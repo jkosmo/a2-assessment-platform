@@ -26,6 +26,12 @@ viser ikke dette: den sender bare noen av parameterne, så resten får standardv
 Rotårsak: innstillinger satt med `az` i prod uten å legges i Bicep samtidig, slik `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` også ble
 (2026-10-11). Sjekken er mekanisk og bør kjøres før hver full utrulling.
 
+**I prod 2026-11-23 kl. 21:41** (`deploy-azure.yml`, 78f565e9, med 2.181.1). Web og worker 2.181.2, `/healthz` 200,
+pingtestene 900 s og varslene PT15M, de tre innstillingene beholdt. App-innstillingene før og etter er sammenlignet på alle tre
+appene. Én uønsket endring: `ASSESSMENT_JOB_MAX_ATTEMPTS` på web gikk 6 → 3, fordi GitHub-variabelen sto på 3. Produkteiers
+beslutning 2026-08-26 (2.33.0, «gjenforsøkene dekker nå en nedetid») er 6. Variabelen og begge appene er satt til 6 samme kveld.
+Workeren hadde stått på 3 hele tiden, så i prod har vurderingen trolig aldri prøvd mer enn 3 ganger før nå.
+
 ## 2.181.1 - 2026-11-23
 
 Stage-testkontoen kan være **administrator** (produkteier 2026-11-23: «en testkonto i stage med app admin, vi trenger å kunne
