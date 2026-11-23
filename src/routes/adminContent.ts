@@ -116,6 +116,7 @@ import { assertContentOwnership, listManageableContentIds } from "../modules/con
 import { assertArchivedBeforeLock } from "../modules/content/archivedGuard.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
+import { normalizeLocale } from "../i18n/locale.js";
 import { evaluateModulePublishGate } from "../modules/adminContent/modulePublishGate.js";
 import { certificationRepository } from "../modules/certification/index.js";
 
@@ -267,7 +268,8 @@ adminContentRouter.post("/modules", async (request, response) => {
 });
 
 adminContentRouter.get("/modules/library", async (request, response) => {
-  const locale = (request.query.locale as string) || request.context?.locale || "en-GB";
+  // #1194: rå `?locale=nb-NO` ga 500 (oppslaget i tekstsamlingen ble undefined). Normaliser; ellers forespørselens språk.
+  const locale = normalizeLocale(typeof request.query.locale === "string" ? request.query.locale : undefined) ?? requestLocale(request);
   try {
     const modules = await listLibraryModules(
       locale as Parameters<typeof listLibraryModules>[0],
@@ -1246,7 +1248,8 @@ adminContentRouter.post("/modules/:moduleId/unpublish", async (request, response
 // ---------------------------------------------------------------------------
 
 adminContentRouter.get("/modules/archive", async (request, response) => {
-  const locale = (request.query.locale as string) || "en-GB";
+  // #1194: som over.
+  const locale = normalizeLocale(typeof request.query.locale === "string" ? request.query.locale : undefined) ?? requestLocale(request);
   const search = request.query.search as string | undefined;
 
   try {

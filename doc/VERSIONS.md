@@ -2,6 +2,34 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.181.4 - 2026-11-24
+
+Fire feil til fra kompleksitetsskanningen 2026-11-23, alle uten behov for en avgjørelse fra produkteier.
+
+- **#1193 · Kriterieendringer i Innstillinger vises som ulagret.** «Fjern» og «Generer på nytt» sendte ingen input-hendelse, så
+  hodet sa «Alt lagret», Lagre var grå, og lukking av fanen varslet ikke. Fjerningen var tapt uten et ord. Nå regner hodet ut
+  «ulagret» på nytt etter hver endring i kriterielista. «Legg til» uten tekst er fortsatt ingen endring (et tomt kriterium
+  droppes ved lagring); teksten i det nye kriteriet er det.
+- **#1194 · `?locale=nb-NO` ga 500** i modulbiblioteket og modularkivet, fordi verdien ble sendt rått til tekstsamlingen. Nå
+  normaliseres den; et ukjent språk gir forespørselens språk. De sju rutestedene med egen reserve
+  (`normalizeLocale(request.context?.locale) ?? …`) bruker nå `requestLocale(request)`, og vakta fra #984 ser også den
+  skrivemåten og `|| …`. Reservene var døde (`authenticate` setter alltid språket), men vakta lovet at de ikke fantes.
+- **#1195 · Ankebehandleren på bokmål og nynorsk.** 64 nøkler fantes bare på engelsk (detaljpanelet, valideringen, filteret
+  for manuell vurdering). Nå finnes de på alle tre språk. Tabellen for manuell vurdering hadde 60 strenger der æ, ø og å var
+  byttet ut («bestatt», «koen», «pa», «fullfort») eller brukte «MCQ», «LLM» og «AI» der resten av appen sier «flervalg» og «KI»;
+  de er rettet, og undertittelen på review-sida også. Én paritetstest finner nå alle oversettelsestabellene selv og sjekker
+  den sammensatte tabellen sida bruker (før: 3 av 12 hadde test).
+- **#1196 · E-posten om ny hovedversjon går bare til den som ser kurset.** Den gikk til alle med kursbevis, også dem som var
+  fjernet fra klassen etter at de fullførte et begrenset kurs, og lenken ga 404. Nå avgjøres synligheten med samme regel som
+  «Mine kurs» og de andre e-postene (`findLearnersSeeingCourses`), både i jobben og rett før sendingen. Den som ikke ser
+  kurset, får raden `skipped` med grunnen `not_visible`.
+  **Kjent mangel:** tallet i dialogen for ny hovedversjon («så mange får e-post») kommer fra `findMajorVersionRecipients`, som
+  ikke ser på synligheten. Det kan derfor være høyere enn antallet som faktisk får e-posten.
+
+Tester: `test/e2e/admin-content-criteria-dirty-1193.spec.ts` (3), `test/m2-query-locale-1194.test.ts` (7),
+`test/unit/request-locale-984.test.ts` (utvidet mønster), `test/unit/i18n-parity-all-tables-1195.test.ts` (13),
+`test/m2-course-major-email-visibility-1196.test.ts` (4, med klassemedlemskap). Hver fiks er mutasjonsverifisert.
+
 ## 2.181.3 - 2026-11-23
 
 Tre feil fra kompleksitetsskanningen 2026-11-23, alle verifisert i koden før de ble rettet.

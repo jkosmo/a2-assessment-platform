@@ -38,7 +38,8 @@ vi.mock("../../src/db/prisma.js", () => ({
       findUnique: vi.fn(async () => h.notice),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
-    course: { findUnique: vi.fn(async () => ({ title: "Brannvern for alle", publishedAt: new Date("2026-01-01T00:00:00Z"), archivedAt: null, versionMajor: 4 })) },
+    // #1196: synligheten leses fra kurset (id, enrollmentPolicy). Åpent kurs: alle ser det, uten flere oppslag.
+    course: { findUnique: vi.fn(async () => ({ id: "c1", enrollmentPolicy: "OPEN", title: "Brannvern for alle", publishedAt: new Date("2026-01-01T00:00:00Z"), archivedAt: null, versionMajor: 4 })) },
     user: { findUnique: vi.fn(async () => h.user) },
     courseVersion: { findUnique: vi.fn(async () => ({ changedItemCount: 3 })) },
   },

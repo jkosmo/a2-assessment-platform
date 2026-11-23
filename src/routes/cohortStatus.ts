@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import { prisma } from "../db/prisma.js";
 import { getCohortStatus } from "../modules/course/cohortStatusService.js";
 import { localizeContentText } from "../i18n/content.js";
-import { normalizeLocale } from "../i18n/locale.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 // #498: teacher/SMO cohort-status dashboard API. Mounted at /api/cohort-status; role-gated to
 // SUBJECT_MATTER_OWNER + ADMINISTRATOR + REPORT_READER (see capabilities `cohort_dashboard`).
@@ -20,7 +20,7 @@ const cohortStatusRouter = Router();
 // suppressed — but a dashboard is a question from a teacher, and it deserves an honest answer.
 cohortStatusRouter.get("/courses", async (request, response, next) => {
   try {
-    const locale = normalizeLocale(request.context?.locale) ?? "nb";
+    const locale = requestLocale(request);
     const courses = await prisma.course.findMany({
       select: { id: true, title: true, publishedAt: true, archivedAt: true },
       orderBy: { createdAt: "desc" },

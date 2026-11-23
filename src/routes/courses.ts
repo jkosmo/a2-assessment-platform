@@ -8,7 +8,7 @@ import { pairKey } from "../modules/course/learnerVisibility.js";
 import { runContentReadForLearner } from "../db/contentLock.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
-import { normalizeLocale } from "../i18n/locale.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 import { ConflictError, NotFoundError } from "../errors/AppError.js";
 import { sortCoursesForParticipant } from "../modules/course/courseOrdering.js";
 import {
@@ -46,7 +46,7 @@ coursesRouter.get("/", async (request, response, next) => {
     return;
   }
 
-  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+  const locale = requestLocale(request);
 
   try {
     // #1139 skive 0: framdriften er flyttet uendret til `getMyCoursesProgress`, som den ukentlige e-posten også bruker.
@@ -113,7 +113,7 @@ coursesRouter.get("/completions", async (request, response, next) => {
     return;
   }
 
-  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+  const locale = requestLocale(request);
 
   try {
     // #580 follow-up: backfill any completion whose gates are met but whose certificate was never
@@ -153,7 +153,7 @@ coursesRouter.get("/completions/:certificateId", async (request, response, next)
     return;
   }
 
-  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+  const locale = requestLocale(request);
 
   try {
     const completion = await courseRepository.findCourseCompletionByCertificateId(
@@ -202,7 +202,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     return;
   }
 
-  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+  const locale = requestLocale(request);
 
   try {
     // #959: ÉN dør. Signaturen krever hvem som spør, så synligheten kan ikke bli glemt her —
@@ -400,7 +400,7 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
     response.status(401).json({ error: "unauthorized" });
     return;
   }
-  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+  const locale = requestLocale(request);
   try {
     // #959: ÉN dør. Signaturen krever hvem som spør, så synligheten kan ikke bli glemt her —
     // og `null` dekker alle tre årsakene (finnes ikke / ikke publisert / ikke synlig for deg)

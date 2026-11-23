@@ -839,12 +839,16 @@ export function createSettingsTab(ctx) {
         // After the redraw, so the sync reads the cards that now exist. Add and Remove go through
         // here, and doing it from setState (round 3) read the DOM one redraw too early.
         syncSettingsCriteriaToDraft();
+        // #1193: Fjern og Legg til sender ingen input-hendelse, så hodet sa «Alt lagret» og lukking av fanen varslet ikke.
+        refreshModuleHeaderState();
       },
       onRegenerate: () => regenerateCriteriaFromTask(container, (newList) => {
         settingsCriteriaState = newList;
         container.innerHTML = buildCriteriaEditorHtml(settingsCriteriaState, t, tf);
         // After the redraw, not before: the DOM is what the sync reads.
         syncSettingsCriteriaToDraft();
+        // #1193: det samme for Generer på nytt.
+        refreshModuleHeaderState();
       }),
     });
   }

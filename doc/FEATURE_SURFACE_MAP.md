@@ -193,7 +193,8 @@ A major version with nobody holding a certificate for the current major version 
 per recipient inside `applyCourseVersionChange` (so every way in above that can give a major version — the form,
 `PUT …/items`, «Publiser nye versjoner», «Publiser kurs», import `replaceExisting` — creates them; the guard test
 forbids creating them anywhere else). Recipients: `findMajorVersionRecipients` (certificate for the course, active,
-not anonymized, one per person); the three dialogs show the same count as `majorEmailRecipients` and, over 200,
+not anonymized, one per person; #1196: the job and the outbox handler also require that the person still sees the course,
+with `findLearnersSeeingCourses` — otherwise `skipped`/`not_visible`, so the dialog count can exceed the e-mails sent); the three dialogs show the same count as `majorEmailRecipients` and, over 200,
 require a tick (`courseVersionAnswer`) and send `confirmEmailRecipients` — the server recounts and answers `409
 major_email_confirm_required` without it. Sending: `CourseMajorEmailMonitor` → `runCourseMajorEmailSchedule` →
 outbox `course_major_version_notification` → `deliverCourseMajorVersionNotice` (`courseMajorVersionEmail.ts`), only
