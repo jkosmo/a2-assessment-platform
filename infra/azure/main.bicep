@@ -7,9 +7,10 @@ param location string = resourceGroup().location
 @description('Global app name prefix. Must be lowercase alphanumeric and hyphen.')
 param appNamePrefix string = 'a2-assessment-platform'
 
-@description('App Service SKU name.')
+@description('App Service SKU name. Prod is B2 from 2026-11-24 (B1 ran out of memory during a normal deploy).')
 @allowed([
   'B1'
+  'B2'
   'S1'
   'P0v3'
 ])
@@ -430,7 +431,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   kind: 'linux'
   sku: {
     name: appServiceSkuName
-    tier: appServiceSkuName == 'B1' ? 'Basic' : (appServiceSkuName == 'S1' ? 'Standard' : 'PremiumV3')
+    tier: startsWith(appServiceSkuName, 'B') ? 'Basic' : (appServiceSkuName == 'S1' ? 'Standard' : 'PremiumV3')
     capacity: 1
   }
   tags: {

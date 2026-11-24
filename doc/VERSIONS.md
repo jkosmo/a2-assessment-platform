@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.181.6 - 2026-11-24
+
+**Prod-planen går fra B1 til B2** (produkteier 2026-11-24). Utrullingen av 2.181.4 samme kveld ga 25 minutter nedetid i prod:
+web, worker og parser deler én B1 (1,75 GB), som ligger på 80 % minne i vanlig drift. Da de tre startet på nytt, steg minnet til
+97 %, Azure flyttet planen til en annen maskin, og alle tre kaldstartet der på 100 % CPU i 20 minutter. B2 har 3,5 GB, omtrent
+130 kr mer i måneden.
+
+- `infra/azure/main.bicep`: `B2` er tillatt, og nivået utledes som `Basic` for alle B-størrelser. Før ble alt som ikke var B1 eller
+  S1, `PremiumV3`, så B2 ville fått feil nivå.
+- GitHub-variabelen `AZURE_APP_SERVICE_SKU` for production settes til `B2`. Stage står på `B1` (Azure-stage er passiv).
+- Krever full infrastrukturutrulling (`deploy-azure`). Skaleringen skjer på stedet innen samme nivå; identiteter, Key Vault og
+  roller røres ikke.
+- **Tilbake:** sett variabelen til `B1` og kjør `deploy-azure` igjen.
+
 ## 2.181.5 - 2026-11-24
 
 To av de fire avgjørelsene fra kompleksitetsskanningen (#1192, produkteier 2026-11-24). De to andre (bestått modul overalt, og
