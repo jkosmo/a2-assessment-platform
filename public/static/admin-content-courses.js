@@ -2532,8 +2532,28 @@ function courseVersionNumber(course) {
 function courseDraftItemProblem(item) {
   if (item?.missing) return "missing";
   if (item?.archivedAt) return "archived";
-  if (item?.unpublished) return "unpublished";
+  // #1192 punkt 4: en upublisert seksjon stopper ikke publiseringen; den er skjult for deltakerne (`courseDraftItemNote`).
+  if (item?.unpublished && item.type === "MODULE") return "unpublished";
   return null;
+}
+
+/** En merknad som ikke stopper publiseringen: en ny seksjon uten publisert versjon, som deltakerne ikke ser ennå. */
+function courseDraftItemNote(item) {
+  return item?.unpublished && item.type === "SECTION" && !courseDraftItemProblem(item) ? "sectionHidden" : null;
+}
+
+/**
+ * Merknaden for en rad i lista. Seksjonsbiblioteket er kilden (`activeVersionId`), så raden får merknaden uansett hvordan den kom
+ * inn: lagt til fra velgeren, lest fra utkastet, eller fra det publiserte kurset (QA-porten 2026-11-24: velgeren mistet
+ * tilstanden, og «Publiser utkastet» rett etter «Legg til» ga ingen merknad). Mangler biblioteket, står serverens flagg.
+ */
+function courseItemNote(m) {
+  if (m.problem) return null;
+  if (m.type === "SECTION") {
+    const lib = allLibrarySections.find((s) => s.id === m.refId);
+    if (lib) return lib.activeVersionId == null ? "sectionHidden" : null;
+  }
+  return m.note ?? null;
 }
 
 function courseDraftItemToFormItem(item) {
@@ -2544,6 +2564,7 @@ function courseDraftItemToFormItem(item) {
     title: localizedText(item.title) || refId,
     discussionsEnabled: item.discussionsEnabled !== false,
     problem: courseDraftItemProblem(item),
+    note: courseDraftItemNote(item),
   };
 }
 
@@ -2728,11 +2749,15 @@ function renderModuleList() {
       const openHref = buildCourseItemHref(m, aktivtKursId);
       // #1140 etappe 2: et element i utkastet som er arkivert, avpublisert eller slettet siden utkastet ble lagret, merkes med
       // grunnen. Publiseringen avvises av serveren til det er tatt ut.
+      // #1192 punkt 4: en upublisert seksjon får en merknad som ikke stopper publiseringen.
+      const note = courseItemNote(m);
       const problemNote = m.problem
         ? `<span class="form-row-note" data-item-problem="${escapeHtml(m.problem)}">${escapeHtml(t(`courses.draft.item.${m.problem}`))}</span>`
-        : "";
+        : note
+          ? `<span class="form-row-note" data-item-note="${escapeHtml(note)}">${escapeHtml(t(`courses.draft.item.${note}`))}</span>`
+          : "";
       return `
-      <li class="form-row${m.problem ? " is-blocked" : ""}" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
+      <li class="form-row${m.problem ? " is-blocked" : note ? " has-note" : ""}" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
         <span class="form-row-order">${i + 1}.</span>
         <span class="form-row-badge">${courseItemTypeBadge(m.type)}</span>
         <span class="form-row-title">${escapeHtml(m.title)}</span>
@@ -2825,7 +2850,12 @@ async function refreshPickerLibrary() {
   try {
     const [modules, sections] = await Promise.allSettled([loadPickerModules(), loadPickerSections()]);
     if (modules.status === "fulfilled") allLibraryModules = modules.value;
-    if (sections.status === "fulfilled") allLibrarySections = sections.value;
+    if (sections.status === "fulfilled") {
+      allLibrarySections = sections.value;
+      // QA 2026-11-24: merknaden «Ikke publisert ennå» leses fra biblioteket; tegn lista på nytt så den følger en seksjon som er
+      // publisert eller avpublisert i en annen fane. Lytteren bindes på nytt i `renderModuleList`.
+      if (document.getElementById("moduleList")) renderModuleList();
+    }
     updateComboboxDropdown();
   } finally {
     pickerRefreshRunning = false;

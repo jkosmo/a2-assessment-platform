@@ -583,6 +583,44 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     await expect(page.locator('#coursesTableBody tr[data-row-id="course-2"] [data-action="publish"]')).toHaveCount(1);
   });
 
+  // QA-porten 2026-11-24 (#1192 punkt 4): velgeren mistet seksjonens tilstand, så en upublisert seksjon lagt til og publisert med
+  // en gang fikk ingen merknad. Merknaden kommer nå fra seksjonsbiblioteket, før noe er lagret.
+  test("en upublisert seksjon lagt til fra velgeren får merknaden med en gang; en publisert seksjon får den ikke", async ({ page }) => {
+    await page.route("**/api/admin/content/sections", (route: Route) =>
+      json(route, 200, {
+        sections: [
+          { id: "sec-ny", title: "Ny seksjon", activeVersionId: null, archivedAt: null },
+          { id: "sec-pub", title: "Publisert seksjon", activeVersionId: "secv-1", archivedAt: null },
+        ],
+      }),
+    );
+    await openBuilder(page);
+    const input = page.locator("#comboboxInput");
+    for (const title of ["Ny seksjon", "Publisert seksjon"]) {
+      await input.click();
+      await input.fill(title);
+      await page.locator("#comboboxDropdown .combobox-option", { hasText: title }).click();
+      await page.locator("#addItemBtn").click();
+    }
+    const ny = page.locator('#moduleList > li[data-ref-id="sec-ny"]');
+    await expect(ny.locator("[data-item-note]")).toHaveText("Ikke publisert ennå. Deltakerne ser den ikke før den er publisert.");
+    await expect(ny).not.toHaveClass(/is-blocked/);
+    await expect(ny).toHaveClass(/has-note/);
+    // Kontroll: den publiserte seksjonen har ingen merknad.
+    await expect(page.locator('#moduleList > li[data-ref-id="sec-pub"] [data-item-note]')).toHaveCount(0);
+
+    // QA 2026-11-24: merknaden står på egen linje under tittelen, ikke som en smal kolonne ved knappene, også på 390 px.
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const title = await ny.locator(".form-row-title").boundingBox();
+      const note = await ny.locator("[data-item-note]").boundingBox();
+      expect(note!.y, `bredde ${width}`).toBeGreaterThanOrEqual(title!.y + title!.height - 1);
+      expect(note!.width, `bredde ${width}`).toBeGreaterThan(title!.width * 0.9);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `bredde ${width}`).toBe(true);
+      await page.screenshot({ path: `test-results/kursbygger-skjult-seksjon-${width}.png`, fullPage: false, clip: undefined });
+    }
+  });
+
   test("et element i utkastet som er arkivert, avpublisert eller slettet, merkes med grunnen; publiseringen avvises med navnene", async ({ page }) => {
     const state = await openBuilder(page, {
       draft: draftWith([
@@ -590,15 +628,23 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
         { type: "SECTION", id: "sec-b", title: "Seksjon B", unpublished: true },
         { type: "MODULE", id: "mod-gone", title: "", missing: true },
         { type: "MODULE", id: "mod-c", title: "Modul C" },
+        { type: "MODULE", id: "mod-d", title: "Modul D", unpublished: true },
       ]),
     });
     const rows = page.locator("#moduleList > li");
-    await expect(rows).toHaveCount(4);
+    await expect(rows).toHaveCount(5);
     await expect(rows.nth(0).locator("[data-item-problem]")).toHaveText("Arkivert etter at utkastet ble lagret. Ta den ut av utkastet før du publiserer.");
-    await expect(rows.nth(1).locator("[data-item-problem]")).toHaveText("Ikke publisert. Publiser den, eller ta den ut av utkastet før du publiserer.");
+    // #1192 punkt 4: en upublisert SEKSJON stopper ikke publiseringen; den får en merknad om at deltakerne ikke ser den ennå.
+    await expect(rows.nth(1).locator("[data-item-problem]")).toHaveCount(0);
+    await expect(rows.nth(1).locator("[data-item-note]")).toHaveText("Ikke publisert ennå. Deltakerne ser den ikke før den er publisert.");
+    await expect(rows.nth(1)).not.toHaveClass(/is-blocked/);
     await expect(rows.nth(2).locator("[data-item-problem]")).toHaveText("Slettet etter at utkastet ble lagret. Ta den ut av utkastet før du publiserer.");
     await expect(rows.nth(2).locator(".form-row-title")).toHaveText("mod-gone");
     await expect(rows.nth(3).locator("[data-item-problem]")).toHaveCount(0);
+    await expect(rows.nth(3).locator("[data-item-note]")).toHaveCount(0);
+    // Kontroll: en upublisert MODUL stopper fortsatt.
+    await expect(rows.nth(4).locator("[data-item-problem]")).toHaveText("Ikke publisert. Publiser den, eller ta den ut av utkastet før du publiserer.");
+    await expect(rows.nth(4)).toHaveClass(/is-blocked/);
     await expect(rows.nth(0)).toHaveClass(/is-blocked/);
 
     state.failNext.publish = {
@@ -608,15 +654,15 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
         message: "x",
         details: { items: [
           { type: "MODULE", id: "mod-a", title: "Modul A", reason: "archived" },
-          { type: "SECTION", id: "sec-b", title: "{\"nb\":\"Seksjon B\",\"en-GB\":\"Section B\"}", reason: "unpublished" },
           { type: "MODULE", id: "mod-gone", title: null, reason: "missing" },
+          { type: "MODULE", id: "mod-d", title: "{\"nb\":\"Modul D\",\"en-GB\":\"Module D\"}", reason: "unpublished" },
         ] },
       },
     };
     await publishDraftAndConfirm(page);
     const banner = page.locator("#formErrorBanner");
     await expect(banner).toContainText("Ett eller flere elementer i utkastet er arkivert, slettet eller ikke publisert.");
-    await expect(banner).toContainText("Dette må rettes: «Modul A» (arkivert), «Seksjon B» (ikke publisert), «mod-gone» (slettet).");
+    await expect(banner).toContainText("Dette må rettes: «Modul A» (arkivert), «mod-gone» (slettet), «Modul D» (ikke publisert).");
     // Et bilde å se på ved gjennomgang (test-results/ er ikke sporet): merkede rader, banneret, linja og knappene.
     await page.screenshot({ path: "test-results/kursutkast-merkede-elementer.png", fullPage: true });
   });

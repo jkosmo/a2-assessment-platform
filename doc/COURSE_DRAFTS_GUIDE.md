@@ -39,8 +39,10 @@ med en gang.
 
 - **«Noen andre har endret utkastet …»** To forfattere har hatt kurset åpent samtidig, og den andre lagret, publiserte eller
   forkastet først. Ingenting av ditt er lagret. Kopier det du skrev, last siden på nytt og gjør endringen igjen.
-- **En rad i innholdslista er merket rødt.** Modulen eller seksjonen er arkivert eller slettet, eller den er ny i utkastet og
-  ikke publisert. Publiser den, eller ta den ut av utkastet. Utkastet kan ikke publiseres før det er gjort.
+- **En rad i innholdslista er merket rødt.** Modulen eller seksjonen er arkivert eller slettet, eller det er en modul som er
+  ny i utkastet og ikke publisert. Publiser den, eller ta den ut av utkastet. Utkastet kan ikke publiseres før det er gjort.
+- **En seksjon er merket «Ikke publisert ennå».** Den stopper ikke publiseringen. Seksjonen kommer inn i kurset, men
+  deltakerne ser den ikke før du publiserer seksjonen (fra 2.181.5).
 - **«Kurset har et utkast …» når du laster opp en kursfil.** «Oppdater dette kurset» skriver rett i det publiserte kurset,
   og stoppes når kurset har et utkast. Publiser eller forkast utkastet først.
 - **Kurset er avpublisert, og det ligger et utkast igjen.** Publiser kurset igjen for å fortsette på utkastet, eller forkast

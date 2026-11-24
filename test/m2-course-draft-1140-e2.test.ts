@@ -935,12 +935,29 @@ describe("#1140 etappe 2 skive 2b: «Publiser utkastet»", () => {
     expect(JSON.parse(after.title)).toEqual(nyttNavn);
     expect(after.items).toEqual([c.moduleId, c.sectionId, pending.id]);
 
-    // KONTROLL: den samme upubliserte seksjonen, NY i utkastet til et annet kurs, stopper publiseringen der.
-    const other = await publishedCourse("pub-ny-i-utkastet");
-    await saveFirstDraft(other.courseId, { items: [{ type: "MODULE", moduleId: other.moduleId }, { type: "SECTION", sectionId: pending.id }] });
-    const rejected = await publishDraft(other.courseId);
-    expect(rejected.status).toBe(400);
-    expect(rejected.body.details.items).toEqual([expect.objectContaining({ id: pending.id, reason: "unpublished" })]);
+  });
+
+  // #1192 punkt 4 (produkteier 2026-11-24): beslutningen fra 2026-08-23 gjelder også for kursutkastet. En upublisert seksjon som
+  // er NY i utkastet, stopper ikke publiseringen; den kommer inn i kurset og er skjult for deltakerne til den er publisert.
+  it("en upublisert seksjon som er NY i utkastet: merket, publiseringen går, og deltakerne ser den ikke", async () => {
+    const c = await publishedCourse("pub-ny-seksjon-skjult");
+    const pending = await prisma.courseSection.create({ data: { title: JSON.stringify(L(tag("ny seksjon uten versjon"))) }, select: { id: true } });
+    await prisma.courseSectionVersion.create({ data: { sectionId: pending.id, versionNo: 1, bodyMarkdown: JSON.stringify(L("Ikke publisert ennå.")) } });
+    await saveFirstDraft(c.courseId, { items: [{ type: "MODULE", moduleId: c.moduleId }, { type: "SECTION", sectionId: c.sectionId }, { type: "SECTION", sectionId: pending.id }] });
+
+    // Utkastet sier fortsatt at den ikke er publisert (kursbyggeren viser en merknad som ikke stopper).
+    const got = await request(app).get(`${base(c.courseId)}/draft`).set(ADMIN);
+    expect(got.body.draft.items.map((i: { unpublished: boolean }) => i.unpublished)).toEqual([false, false, true]);
+
+    const published = await publishDraft(c.courseId, { version: "minor" });
+    expect(published.status, JSON.stringify(published.body).slice(0, 300)).toBe(200);
+    expect((await publishedState(c.courseId)).items).toEqual([c.moduleId, c.sectionId, pending.id]);
+
+    const participant = { "x-user-id": `draft-e2-p4-${RUN}`, "x-user-email": `draft.e2.p4.${RUN}@x.test`, "x-user-name": "Deltaker", "x-user-department": "Learning", "x-user-roles": "PARTICIPANT", "x-locale": "nb" };
+    const one = await request(app).get(`/api/courses/${c.courseId}`).set(participant);
+    expect(one.status).toBe(200);
+    const ids = (one.body.course.items as Array<{ moduleId?: string | null; sectionId?: string | null }>).map((i) => i.moduleId ?? i.sectionId);
+    expect(ids).toEqual([c.moduleId, c.sectionId]);
   });
 
   it("avpublisert med utkast, så publisert igjen: utkastet står, kurset er «publisert med nyere utkast», og utkastet kan publiseres", async () => {

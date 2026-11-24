@@ -402,7 +402,9 @@ export async function getUserClassIds(ctx: UserMembershipContext): Promise<Set<s
  *   - Et kurs deltakeren BARE har fra arkiverte klasser, er med bare når det er påbegynt eller fullført
  *     (`findStartedOrCompletedCourseIds`, under). Ellers er det borte, som om tildelingen ikke fantes.
  *   - OPEN-kurs og individuell tildeling avgjøres ikke her (`filterVisibleCourseIds`), og vises som før.
- * Fristen regnes som før: den tidligste over alle klassene som gir kurset, også arkiverte.
+ * Fristen er den tidligste over de AKTIVE klassene som gir kurset. En arkivert klasse gir ikke frist (produkteier 2026-11-24,
+ * #1192 punkt 3): arkiveringsdialogen lover at påminnelsene stopper, og fristen herfra står i «Mine kurs», `/enrollments` og den
+ * ukentlige e-posten. Et påbegynt kurs bare fra arkiverte klasser er fortsatt med, men uten frist (`null`).
  *
  * Påminnelsene, kullstatus og kursrapporten hopper alt over arkiverte klasser (`classRepository`, `class: { archivedAt: null }`).
  * Kursrapporten tar i tillegg med alle som har levert, lest eller fullført, og det er den samme regelen som her.
@@ -419,11 +421,12 @@ export async function getClassAssignedCourseDueDates(classIds: Set<string>, user
   const map = new Map<string, Date | null>();
   for (const r of rows) {
     if (!fromActiveClass.has(r.courseId) && !keptFromArchived.has(r.courseId)) continue;
+    const dueAt = r.class.archivedAt === null ? r.dueAt : null;
     if (!map.has(r.courseId)) {
-      map.set(r.courseId, r.dueAt);
+      map.set(r.courseId, dueAt);
     } else {
       const existing = map.get(r.courseId) ?? null;
-      if (r.dueAt && (!existing || r.dueAt < existing)) map.set(r.courseId, r.dueAt);
+      if (dueAt && (!existing || dueAt < existing)) map.set(r.courseId, dueAt);
     }
   }
   return map;

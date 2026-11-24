@@ -1470,8 +1470,9 @@ behandler tilstanden som publisert i knappene (`content-status-badge.js`, kursli
 
 **Publiserer utkastet:** `publishCourseDraft` (courseDraft.ts) sjekker at utkastet er det fana lastet, og at kurset er
 publisert. Så skriver ruta utkastet med `updateCourse` (samme vei som `PUT …/content`: versjon, krav og e-post avgjøres
-der), og raden slettes, alt i én transaksjon. Et element som er arkivert, avpublisert eller slettet siden utkastet ble
-lagret, stopper publiseringen med navn. Unntaket fra låsen (`publishingDraft: true`) gis ett sted, i den ruta.
+der), og raden slettes, alt i én transaksjon. Et element som er arkivert eller slettet siden utkastet ble lagret, og en
+modul som er ny i utkastet og ikke publisert, stopper publiseringen med navn. En upublisert seksjon stopper den ikke fra
+2.181.5 (#1192 punkt 4): den kommer inn skjult for deltakerne, og kursbyggeren merker den. Unntaket fra låsen (`publishingDraft: true`) gis ett sted, i den ruta.
 
 **Skriver kursets felt eller liste, og stoppes derfor av låsen** (utkast finnes → `409 course_has_draft`). Låsen sitter ETT
 sted, i `claimCourseRevision` (courseVersioning.ts), som alle disse går gjennom:

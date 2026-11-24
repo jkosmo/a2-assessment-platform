@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.181.5 - 2026-11-24
+
+To av de fire avgjørelsene fra kompleksitetsskanningen (#1192, produkteier 2026-11-24). De to andre (bestått modul overalt, og
+ny hovedversjon med ny frist) bygges etter en egen plan.
+
+- **#1192 punkt 3 · En arkivert klasse gir ikke frist.** Arkiveringsdialogen lovet at påminnelsene stopper, men fristen fra en
+  arkivert klasse sto fortsatt i «Mine kurs» og `/enrollments`, og den ukentlige e-posten viste «Fristen har gått ut» hver
+  mandag. En tidlig frist fra en arkivert klasse slo også en senere fra en aktiv. Nå tar `getClassAssignedCourseDueDates`
+  fristen bare fra aktive klasser. Et påbegynt kurs som deltakeren bare har fra arkiverte klasser, vises som før, men uten frist.
+  Tildelingse-posten og påminnelsene hoppet allerede over arkiverte klasser.
+- **#1192 punkt 4 · En upublisert seksjon stopper ikke «Publiser utkastet».** Beslutningen fra 2026-08-23 gjelder også for
+  kursutkastet: seksjonen kommer inn i kurset og er skjult for deltakerne til den er publisert. Kursbyggeren merker den «Ikke
+  publisert ennå. Deltakerne ser den ikke før den er publisert.», uten rød sperre. En upublisert modul stopper fortsatt.
+  Kursbyggeren, lagringen og importen godtok slike seksjoner allerede; bare publiseringen av utkastet avviste dem.
+  Merknaden leses fra seksjonsbiblioteket kursbyggeren alt har (`activeVersionId`), så den står også på en seksjon som nettopp
+  er lagt til fra velgeren, før noe er lagret. Den står på egen linje i varselfarge, og lista tegnes på nytt når biblioteket
+  hentes på nytt (forfatteren kommer tilbake til fanen).
+  **Kjente mangler:** (1) Spørsmålet om mindre eller større versjon teller den skjulte seksjonen som «lagt til». Velger
+  forfatteren større versjon, får de med kursbevis e-post uten at de ser noe nytt. Forfatteren velger selv, og importen kunne
+  gjøre det samme fra før. (2) Et kurs deltakeren bare har fra arkiverte klasser og har deltatt i (diskusjon, innlevering på en
+  modul som senere er arkivert), kan stå under «Ikke påbegynt» i den ukentlige e-posten. Før 2.181.5 sto det under «Fristen
+  har gått ut».
+
+**Rotårsak etter QA-porten (NO-GO 2026-11-24) og en rød integrasjonstest:**
+1. *Merknaden manglet i den vanlige flyten* (legg til fra velgeren → «Publiser utkastet» med en gang). Jeg festet merknaden til
+   serverens flagg i utkastet, og testet bare et utkast som alt var lagret. Velgeren tar ikke med seksjonens tilstand. Før
+   2.181.5 var det ufarlig, fordi tjeneren stoppet publiseringen; da regelen ble løsnet, ble merknaden den eneste beskjeden.
+   Sjekken som skulle fanget det: «følg den dokumenterte brukerreisen, ikke kodestien du bygde» (CLAUDE.md). Den ble ikke kjørt
+   for denne endringen. Ny e2e følger reisen fra velgeren.
+2. *En test i `m2-section-draft-1163.test.ts` festet den gamle avvisningen* med bare statuskoden 400. Jeg søkte etter
+   feilkoden `course_draft_item_unusable` før endringen og fant den ikke der. Full runde fanget den. Ingen ny regel: søket etter
+   testene som fester en regel må også ta ruta (`draft/publish`), ikke bare feilkoden.
+
+Tester: `test/m2-classes-archived.test.ts` (2 nye: arkivert klasse alene, og arkivert pluss aktiv, med kontroll før arkiveringen
+og mot den ukentlige e-posten), `test/m2-course-draft-1140-e2.test.ts` (kontrollen som festet avvisningen, er byttet ut med en
+test som publiserer og sjekker at deltakeren ikke ser seksjonen), `test/e2e/admin-content-course-draft-1140.spec.ts` (merknaden
+for seksjonen, og en upublisert modul som kontroll). Hver fiks er mutasjonsverifisert.
+
 ## 2.181.4 - 2026-11-24
 
 Fire feil til fra kompleksitetsskanningen 2026-11-23, alle uten behov for en avgjørelse fra produkteier.

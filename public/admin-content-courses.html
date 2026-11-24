@@ -214,6 +214,9 @@
       /* Et element i utkastet som ikke kan publiseres: grunnen på egen linje i raden. */
       .form-row.is-blocked { flex-wrap: wrap; border-color: #f5c0bb; background: #fdf0ef; }
       .form-row-note { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--color-error); }
+      /* #1192 punkt 4: en merknad som ikke stopper publiseringen (upublisert seksjon): egen linje, varselfarge, ingen rød ramme. */
+      .form-row.has-note { flex-wrap: wrap; }
+      .form-row.has-note .form-row-note { font-weight: 400; color: var(--color-warning); }
       /* #1150 skive 2b: det åpnede, arkiverte kurset — linja (`.course-archived-notice`) og sperren (`.course-archived-lock`)
          står i shared.css, felles med modul og seksjon (#1151 skive 3c). */
       /* #1150 skive 2b: dialogene for «Arkiver» og «Gjenopprett». Dialogen er aldri høyere enn skjermen (nettleserens egen

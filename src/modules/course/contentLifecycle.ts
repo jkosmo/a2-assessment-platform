@@ -183,8 +183,8 @@ export function findActiveCoursesForModules(moduleIds: string[], locale: Support
 //
 // Brukes av: arkivering for hånd av en modul og en seksjon (`assert…NotInActiveCourse` med «arkiveres»), importens
 // `updateExisting` (arkiverer det den byttet ut), og forhåndsvisningen av kursarkiveringen (courseArchivePreview.ts).
-// Avpublisering bruker den IKKE: et utkast som får et avpublisert element, stoppes ved publisering
-// (`course_draft_item_unusable`), og avpublisering er reversibel. Sletting teller alle kurs (`findAll…`), og fra #1152 også
+// Avpublisering bruker den IKKE: et utkast som får en avpublisert modul, stoppes ved publisering
+// (`course_draft_item_unusable`); en avpublisert seksjon er skjult for deltakerne (#1192 punkt 4). Avpublisering er reversibel. Sletting teller alle kurs (`findAll…`), og fra #1152 også
 // utkastene, gjennom denne regelen (`findCourseDraftUsesForDelete` under).
 // Vakt: test/content-in-use-guard.test.js.
 // ─────────────────────────────────────────────────────────────────────────────────────────────

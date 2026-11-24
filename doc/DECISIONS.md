@@ -1558,7 +1558,8 @@ til folk i en arkivert klasse.» Og: heller ikke tildele kurs til en arkivert kl
   kunne en deltaker mistet kurset og likevel fått e-post med lenke til en side som svarer 404. Med vilje litt videre enn kursdetaljens telling:
   en lesing teller også når seksjonen er endret i en senere hovedversjon, og en innlevering også når modulen er arkivert. Det
   deltakeren har gjort, skal ikke forsvinne. (`findStartedOrCompletedCourseIds`.)
-- **Fristen** regnes som før, den tidligste over alle klassene som gir kurset, også arkiverte.
+- **Fristen** regnes som før, den tidligste over alle klassene som gir kurset, også arkiverte. **Erstattet 2026-11-24 (#1192
+  punkt 3):** en arkivert klasse gir ikke frist lenger.
 - **En arkivert klasse tar ikke imot deltakere eller kurs:** `400 class_archived`. Å fjerne en deltaker eller et kurs går. Etter
   «Gjenopprett» går alt igjen. Påminnelsene, kullstatus og kursrapportens publikum hoppet alt over arkiverte klasser.
 - **Kjent mangel til #1142:** e-posten om et nytt kurs i klassen sendes etter transaksjonen. Arkiveres klassen i sekundene mellom
@@ -1712,7 +1713,8 @@ Da kursbyggeren skulle bygges, svarte produkteier på fire spørsmål (skissen: 
 - **Et upublisert element stopper publiseringen bare når det er NYTT i utkastet.** Et element som alt står i det
   publiserte kurset, slipper gjennom selv om det ikke er publisert (kursimporten kan legge en ny seksjon inn som utkast).
   Det er tilstanden kurset alt har, og utkastet gjør den ikke verre. Uten dette ville et slikt kurs ikke fått publisert
-  noe utkast (QA-porten, skive 2c).
+  noe utkast (QA-porten, skive 2c). **For seksjoner erstattet 2026-11-24 (#1192 punkt 4):** en upublisert seksjon stopper
+  ikke publiseringen lenger; den er skjult for deltakerne. Regelen gjelder fortsatt for moduler.
 
 ## Arkiverte kurs teller ikke som bruk (#1149, 2026-11-13)
 
@@ -2490,3 +2492,28 @@ stedet for å forkaste det som var skrevet uten et ord. Kurset lagrer først («
 fordi lagringen i Rediger ikke kan ventes på uten en omskriving. Valgt under byggingen av #1189.
 
 **Sak:** #1189, #1191 · **Dato:** 2026-11-23 · **Status:** valgt under byggingen
+
+## Fire avgjørelser fra kompleksitetsskanningen (#1192, 2026-11-24)
+
+Produkteier svarte ja på alle fire (2026-11-24). Felles begrunnelse: den nyeste beslutningen gjelder, og alle skjermer og
+e-poster skal si det samme om samme person.
+
+1. **En bestått modul står til modulen revideres, overalt.** Det gjelder allerede kurset og kursbeviset («Moduler utløper
+   ikke», 2026-08-22, og regelen fra 2026-11-03). Nå skal også modulrapportene, `CertificationStatus` (`/recertification`) og
+   profilen følge den. Et senere forsøk som stryker, tar ikke fra deltakeren en bestått modul. «Fullføring per modul»
+   (2026-10-19) teller fortsatt hver person én gang, men en person som har bestått den gjeldende hovedversjonen, står som
+   bestått selv om det siste forsøket strøk. Dette erstatter «siste forsøk» der.
+2. **En ny frist etter en ny hovedversjon gjør kurset uferdig igjen** for den som bare har kursbevis for en eldre
+   hovedversjon. Slik var det tenkt i `doc/DESIGN_934.md` (avgjort 2026-11-01, punkt 2): den nye hovedversjonen er frivillig
+   til noen setter en ny frist. Uten en ny frist står et oppfylt kurs som fullført, og ingen får påminnelse. Resultater,
+   Status og tildelingse-posten skal si det samme: «Må ta ny versjon» bare når det finnes en slik frist.
+3. **Arkiverte klasser gir ikke frist.** Arkiveringsdialogen lover at påminnelsene stopper, og fristen i «Mine kurs» og i den
+   ukentlige e-posten skal da ikke komme fra en arkivert klasse. Dette erstatter linja «Fristen regnes som før, den tidligste
+   over alle klassene som gir kurset, også arkiverte» (2026-11-08). Et påbegynt kurs fra en arkivert klasse vises fortsatt i
+   «Mine kurs», men uten frist fra den klassen.
+4. **Upubliserte seksjoner i et publisert kurs er tillatt, også når kursutkastet publiseres.** Beslutningen fra 2026-08-23
+   gjelder: seksjonen er skjult for deltakerne og har ingen konsekvenser for dem før den er publisert. «Publiser utkastet»
+   skal ikke lenger avvise en ny upublisert seksjon. Det erstatter regelen fra #1140 etappe 2 («Et upublisert element stopper
+   publiseringen bare når det er NYTT i utkastet») for seksjoner. Kursbyggeren, lagringen og importen gjorde det allerede slik.
+
+**Sak:** #1192 · **Dato:** 2026-11-24 · **Status:** avgjort av produkteier

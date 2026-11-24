@@ -598,18 +598,25 @@ async function describeCourseDraftItems(
       archivedAt: row?.archivedAt?.toISOString() ?? null,
       // NYTT i utkastet og uten publisert versjon. Et element som bare står i utkastet, ses ikke av bruk-låsen (den leser
       // kursets liste), så det kan avpubliseres etter at utkastet ble lagret; og velgeren i kursbyggeren tilbyr seksjoner
-      // som aldri har vært publisert. I et levende kurs ville deltakerne da møtt noe NYTT som ikke kan åpnes.
+      // som aldri har vært publisert. I et levende kurs ville deltakerne da møtt noe NYTT som ikke kan åpnes. Bare en modul
+      // stopper publiseringen; en seksjon merkes, men er skjult for deltakerne til den er publisert (`draftItemProblem`).
       unpublished: row != null && row.activeVersionId == null && !alreadyInCourse.has(refId),
       missing: !row,
     };
   });
 }
 
-/** Hvorfor et element i utkastet ikke kan publiseres ut i kurset, eller `null` når det kan. */
-function draftItemProblem(item: { missing: boolean; archivedAt: string | null; unpublished: boolean }): "missing" | "archived" | "unpublished" | null {
+/**
+ * Hvorfor et element i utkastet ikke kan publiseres ut i kurset, eller `null` når det kan.
+ *
+ * En upublisert SEKSJON stopper ikke publiseringen (produkteier 2026-11-24, #1192 punkt 4): den er skjult for deltakerne til den
+ * er publisert (`isSectionAvailableToParticipant`, DECISIONS 2026-08-23), som når den legges inn i kurset på andre måter. En
+ * upublisert MODUL stopper den fortsatt: en modul vises for deltakerne som en rad, også uten publisert versjon.
+ */
+function draftItemProblem(item: { type: "MODULE" | "SECTION"; missing: boolean; archivedAt: string | null; unpublished: boolean }): "missing" | "archived" | "unpublished" | null {
   if (item.missing) return "missing";
   if (item.archivedAt != null) return "archived";
-  return item.unpublished ? "unpublished" : null;
+  return item.unpublished && item.type === "MODULE" ? "unpublished" : null;
 }
 
 /**

@@ -2,6 +2,7 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { getWeeklyDigestContent } from "../src/modules/weeklyDigest/weeklyDigestContent.js";
 
 // Produkteier 2026-11-08, arkiverte klasser:
 //   «Kurs fra arkiverte klasser som ikke er fullført eller påbegynt bør ikke vises i Mine kurs. Man bør ikke kunne legge til
@@ -258,5 +259,52 @@ describe("en arkivert klasse tar ikke imot deltakere eller kurs", () => {
     expect(response.status, JSON.stringify(response.body)).toBe(400);
     expect(response.body.error).toBe("class_archived");
     expect(await prisma.classMember.count({ where: { classId } })).toBe(0);
+  });
+});
+
+// #1192 punkt 3 (produkteier 2026-11-24): en arkivert klasse gir ikke frist. Arkiveringsdialogen lover at påminnelsene stopper;
+// fristen fra `getClassAssignedCourseDueDates` står i «Mine kurs», `/enrollments` og den ukentlige e-posten.
+describe("fristen: en arkivert klasse gir ikke frist", () => {
+  const PASSERT = new Date("2026-01-05T12:00:00.000Z");
+  const SENERE = "2030-01-01T00:00:00.000Z";
+  const setDue = (classId: string, courseId: string, dueAt: Date) =>
+    prisma.courseGroupAssignment.updateMany({ where: { classId, courseId }, data: { dueAt } });
+  const enrollmentRow = async (headers: Record<string, string>, courseId: string) => {
+    const response = await request(app).get("/api/courses/enrollments").set(headers);
+    expect(response.status).toBe(200);
+    return (response.body.enrollments as Array<{ courseId: string; dueAt: string | null; status: string }>).find((row) => row.courseId === courseId);
+  };
+  const overdueInDigest = async (userId: string, courseId: string) => {
+    const content = await getWeeklyDigestContent({ userId, roles: ["PARTICIPANT"], locale: "nb", now: new Date() });
+    return (content?.overdue ?? []).some((row) => row.courseId === courseId);
+  };
+
+  it("påbegynt kurs bare fra en arkivert klasse med passert frist: står uten frist, ikke forfalt, og ikke i «Fristen har gått ut»", async () => {
+    const m = await memberWithCourse();
+    await prisma.courseSectionRead.create({ data: { userId: m.userId, courseId: m.courseId, sectionId: m.sectionId } });
+    await setDue(m.classId, m.courseId, PASSERT);
+    // Kontroll: før arkiveringen er fristen der, og kurset er forfalt i e-posten.
+    expect((await enrollmentRow(m.headers, m.courseId))?.dueAt).toBe(PASSERT.toISOString());
+    expect(await overdueInDigest(m.userId, m.courseId)).toBe(true);
+
+    expect((await archive(m.classId)).status).toBe(200);
+    const row = await enrollmentRow(m.headers, m.courseId);
+    expect(row).toMatchObject({ dueAt: null });
+    expect(row?.status).not.toBe("OVERDUE");
+    expect(await overdueInDigest(m.userId, m.courseId)).toBe(false);
+  });
+
+  it("samme kurs fra en arkivert klasse med tidlig frist og en aktiv med senere: fristen er den aktive klassens", async () => {
+    const m = await memberWithCourse();
+    await setDue(m.classId, m.courseId, PASSERT);
+    const active = await newClass();
+    expect((await addMember(active, m.userId)).status).toBe(201);
+    expect((await assignCourse(active, m.courseId)).status).toBe(201);
+    // Kontroll: med begge aktive vinner den tidligste.
+    expect((await enrollmentRow(m.headers, m.courseId))?.dueAt).toBe(PASSERT.toISOString());
+
+    expect((await archive(m.classId)).status).toBe(200);
+    expect((await enrollmentRow(m.headers, m.courseId))?.dueAt).toBe(SENERE);
+    expect(await overdueInDigest(m.userId, m.courseId)).toBe(false);
   });
 });

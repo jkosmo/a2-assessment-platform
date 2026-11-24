@@ -190,8 +190,9 @@ describe("#1163: «Lagre» er et utkast, «Publiser» er det deltakerne ser", ()
       const rad = await prisma.courseDraft.findUniqueOrThrow({ where: { courseId } });
       return request(app).post(`${base}/draft/publish`).set(admin).send({ loaded: { draftId: rad.id, revision: rad.revision } });
     };
-    // Seksjonen er et utkast og ny i kursets utkast: utkastet kan ikke publiseres ennå.
-    expect((await publiserUtkast()).status).toBe(400);
+    // Fram til 2.181.5 stoppet en upublisert seksjon som var ny i kursets utkast, publiseringen. Nå slipper den gjennom og er
+    // skjult for deltakerne (#1192 punkt 4, målt i `m2-course-draft-1140-e2.test.ts`). Her publiseres kursets utkast først etter
+    // seksjonen, for å måle tittelen deltakeren ser.
 
     // Seksjonen publiseres for seg, før kursets utkast. Deltakeren ser den ikke: den står ikke i det publiserte kurset.
     const publisertTittel = JSON.parse((await detail(s2)).title).nb as string;
