@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.181.7 - 2026-11-24
+
+**#1192 punkt 1 · En bestått modul står til modulen revideres, også i modulrapportene, profilen og resertifiseringen.** Før
+svarte fire steder hver sin regel (siste forsøk, siste vedtak, ethvert bestått), så samme person kunne være bestått i
+kursrapporten og `FAILED` i modulrapporten. Nå leser alle fra `moduleCredit.ts`: `findModuleStanding` på modulnivå (et pass
+gjelder på modulens nyeste hovedversjon, svar A), og kursets krav når rapporten er filtrert på ett kurs. Plan:
+`doc/design/PLAN_1192_BESTATT_OG_FRIST.md`, del 1.
+
+- **Modulrapportene** («Fullføring per modul», pass-rates, detaljene, CSV): et gjeldende pass er bestått uansett senere forsøk.
+  Bare pass på en eldre hovedversjon gir «må ta ny versjon», og det gamle vedtaket gir aldri bestått tilbake. Uten pass avgjør
+  siste forsøk som før. Pass-rates har et nytt felt `revisedCount` (ikke med i `decisionCount` eller andelen), detaljene
+  `totals.needsNewVersion`. Datofilteret velger personer med innlevering i perioden og viser ståstedet nå.
+- **Profilen** («Moduler bestått» og totalen): bare gjeldende pass. Ukestallene er hendelser og står som før.
+- **`/api/reports/recertification`**: statusen kommer fra `ModulePass` (ACTIVE, SUPERSEDED, NOT_CERTIFIED). Et bestått som er
+  omgjort i en anke, står ikke lenger som ACTIVE (DESIGN_934 mangel 41).
+- **Tallene i publiseringsdialogen** (`/modules/:id/passed-count`, `passedCount`): gjeldende pass.
+- `CertificationStatus` skrives fortsatt, men ingen flate leser statusen derfra.
+
+**Valgt under byggingen:** et pass på en versjon uten nummer regnes som hovedversjon 1 (som `currentModuleMajor`). Har en
+revidert modul et nyere forsøk som strøk, viser rapporten det forsøket, ikke «må ta ny versjon». Kursfilteret bruker kursets
+krav bare når ett kurs er valgt, ikke for en fagansvarligs tillatte kurs. Autostart av flervalgsmodul utenfor kurs og
+«Fullført» på modulkortet er ikke endret: begge nås bare utenfor kursmodus (`PARTICIPANT_COURSE_ONLY` er på), og «Fullført»
+der betyr at forsøket er ferdig, ikke bestått.
+
+**Kjente mangler:** Resultatsida viser ikke `revisedCount`, så bestått, ikke bestått og under vurdering summerer ikke til
+totalen når noen må ta ny versjon. Raden i detaljene kan vise poeng og dato fra siste forsøk når statusen er bestått på grunn
+av et tidligere pass. Ukestallet «bestått» i profilen teller pass som tilbakefyllingen har ugyldiggjort. Statusfilteret kan
+ikke velge «må ta ny versjon». Fra QA-porten (GO, Claude-agent): i resertifiseringsrapporten kommer `passedAt` fortsatt fra
+`CertificationStatus`, så en som besto og så strøk, står som ACTIVE uten dato; vakta i `content-lock-write-guard.test.js` lister
+fortsatt `reviewAppealReport.ts` som leser av `isCertificationPassed`, som ikke har kallere lenger; fiksturen i
+`completion-per-person.test.ts` lager bestått uten `ModulePass` og måler bare reserveveien; `hasValidModulePass` (spørsmålet i
+moduldialogen) teller også pass på eldre hovedversjoner. `revisedCount` står sist i pass-rates, så CSV-kolonnene før den ikke
+flyttes.
+
+Tester: `test/m2-module-standing-reports-1192.test.ts` (7, gjennom rutene), `test/unit/reporting-service.test.ts` og
+`test/unit/my-stats-1138.test.ts` (nye og endrede), og to fiksturer som lagde et bestått uten `ModulePass`
+(`m2-course-publish-pending-versions`, `m2-module-revision-supersedes-997`). Ni mutasjoner, alle røde på riktig sted.
+
 ## 2.181.6 - 2026-11-24
 
 **Prod-planen går fra B1 til B2** (produkteier 2026-11-24). Utrullingen av 2.181.4 samme kveld ga 25 minutter nedetid i prod:

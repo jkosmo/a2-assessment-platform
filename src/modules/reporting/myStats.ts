@@ -2,6 +2,7 @@ import { prisma } from "../../db/prisma.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { boatMood, type BoatMood } from "../gamification/boatMood.js";
+import { findModuleStanding } from "../course/moduleCredit.js";
 import {
   activityEventsFrom,
   addDaysToKey,
@@ -21,7 +22,8 @@ import {
 //   - seksjoner lest: ulike seksjoner per uke. Samme seksjon lest i to kurs samme uke teller én
 //     gang (Aktivitet teller to lesinger). Kopien «Oppdater kurs» lager (#1095) er alt borte i
 //     `distinctReads`;
-//   - moduler bestått: ulike moduler per uke, etter `passedAt` (avgjort, og siste vedtak bestått);
+//   - moduler bestått: ulike moduler per uke, etter `passedAt` (avgjort, og siste vedtak bestått). Lista «Moduler bestått» og
+//     totalen tar bare med moduler som fortsatt er bestått (#1192 punkt 1: ikke revidert siden); ukene er hendelser;
 //   - kurs fullført: hvert kursbevis, også et nytt for en ny hovedversjon;
 //   - anslått lesetid: antall ord i seksjonsversjonen som gjaldt da brukeren leste, på brukerens
 //     språk, delt på 200 ord per minutt. Én gang per seksjon per uke. Tid brukt måles ikke.
@@ -85,6 +87,11 @@ export function buildMyStats(input: {
   /** Ord i seksjonsversjonen som gjaldt for denne lesingen, på brukerens språk. */
   wordsForRead: (read: { sectionId: string; readAt: Date }) => number;
   moduleTitle: (moduleId: string) => string;
+  /**
+   * #1192 punkt 1: er modulen fortsatt bestått (ikke revidert siden)? Utelatt: ja. «Moduler bestått» og totalen tar bare med
+   * moduler der dette er sant. Ukestallene er hendelser («bestått den uka») og står som før.
+   */
+  passIsCurrent?: (moduleId: string) => boolean;
 }): MyStats {
   const { now, sources } = input;
   const todayKey = osloDayKey(now);
@@ -114,6 +121,7 @@ export function buildMyStats(input: {
     if (!at || at > now) continue;
     const week = weekOf(at);
     if (week !== null) moduleSets[week]!.add(submission.moduleId);
+    if (input.passIsCurrent && !input.passIsCurrent(submission.moduleId)) continue;
     const known = latestPass.get(submission.moduleId);
     if (!known || at > known.at) latestPass.set(submission.moduleId, { at, totalScore: submission.decisions[0]?.totalScore ?? null });
   }
@@ -223,5 +231,14 @@ export async function getMyStats(userId: string, locale: SupportedLocale, now = 
   };
 
   const titles = new Map(modules.map((m) => [m.id, localizeContentText(locale, m.title) ?? m.title]));
-  return buildMyStats({ now, sources, wordsForRead, moduleTitle: (id) => titles.get(id) ?? id });
+  // #1192 punkt 1: samme regel som modulrapportene. Bestått bare på en eldre hovedversjon av modulen er ikke «bestått» her;
+  // uten pass i det hele tatt avgjør vedtaket, som før (`personModuleOutcome`).
+  const standing = await findModuleStanding(prisma, { moduleIds: passedModuleIds, userIds: [userId] });
+  return buildMyStats({
+    now,
+    sources,
+    wordsForRead,
+    moduleTitle: (id) => titles.get(id) ?? id,
+    passIsCurrent: (moduleId) => standing.standing(userId, moduleId) !== "REVISED",
+  });
 }

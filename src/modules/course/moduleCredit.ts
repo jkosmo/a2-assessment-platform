@@ -193,3 +193,90 @@ export async function findModuleProgress(client: ProgressReader, input: ModulePr
   if (moduleIds.length === 0 || input.userIds?.length === 0) return emptyProgress();
   return readPerCourseRule(client, input, moduleIds);
 }
+
+// ---------------------------------------------------------------------------
+// #1192 punkt 1 (produkteier 2026-11-24): «har deltakeren bestått modulen?» for flatene som ikke har et kurs —
+// modulrapportene, profilen og resertifiseringsrapporten. Samme regel som i kurs: en bestått står til modulen revideres,
+// og et senere stryk tar den ikke bort. «Revidert» betyr her en nyere hovedversjon av MODULEN (svar A): et pass på en eldre
+// hovedversjon er ikke gjeldende, også når et kurs har valgt å ikke kreve den nye. Med `courseId` brukes kursets krav.
+// ---------------------------------------------------------------------------
+
+type ModuleLevelReader = Pick<typeof prisma, "modulePass" | "moduleVersion" | "courseModuleRequirement">;
+
+export type ModuleLevelStanding = {
+  /** `PASSED`: et gjeldende pass. `REVISED`: bare pass på en eldre hovedversjon (eller ugyldiggjort). `null`: ingen pass. */
+  standing(userId: string, moduleId: string): ModuleStanding | null;
+  /** Deltakerne med et gjeldende pass på modulen. */
+  passedUserIds(moduleId: string): Set<string>;
+};
+
+/**
+ * Ren funksjon: teller passet på modulnivå, gitt modulens nyeste hovedversjon? En versjon uten nummer regnes som hovedversjon 1,
+ * som i `currentModuleMajor` og nummereringen av historikk (`numberModuleHistory`). Kursregelen (`passCountsForCourse`) lar
+ * derimot et pass uten nummer stå som ikke tellende, fordi kravet da ikke er fylt ut; her finnes ikke noe krav.
+ */
+export function passCountsForModule(pass: { invalidatedAt: Date | null; versionMajor: number | null }, currentMajor: number): boolean {
+  if (pass.invalidatedAt !== null) return false;
+  return (pass.versionMajor ?? 1) >= currentMajor;
+}
+
+export async function findModuleStanding(
+  client: ModuleLevelReader,
+  input: { moduleIds: string[]; userIds?: string[]; courseId?: string },
+): Promise<ModuleLevelStanding> {
+  const moduleIds = [...new Set(input.moduleIds)];
+  if (moduleIds.length === 0 || input.userIds?.length === 0) {
+    return { standing: () => null, passedUserIds: () => new Set() };
+  }
+  if (input.courseId) {
+    const courseId = input.courseId;
+    const progress = await findModuleProgress(client, { userIds: input.userIds, courses: [{ courseId, moduleIds }] });
+    return {
+      standing: (userId, moduleId) => progress.standing(userId, courseId, moduleId),
+      passedUserIds: (moduleId) => progress.passedUserIds(courseId, moduleId),
+    };
+  }
+  return readModuleLevelRule(client, moduleIds, input.userIds);
+}
+
+/**
+ * Hvor mange som har bestått modulen nå, på modulnivå (#1192 punkt 1). Tallet forfatteren ser før en publisering
+ * (`/modules/:id/passed-count`, kursets forhåndsvisning av ventende versjoner). Leste før `CertificationStatus`.
+ */
+export async function countCurrentModulePasses(client: ModuleLevelReader, moduleId: string): Promise<number> {
+  return (await readModuleLevelRule(client, [moduleId], undefined)).passedUserIds(moduleId).size;
+}
+
+/** Modulens nyeste hovedversjon (som `currentModuleMajor`, uten å nummerere historikk) og beståttene. */
+async function readModuleLevelRule(client: ModuleLevelReader, moduleIds: string[], userIds: string[] | undefined): Promise<ModuleLevelStanding> {
+  const majors = await client.moduleVersion.groupBy({
+    by: ["moduleId"],
+    where: { moduleId: { in: moduleIds }, versionMajor: { not: null } },
+    _max: { versionMajor: true },
+  });
+  const currentMajor = new Map(majors.map((row) => [row.moduleId, row._max.versionMajor ?? 1]));
+  const passes = await client.modulePass.findMany({
+    where: { moduleId: { in: moduleIds }, ...(userIds ? { userId: { in: userIds } } : {}) },
+    select: { userId: true, moduleId: true, invalidatedAt: true, moduleVersion: { select: { versionMajor: true } } },
+  });
+  const standings = new Map<string, ModuleStanding>();
+  const passedByModule = new Map<string, Set<string>>();
+  for (const pass of passes) {
+    const key = `${pass.userId}\n${pass.moduleId}`;
+    if (standings.get(key) === "PASSED") continue;
+    const counts = passCountsForModule(
+      { invalidatedAt: pass.invalidatedAt, versionMajor: pass.moduleVersion.versionMajor },
+      currentMajor.get(pass.moduleId) ?? 1,
+    );
+    standings.set(key, counts ? "PASSED" : "REVISED");
+    if (counts) {
+      const set = passedByModule.get(pass.moduleId);
+      if (set) set.add(pass.userId);
+      else passedByModule.set(pass.moduleId, new Set([pass.userId]));
+    }
+  }
+  return {
+    standing: (userId, moduleId) => standings.get(`${userId}\n${moduleId}`) ?? null,
+    passedUserIds: (moduleId) => passedByModule.get(moduleId) ?? new Set(),
+  };
+}

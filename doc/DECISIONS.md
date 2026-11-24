@@ -1386,6 +1386,10 @@ eller det første). En som strøk og venter på sensor etter et nytt forsøk, st
 vurdering», ikke «ikke bestått». Alle forsøk vises i en egen kolonne «Forsøk». Feltnavnene i API og
 CSV (`totalSubmissions` osv.) er beholdt for ikke å brekke eksporter; betydningen er nå personer.
 
+**Erstattet 2026-11-24 (#1192 punkt 1):** personer telles fortsatt én gang, men utfallet er ståstedet: en gjeldende bestått står
+uansett hva senere forsøk ga, og et pass bare på en eldre hovedversjon er «Må ta ny versjon». Siste forsøk avgjør bare når det
+ikke finnes et gjeldende pass. Se «Fire avgjørelser fra kompleksitetsskanningen».
+
 ## Steg for steg, skriv selv og repetisjonskort (#1075, #1076, #1078): rammer i teksten (2026-10-19)
 
 Produkteier godkjente skissen («Ser fint ut»): alle tre er rammer i seksjonsteksten, som «tenk først»
@@ -2515,5 +2519,16 @@ e-poster skal si det samme om samme person.
    gjelder: seksjonen er skjult for deltakerne og har ingen konsekvenser for dem før den er publisert. «Publiser utkastet»
    skal ikke lenger avvise en ny upublisert seksjon. Det erstatter regelen fra #1140 etappe 2 («Et upublisert element stopper
    publiseringen bare når det er NYTT i utkastet») for seksjoner. Kursbyggeren, lagringen og importen gjorde det allerede slik.
+
+**Presisert samme dag** (produkteier, ja på spørsmål A, B og C i `doc/design/PLAN_1192_BESTATT_OG_FRIST.md`):
+
+- **A. Modulnivå:** i modulrapportene og profilen er en bestått gjeldende bare på modulens nyeste hovedversjon, også når et
+  kurs har valgt å ikke kreve den. Kurset godtar fortsatt det gamle passet; modulrapporten viser at modulen er revidert.
+- **B. Frister som finnes:** regnes som satt før den nye hovedversjonen. Utrullingen endrer ingen status og sender ingen
+  påminnelser.
+- **C. Tildelingse-posten til en med eldre kursbevis:** går bare når tildelingen gjør kurset utestående (en frist satt etter
+  den nye hovedversjonen), med teksten «ny versjon av et kurs du har fullført». Uten frist sendes ingenting. En ren
+  fristendring på en tildeling som finnes, gir ingen e-post. Dette endrer «En ny frist er fortsatt ikke et nytt kurs»
+  (#1146, 2026-11-10) for den som har et eldre kursbevis.
 
 **Sak:** #1192 · **Dato:** 2026-11-24 · **Status:** avgjort av produkteier

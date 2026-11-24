@@ -34,7 +34,7 @@ See [DOMAIN_LIFECYCLE.md](DOMAIN_LIFECYCLE.md) for the full ownership model.
 | Method | Route | Role(s) |
 |---|---|---|
 | `GET` | `/api/me` | any authenticated |
-| `GET` | `/api/me/stats` | any authenticated, **always the caller** (2.141.0, #1138). Takes no user id in path, query or body; no role reaches another person's numbers. «Min statistikk» on `/profile`: `mood` (`ny` \| `mett` \| `sulten` \| `sur` \| `dramatisk`, by calendar weeks since last activity, Europe/Oslo), `lastActivityAt`, `weeks` (12 × `{ from, to, partial, sectionsRead, modulesPassed, coursesCompleted, readingMinutes }`, Monday–Sunday Oslo, oldest first, empty weeks included), `recent` (sum of the last 4 weeks), `totals` (`coursesCompleted` = certificates, `modulesPassed` = distinct modules, `sectionsRead` = distinct sections), `passedModules` (`moduleId`, `moduleTitle` localised, `passedAt`, `totalScore` of the latest passed attempt per module). Events come from the same loader as the activity report (`loadActivitySources`); a module is passed when the submission is settled and its latest decision passed. Reading time = words in the section version current at the read, in the caller's language, / 200 per minute, once per section per week |
+| `GET` | `/api/me/stats` | any authenticated, **always the caller** (2.141.0, #1138). Takes no user id in path, query or body; no role reaches another person's numbers. «Min statistikk» on `/profile`: `mood` (`ny` \| `mett` \| `sulten` \| `sur` \| `dramatisk`, by calendar weeks since last activity, Europe/Oslo), `lastActivityAt`, `weeks` (12 × `{ from, to, partial, sectionsRead, modulesPassed, coursesCompleted, readingMinutes }`, Monday–Sunday Oslo, oldest first, empty weeks included), `recent` (sum of the last 4 weeks), `totals` (`coursesCompleted` = certificates, `modulesPassed` = distinct modules, `sectionsRead` = distinct sections), `passedModules` (`moduleId`, `moduleTitle` localised, `passedAt`, `totalScore` of the latest passed attempt per module). Events come from the same loader as the activity report (`loadActivitySources`); a module is passed when the submission is settled and its latest decision passed. **2.181.7 (#1192 point 1):** `passedModules` and `totals.modulesPassed` leave out a module passed only on an older major version (module standing `REVISED`); the weekly `modulesPassed` are events and still count it. Reading time = words in the section version current at the read, in the caller's language, / 200 per minute, once per section per week |
 | `GET` | `/api/me/data` | any authenticated. What is stored about the caller. Since 2.134.0 also `profile.modulePasses`: `moduleId`, `moduleVersionId`, `submissionId`, `passedAt`, `invalidatedAt` |
 | `GET` | `/api/modules` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
 | `GET` | `/api/modules/:moduleId` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
@@ -201,8 +201,17 @@ det var før serveren lokaliserte.
 `completion` and `pass-rates` count **people, not attempts** (2.95.0): each participant once per module,
 by their latest submission. `totalSubmissions`, `completedSubmissions`, `underReviewSubmissions`,
 `passCount`, `failCount` and `decisionCount` are people; `completion` rows and totals also carry
-`attempts` (every submission, including retaken ones). `status` filters apply to the latest
-submission.
+`attempts` (every submission, including retaken ones). `status` filters apply to the person's outcome (from 2.181.7: a current pass counts as COMPLETED even with a newer attempt under review; otherwise the latest
+submission).
+
+**2.181.7 (#1192 point 1):** the outcome per person is the module **standing** (`ModulePass`, `findModuleStanding`), the same
+rule as courses. A current pass counts as passed/completed whatever later attempts gave; a pass only on an older major version
+of the module is `NEEDS_NEW_VERSION` («Må ta ny versjon») in `completion/details` and `module-learners`, counted in the new
+`revisedCount` in `pass-rates` (not in `decisionCount`, not in the pass rate) and as neither completed nor under review in
+`completion`. Without any pass, the latest submission decides as before. The date window still selects people with a
+submission in the period; the outcome is their standing now. With `courseId`, the course's requirement
+(`CourseModuleRequirement.minModuleMajor`) decides instead of the module's newest major. `completion/details` and
+`module-learners` totals add `needsNewVersion`.
 
 ## Cohort status (#498)
 
@@ -261,8 +270,10 @@ now reports stored certification state instead of a derived expiry state:
 | `rows[]` expiry fields | `expiryDate`, `recertificationDueDate`, `daysUntilDue`, `daysUntilExpiry` | removed |
 | `totals` | one count per lifecycle value | `certificationCount`, `ACTIVE`, `NOT_CERTIFIED` |
 
-Historical rows still holding `DUE_SOON`/`DUE`/`EXPIRED` are reported as `ACTIVE` — they counted as
-passed before and still do. `?status=` filtering accepts the two remaining values. The CSV export
+Before 2.181.7, historical rows still holding `DUE_SOON`/`DUE`/`EXPIRED` were reported as `ACTIVE` — they counted as
+passed before and still do. **2.181.7 (#1192 point 1):** `CertificationStatus` is only the population; `status` comes from the
+module standing (`ModulePass`): a current pass → `ACTIVE`, a pass only on an older major version → `SUPERSEDED`, no pass →
+`NOT_CERTIFIED` (also a pass overturned on appeal, which used to stay `ACTIVE`). `?status=` filtering accepts the two remaining values. The CSV export
 token is unchanged (`/api/reports/export?type=recertification`).
 
 ---
@@ -541,7 +552,9 @@ open to every author**, like the course detail; it was owner-or-administrator. T
 `/modules/:moduleId/…` is still owner-guarded (`403 content_ownership`). `GET /modules/:moduleId/export-package` is
 open the same way (export and «Dupliser» on someone else's module; the copy is owned by whoever imports it).
 `passed-count`, `publish-preview-versioned` (preludes to a publish) and (#1168) `archive-preview` (prelude to an archive)
-stay owner-guarded. The answer key is not
+stay owner-guarded. **2.181.7 (#1192 point 1):** `passed-count` (and `passedCount` in the course's `pending-versions`) counts
+people with a current pass on the module's newest major version (`ModulePass`, `countCurrentModulePasses`), no longer
+`CertificationStatus`. The answer key is not
 protected from other authors either: product owner 2026-09-08 (#1031), `doc/DECISIONS.md` «Fagansvarlige deler innsyn».
 Until v2.11.11 the answer key was stripped for non-administrators; that redaction was removed (#392).
 

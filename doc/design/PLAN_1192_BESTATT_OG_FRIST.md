@@ -151,6 +151,8 @@ versjonen), `:87-115`, `:529`, `test/m2-module-pass-per-course-934-5a3.test.ts:1
 
 ## Spørsmål til produkteier før bygging
 
+**Besvart 2026-11-24: ja på A, B og C** (forslagene under gjelder).
+
 **A. Modulnivå:** er en bestått modul «revidert» i modulrapportene og profilen når modulen har fått en nyere hovedversjon, også
 om et kurs har valgt å ikke kreve den? Forslag: ja (se over).
 

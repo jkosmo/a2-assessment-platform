@@ -151,6 +151,26 @@ describe("ukene i statistikken", () => {
     expect(stats.passedModules).toEqual([{ moduleId: "m-ok", moduleTitle: "Tittel m-ok", passedAt: "2026-11-09T09:00:00.000Z", totalScore: 88 }]);
   });
 
+  // #1192 punkt 1: en modul som er revidert siden (bestått bare en eldre hovedversjon) står ikke i «Moduler bestått» eller i
+  // totalen. Uka den ble bestått, teller fortsatt: det er en hendelse.
+  it("#1192: en revidert modul er ute av lista og totalen, men uka den ble bestått teller fortsatt", () => {
+    const stats = buildMyStats({
+      now: NOW,
+      sources: sources({
+        submissions: [
+          decided("m-gjeldende", "2026-11-09T08:00:00Z", [[true, "2026-11-09T09:00:00Z", 88]]),
+          decided("m-revidert", "2026-11-10T08:00:00Z", [[true, "2026-11-10T09:00:00Z", 77]]),
+        ],
+      }),
+      wordsForRead: () => 0,
+      moduleTitle: (id) => `Tittel ${id}`,
+      passIsCurrent: (moduleId) => moduleId !== "m-revidert",
+    });
+    expect(stats.passedModules.map((m) => m.moduleId)).toEqual(["m-gjeldende"]);
+    expect(stats.totals.modulesPassed).toBe(1);
+    expect(stats.weeks[11]!.modulesPassed).toBe(2);
+  });
+
   it("en modul bestått to ganger står én gang i lista, med det siste beståtte forsøket", () => {
     const stats = build(sources({
       submissions: [

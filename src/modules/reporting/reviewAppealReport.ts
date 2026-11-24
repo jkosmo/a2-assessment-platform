@@ -3,7 +3,8 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { reportingRepository } from "../../repositories/reportingRepository.js";
 import { buildAppealSlaSnapshot } from "../../modules/appeal/index.js";
-import { isCertificationPassed } from "../certification/index.js";
+import { prisma } from "../../db/prisma.js";
+import { findModuleStanding } from "../course/moduleCredit.js";
 import type {
   ReviewStatus as ReviewStatusType,
   AppealStatus as AppealStatusType,
@@ -167,8 +168,17 @@ export async function getCertificationStatusReport(filters: ReportFilters, local
     dateTo: filters.dateTo,
   });
 
+  // #1192 punkt 1 (produkteier 2026-11-24): statusen kommer fra `ModulePass` på modulnivå, samme regel som modulrapportene og
+  // kurset. `CertificationStatus` er bare utvalget (hvem som har et vedtak på modulen); den skrives fortsatt, men avgjør ikke
+  // lenger. Gjeldende pass: ACTIVE. Pass bare på en eldre hovedversjon: SUPERSEDED («må tas på nytt», som #997). Ingen pass:
+  // NOT_CERTIFIED — også for et bestått som er omgjort i en anke (raden sto før som ACTIVE, DESIGN_934 mangel 41).
+  const standing = await findModuleStanding(prisma, {
+    moduleIds: [...new Set(certifications.map((c) => c.module.id))],
+    userIds: [...new Set(certifications.map((c) => c.user.id))],
+  });
   const rows = certifications
     .map((certification): CertificationStatusRow => {
+      const now = standing.standing(certification.user.id, certification.module.id);
       return {
         certificationId: certification.id,
         userId: certification.user.id,
@@ -177,14 +187,7 @@ export async function getCertificationStatusReport(filters: ReportFilters, local
         moduleId: certification.module.id,
         moduleTitle: localizeContentText(locale, certification.module.title) ?? certification.module.title,
         latestDecisionId: certification.latestDecisionId,
-        // Historiske rader kan stå med DUE_SOON/DUE/EXPIRED. De talte som bestått den gang og teller
-        // som bestått nå — samme regel som kursbevisporten bruker, én kilde (`isCertificationPassed`).
-        status: isCertificationPassed(certification.status)
-          ? "ACTIVE"
-          // #997: modulen ble revidert etter at deltakeren besto — «må tas på nytt», ikke stryk.
-          : certification.status === "SUPERSEDED"
-            ? "SUPERSEDED"
-            : "NOT_CERTIFIED",
+        status: now === "PASSED" ? "ACTIVE" : now === "REVISED" ? "SUPERSEDED" : "NOT_CERTIFIED",
         passedAt: certification.passedAt,
         updatedAt: certification.updatedAt,
       };

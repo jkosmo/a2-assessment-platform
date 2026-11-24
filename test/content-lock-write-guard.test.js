@@ -560,9 +560,9 @@ const PROGRESS_READERS = new Map([
   [
     "certificationStatus",
     new Set([
-      // Det som gjelder modulen uten kurs: statusrapporten, #997-tallet i den gamle dialogen og vakta mot nedgradering.
+      // Utvalget i statusrapporten (statusen kommer fra `ModulePass`, #1192 punkt 1) og vakta mot nedgradering. Tallet i
+      // publiseringsdialogene leser `ModulePass` fra #1192 (`countCurrentModulePasses`).
       "repositories/reportingRepository.ts:findCertificationsForStatusReport",
-      "modules/certification/certificationRepository.ts:findPassedCertificationsForModule",
       "modules/certification/certificationRepository.ts:findByUserAndModule",
       // Nummereringen av historikk uten nummer leser #997-sporet (`supersededByVersionId`).
       "modules/adminContent/moduleVersioning.ts:numberModuleHistory",
@@ -574,6 +574,8 @@ const PROGRESS_READERS = new Map([
       "modules/course/moduleCredit.ts:readPerCourseRule",
       "modules/course/moduleCredit.ts:findCreditedModules",
       "modules/course/moduleCredit.ts:hasValidModulePass",
+      // #1192 punkt 1: samme regel på modulnivå (modulrapportene, profilen, resertifiseringsrapporten).
+      "modules/course/moduleCredit.ts:readModuleLevelRule",
       // 2.169.0 (produkteier, A, 21.11.2026): et arkivert kurs med uklart krav beholdes når noen har en gyldig bestått på en av
       // modulene som falt ut, uansett kurs. Ikke fremdrift i kurset: kravet er ukjent, og tvil gir «beholdes».
       "modules/course/courseDeleteGuard.ts:findProgressOnUncertainRequirement",

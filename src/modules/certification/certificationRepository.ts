@@ -54,25 +54,8 @@ export function createCertificationRepository(client: CertificationRepositoryCli
       });
     },
 
-    /**
-     * #997: hvem har bestått denne modulen akkurat nå? Tallet til den gamle publiseringsdialogen
-     * (`GET …/passed-count` og `passedCount` i `pending-versions`). Klienten fra 2.136.0 bruker det bare
-     * når de nye endepunktene svarer 404 eller 409. Varslene fra #997 sendes ikke lenger (2026-11-08).
-     *
-     * ⚠️ `CERTIFICATION_PASSED_STATUSES`, ikke bare ACTIVE: gamle rader står med DUE/EXPIRED og
-     * telte som bestått før #989. De skal behandles likt her — ellers ville en revisjon latt dem
-     * stå som bestått for alltid, som er nettopp hullet #997 handler om.
-     */
-    findPassedCertificationsForModule(moduleId: string) {
-      return client.certificationStatus.findMany({
-        where: { moduleId, status: { in: CERTIFICATION_PASSED_STATUSES } },
-        select: {
-          id: true,
-          userId: true,
-          user: { select: { email: true, name: true, preferredLocale: true } },
-        },
-      });
-    },
+    // #1192 punkt 1 (2026-11-24): `findPassedCertificationsForModule` er fjernet. Tallet til publiseringsdialogene
+    // (`GET …/passed-count` og `passedCount` i `pending-versions`) leses nå fra `ModulePass` (`countCurrentModulePasses`).
 
     // #997: funksjonen som skrev `SUPERSEDED` er fjernet 2026-11-08: den kunne bare nås med bryteren for #934
     // 5a-3 av, og den har vært på i prod siden 2026-11-06. Gamle `SUPERSEDED`-rader står og leses av nummereringen av historikken.

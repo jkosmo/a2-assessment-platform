@@ -7,7 +7,7 @@ import { publishModuleVersion } from "../adminContent/adminContentCommands.js";
 import { createCourseRepository } from "./courseRepository.js";
 import { evaluateModulePublishGate, flattenStoredLocalized } from "../adminContent/modulePublishGate.js";
 import { listManageableContentIds } from "../content/contentOwnershipService.js";
-import { createCertificationRepository } from "../certification/index.js";
+import { countCurrentModulePasses } from "./moduleCredit.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
 import { runContentWrite } from "../../db/contentLock.js";
 import { assertNotArchived, assertNotArchivedBeforeLock } from "../content/archivedGuard.js";
@@ -648,7 +648,6 @@ export type PendingVersionsActor = { userId: string; roles: string[] };
 
 export async function getCoursePendingVersions(courseId: string, actor: PendingVersionsActor, reader: PublishReader = prisma): Promise<CoursePendingVersions> {
   const courseRepository = createCourseRepository(reader);
-  const certificationRepository = createCertificationRepository(reader);
   const course = await reader.course.findUnique({
     where: { id: courseId },
     select: { id: true, publishedAt: true, versionMajor: true, versionMinor: true },
@@ -673,7 +672,8 @@ export async function getCoursePendingVersions(courseId: string, actor: PendingV
         notOwnedItems.push({ type: "MODULE", id: item.moduleId, title: evaluation.title });
         continue;
       }
-      const passedCount = (await certificationRepository.findPassedCertificationsForModule(item.moduleId)).length;
+      // #1192 punkt 1: de som har bestått modulen nå (gjeldende pass på modulnivå), ikke `CertificationStatus`.
+      const passedCount = await countCurrentModulePasses(reader, item.moduleId);
       items.push({
         type: "MODULE",
         id: item.moduleId,

@@ -83,6 +83,10 @@ async function setupPassedModule(opts: { preferredLocale?: string | null } = {})
     },
     select: { id: true },
   });
+  // Som `recordModulePassFromDecision` gjør ved et bestått. Fra #1192 punkt 1 leser `passed-count` herfra.
+  await prisma.modulePass.create({
+    data: { userId: user.id, moduleId: module.id, submissionId: submission.id, decisionId: decision.id, moduleVersionId: version1.id, passedAt: new Date("2026-05-01T09:00:00.000Z") },
+  });
 
   return { moduleId: module.id, version2Id: version2.id, userId: user.id, userEmail: user.email, certificationId: certification.id };
 }

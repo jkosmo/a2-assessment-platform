@@ -3,7 +3,7 @@ import { mcqQuestionTypeFields, publishModuleVersionedBodySchema } from "../modu
 import { prisma } from "../db/prisma.js";
 import { localizeContentText } from "../i18n/content.js";
 import { findAffectedCourses, withVersionChoiceRights } from "../modules/course/courseVersioning.js";
-import { hasValidModulePass } from "../modules/course/moduleCredit.js";
+import { countCurrentModulePasses, hasValidModulePass } from "../modules/course/moduleCredit.js";
 import { publishModuleVersioned } from "../modules/course/versionedPublishService.js";
 import { z } from "zod";
 import {
@@ -118,7 +118,6 @@ import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
 import { normalizeLocale } from "../i18n/locale.js";
 import { evaluateModulePublishGate } from "../modules/adminContent/modulePublishGate.js";
-import { certificationRepository } from "../modules/certification/index.js";
 
 const adminContentRouter = Router();
 
@@ -1030,8 +1029,8 @@ adminContentRouter.get("/modules/:moduleId/passed-count", async (request, respon
     // Samme vakt som publiseringen den er forspillet til (#943): hvor mange som har bestått en
     // annens modul, er ikke allmenn lesning.
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
-    const passed = await certificationRepository.findPassedCertificationsForModule(request.params.moduleId);
-    response.json({ passedCount: passed.length });
+    // #1192 punkt 1: de som har bestått modulen nå (gjeldende pass på modulnivå), ikke `CertificationStatus`.
+    response.json({ passedCount: await countCurrentModulePasses(prisma, request.params.moduleId) });
   } catch (error) {
     if (error instanceof AppError) {
       respondWithAppError(response, error);
