@@ -35,6 +35,18 @@ Har du lagt til, tatt ut eller flyttet innhold, og noen har kursbevis, spør «P
 eller en hovedversjon. Det er samme spørsmål som før, bare flyttet fra «Lagre» til publiseringen. Ellers publiseres utkastet
 med en gang.
 
+## Navn og beskrivelse på tre språk
+
+Fra 2.182.0 (#1178) oversettes kursets navn og beskrivelse slik seksjonene gjør det:
+
+- Bare det du har endret siden sist du lagret, oversettes, fra språket du endret det på, til de andre språkene.
+- Har du bare endret navnet, oversettes bare navnet. Lagrer du uten å endre tekst, for eksempel bare rekkefølgen, oversettes
+  ingenting. En rettelse du har gjort for hånd i et annet språk, blir stående.
+- Har du selv skrevet på to språk i samme lagring, står begge, og det tredje oversettes fra språket du står i.
+- Kommer ikke en oversettelse, står det språket tomt, og lagringen sier fra. Den gamle teksten blir ikke stående: den var en
+  oversettelse av noe som ikke står der lenger. Unntaket er navnet på bokmål, som må finnes for å lagre; der står det forrige.
+- Det finnes ingen egen «Oversett»-knapp. Se over de andre språkene etter lagring.
+
 ## Når noe stopper deg
 
 - **«Noen andre har endret utkastet …»** To forfattere har hatt kurset åpent samtidig, og den andre lagret, publiserte eller

@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.182.0 - 2026-11-25
+
+**#1178 skive 1 · Kurset oversetter bare det som er endret** (prinsipp 3 i «felles prinsipper», doc/DECISIONS.md, godtatt
+15.11.2026). Kursets navn og beskrivelse oversettes ved lagring bare når teksten er endret siden sist lagring, fra språket som
+ble endret, og bare feltet som ble endret. Samme regel som seksjonene (`changedFieldTranslations`, 2.167.0).
+
+- **Hva som var galt:** hver lagring oversatte navn og beskrivelse til de andre språkene, også når ingen tekst var endret (for
+  eksempel bare en ny rekkefølge eller et annet nivå). Det ga to KI-kall per lagring og skrev over rettelser gjort for hånd. Ble
+  bare navnet endret, ble beskrivelsen også oversatt på nytt.
+- **En oversettelse som ikke kom, står tom** og meldes, som i seksjonene. Før ble den gamle teksten beholdt (#1037,
+  `preserveExisting`); da ble alt oversatt ved hver lagring, og den gamle teksten var fortsatt en oversettelse av det samme.
+  Nå er den en oversettelse av noe som ikke står der lenger. Unntak: navnet på bokmål, som lagringen krever. Feiler
+  oversettingen til bokmål, står det lagrede navnet, så en nettverksfeil ikke stopper lagringen.
+- Meldingen ved en oversettelse som ikke kom, ba om å bruke «Oversett»; kurs har ingen slik knapp. Nå: «Når du publiserer,
+  kan du fylle inn det som mangler.» Det blir sant med skive 2 (publiseringsporten for navn og beskrivelse), som går til prod
+  i samme pakke. Planen: `doc/design/PLAN_1178_KURS_PUBLISERINGSPORT.md`.
+- Punkt 3 i saken (publisering uten dialog når alt innhold er publisert) var alt rettet i #1164.
+- **Tester:** `test/e2e/course-save-translation-1178.spec.ts` (5): ingen endret tekst gir ingen KI-kall og beholder rettelsen,
+  bare navnet oversettes når bare navnet er endret, to språk endret, en oversettelse som feiler (tom og meldt), og unntaket for
+  bokmålsnavnet. De to eldre e2e-testene for oversetting av kurs er grønne uendret. `test/dom/course-localization-failure-1037.dom.test.js`
+  leser den nye funksjonen; testen for `preserveExisting` er tatt bort med begrunnelse.
+- **Mutasjoner:** 5 av 5 røde på riktig sted (beskrivelsen regnet som endret, den gamle teksten blir stående, uten unntaket
+  for bokmål, språket forfatteren står i blir oversett, feilet språk meldes ikke). Den første utgaven av den første mutasjonen
+  overlevde: når alle språk regnes som endret, har regelen ingen mål å oversette til, så mutasjonen gjorde ingen forskjell. Den
+  ble byttet med en som ligner den gamle feilen (bokmål regnes som endret uten å være det).
+
 ## 2.181.9 - 2026-11-25
 
 **#1192 · Klasseskjermen varsler før en frist krever en ny versjon** (produkteier 2026-11-25: «Det bør tydelig varsles om dette

@@ -40,6 +40,7 @@ import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { createListPage } from "/static/list-page.js";
 import { createFormPage, formPageTexts } from "/static/form-page.js";
+import { changedFieldTranslations } from "/static/admin-content-localized-copy.js";
 
 // #1046 C2: bokmål først, som i alle språkvelgere. Bokmål er det påkrevde språket (produkteier 12.09); publiseringsgaten krever fortsatt alle tre.
 const DETAIL_LOCALES = ["nb", "nn", "en-GB"];
@@ -188,31 +189,6 @@ function hasAnyLocalizedValue(valueMap) {
   return supportedLocales.some((locale) => typeof valueMap?.[locale] === "string" && valueMap[locale].trim().length > 0);
 }
 
-function firstNonEmptyLocale(valueMap, preferredLocales = supportedLocales) {
-  const orderedLocales = [...new Set([...preferredLocales, ...supportedLocales])];
-  for (const locale of orderedLocales) {
-    const value = valueMap?.[locale];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return locale;
-    }
-  }
-  return null;
-}
-
-function getChangedCourseLocales(currentValues, initialValues) {
-  const changed = new Set();
-  for (const locale of supportedLocales) {
-    const currentTitle = currentValues?.title?.[locale] ?? "";
-    const initialTitle = initialValues?.title?.[locale] ?? "";
-    const currentDescription = currentValues?.description?.[locale] ?? "";
-    const initialDescription = initialValues?.description?.[locale] ?? "";
-    if (currentTitle !== initialTitle || currentDescription !== initialDescription) {
-      changed.add(locale);
-    }
-  }
-  return changed;
-}
-
 function applyCourseLocaleValuesToForm(values) {
   for (const locale of supportedLocales) {
     const titleInput = document.getElementById(`title-${locale}`);
@@ -229,100 +205,52 @@ function applyCourseLocaleValuesToForm(values) {
   courseFormPage?.refreshTitle();
 }
 
-function resolveCourseLocalizationSourceLocale(currentValues, initialValues) {
-  const changedLocales = getChangedCourseLocales(currentValues, initialValues);
-  if (changedLocales.size === 1) {
-    return [...changedLocales][0];
-  }
-  if (changedLocales.size === 0) {
-    return firstNonEmptyLocale(currentValues?.title, [activeDetailLocale, currentLocale, "en-GB"]) ??
-      firstNonEmptyLocale(currentValues?.description, [activeDetailLocale, currentLocale, "en-GB"]);
-  }
-  return null;
-}
-
 /**
- * #1037: en oversettelse som ikke kom, skal se ut som en oversettelse som ikke kom.
+ * #1178 (prinsipp 3, doc/DECISIONS.md «felles prinsipper»): oversettingen ved lagring. `plan` er `changedFieldTranslations`
+ * (admin-content-localized-copy.js), som seksjonene bruker: bare felt som er endret siden sist lagring, fra språket som ble
+ * endret, til språkene som IKKE ble endret. Ingen endret tekst gir ingen KI-kall. Før oversatte hver lagring navn og
+ * beskrivelse fra «det første språket med tekst», også når bare rekkefølgen var endret, og skrev over manuelle rettelser.
  *
- * ⚠️ SKREV TIDLIGERE KILDETEKSTEN INN I MÅLLOKALET. To steder gjorde det: `|| sourceTitle` når
- * svaret manglet feltet, og `catch`-blokka ved nettverksfeil. Resultatet var et fullt trespråkskart
- * som PÅSTO at kurset var oversatt — og løgnen ble fortalt nettopp når noe allerede hadde gått galt,
- * mens forfatteren så en feilmelding om noe annet.
+ * Ett kall til /courses/localize-copy per kilde- og målspråk, med feltene det paret har.
  *
- * Nedstrøms trodde publiseringsgaten at kurset var ferdig, oversettelsesstatusen i lista viste det
- * som komplett, og en nynorskdeltaker fikk bokmål servert som nynorsk. Det er #892-invarianten
- * brutt stille.
+ * #1037: en oversettelse som ikke kom, skal se ut som en oversettelse som ikke kom. Målspråket fylles ALDRI med kildeteksten
+ * (det påsto at kurset var oversatt, og en nynorskdeltaker fikk bokmål). Målet står TOMT og føres opp i `failedLocales`, så
+ * lagringen sier fra og publiseringsporten fanger det. Den gamle teksten beholdes ikke lenger (som seksjonene, #1163): den er
+ * en oversettelse av noe som ikke står der lenger. Før #1178 ble alt oversatt ved hver lagring, og da var den gamle teksten
+ * fortsatt en oversettelse av det samme.
  *
- * ⚠️ #930 DEKKET IKKE DETTE. Den sørget for at innhold skrevet i ETT språk bærer hvilket. Denne
- * stien skriver TRE, og ligger derfor utenfor.
- *
- * Retter etter #982/#905-mønsteret: lokalen SLIPPES, og føres opp i `failedLocales` slik at kalleren
- * kan si fra. Stillhet her var halve #892 — derfor returnerer funksjonen listen, og begge kallerne
- * viser den.
- *
- * `preserveExisting` er urørt: redigerer man et kurs som allerede har en oversettelse, beholdes den
- * når en ny ikke kom. Det er ikke en løgn — teksten ER oversatt, bare ikke på nytt.
+ * Ett unntak: navnet på bokmål. Lagringen krever det (produkteier 12.09). Feiler oversettingen TIL bokmål, står det lagrede
+ * bokmålsnavnet, så en nettverksfeil ikke stopper lagringen med «navnet må finnes på bokmål». Språket meldes likevel.
  */
-async function localizeCourseCopyAcrossLocales({ titleValues, descriptionValues, sourceLocale, preserveExisting = false }) {
-  const localized = {
-    title: cloneLocalizedFieldValues(titleValues),
-    description: cloneLocalizedFieldValues(descriptionValues),
-    failedLocales: [],
-  };
-
-  const sourceTitle = localized.title[sourceLocale]?.trim() ?? "";
-  const sourceDescription = localized.description[sourceLocale]?.trim() ?? "";
-  const hasSourceTitle = sourceTitle.length > 0;
-  const hasSourceDescription = sourceDescription.length > 0;
-
-  if (!hasSourceTitle && !hasSourceDescription) {
-    return localized;
-  }
-
-  for (const targetLocale of supportedLocales) {
-    if (targetLocale === sourceLocale) continue;
-
-    try {
-      const result = await apiFetch("/api/admin/content/courses/localize-copy", getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          ...(hasSourceTitle ? { title: sourceTitle } : {}),
-          ...(hasSourceDescription ? { description: sourceDescription } : {}),
-          sourceLocale,
-          targetLocale,
-        }),
-      });
-
-      // ⚠️ INGEN `|| sourceTitle` HER. Kom det ingen oversettelse, blir lokalen stående tom — med
-      // mindre det ALLEREDE fantes en, og vi er i redigeringsmodus.
-      let feilet = false;
-      if (hasSourceTitle) {
-        const oversatt = result?.title?.trim?.() || "";
-        const beholdt = preserveExisting ? localized.title[targetLocale] : "";
-        localized.title[targetLocale] = oversatt || beholdt || "";
-        if (!oversatt && !beholdt) feilet = true;
-      }
-      if (hasSourceDescription) {
-        const oversatt = result?.description?.trim?.() || "";
-        const beholdt = preserveExisting ? localized.description[targetLocale] : "";
-        localized.description[targetLocale] = oversatt || beholdt || "";
-        if (!oversatt && !beholdt) feilet = true;
-      }
-      if (feilet) localized.failedLocales.push(targetLocale);
-    } catch {
-      // ⚠️ NETTVERKSFEILEN VAR DEN VERSTE VARIANTEN: den fylte tre språk med kildeteksten mens
-      // forfatteren så en feilmelding om noe helt annet. Nå slippes lokalen, og kalleren sier fra.
-      const beholdtTittel = preserveExisting ? localized.title[targetLocale] : "";
-      const beholdtBeskrivelse = preserveExisting ? localized.description[targetLocale] : "";
-      if (hasSourceTitle) localized.title[targetLocale] = beholdtTittel || "";
-      if (hasSourceDescription) localized.description[targetLocale] = beholdtBeskrivelse || "";
-      if ((hasSourceTitle && !beholdtTittel) || (hasSourceDescription && !beholdtBeskrivelse)) {
-        localized.failedLocales.push(targetLocale);
-      }
+async function translateCourseCopyForSave(plan, current, saved) {
+  const values = cloneCourseLocaleValues(current);
+  const failedLocales = [];
+  const pairs = new Map();
+  for (const [field, { sourceLocale, targetLocales }] of Object.entries(plan)) {
+    for (const target of targetLocales) {
+      const key = `${sourceLocale}>${target}`;
+      if (!pairs.has(key)) pairs.set(key, { sourceLocale, target, fields: [] });
+      pairs.get(key).fields.push(field);
     }
   }
-
-  return localized;
+  for (const { sourceLocale, target, fields } of pairs.values()) {
+    let result = null;
+    try {
+      result = await apiFetch("/api/admin/content/courses/localize-copy", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ ...Object.fromEntries(fields.map((field) => [field, values[field][sourceLocale].trim()])), sourceLocale, targetLocale: target }),
+      });
+    } catch {
+      // Nettverksfeil og avvist kall: målet står tomt under, og meldes.
+    }
+    for (const field of fields) {
+      const translated = typeof result?.[field] === "string" ? result[field].trim() : "";
+      const keepSavedNbName = !translated && field === "title" && target === "nb" ? String(saved?.title?.nb ?? "").trim() : "";
+      values[field][target] = translated || keepSavedNbName;
+      if (!translated && !failedLocales.includes(target)) failedLocales.push(target);
+    }
+  }
+  return { ...values, failedLocales };
 }
 
 /**
@@ -3210,15 +3138,15 @@ async function saveCourse(courseId, { beforePublish = false } = {}) {
   }
   const sortOrder = sortOrderRaw === "" ? null : Number.parseInt(sortOrderRaw, 10);
   const themeIds = collectCourseThemeIds();
-  const sourceLocale = resolveCourseLocalizationSourceLocale(collectedValues, initialDetailLocaleValues);
-  const effectiveValues = sourceLocale
-    ? await localizeCourseCopyAcrossLocales({
-        titleValues: collectedValues.title,
-        descriptionValues: collectedValues.description,
-        sourceLocale,
-        preserveExisting: true,
-      })
-    : cloneCourseLocaleValues(collectedValues);
+  // #1178: bare det som er endret siden sist lagring, oversettes, fra språket forfatteren står i hvis det er endret.
+  const translationPlan = changedFieldTranslations(
+    {
+      title: { current: collectedValues.title, saved: initialDetailLocaleValues.title },
+      description: { current: collectedValues.description, saved: initialDetailLocaleValues.description },
+    },
+    { editLocale: activeDetailLocale, locales: DETAIL_LOCALES },
+  );
+  const effectiveValues = await translateCourseCopyForSave(translationPlan, collectedValues, initialDetailLocaleValues);
   meldFeiledeLokaler(effectiveValues.failedLocales);
   const normalizedTitle = normalizeLocalizedRequestValue(effectiveValues.title);
   const normalizedDescription = normalizeLocalizedRequestValue(effectiveValues.description);

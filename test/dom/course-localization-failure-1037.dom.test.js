@@ -24,7 +24,7 @@ import path from "node:path";
 const kilde = readFileSync(path.resolve("public/static/admin-content-courses.js"), "utf8");
 
 const funksjon = (() => {
-  const start = kilde.indexOf("async function localizeCourseCopyAcrossLocales");
+  const start = kilde.indexOf("async function translateCourseCopyForSave");
   expect(start, "fant ikke lokaliseringsfunksjonen — kontrollcase").toBeGreaterThan(0);
   const slutt = kilde.indexOf("\n}\n", start);
   // ⚠️ KOMMENTARER STRIPPES. Første utgave av denne vakta sto rød på sin egen forklaring: koden var
@@ -45,11 +45,13 @@ describe("#1037 — kurslagring fyller ikke tre språk med kildeteksten", () => 
   it("⚠️ ingen gren skriver kildeteksten inn i et mållokale", () => {
     // De to konkrete formene saken navnga. En regresjon her ser harmløs ut i en diff — `|| sourceTitle`
     // leses som «fornuftig fallback» — og det er nettopp derfor den må måles.
+    // #1178: funksjonen heter translateCourseCopyForSave og skriver `values[field][target]`. Kildeteksten er
+    // `values[field][sourceLocale]`; den skal aldri stå på høyre side av en tilordning til målet.
     const forbudt = [
+      "|| values[field][sourceLocale]",
+      "values[field][target] = values[field][sourceLocale]",
       "|| sourceTitle",
       "|| sourceDescription",
-      "localized.title[targetLocale] = sourceTitle",
-      "localized.description[targetLocale] = sourceDescription",
     ];
     const funnet = forbudt.filter((f) => funksjon.includes(f));
     expect(
@@ -71,7 +73,7 @@ describe("#1037 — kurslagring fyller ikke tre språk med kildeteksten", () => 
     // Samme regel på N steder, håndhevet på N−1, er feilklassen som har truffet oss sju ganger.
     // Funksjonen hadde to kallere: opprettelse fra samtalen, og lagring fra detaljsiden. #1046 nivå to
     // fjernet samtalen — opprettelse og lagring går nå samme vei (saveCourse), så det er én kaller.
-    const kallere = kilde.split("await localizeCourseCopyAcrossLocales(").length - 1;
+    const kallere = kilde.split("await translateCourseCopyForSave(").length - 1;
     expect(kallere, "ventet ett kallested — endres det, må denne testen oppdateres").toBe(1);
 
     const varsler = kilde.split("meldFeiledeLokaler(").length - 1;
@@ -83,10 +85,8 @@ describe("#1037 — kurslagring fyller ikke tre språk med kildeteksten", () => 
     ).toBe(kallere + 1);
   });
 
-  it("preserveExisting beholdes — en eksisterende oversettelse er ikke en løgn", () => {
-    // ⚠️ Grensen mot testene over. Redigerer man et kurs som ALLEREDE har en oversettelse, skal den
-    // stå når en ny ikke kom: teksten er oversatt, bare ikke på nytt. Uten denne kunne rettingen
-    // blitt for bred og tømt ekte oversettelser ved første nettverksfeil.
-    expect(funksjon).toContain("preserveExisting");
-  });
+  // #1178: «preserveExisting» er borte. Før ble alt oversatt ved hver lagring, og den gamle teksten var fortsatt en
+  // oversettelse av det samme. Nå oversettes et språk bare når kilden er endret, og den gamle teksten oversetter noe som
+  // ikke står der lenger: målet står tomt, som i seksjonene (#1163). Oppførselen, også unntaket for bokmålsnavnet, måles i
+  // test/e2e/course-save-translation-1178.spec.ts.
 });
