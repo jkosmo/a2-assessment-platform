@@ -142,7 +142,7 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
       return client.courseGroupAssignment.findMany({
         where: { classId },
         orderBy: { createdAt: "desc" },
-        include: { course: { select: { id: true, title: true, publishedAt: true, archivedAt: true } } },
+        include: { course: { select: { id: true, title: true, publishedAt: true, archivedAt: true, versionMajor: true } } },
       });
     },
 

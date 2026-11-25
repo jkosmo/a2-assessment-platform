@@ -457,11 +457,12 @@ function classFormBodyHtml() {
       ${unreachable ? `<span class="form-row-meta form-row-meta--warn">${escapeHtml(unreachable)}</span>` : ""}
       ${dueHtml}
       <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="${escapeHtml(tNav("classes.course.remove"))}">${escapeHtml(tNav("ui.action.remove"))}</button></span>
+      ${editable && Number(c.courseVersionMajor) > 1 ? `<p class="form-row-note" data-due-note hidden>${escapeHtml(tf("classes.course.newVersionDeadlineNote", { major: c.courseVersionMajor }))}</p>` : ""}
     </li>`;
   }).join("");
   const assignedIds = new Set(st.courses.map((c) => c.courseId));
   // #688: don't offer archived courses for assignment — they are retired and shouldn't be assigned.
-  const courseOptions = st.allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.displayTitle))}</option>`).join("");
+  const courseOptions = st.allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}" data-major="${escapeHtml(String(c.versionMajor ?? 1))}">${escapeHtml(courseTitle(c.displayTitle))}</option>`).join("");
   const readOnly = Boolean(k?.isSystem);
   const archivedNote = `<p class="small" data-class-archived-note style="margin:6px 0 0">${escapeHtml(tNav("classes.archivedReadonly"))}</p>`;
   return `
@@ -500,6 +501,7 @@ function classFormBodyHtml() {
         </label>
         <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(tNav("classes.assignCourse"))}</button>
       </div>
+      <p class="form-row-note" id="assignVersionNote" hidden></p>
       <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">${escapeHtml(tNav("classes.deadlineHint"))}</p>`}
     </div>`}
     </div>
@@ -613,7 +615,23 @@ function bindClassFormHandlers() {
     if (!input) return;
     const save = input.closest("li")?.querySelector("[data-save-due]");
     if (save) save.disabled = input.value === input.dataset.saved;
+    // Kurs i versjon 2 eller høyere: en ny dato krever den nye versjonen av den som har et eldre kursbevis. Si det før lagring.
+    // En tom dato fjerner fristen og gjør den nye versjonen frivillig igjen, så da vises ingen merknad.
+    const note = input.closest("li")?.querySelector("[data-due-note]");
+    if (note) note.hidden = !input.value || input.value === input.dataset.saved;
   });
+  // Samme varsel når et kurs i versjon 2 eller høyere tildeles med frist.
+  const updateAssignNote = () => {
+    const note = document.getElementById("assignVersionNote");
+    const select = document.getElementById("courseSelect");
+    if (!note || !select) return;
+    const major = Number(select.selectedOptions[0]?.dataset.major ?? 1);
+    const show = Boolean(select.value) && Boolean(document.getElementById("dueAtInput")?.value) && major > 1;
+    note.textContent = show ? tf("classes.course.newVersionDeadlineNote", { major }) : "";
+    note.hidden = !show;
+  };
+  document.getElementById("courseSelect")?.addEventListener("change", updateAssignNote);
+  document.getElementById("dueAtInput")?.addEventListener("input", updateAssignNote);
   document.getElementById("courseChips")?.addEventListener("click", async (e) => {
     const saveBtn = e.target.closest("[data-save-due]");
     if (saveBtn) {

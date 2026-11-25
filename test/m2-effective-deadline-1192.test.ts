@@ -180,6 +180,18 @@ describe("#1192 2a: dueSetAt skrives når fristen settes eller endres", () => {
 
     expect((await assign(null)).status).toBe(201);
     expect(await classRow(courseId, classId)).toEqual({ dueAt: null, dueSetAt: null });
+
+    // Klasseskjermens «Lagre frist» sender `dueAt: null` eksplisitt for en tom dato; det fjerner fristen likt.
+    expect((await assign("2030-03-01T00:00:00.000Z")).status).toBe(201);
+    const explicitNull = await request(app).post(`/api/admin/content/classes/${classId}/courses`).set(admin).send({ courseId, dueAt: null });
+    expect(explicitNull.status).toBe(201);
+    expect(await classRow(courseId, classId)).toEqual({ dueAt: null, dueSetAt: null });
+
+    // Skjermen varsler for kurs i versjon 2 eller høyere: lista over klassens kurs har kursets hovedversjon.
+    await prisma.course.update({ where: { id: courseId }, data: { versionMajor: 2 } });
+    const listed = await request(app).get(`/api/admin/content/classes/${classId}/courses`).set(admin);
+    expect(listed.status).toBe(200);
+    expect(listed.body.courses.find((c: { courseId: string }) => c.courseId === courseId)).toMatchObject({ courseVersionMajor: 2 });
   });
 
   it("individuell tildeling: ny med frist → satt; samme dato på nytt → urørt; ny dato → flyttet; uten frist → null", async () => {

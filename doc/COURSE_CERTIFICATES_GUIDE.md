@@ -26,7 +26,7 @@ Når et kurs får en ny hovedversjon, beholder den som fullførte en eldre versj
 **Slik krever du den nye versjonen:** åpne klassen under Deltakere → Klasser, sett en ny dato i «Frist» på kursraden og trykk
 «Lagre frist». En frist satt etter at den nye versjonen ble publisert, gjør kurset uferdig igjen for dem i klassen som bare har
 kursbevis for en eldre versjon. De får påminnelser, står som uferdige i Status og kursrapporten, og kurset kommer med i
-mandagse-posten. En tom dato fjerner fristen.
+mandagse-posten. En tom dato fjerner fristen. Skjermen varsler under raden før du lagrer (fra 2.181.9), også når du tildeler et kurs i versjon 2 eller høyere med frist.
 
 - Uten ny frist står kurset som fullført. Kursrapporten viser da «Fullført (versjon 1)», så du ser at beviset gjelder en eldre
   versjon.

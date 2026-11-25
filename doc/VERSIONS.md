@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.181.9 - 2026-11-25
+
+**#1192 · Klasseskjermen varsler før en frist krever en ny versjon** (produkteier 2026-11-25: «Det bør tydelig varsles om dette
+hvis kurset ikke er i versjon 1.x»). Når en ny dato skrives inn for et kurs i versjon 2 eller høyere, står det under raden:
+«Kurset er i versjon 2. Med denne fristen må de i klassen som har kursbevis for en eldre versjon, ta versjon 2.» Det samme
+vises under «Tildel kurs» når et slikt kurs er valgt og en dato er fylt ut. Varselet står i advarselsfarge og vises før lagring.
+
+- Ikke for kurs i versjon 1, ikke for en tom dato (den fjerner fristen og gjør versjonen frivillig igjen), og ikke når datoen er
+  den lagrede.
+- `GET /api/admin/content/classes/:id/courses` har et nytt felt, `courseVersionMajor`. Kurslista hadde alt `versionMajor`.
+- Varselet sier ikke hvor mange i klassen det gjelder. Det krever en telling per kurs og klasse; tas hvis det savnes.
+
+Tester: `test/e2e/admin-content-classes.spec.ts` (raden, tildelingen, kontroll for versjon 1 og tom dato, 360 px) og
+`test/m2-effective-deadline-1192.test.ts` (feltet i lista, og `dueAt: null` sendt eksplisitt). Tre mutasjoner, alle røde på
+riktig sted.
+
 ## 2.181.8 - 2026-11-24
 
 **#1192 punkt 2 · En ny frist etter en ny hovedversjon gjør kurset uferdig igjen** (produkteier 2026-11-24). En ny hovedversjon

@@ -226,6 +226,85 @@ test("#1192: fristen endres på kursraden, lagres med knappen, og en tom dato fj
   await page.screenshot({ path: "test-results/class-course-deadline-1192-1280.png", fullPage: true });
 });
 
+// #1192 (produkteier 2026-11-25): et kurs i versjon 2 eller høyere — en ny frist krever den nye versjonen av den som har et eldre
+// kursbevis. Skjermen sier det før lagring, både på raden og ved «Tildel kurs». Kurs i versjon 1: ingen merknad.
+test("#1192: ny frist på et kurs i versjon 2 varsler at eldre kursbevis må ta den nye versjonen; versjon 1 varsler ikke", async ({ page }) => {
+  await mockBaseApis(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/admin/content/classes/*", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ class: { id: "cls-1", name: "Kull A", isSystem: false, archivedAt: null, lifecycle: "active" } }) }),
+  );
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [{ id: "cls-1", name: "Kull A", kind: "MANUAL", isSystem: false, archivedAt: null, canManage: true, _count: { members: 0, courseAssignments: 2 } }] }) }),
+  );
+  await page.route("**/api/admin/content/classes/*/members", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ members: [] }) }),
+  );
+  await page.route("**/api/admin/content/classes/*/courses", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        courses: [
+          { courseId: "c-v2", title: "Arbeidsrett med et ganske langt navn som bryter linja", dueAt: null, coursePublished: true, courseArchived: false, courseVersionMajor: 2 },
+          { courseId: "c-v1", title: "Arbeidsmiljø", dueAt: null, coursePublished: true, courseArchived: false, courseVersionMajor: 1 },
+        ],
+      }),
+    }),
+  );
+  await page.route("**/api/admin/content/courses", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        courses: [
+          { id: "n-v3", title: "{}", displayTitle: "Personvern", archivedAt: null, versionMajor: 3 },
+          { id: "n-v1", title: "{}", displayTitle: "HMS", archivedAt: null, versionMajor: 1 },
+        ],
+      }),
+    }),
+  );
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser");
+  await page.locator('[data-action="open"]').first().click();
+
+  const tekst = "Kurset er i versjon 2. Med denne fristen må de i klassen som har kursbevis for en eldre versjon, ta versjon 2.";
+  const v2 = page.locator(".form-row", { hasText: "Arbeidsrett" });
+  const note = v2.locator("[data-due-note]");
+  await expect(note).toBeHidden();
+  await v2.locator("[data-course-due]").fill("2026-12-01");
+  await expect(note).toBeVisible();
+  await expect(note).toHaveText(tekst);
+  // Et varsel ingen ser er ikke et varsel.
+  await expect(note).toHaveCSS("color", "rgb(122, 75, 0)");
+  // Tom dato fjerner fristen og gjør versjonen frivillig: ingen merknad.
+  await v2.locator("[data-course-due]").fill("");
+  await expect(note).toBeHidden();
+  // Kontroll: versjon 1 har ingen merknad, heller ikke med ny dato.
+  const v1 = page.locator(".form-row", { hasText: "Arbeidsmiljø" });
+  await v1.locator("[data-course-due]").fill("2026-12-01");
+  await expect(v1.locator("[data-save-due]")).toBeEnabled();
+  await expect(v1.locator("[data-due-note]")).toHaveCount(0);
+
+  // «Tildel kurs» med frist: versjon 3 varsler, versjon 1 ikke, og uten dato ikke.
+  const assignNote = page.locator("#assignVersionNote");
+  await page.locator("#courseSelect").selectOption("n-v3");
+  await expect(assignNote).toBeHidden();
+  await page.locator("#dueAtInput").fill("2026-12-01");
+  await expect(assignNote).toBeVisible();
+  await expect(assignNote).toHaveText("Kurset er i versjon 3. Med denne fristen må de i klassen som har kursbevis for en eldre versjon, ta versjon 3.");
+  await page.locator("#courseSelect").selectOption("n-v1");
+  await expect(assignNote).toBeHidden();
+  await page.locator("#courseSelect").selectOption("n-v3");
+  await page.locator("#dueAtInput").fill("");
+  await expect(assignNote).toBeHidden();
+  await expect(page.locator("body")).not.toContainText("{major}");
+
+  await v2.locator("[data-course-due]").fill("2026-12-01");
+  await page.setViewportSize({ width: 360, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: "test-results/class-course-version-note-1192-360.png", fullPage: true });
+});
+
 // #705-family: classes render consistently with the other lifecycle lists — Aktive/Arkiverte filter,
 // a Type column (System/Manuell/Entra), an "Arkivert" status badge, and a symmetric Gjenopprett action.
 test("classes admin: Aktive/Arkiverte filter, Type column, and restore action", async ({ page }) => {

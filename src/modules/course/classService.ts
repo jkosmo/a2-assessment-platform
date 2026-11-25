@@ -308,6 +308,9 @@ export async function listClassCourseAssignments(classId: string, locale: Suppor
     // forklarer hvorfor ingen i klassen beveger seg, og det skal ikke kreve detektivarbeid.
     coursePublished: r.course.publishedAt !== null,
     courseArchived: r.course.archivedAt !== null,
+    // #1192: klasseskjermen varsler at en ny frist på et kurs i versjon 2 eller høyere krever den nye versjonen av den som har
+    // kursbevis for en eldre.
+    courseVersionMajor: r.course.versionMajor,
   }));
 }
 
