@@ -48,6 +48,7 @@ import {
 import { EmailContainsLinkError } from "../certification/illustratedEmail.js";
 import { COURSE_MAJOR_EMAIL_PER_RUN, COURSE_MAJOR_EMAIL_SPACING_MS } from "./courseMajorVersionEmail.js";
 import { neutralizeWeeklyDigestAfterProdCopy } from "../weeklyDigest/weeklyDigestJob.js";
+import { effectiveDeadline } from "./effectiveDeadline.js";
 
 /** Det regelen trenger av en klient: `prisma` eller en transaksjon. */
 export type CourseAssignmentRuleClient = Pick<DbTransactionClient, "$queryRaw">;
@@ -117,7 +118,11 @@ const NOW_UTC = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
  *   8. personen har ikke kursbevis på kursets hovedversjon eller nyere (#1146, produkteier 2026-11-10; før: for noen
  *      hovedversjon). Med kursbevis på en ELDRE hovedversjon er personen bare med når alle åpne veier til kurset (klasse,
  *      medlemskap, tildeling) åpnet etter at kurset fikk sin hovedversjon (`CourseVersion.publishedAt`). Ellers ville en ny
- *      hovedversjon gitt e-post om «nytt kurs» i tillegg til e-posten fra #934, uten at noen la kurset til (planreview B1);
+ *      hovedversjon gitt e-post om «nytt kurs» i tillegg til e-posten fra #934, uten at noen la kurset til (planreview B1).
+ *      #1192 punkt 2 (produkteier, svar C 2026-11-24): og bare når tildelingen gjør kurset utestående, altså har en frist satt
+ *      etter hovedversjonen (`cga."dueSetAt"`, samme regel som `isCertifiedForDeadline`). Uten frist er den nye versjonen
+ *      frivillig, og det sendes ingenting. En ren fristendring på en tildeling som finnes, åpner ingen ny vei og gir ingen
+ *      e-post (vilkåret over). E-posten sier «ny versjon av et kurs du har fullført», ikke «nytt kurs» (`newVersion`);
  *   9. (gjelder bare den uten kursbevis) personen har ikke påbegynt kurset: ingen lest seksjon i kurset, ingen innlevering på en modul i kurset, og ingen tråd,
  *      intet svar og ingen følging i kursets diskusjoner. Det er «påbegynt» fra skive 0 (`findStartedOrCompletedCourseIds`
  *      i `classService.ts`), og testen sammenligner de to. «Du har fått et nytt kurs» om et kurs hen er i gang med, er feil
@@ -150,6 +155,10 @@ type EligiblePairsOptions = {
 
 /** Når en vei til kurset åpnet: den siste av medlemskapet og tildelingen (#1146, punkt 3). */
 const PATH_OPENED_AT = Prisma.sql`GREATEST(cm."addedAt", cga."createdAt")`;
+
+/** Når kursets nåværende hovedversjon ble publisert (`CourseVersion`; NULL for et kurs som alltid har vært 1.x). */
+const CURRENT_MAJOR_PUBLISHED_AT = Prisma.sql`(SELECT cv."publishedAt" FROM "CourseVersion" cv
+                                               WHERE cv."courseId" = cga."courseId" AND cv."versionMajor" = co."versionMajor")`;
 
 function eligiblePairsQuery({ scope, onlyCourseIds, excludeExistingNotices, onlyPairs }: EligiblePairsOptions = {}): Prisma.Sql {
   const scoped = scope
@@ -194,8 +203,8 @@ function eligiblePairsQuery({ scope, onlyCourseIds, excludeExistingNotices, only
     ${withoutNotice}
     GROUP BY cm."userId", cga."courseId", co."versionMajor"
     HAVING NOT ${hasOlderCertificate}
-        OR MIN(${PATH_OPENED_AT}) > (SELECT cv."publishedAt" FROM "CourseVersion" cv
-                                     WHERE cv."courseId" = cga."courseId" AND cv."versionMajor" = co."versionMajor")
+        OR (MIN(${PATH_OPENED_AT}) > ${CURRENT_MAJOR_PUBLISHED_AT}
+            AND BOOL_OR(cga."dueAt" IS NOT NULL AND cga."dueSetAt" > ${CURRENT_MAJOR_PUBLISHED_AT}))
   `;
 }
 
@@ -612,14 +621,17 @@ async function prepareDigest(batchId: string, userId: string, queued: Array<{ id
   if (keep.length === 0) return null;
   const courseIds = keep.map((r) => r.courseId);
 
-  const [user, courses, assignments] = await Promise.all([
+  const [user, courses, assignments, completions] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true, preferredLocale: true } }),
-    prisma.course.findMany({ where: { id: { in: courseIds } }, select: { id: true, title: true } }),
+    prisma.course.findMany({ where: { id: { in: courseIds } }, select: { id: true, title: true, versionMajor: true } }),
     // Klassene personen har kurset fra: de samme vanlige klassene regelen ser på.
     prisma.courseGroupAssignment.findMany({
       where: { courseId: { in: courseIds }, class: { kind: "MANUAL", isSystem: false, archivedAt: null, members: { some: { userId } } } },
       select: { courseId: true, dueAt: true, class: { select: { name: true } } },
     }),
+    // #1192 punkt 2: et kursbevis (regelen har alt tatt ut den som har bevis for nåværende hovedversjon), så e-posten sier «ny
+    // versjon av et kurs du har fullført» for de kursene.
+    prisma.courseCompletion.findMany({ where: { userId, courseId: { in: courseIds } }, select: { courseId: true, versionMajor: true } }),
   ]);
   // Personen er slettet (radene følger med): ingenting å sende.
   if (!user) return null;
@@ -632,16 +644,15 @@ async function prepareDigest(batchId: string, userId: string, queued: Array<{ id
       title: course.title,
       classNames: [...new Set(fromClasses.map((a) => a.class.name))],
       dueAt: earliestDueAt(fromClasses.map((a) => a.dueAt)),
+      newVersion: completions.some((c) => c.courseId === course.id && c.versionMajor < course.versionMajor),
     });
   }
   return { user, keepIds: keep.map((r) => r.id), coursesById };
 }
 
-/** Den tidligste fristen; en klasse uten frist teller ikke (samme regel som `getClassAssignedCourseDueDates`). */
+/** Den tidligste fristen; en klasse uten frist teller ikke. #1192: samme funksjon som de andre fristene (`effectiveDeadline`). */
 function earliestDueAt(dueDates: Array<Date | null>): Date | null {
-  let earliest: Date | null = null;
-  for (const dueAt of dueDates) if (dueAt && (!earliest || dueAt < earliest)) earliest = dueAt;
-  return earliest;
+  return effectiveDeadline({ classes: dueDates.map((dueAt) => ({ dueAt })) }).dueAt;
 }
 
 /** Betinget: endrer bare samlingens rader som fortsatt står i `from`. */

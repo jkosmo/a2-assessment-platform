@@ -278,3 +278,35 @@ describe("#1142 skive 2: bildet", () => {
     for (const other of LOCALES) expect(e.plainText).not.toContain(alt[other]);
   });
 });
+
+// #1192 punkt 2 (produkteier, svar C 2026-11-24): til den som har kursbevis for en eldre hovedversjon sier e-posten «ny versjon av
+// et kurs du har fullført», ikke «nytt kurs».
+describe("#1192: ny versjon av et kurs du har fullført", () => {
+  const NEW_VERSION: CourseAssignmentDigestCourseInput[] = [{ ...ONE[0]!, newVersion: true }];
+  const MIXED: CourseAssignmentDigestCourseInput[] = [{ ...THREE[0]! }, { ...THREE[1]!, newVersion: true }];
+
+  it("ett kurs: emnet og innledningen sier ny versjon, på alle tre språk", () => {
+    const expected: Record<Locale, { subject: string; intro: string }> = {
+      nb: { subject: "Ny versjon av et kurs du har fullført: «Brannvern for alle»", intro: "det er kommet en ny versjon av et kurs du har fullført" },
+      nn: { subject: "Ny versjon av eit kurs du har fullført: «Brannvern for alle»", intro: "det har kome ein ny versjon av eit kurs du har fullført" },
+      "en-GB": { subject: "A new version of a course you have completed: «Brannvern for alle»", intro: "there is a new version of a course you have completed" },
+    };
+    for (const locale of LOCALES) {
+      const email = buildCourseAssignmentDigestEmail({ locale, courses: NEW_VERSION });
+      expect(email.subject, locale).toBe(expected[locale].subject);
+      expect(email.plainText, locale).toContain(expected[locale].intro);
+      expect(email.plainText, locale).not.toMatch(/nytt kurs|nye kurs|new course/i);
+    }
+  });
+
+  it("flere kurs der ett er en ny versjon: emnet sier ikke «nye kurs», og linja er merket", () => {
+    const email = buildCourseAssignmentDigestEmail({ locale: "nb", courses: MIXED });
+    expect(email.subject).toBe("Du har 2 kurs å ta");
+    expect(email.plainText).toContain("«Etikk i rådgivning» – fra klassen «Nyansatte», frist 15. januar 2027 (ny versjon av et kurs du har fullført)");
+    expect(email.plainText).not.toMatch(/«Personvern i praksis»[^\n]*ny versjon/);
+  });
+
+  it("kontroll: uten ny versjon er teksten som før", () => {
+    expect(buildCourseAssignmentDigestEmail({ locale: "nb", courses: ONE }).subject).toBe("Du har fått et nytt kurs: «Brannvern for alle»");
+  });
+});

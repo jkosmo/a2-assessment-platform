@@ -10,7 +10,8 @@ import { queryLatestSubmissionsForModules } from "../submission/submissionReposi
 import { courseRepository } from "./courseRepository.js";
 import { computeCourseStatus } from "./courseQueries.js";
 import { filterVisibleCourseIds } from "./enrollmentService.js";
-import { getClassAssignedCourseDueDates, getUserClassIds } from "./classService.js";
+import { getClassAssignedCourseDeadlines, getUserClassIds } from "./classService.js";
+import type { EffectiveDeadline } from "./effectiveDeadline.js";
 import { findLocalizedThemesForCourses } from "./courseThemeService.js";
 import { prisma } from "../../db/prisma.js";
 import { findSectionReadCredit } from "./sectionReadCredit.js";
@@ -29,6 +30,8 @@ export type MyCoursesProgress = {
   items: CourseListItem[];
   /** Klassefristen per kurs fra personens klasser (tidligste), som `getClassAssignedCourseDueDates` gir den. */
   classCourseDue: Map<string, Date | null>;
+  /** #1192 punkt 2: det samme med tidspunktet fristen ble satt (`getClassAssignedCourseDeadlines`). */
+  classCourseDeadlines: Map<string, EffectiveDeadline>;
   /**
    * #1156: kursene personen har gjort noe i SELV: en lesing gjort i kurset, eller en innlevering på en av modulene. Ikke det
    * samme som «Påbegynt» i `items`, som også teller lesinger gjort i et annet kurs. «I gang» i den ukentlige e-posten spør her
@@ -42,7 +45,8 @@ export async function getMyCoursesProgress({ userId, roles, groupIds, locale }: 
   // #496/EN-2 + #645/CL-2: RESTRICTED courses are visible to users with an individual enrolment OR
   // a class assignment (member of a class the course is assigned to); OPEN courses to everyone.
   const classIds = await getUserClassIds({ userId, roles, groupIds });
-  const classCourseDue = await getClassAssignedCourseDueDates(classIds, userId);
+  const classCourseDeadlines = await getClassAssignedCourseDeadlines(classIds, userId);
+  const classCourseDue = new Map([...classCourseDeadlines].map(([courseId, deadline]) => [courseId, deadline.dueAt]));
   const visibleIds = await filterVisibleCourseIds(userId, allCourses, new Set(classCourseDue.keys()));
   const courses = allCourses.filter((course) => visibleIds.has(course.id));
 
@@ -111,5 +115,5 @@ export async function getMyCoursesProgress({ userId, roles, groupIds, locale }: 
     };
   });
 
-  return { items, classCourseDue, startedInCourseIds };
+  return { items, classCourseDue, classCourseDeadlines, startedInCourseIds };
 }

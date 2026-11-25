@@ -208,6 +208,11 @@ export type ModuleLevelStanding = {
   standing(userId: string, moduleId: string): ModuleStanding | null;
   /** Deltakerne med et gjeldende pass på modulen. */
   passedUserIds(moduleId: string): Set<string>;
+  /**
+   * #1192 (QA 2.181.7): når passet som gir ståstedet, ble tatt: det siste gjeldende passet for `PASSED`, det siste passet for
+   * `REVISED`, ellers null. Resertifiseringsrapporten viser datoen ved siden av statusen. Bare på modulnivå; med `courseId` null.
+   */
+  passedAt(userId: string, moduleId: string): Date | null;
 };
 
 /**
@@ -226,7 +231,7 @@ export async function findModuleStanding(
 ): Promise<ModuleLevelStanding> {
   const moduleIds = [...new Set(input.moduleIds)];
   if (moduleIds.length === 0 || input.userIds?.length === 0) {
-    return { standing: () => null, passedUserIds: () => new Set() };
+    return { standing: () => null, passedUserIds: () => new Set(), passedAt: () => null };
   }
   if (input.courseId) {
     const courseId = input.courseId;
@@ -234,6 +239,7 @@ export async function findModuleStanding(
     return {
       standing: (userId, moduleId) => progress.standing(userId, courseId, moduleId),
       passedUserIds: (moduleId) => progress.passedUserIds(courseId, moduleId),
+      passedAt: () => null,
     };
   }
   return readModuleLevelRule(client, moduleIds, input.userIds);
@@ -257,18 +263,24 @@ async function readModuleLevelRule(client: ModuleLevelReader, moduleIds: string[
   const currentMajor = new Map(majors.map((row) => [row.moduleId, row._max.versionMajor ?? 1]));
   const passes = await client.modulePass.findMany({
     where: { moduleId: { in: moduleIds }, ...(userIds ? { userId: { in: userIds } } : {}) },
-    select: { userId: true, moduleId: true, invalidatedAt: true, moduleVersion: { select: { versionMajor: true } } },
+    select: { userId: true, moduleId: true, invalidatedAt: true, passedAt: true, moduleVersion: { select: { versionMajor: true } } },
   });
   const standings = new Map<string, ModuleStanding>();
+  const dates = new Map<string, Date>();
   const passedByModule = new Map<string, Set<string>>();
   for (const pass of passes) {
     const key = `${pass.userId}\n${pass.moduleId}`;
-    if (standings.get(key) === "PASSED") continue;
     const counts = passCountsForModule(
       { invalidatedAt: pass.invalidatedAt, versionMajor: pass.moduleVersion.versionMajor },
       currentMajor.get(pass.moduleId) ?? 1,
     );
+    const was = standings.get(key);
+    // En gjeldende bestått vinner over en revidert; innen samme ståsted følger den siste datoen med.
+    if (was === "PASSED" && !counts) continue;
+    if (was !== "PASSED" && counts) dates.delete(key);
     standings.set(key, counts ? "PASSED" : "REVISED");
+    const latest = dates.get(key);
+    if (!latest || pass.passedAt > latest) dates.set(key, pass.passedAt);
     if (counts) {
       const set = passedByModule.get(pass.moduleId);
       if (set) set.add(pass.userId);
@@ -278,5 +290,6 @@ async function readModuleLevelRule(client: ModuleLevelReader, moduleIds: string[
   return {
     standing: (userId, moduleId) => standings.get(`${userId}\n${moduleId}`) ?? null,
     passedUserIds: (moduleId) => passedByModule.get(moduleId) ?? new Set(),
+    passedAt: (userId, moduleId) => dates.get(`${userId}\n${moduleId}`) ?? null,
   };
 }

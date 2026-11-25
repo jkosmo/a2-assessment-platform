@@ -142,7 +142,9 @@ test.describe("#934 — kursbevis per hovedversjon", () => {
     await page.route("**/api/reports/courses/details**", (r: Route) => r.fulfill(json({
       rows: [
         { userId: "u1", participantName: "Kari", participantEmail: "kari@x.no", participantDepartment: null, status: "NEEDS_NEW_VERSION", earlierCertificateVersion: 1, completedModules: 1, totalModules: 2, readSections: 0, totalSections: 0, score: null, latestActivityAt: null },
-        { userId: "u2", participantName: "Ola", participantEmail: "ola@x.no", participantDepartment: null, status: "COMPLETED", completedModules: 2, totalModules: 2, readSections: 0, totalSections: 0, score: null, latestActivityAt: null },
+        { userId: "u2", participantName: "Ola", participantEmail: "ola@x.no", participantDepartment: null, status: "COMPLETED", earlierCertificateVersion: null, completedModules: 2, totalModules: 2, readSections: 0, totalSections: 0, score: null, latestActivityAt: null },
+        // #1192 punkt 2: eldre bevis, ingen ny frist — den nye versjonen er frivillig, kurset står som fullført med versjonen.
+        { userId: "u3", participantName: "Per", participantEmail: "per@x.no", participantDepartment: null, status: "COMPLETED", earlierCertificateVersion: 1, completedModules: 1, totalModules: 2, readSections: 0, totalSections: 0, score: null, latestActivityAt: null },
       ],
     })));
 
@@ -152,5 +154,8 @@ test.describe("#934 — kursbevis per hovedversjon", () => {
     // Rå nøkkel skal aldri vises.
     await expect(page.locator("#courseLearnerBody")).not.toContainText("NEEDS_NEW_VERSION");
     await expect(page.locator("#courseLearnerBody tr", { hasText: "Ola" })).not.toContainText("Må ta ny versjon");
+    await expect(page.locator("#courseLearnerBody tr", { hasText: "Ola" }).locator("td").nth(3)).toHaveText("Fullført");
+    await expect(page.locator("#courseLearnerBody tr", { hasText: "Per" }).locator("td").nth(3)).toHaveText("Fullført (versjon 1)");
+    await expect(page.locator("#courseLearnerBody")).not.toContainText("{version}");
   });
 });

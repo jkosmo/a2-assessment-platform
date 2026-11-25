@@ -69,6 +69,14 @@ vi.mock("../../src/modules/course/cohortStatusService.js", () => ({
   resolveCourseAudience,
 }));
 
+// #1192 punkt 2: ingen hovedversjon er publisert i fiksturene, så ingen frist gjør et eldre kursbevis utilstrekkelig. Regelen
+// måles gjennom rutene i test/m2-new-version-deadline-1192.test.ts.
+const deadlineReopensCourse = vi.fn((_member: { userId: string }) => false);
+vi.mock("../../src/modules/course/newVersionDeadline.js", () => ({
+  findCurrentMajors: async () => new Map(),
+  deadlineReopensCourse: (member: { userId: string }) => deadlineReopensCourse(member),
+}));
+
 vi.mock("../../src/repositories/userRepository.js", () => ({
   findUserIdsInDepartment,
   findUsersByIds,
@@ -363,7 +371,9 @@ describe("#996: kursdrilldownen bruker samme publikum som sammendraget", () => {
       bevis("eldre-versjon", "28", 1),
       bevis("fullført-ny", "05", 2),
     ]);
-    resolveCourseAudience.mockResolvedValue(audience("venter-b", "venter-a"));
+    // #1192 punkt 2: «må ta ny versjon» krever en frist satt etter den nye hovedversjonen; den har «eldre-versjon» her.
+    resolveCourseAudience.mockResolvedValue(audience("venter-b", "venter-a", "eldre-versjon"));
+    deadlineReopensCourse.mockImplementation((member) => member.userId === "eldre-versjon");
     findUsersByIds.mockResolvedValue([person("venter-b"), person("venter-a")]);
 
     const { getCourseLearnerReport } = await import("../../src/modules/course/courseReport.js");

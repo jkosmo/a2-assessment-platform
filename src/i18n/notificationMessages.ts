@@ -512,6 +512,11 @@ export type CourseAssignmentDigestCourse = {
   classNames: string[];
   /** Den tidligste fristen blant klassene, eller null. */
   dueAt: Date | null;
+  /**
+   * #1192 punkt 2 (produkteier, svar C 2026-11-24): personen har kursbevis for en eldre hovedversjon, og tildelingen har en frist
+   * satt etter den nye. E-posten sier «ny versjon av et kurs du har fullført», ikke «nytt kurs».
+   */
+  newVersion?: boolean;
 };
 
 export type CourseAssignmentDigestMessage = { subject: string; paragraphs: string[] };
@@ -530,6 +535,14 @@ type CourseAssignmentDigestLabels = {
   closingOne: string;
   /** Flere kurs: knappen går til «Mine kurs». */
   closingMany: string;
+  /** #1192: ett kurs, og det er en ny versjon av et kurs personen har fullført. */
+  subjectOneNewVersion: string; // {course}
+  introOneNewVersion: string;
+  /** #1192: flere kurs, minst ett er en ny versjon. «Nye kurs» ville vært feil for dem. */
+  subjectManyMixed: string; // {n}
+  introManyMixed: string; // {n}
+  /** #1192: merket på linja for en ny versjon. */
+  newVersionMark: string;
 };
 
 const courseAssignmentDigestMessages: Record<SupportedLocale, CourseAssignmentDigestLabels> = {
@@ -545,6 +558,11 @@ const courseAssignmentDigestMessages: Record<SupportedLocale, CourseAssignmentDi
     due: "due {date}",
     closingOne: "Log in to A-2 læringsplattform and open the course under My courses.",
     closingMany: "Log in to A-2 læringsplattform and open My courses.",
+    subjectOneNewVersion: "A new version of a course you have completed: «{course}»",
+    introOneNewVersion: "there is a new version of a course you have completed on A-2 læringsplattform.",
+    subjectManyMixed: "You have {n} courses to take",
+    introManyMixed: "you have {n} courses to take on A-2 læringsplattform.",
+    newVersionMark: "a new version of a course you have completed",
   },
   nb: {
     subjectOne: "Du har fått et nytt kurs: «{course}»",
@@ -558,6 +576,11 @@ const courseAssignmentDigestMessages: Record<SupportedLocale, CourseAssignmentDi
     due: "frist {date}",
     closingOne: "Logg inn på A-2 læringsplattform og åpne kurset under Mine kurs.",
     closingMany: "Logg inn på A-2 læringsplattform og åpne Mine kurs.",
+    subjectOneNewVersion: "Ny versjon av et kurs du har fullført: «{course}»",
+    introOneNewVersion: "det er kommet en ny versjon av et kurs du har fullført på A-2 læringsplattform.",
+    subjectManyMixed: "Du har {n} kurs å ta",
+    introManyMixed: "du har {n} kurs å ta på A-2 læringsplattform.",
+    newVersionMark: "ny versjon av et kurs du har fullført",
   },
   nn: {
     subjectOne: "Du har fått eit nytt kurs: «{course}»",
@@ -571,6 +594,11 @@ const courseAssignmentDigestMessages: Record<SupportedLocale, CourseAssignmentDi
     due: "frist {date}",
     closingOne: "Logg inn på A-2 læringsplattform og opne kurset under Mine kurs.",
     closingMany: "Logg inn på A-2 læringsplattform og opne Mine kurs.",
+    subjectOneNewVersion: "Ny versjon av eit kurs du har fullført: «{course}»",
+    introOneNewVersion: "det har kome ein ny versjon av eit kurs du har fullført på A-2 læringsplattform.",
+    subjectManyMixed: "Du har {n} kurs å ta",
+    introManyMixed: "du har {n} kurs å ta på A-2 læringsplattform.",
+    newVersionMark: "ny versjon av eit kurs du har fullført",
   },
 };
 
@@ -736,14 +764,22 @@ export function getCourseAssignmentDigestMessage(
     if (course.classNames.length === 1) parts.push(` – ${t.fromClass.split("{class}").join(`«${course.classNames[0]}»`)}`);
     if (course.classNames.length > 1) parts.push(` – ${t.fromClasses.split("{classes}").join(quotedList(course.classNames, t.and))}`);
     if (course.dueAt) parts.push(`, ${t.due.split("{date}").join(formatDateOnly(course.dueAt, locale))}`);
+    // #1192 punkt 2: i en e-post med flere kurs sier linja selv at den er en ny versjon.
+    if (course.newVersion && sorted.length > 1) parts.push(` (${t.newVersionMark})`);
     return parts.join("");
   });
   const one = sorted.length === 1;
   const n = String(sorted.length);
+  const anyNewVersion = sorted.some((course) => course.newVersion);
   // Pakkens tekst og resten skilles av ett mellomrom her, så pakken ikke må huske et mellomrom på slutten.
-  const intro = `${mascotEmailText("courseAssignedIntro", locale).trim()} ${one ? t.introOne : t.introMany.split("{n}").join(n)}`;
+  const rest = one
+    ? anyNewVersion ? t.introOneNewVersion : t.introOne
+    : (anyNewVersion ? t.introManyMixed : t.introMany).split("{n}").join(n);
+  const intro = `${mascotEmailText("courseAssignedIntro", locale).trim()} ${rest}`;
   return {
-    subject: one ? t.subjectOne.split("{course}").join(sorted[0]!.title) : t.subjectMany.split("{n}").join(n),
+    subject: one
+      ? (anyNewVersion ? t.subjectOneNewVersion : t.subjectOne).split("{course}").join(sorted[0]!.title)
+      : (anyNewVersion ? t.subjectManyMixed : t.subjectMany).split("{n}").join(n),
     paragraphs: [t.greeting, intro, lines.join("\n"), one ? t.closingOne : t.closingMany],
   };
 }

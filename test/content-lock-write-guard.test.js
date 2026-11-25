@@ -621,11 +621,9 @@ function progressReadViolations(activeProgram, activeFiles) {
   return { out, seen };
 }
 
-const PASSED_STATUS_USERS = new Set([
-  "modules/certification/certificationRepository.ts",
-  "modules/certification/index.ts",
-  "modules/reporting/reviewAppealReport.ts",
-]);
+// #1192 (QA 2.181.7): ingen. `isCertificationPassed`/`CERTIFICATION_PASSED_STATUSES` er fjernet; resertifiseringsrapporten
+// (reviewAppealReport.ts) var den siste leseren og går nå gjennom `findModuleStanding`.
+const PASSED_STATUS_USERS = new Set([]);
 const SWITCH_FILE = "modules/course/modulePassSwitch.ts";
 
 /** Tekstsjekkene for én fil, så de kan prøves på kontrollcasene. */
@@ -720,7 +718,8 @@ describe("#934 skive 5a-3: fremdrift i kurs går gjennom én funksjon, ingenting
     // Lov: tellingen i slettesperren, og et svar om en innlevering, en anke eller en sak, som har samme ord.
     expect(caught("_count: { select: { certificationStatuses: true } }")).toEqual([]);
     expect(caught('appealStatus: "SUPERSEDED"')).toEqual([]);
-    expect(caught("isCertificationPassed(row.status)", "modules/reporting/reviewAppealReport.ts")).toEqual([]);
+    // #1192: resertifiseringsrapporten får ikke lenger lese modulstatusens «bestått» (den leser `findModuleStanding`).
+    expect(caught("isCertificationPassed(row.status)", "modules/reporting/reviewAppealReport.ts")).toHaveLength(1);
     // 2026-11-08: moduleCredit.ts leste modulstatus for den gamle regelen. Den er fjernet, og nå er det rødt der også.
     expect(caught("isCertificationPassed(row.status)", "modules/course/moduleCredit.ts")).toHaveLength(1);
     expect(caught("certifications: { select: { moduleId: true } }", "routes/me.ts")).toEqual([]);

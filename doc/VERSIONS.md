@@ -2,6 +2,58 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.181.8 - 2026-11-24
+
+**#1192 punkt 2 · En ny frist etter en ny hovedversjon gjør kurset uferdig igjen** (produkteier 2026-11-24). En ny hovedversjon
+av et kurs er frivillig til noen setter en ny frist. Har personen bare kursbevis for en eldre hovedversjon, og fristen som gjelder
+ble satt etter at den nye versjonen ble publisert, er kurset ikke lenger fullført. Uten ny frist står det fortsatt som fullført.
+Plan: `doc/design/PLAN_1192_BESTATT_OG_FRIST.md`, del 2.
+
+- **Én regel for hvilken frist som gjelder** (`src/modules/course/effectiveDeadline.ts`). Før slo fire steder sammen fristene
+  hver på sin måte, så samme person kunne ha ulik frist i Status, påminnelsene, mandagse-posten og `/api/courses/enrollments`.
+  Nå: en tildeling til personen vinner, også uten frist; en egen påmelding (SELF) skjuler ikke klassens frist; ellers den
+  tidligste fristen fra aktive klasser. Påminnelsene velger fristen før de ser på påminnelsesvinduet.
+- **Når fristen ble satt:** nytt felt `dueSetAt` på `CourseEnrollment` og `CourseGroupAssignment` (migrering
+  `20261124210000_course_deadline_set_at`, bare tillegg, ingen tilbakefylling). Det skrives bare når datoen endres. Eksisterende
+  frister har ikke feltet og regnes som satt før den nye versjonen (svar B), så utrullingen sender ingen påminnelser og endrer
+  ingen status i Status, «Mine kurs» eller påminnelsene. **Kursrapporten endres ved utrulling:** den som bare har kursbevis for en
+  eldre hovedversjon, går fra «Må ta ny versjon» til «Fullført (versjon 1)», og fullføringsandelen i sammendraget stiger. Det
+  følger av avgjørelsen, men tallene ser annerledes ut samme dag.
+- **Statusen** (`src/modules/course/newVersionDeadline.ts`): `/enrollments`, Status, påminnelsene, mandagse-posten og
+  kursrapporten (detalj og sammendrag) bruker samme regel. Kursrapporten viser versjonen ved «Fullført» når beviset gjelder en
+  eldre hovedversjon, også i CSV-fila.
+- **Tildelingse-posten** sier «Ny versjon av et kurs du har fullført» og går bare når en klassefrist er satt etter den nye
+  versjonen.
+- **Fristen endres i klassen** (produkteier 2026-11-25): hver kursrad i en aktiv klasse har et datofelt og «Lagre frist». Før var
+  eneste vei å fjerne kurset og legge det til igjen, som også sendte «Du har fått et nytt kurs» på nytt. Lagres med knappen, ikke
+  når datoen endres: et datofelt melder en endring for hver gyldig dato mens året skrives, og hver lagring flytter `dueSetAt`. En
+  tom dato fjerner fristen. Arkivert klasse eller kurs: bare tekst, som før. Ingen ny rute (`POST …/classes/:id/courses` på et
+  kurs klassen har, oppdaterer fristen). Brukerveiledning: `doc/COURSE_CERTIFICATES_GUIDE.md`, «Ny hovedversjon».
+- **Resertifiseringsrapporten:** `passedAt` følger statusen fra `ModulePass` (rest fra QA i 2.181.7).
+- **Opprydding:** `isCertificationPassed` og `CERTIFICATION_PASSED_STATUSES` er fjernet, og vakta lister ingen lesere av dem.
+
+**Valgt under byggingen** (`doc/DECISIONS.md`): SELF er ikke en tildeling. En tildeling vinner også uten frist. Ved lik dato
+gjelder den sist satte. «Påbegynt» etter en ny hovedversjon teller også lesinger fra den gamle versjonen, så en som må ta kurset
+på nytt, blir gjerne «I gang» eller «Forfalt», ikke «Tildelt». «Mine kurs» er ikke endret: den viser ingen frister, og et eldre
+kursbevis viser alt «Ny versjon».
+
+**Kjente mangler:** Tildelingse-posten ser bare klassefrister; har personen også en individuell tildeling eller en annen klasse
+med tidligere frist, kan e-posten og Status være uenige. En frist som endres mens gammel kode ennå kjører under utrullingen,
+beholder et eldre tidspunkt. `passedAt` i resertifiseringsrapporten er alltid tom når rapporten er filtrert på kurs (ingen flate
+bruker det). `selfEnroll` overskriver en eksisterende tildeling og fjerner fristen (fantes fra før, egen sak). Fra QA-porten (GO,
+Claude-agent): administratorens påmeldingsliste for et kurs bruker radens egen frist, ikke klassens, så en SELF-påmelding med
+klassefrist kan stå som «Fullført» der og «Forfalt» i Status. Regelen er «tidligste frist», så en gammel frist fra en annen klasse
+eller en individuell tildeling uten ny frist kan stoppe at en ny frist gjør kurset utestående (produkteier 2026-11-25: sjeldent,
+føres som kjent mangel). Fra QA av fristfeltet (GO): en halvskrevet dato (året slettet) gir tom verdi, så «Lagre frist» fjerner
+fristen; en dato skrevet men ikke lagret på en annen rad faller tilbake når en rad lagres og klassen lastes på nytt. En flyttet frist
+etter en ny hovedversjon krever den nye versjonen (svar C), og skjermen sier ikke det; veiledningen gjør.
+
+Tester: `test/m2-effective-deadline-1192.test.ts` (6), `test/m2-new-version-deadline-1192.test.ts` (5),
+`test/unit/effective-deadline-1192.test.ts` (6), og endrede tester som holdt fast ved den gamle regelen (kursversjoner,
+modulpass per kurs, tildelingse-posten og -regelen, ukeposten, og `m2-course-assignment-readded-1146`, som avleggeren ikke kjørte
+og den fulle runden fant). E2e: `admin-content-classes.spec.ts` (fristen på raden, arkivert klasse og kontroll, 390 px) og
+`course-versions-934.spec.ts` («Fullført (versjon 1)»). 23 mutasjoner, alle røde på riktig sted.
+
 ## 2.181.7 - 2026-11-24
 
 **#1192 punkt 1 · En bestått modul står til modulen revideres, også i modulrapportene, profilen og resertifiseringen.** Før

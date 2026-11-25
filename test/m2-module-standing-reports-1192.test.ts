@@ -195,6 +195,16 @@ describe("#1192 punkt 1: modulrapportene følger ståstedet, ikke bare siste for
     expect(await statusOf(egen.moduleId, u.anket)).toBe("NOT_CERTIFIED");
     // Kontroll: aldri bestått.
     expect(await statusOf(enkel.moduleId, u.strok)).toBe("NOT_CERTIFIED");
+
+    // QA 2.181.7: datoen følger statusen. Den som besto og så strøk, har raden NOT_CERTIFIED uten dato, men står som ACTIVE: datoen
+    // er passets. Det omgjorte beståtte har dato på raden, men står uten pass: ingen dato.
+    const passedAtOf = async (moduleId: string, userId: string) => {
+      const response = await request(app).get(`/api/reports/recertification?moduleId=${moduleId}`).set(reader);
+      return (response.body.rows as Array<{ userId: string; passedAt: string | null }>).find((r) => r.userId === userId)?.passedAt;
+    };
+    const pass = await prisma.modulePass.findFirstOrThrow({ where: { userId: u.bestodStrok, moduleId: enkel.moduleId }, select: { passedAt: true } });
+    expect(await passedAtOf(enkel.moduleId, u.bestodStrok)).toBe(pass.passedAt.toISOString());
+    expect(await passedAtOf(egen.moduleId, u.anket)).toBeNull();
   });
 
   it("bestått-andelen og fullføringen: samme regel, og den reviderte er verken bestått eller strøket", async () => {

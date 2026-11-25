@@ -143,9 +143,87 @@ test("classes admin: list, create, add a student via search, and assign a course
   await page.locator("#assignCourseBtn").click();
   await expect.poll(() => coursePosted).toBe(true);
 
-  // #497: the assigned-course chip shows the frist (formatted DD.MM.YYYY, no timezone shift).
+  // #497: the assigned-course chip shows the frist (no timezone shift). #1192: i et datofelt på raden, så den kan endres.
   await expect(page.locator("#courseChips")).toContainText("Arbeidsmiljø");
-  await expect(page.locator("#courseChips")).toContainText("Frist: 17.07.2026");
+  await expect(page.locator('#courseChips [data-course-due="course-1"]')).toHaveValue("2026-07-17");
+});
+
+// #1192: fristen på et kurs klassen alt har, endres på raden. Før var eneste vei å fjerne kurset og legge det til igjen.
+test("#1192: fristen endres på kursraden, lagres med knappen, og en tom dato fjerner fristen", async ({ page }) => {
+  await mockBaseApis(page, ["ADMINISTRATOR"]);
+  const assigned = [
+    { courseId: "c-1", title: "Arbeidsrett", dueAt: "2026-07-17T00:00:00.000Z" as string | null, coursePublished: true, courseArchived: false },
+    { courseId: "c-arch", title: "Gammelt kurs", dueAt: "2026-03-01T00:00:00.000Z" as string | null, coursePublished: true, courseArchived: true },
+  ];
+  const posts: Array<{ courseId: string; dueAt?: string | null }> = [];
+  await page.route("**/api/admin/content/classes/*", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ class: { id: "cls-1", name: "Kull A", isSystem: false, archivedAt: null, lifecycle: "active" } }) }),
+  );
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [{ id: "cls-1", name: "Kull A", kind: "MANUAL", isSystem: false, archivedAt: null, canManage: true, _count: { members: 0, courseAssignments: 2 } }] }) }),
+  );
+  await page.route("**/api/admin/content/classes/*/members", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ members: [] }) }),
+  );
+  await page.route("**/api/admin/content/classes/*/courses", (route: Route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as { courseId: string; dueAt?: string | null };
+      posts.push(body);
+      const row = assigned.find((c) => c.courseId === body.courseId);
+      if (row) row.dueAt = body.dueAt ?? null;
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: assigned }) });
+  });
+  await page.route("**/api/admin/content/courses", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: [] }) }),
+  );
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+
+  await page.goto("/deltakere/klasser");
+  await page.locator('[data-action="open"]').first().click();
+  const due = page.locator('[data-course-due="c-1"]');
+  const save = page.locator('[data-save-due="c-1"]');
+  await expect(due).toHaveValue("2026-07-17");
+  await expect(due).toHaveAccessibleName("Frist for Arbeidsrett");
+  // Uendret dato: ingenting å lagre. Tilbake til den lagrede: knappen av igjen.
+  await expect(save).toBeDisabled();
+  await due.fill("2026-09-01");
+  await expect(save).toBeEnabled();
+  await due.fill("2026-07-17");
+  await expect(save).toBeDisabled();
+  expect(posts).toHaveLength(0);
+
+  // Ny dato, lagret med knappen: én POST med datoen, og raden viser den nye fristen.
+  await due.fill("2026-09-01");
+  await save.click();
+  await expect.poll(() => posts.length).toBe(1);
+  expect(posts[0]).toEqual({ courseId: "c-1", dueAt: "2026-09-01T00:00:00.000Z" });
+  await expect(page.locator(".toast__message", { hasText: "Fristen er lagret." })).toBeVisible();
+  await expect(due).toHaveValue("2026-09-01");
+  await expect(save).toBeDisabled();
+
+  // Tom dato fjerner fristen.
+  await due.fill("");
+  await save.click();
+  await expect.poll(() => posts.length).toBe(2);
+  expect(posts[1]).toEqual({ courseId: "c-1", dueAt: null });
+  await expect(due).toHaveValue("");
+
+  // Et arkivert kurs: serveren nekter å tildele det, så fristen står bare som tekst.
+  await expect(page.locator('[data-course-due="c-arch"]')).toHaveCount(0);
+  await expect(page.locator(".form-row", { hasText: "Gammelt kurs" })).toContainText("Frist: 01.03.2026");
+
+  // Smal skjerm: raden brytes, ingenting stikker ut av sida.
+  await page.setViewportSize({ width: 390, height: 800 });
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  const rowBox = await page.locator(".form-row", { hasText: "Arbeidsrett" }).boundingBox();
+  const saveBox = await save.boundingBox();
+  expect(saveBox!.x + saveBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width + 1);
+  await page.screenshot({ path: "test-results/class-course-deadline-1192-390.png", fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.screenshot({ path: "test-results/class-course-deadline-1192-1280.png", fullPage: true });
 });
 
 // #705-family: classes render consistently with the other lifecycle lists — Aktive/Arkiverte filter,
@@ -562,6 +640,23 @@ test("#1168: «Slett» på en arkivert klasse i hodet: sidas dialog med rød kna
   await page.locator("#moduleLifecycleDialogConfirmBtn").click();
   await expect.poll(() => calls.del).toBe(1);
   expect(calls.browserQuestions).toEqual([]);
+});
+
+test("#1192: i en arkivert klasse kan fristen ikke endres (serveren nekter), den står som tekst; i en aktiv kan den", async ({ page }) => {
+  await mockOneClass(page, { archivedAt: "2026-01-01T00:00:00.000Z" });
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser?id=cls-1");
+  await expect(page.locator("#courseChips")).toContainText("Arbeidsmiljø");
+  await expect(page.locator("[data-course-due], [data-save-due]")).toHaveCount(0);
+  await expect(page.locator("#courseChips")).toContainText("Ingen frist");
+});
+
+test("#1192 kontroll: i en aktiv klasse har samme kursrad datofeltet", async ({ page }) => {
+  await mockOneClass(page, { archivedAt: null });
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser?id=cls-1");
+  await expect(page.locator('[data-course-due="course-1"]')).toHaveValue("");
+  await expect(page.locator('[data-save-due="course-1"]')).toBeDisabled();
 });
 
 test("#1168: «Gjenopprett» spør ikke, og et dobbeltklikk sender bare én gjenoppretting (QA 2.181.0)", async ({ page }) => {

@@ -2,7 +2,8 @@
 //
 // «Utestående» har tre kilder (planen 12.2):
 //   (a) framdriften i «Mine kurs» (`getMyCoursesProgress`, skive 0): hvilke kurs personen ser, og hvilke som er i gang;
-//   (b) kursbevis for en hvilken som helst hovedversjon tar kurset ut (spørsmål 6: ny versjon er frivillig);
+//   (b) kursbevis tar kurset ut; et bevis bare for en ELDRE hovedversjon gjør det ikke når fristen ble satt etter den nye
+//       hovedversjonen (#1192 punkt 2, `certifiedCourseIdsFor`; før: ethvert bevis, spørsmål 6: ny versjon er frivillig);
 //   (c) tildelinger: individuelle (`CourseEnrollment`, ikke `SELF`) og fra klasser. Individuell frist går foran klassens; klassen
 //       gir den tidligste fristen.
 //
@@ -16,6 +17,8 @@ import { prisma } from "../../db/prisma.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { boatMood, type BoatMood } from "../gamification/boatMood.js";
 import { getMyCoursesProgress } from "../course/myCoursesProgress.js";
+import { effectiveDeadline, type EffectiveDeadline } from "../course/effectiveDeadline.js";
+import { findCurrentMajors, isCertifiedForDeadline } from "../course/newVersionDeadline.js";
 import type { CourseListItem } from "../course/courseReadModels.js";
 import { activityEventsFrom, addDaysToKey, loadActivitySources, mondayOfKey, osloDayKey } from "../reporting/activityReport.js";
 
@@ -96,7 +99,12 @@ export function classifyWeeklyDigest(input: {
     // Alle steg gjort, men kursbeviset mangler (det utstedes like etter): ingenting å gjøre for deltakeren.
     if (status === "COMPLETED") continue;
     const assigned = individual.has(course.id) || input.classCourseDue.has(course.id);
-    const dueAt = individual.get(course.id)?.dueAt ?? input.classCourseDue.get(course.id) ?? null;
+    // #1192 punkt 2: samme regel som Status og påminnelsene (`effectiveDeadline`). Før tapte en tildeling uten frist mot
+    // klassens frist (`??`), så e-posten kunne si «Fristen har gått ut» der Status ikke viste noen frist.
+    const dueAt = effectiveDeadline({
+      individual: individual.get(course.id),
+      classes: input.classCourseDue.has(course.id) ? [{ dueAt: input.classCourseDue.get(course.id) ?? null }] : [],
+    }).dueAt;
     const started = status === "IN_PROGRESS" && input.startedInCourseIds.has(course.id);
     const item: WeeklyDigestCourse = {
       courseId: course.id,
@@ -121,16 +129,39 @@ export function classifyWeeklyDigest(input: {
 }
 
 /**
+ * #1192 punkt 2: kursene kursbeviset tar ut av e-posten. Et bevis for nåværende hovedversjon gjør det alltid; et bevis bare for en
+ * eldre hovedversjon gjør det ikke når fristen som gjelder (`effectiveDeadline`), ble satt etter den nye hovedversjonen
+ * (`isCertifiedForDeadline`, samme regel som Status og påminnelsene). Før tok ethvert bevis kurset ut.
+ */
+async function certifiedCourseIdsFor(
+  completions: Array<{ courseId: string; versionMajor: number }>,
+  enrollments: Array<{ courseId: string; source: string; dueAt: Date | null; dueSetAt: Date | null }>,
+  classDeadlines: Map<string, EffectiveDeadline>,
+): Promise<Set<string>> {
+  const certificateMajor = new Map<string, number>();
+  for (const c of completions) certificateMajor.set(c.courseId, Math.max(certificateMajor.get(c.courseId) ?? 0, c.versionMajor));
+  const currentMajors = await findCurrentMajors(prisma, [...certificateMajor.keys()]);
+  const individual = new Map(enrollments.map((e) => [e.courseId, e]));
+  const certified = new Set<string>();
+  for (const [courseId, major] of certificateMajor) {
+    const fromClass = classDeadlines.get(courseId);
+    const deadline = effectiveDeadline({ individual: individual.get(courseId), classes: fromClass ? [fromClass] : [] });
+    if (isCertifiedForDeadline(major, currentMajors.get(courseId), deadline)) certified.add(courseId);
+  }
+  return certified;
+}
+
+/**
  * Innholdet for én person nå, eller `null` når ingenting står igjen. `roles` og `locale` er parametre (planen 12.2): ruta har dem fra
  * innloggingen, workeren fra databasen (`getActiveRoles`, `recipientLocale`). Ingen Entra-grupper i workeren (kjent mangel).
  */
 export async function getWeeklyDigestContent(input: { userId: string; roles: string[]; locale: SupportedLocale; now: Date }): Promise<WeeklyDigestContent | null> {
   const { userId, roles, locale, now } = input;
   const weekEnd = endOfPreviousWeek(now);
-  const [{ items, classCourseDue, startedInCourseIds }, completions, enrollments, activity] = await Promise.all([
+  const [{ items, classCourseDue, classCourseDeadlines, startedInCourseIds }, completions, enrollments, activity] = await Promise.all([
     getMyCoursesProgress({ userId, roles, locale }),
-    prisma.courseCompletion.findMany({ where: { userId }, select: { courseId: true } }),
-    prisma.courseEnrollment.findMany({ where: { userId, revokedAt: null }, select: { courseId: true, source: true, dueAt: true } }),
+    prisma.courseCompletion.findMany({ where: { userId }, select: { courseId: true, versionMajor: true } }),
+    prisma.courseEnrollment.findMany({ where: { userId, revokedAt: null }, select: { courseId: true, source: true, dueAt: true, dueSetAt: true } }),
     loadActivitySources([userId], weekEnd),
   ]);
   let lastActivityAt: Date | null = null;
@@ -140,7 +171,7 @@ export async function getWeeklyDigestContent(input: { userId: string; roles: str
   return classifyWeeklyDigest({
     now,
     progress: items,
-    certifiedCourseIds: new Set(completions.map((c) => c.courseId)),
+    certifiedCourseIds: await certifiedCourseIdsFor(completions, enrollments, classCourseDeadlines),
     individual: enrollments,
     classCourseDue,
     startedInCourseIds,

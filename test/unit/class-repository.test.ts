@@ -39,14 +39,15 @@ describe("class repository", () => {
 
     await expect(repo.assignCourseToClass("course-1", "class-1", dueAt, "admin-1")).resolves.toBeUndefined();
 
+    // #1192 punkt 2: en ny tildeling med frist får `dueSetAt` (når fristen ble satt).
     expect(createMany).toHaveBeenCalledWith({
-      data: [{ courseId: "course-1", classId: "class-1", dueAt, assignedById: "admin-1" }],
+      data: [{ courseId: "course-1", classId: "class-1", dueAt, dueSetAt: expect.any(Date), assignedById: "admin-1" }],
       skipDuplicates: true,
     });
     expect(updateMany).not.toHaveBeenCalled();
   });
 
-  it("an existing assignment only gets the new due date", async () => {
+  it("an existing assignment only gets the new due date, and dueSetAt only when the date differs", async () => {
     const createMany = vi.fn().mockResolvedValue({ count: 0 });
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const repo = createClassRepository({ courseGroupAssignment: { createMany, updateMany } } as never);
@@ -54,7 +55,11 @@ describe("class repository", () => {
 
     await expect(repo.assignCourseToClass("course-1", "class-1", dueAt, "admin-1")).resolves.toBeUndefined();
 
-    expect(updateMany).toHaveBeenCalledWith({ where: { courseId: "course-1", classId: "class-1" }, data: { dueAt } });
+    // #1192 punkt 2: sammenligningen ligger i samme UPDATE (`dueAtDiffers`), så samme dato på nytt ikke flytter `dueSetAt`.
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { courseId: "course-1", classId: "class-1", OR: [{ dueAt: null }, { dueAt: { not: dueAt } }] },
+      data: { dueAt, dueSetAt: expect.any(Date) },
+    });
   });
 
   it("archives a class with a timestamp (soft delete)", async () => {

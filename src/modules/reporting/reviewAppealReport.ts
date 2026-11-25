@@ -188,7 +188,9 @@ export async function getCertificationStatusReport(filters: ReportFilters, local
         moduleTitle: localizeContentText(locale, certification.module.title) ?? certification.module.title,
         latestDecisionId: certification.latestDecisionId,
         status: now === "PASSED" ? "ACTIVE" : now === "REVISED" ? "SUPERSEDED" : "NOT_CERTIFIED",
-        passedAt: certification.passedAt,
+        // QA 2.181.7: datoen følger statusen (passet som gir den), ikke `CertificationStatus`-raden. Før sto en som besto og så
+        // strøk, som ACTIVE uten dato (13 av 201 på stage), og et omgjort bestått som NOT_CERTIFIED med dato.
+        passedAt: standing.passedAt(certification.user.id, certification.module.id),
         updatedAt: certification.updatedAt,
       };
     })

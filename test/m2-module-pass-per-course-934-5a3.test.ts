@@ -1109,6 +1109,14 @@ describe("#934 5a-3: kursrapporten", () => {
     await majorIn(moduleId, { [a]: "major", [b]: "minor" }, [a, b]);
     expect((await summary(a)).moduleBreakdown.find((row) => row.moduleId === moduleId)?.passedUsers).toBe(0);
     expect((await summary(b)).moduleBreakdown.find((row) => row.moduleId === moduleId)?.passedUsers).toBe(1);
+    // #1192 punkt 2 (produkteier 2026-11-24): uten en ny frist er den nye versjonen frivillig, og beviset for A står som fullført.
+    expect((await learners(a)).find((row) => row.participantId === u.userId)).toMatchObject({ status: "COMPLETED", passedModules: 0 });
+    const dueSetAt = new Date(Date.now() + 1000);
+    await prisma.courseEnrollment.upsert({
+      where: { userId_courseId: { userId: u.userId, courseId: a } },
+      create: { userId: u.userId, courseId: a, source: "INDIVIDUAL", dueAt: new Date(Date.now() + 30 * 86_400_000), dueSetAt },
+      update: { source: "INDIVIDUAL", revokedAt: null, dueAt: new Date(Date.now() + 30 * 86_400_000), dueSetAt },
+    });
     expect((await learners(a)).find((row) => row.participantId === u.userId)).toMatchObject({ status: "NEEDS_NEW_VERSION", passedModules: 0 });
     expect((await learners(b)).find((row) => row.participantId === u.userId)).toMatchObject({ status: "COMPLETED", passedModules: 1 });
   });

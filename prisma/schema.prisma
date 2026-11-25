@@ -974,6 +974,8 @@ model CourseEnrollment {
   assignedById String? // SMO/admin who assigned; null for self-enrollment (source=SELF)
   source       CourseEnrollmentSource
   dueAt        DateTime? // optional due date
+  // #1192 punkt 2: når `dueAt` sist ble satt eller endret (null = før feltet fantes, regnes som gammelt).
+  dueSetAt     DateTime?
   assignedAt   DateTime               @default(now())
   revokedAt    DateTime? // soft revoke: keep history/audit
   user         User                   @relation("EnrolledUser", fields: [userId], references: [id], onDelete: Cascade)
@@ -1032,6 +1034,8 @@ model CourseGroupAssignment {
   courseId     String
   classId      String
   dueAt        DateTime?
+  // #1192 punkt 2: når `dueAt` sist ble satt eller endret (null = før feltet fantes, regnes som gammelt).
+  dueSetAt     DateTime?
   assignedById String?
   createdAt    DateTime  @default(now())
   course       Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)

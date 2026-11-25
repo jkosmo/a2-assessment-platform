@@ -43,12 +43,7 @@ vi.mock("../../src/config/reportingAnalytics.js", () => ({
 const standingOf = vi.fn((_userId: string, _moduleId: string): "PASSED" | "REVISED" | null => null);
 vi.mock("../../src/modules/course/moduleCredit.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../src/modules/course/moduleCredit.js")>()),
-  findModuleStanding: async () => ({ standing: standingOf, passedUserIds: () => new Set() }),
-}));
-
-vi.mock("../../src/modules/certification/index.js", () => ({
-  isCertificationPassed: (status: string | null | undefined) =>
-    status != null && status !== "NOT_CERTIFIED",
+  findModuleStanding: async () => ({ standing: standingOf, passedUserIds: () => new Set(), passedAt: () => null }),
 }));
 
 // #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.

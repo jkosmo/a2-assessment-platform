@@ -1610,10 +1610,14 @@ Kjente mangler, godtatt fordi plattformen er intern og utrullinger skjer om kvel
   legges til igjen. Kjennetegnet er at alle åpne veier til kurset (klasse, medlemskap, tildeling) er nyere enn forrige varsel
   (`settledAt`). Linja over, «finnes raden, kommer det aldri en ny e-post om samme kurs», gjelder ikke lenger.
 - **Har personen kurset fra en annen klasse,** går det ingen e-post når kurset legges til en klasse til. Kurset forsvant aldri.
-- **En ny frist er fortsatt ikke et nytt kurs.**
+- **En ny frist er fortsatt ikke et nytt kurs.** *Presisert 2026-11-24 (#1192 punkt 2, svar C):* en ren fristendring gir fortsatt
+  ingen e-post, men for den som har et eldre kursbevis gjør en frist satt etter den nye hovedversjonen kurset utestående igjen
+  (Status, påminnelsene, den ukentlige e-posten, kursrapporten).
 - **Kursbevis på kursets hovedversjon** gir fortsatt ingen e-post. **Kursbevis på en eldre hovedversjon** gir e-post, men bare
   når kurset er lagt til (eller medlemmet lagt inn) etter den nye hovedversjonen. Ellers ville hver ny hovedversjon gitt
-  «nytt kurs» i tillegg til e-posten fra #934. Påbegynt teller bare for den som ikke har kursbevis.
+  «nytt kurs» i tillegg til e-posten fra #934. Påbegynt teller bare for den som ikke har kursbevis. *Endret 2026-11-24 (#1192
+  punkt 2, svar C):* og bare når tildelingen har en frist satt etter den nye hovedversjonen; e-posten sier da «ny versjon av et
+  kurs du har fullført».
 
 ## Kursbevis for kurs tatt utenfor plattformen (#1145, 2026-11-09/10)
 
@@ -2532,3 +2536,22 @@ e-poster skal si det samme om samme person.
   (#1146, 2026-11-10) for den som har et eldre kursbevis.
 
 **Sak:** #1192 · **Dato:** 2026-11-24 · **Status:** avgjort av produkteier
+### Valgt under byggingen av #1192 punkt 2 (2026-11-24)
+
+- **En SELF-påmelding er ikke en tildeling** og avgjør ikke fristen. Den som har meldt seg på selv og så får kurset fra en klasse,
+  har klassens frist på alle flater. Før skjulte SELF-raden klassens frist i Status og «Mine kurs»/`/enrollments`, mens den ukentlige
+  e-posten (som alt regnet SELF som ikke-tildeling, PLAN_1139) og påminnelsene brukte klassens.
+- **En tildeling til personen vinner over klassen, også uten frist** (som Status gjorde). Den ukentlige e-posten og påminnelsene
+  lot klassens frist vinne når tildelingen ikke hadde frist eller fristen lå utenfor påminnelsesvinduet.
+- **Ved lik dato følger det seneste `dueSetAt` med**, så en frist satt på nytt etter en ny hovedversjon ikke skjules av en eldre
+  med samme dato.
+- **«Påbegynt» etter en ny hovedversjon** regnes som før (lesinger og innleveringer i kurset, også fra den gamle versjonen). En
+  med eldre kursbevis og ny frist står derfor gjerne som «I gang» (eller «Forfalt»), ikke «Tildelt».
+- **«Mine kurs» endres ikke:** sida viser ingen frister, og et eldre kursbevis viser alt «Ny versjon» med en nøytral tekst.
+- **Tildelingse-posten:** vilkåret er at alle veier til kurset åpnet etter den nye hovedversjonen (som før) OG at minst én
+  klassetildeling har en frist satt etter den. Kjent mangel: har personen i tillegg en tildeling (individuell) eller en eldre
+  klasse med tidligere frist, kan e-posten og Status være uenige om kurset er utestående. Begge krever flere veier inn samtidig.
+- **`dueSetAt` skrives bare når datoen endres** (og ved ny eller gjenopprettet tildeling med frist), i samme `UPDATE` som
+  sammenligner. Samme dato sendt på nytt gjør ikke en gammel frist ny.
+
+**Sak:** #1192 · **Dato:** 2026-11-24 · **Status:** valgt under byggingen

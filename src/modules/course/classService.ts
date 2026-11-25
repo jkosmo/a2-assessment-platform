@@ -10,6 +10,7 @@ import { classRepository, createClassRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_I
 import { isClassEntraLinkingEnabled } from "./classConfig.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import { findStartedOrCompletedPairs, pairKey } from "./learnerVisibility.js";
+import { effectiveDeadline, type ClassDeadlineRow, type EffectiveDeadline } from "./effectiveDeadline.js";
 
 // #645/CL-2: class (cohort) business logic — CRUD + membership + course assignment + dynamic
 // membership evaluation. Course→class assignment is dynamic: a participant is assigned a course if
@@ -410,26 +411,31 @@ export async function getUserClassIds(ctx: UserMembershipContext): Promise<Set<s
  * Kursrapporten tar i tillegg med alle som har levert, lest eller fullført, og det er den samme regelen som her.
  */
 export async function getClassAssignedCourseDueDates(classIds: Set<string>, userId: string): Promise<Map<string, Date | null>> {
+  const deadlines = await getClassAssignedCourseDeadlines(classIds, userId);
+  return new Map([...deadlines].map(([courseId, deadline]) => [courseId, deadline.dueAt]));
+}
+
+/**
+ * Som `getClassAssignedCourseDueDates`, med `dueSetAt` for fristen (#1192 punkt 2): kursene fra klasser, og fristen fra klassene
+ * etter `effectiveDeadline` (tidligste fra aktive klasser; ved lik dato følger det seneste tidspunktet med).
+ */
+export async function getClassAssignedCourseDeadlines(classIds: Set<string>, userId: string): Promise<Map<string, EffectiveDeadline>> {
   if (classIds.size === 0) return new Map();
   const rows = await prisma.courseGroupAssignment.findMany({
     where: { classId: { in: [...classIds] } },
-    select: { courseId: true, dueAt: true, class: { select: { archivedAt: true } } },
+    select: { courseId: true, dueAt: true, dueSetAt: true, class: { select: { archivedAt: true } } },
   });
   const fromActiveClass = new Set(rows.filter((r) => r.class.archivedAt === null).map((r) => r.courseId));
   const onlyFromArchived = [...new Set(rows.map((r) => r.courseId))].filter((courseId) => !fromActiveClass.has(courseId));
   const keptFromArchived = await findStartedOrCompletedCourseIds(userId, onlyFromArchived);
-  const map = new Map<string, Date | null>();
+  const byCourse = new Map<string, ClassDeadlineRow[]>();
   for (const r of rows) {
     if (!fromActiveClass.has(r.courseId) && !keptFromArchived.has(r.courseId)) continue;
-    const dueAt = r.class.archivedAt === null ? r.dueAt : null;
-    if (!map.has(r.courseId)) {
-      map.set(r.courseId, dueAt);
-    } else {
-      const existing = map.get(r.courseId) ?? null;
-      if (dueAt && (!existing || dueAt < existing)) map.set(r.courseId, dueAt);
-    }
+    const list = byCourse.get(r.courseId) ?? [];
+    list.push({ dueAt: r.dueAt, dueSetAt: r.dueSetAt, archived: r.class.archivedAt !== null });
+    byCourse.set(r.courseId, list);
   }
-  return map;
+  return new Map([...byCourse].map(([courseId, classes]) => [courseId, effectiveDeadline({ classes })]));
 }
 
 /**

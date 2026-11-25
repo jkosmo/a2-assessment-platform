@@ -85,6 +85,7 @@ export {
   unassignCourseFromClass,
   getUserClassIds,
   getClassAssignedCourseDueDates,
+  getClassAssignedCourseDeadlines,
 } from "./classService.js";
 export type { UserMembershipContext } from "./classService.js";
 export { deriveEnrollmentStatus } from "./enrollmentStatus.js";
@@ -94,6 +95,7 @@ export {
   revokeEnrollment,
   selfEnroll,
   listUserEnrollments,
+  listParticipantEnrollments,
   listCourseEnrollments,
   filterVisibleCourseIds,
   isCourseVisibleToUser,

@@ -1,29 +1,11 @@
-import type { CertificationLifecycleStatus } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import type { LearnerTx } from "../../db/contentLock.js";
 
 type CertificationRepositoryClient = Pick<typeof prisma, "certificationStatus">;
 
-// #820: "passed a module" = any certification lifecycle state except NOT_CERTIFIED.
-//
-// #989: resertifisering er fjernet — bare ACTIVE og NOT_CERTIFIED skrives nå. Lista beholder likevel
-// DUE_SOON/DUE/EXPIRED, og det er nettopp DET som gjør fjerningen konsekvensfri: eksisterende rader
-// står med de verdiene (kolonnene er ikke migrert bort), og de talte som bestått før. Krymper du
-// lista til ["ACTIVE"], mister historiske rader kursbeviset sitt — en bestått-avgjørelse endres, og
-// det er akkurat det #989 ikke skal gjøre.
-//
-// 2026-11-08: fremdrift i kurs og kursbevis leser ikke lenger denne statusen (#934 5a-3, regelen om beståtte per kurs). Lista
-// brukes av tallet til den gamle publiseringsdialogen og statusrapporten per modul.
-export const CERTIFICATION_PASSED_STATUSES: CertificationLifecycleStatus[] = [
-  "ACTIVE",
-  "DUE_SOON",
-  "DUE",
-  "EXPIRED",
-];
-
-export function isCertificationPassed(status: CertificationLifecycleStatus | null | undefined): boolean {
-  return status != null && (CERTIFICATION_PASSED_STATUSES as string[]).includes(status);
-}
+// #1192 (QA 2.181.7): funksjonen og lista som sa «bestått» = enhver modulstatus utenom NOT_CERTIFIED, er fjernet. Ingen flate leser lenger bestått fra `CertificationStatus`: kurset og kursbeviset bruker
+// `findModuleProgress`, modulrapportene, profilen og resertifiseringsrapporten `findModuleStanding` (moduleCredit.ts).
+// Vakta i test/content-lock-write-guard.test.js gir rødt om navnene kommer tilbake.
 
 export function createCertificationRepository(client: CertificationRepositoryClient = prisma) {
   return {

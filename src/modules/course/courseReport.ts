@@ -10,6 +10,7 @@ import { isSettledSubmission } from "../submission/submissionOutcome.js";
 import { round2 } from "../reporting/csvExport.js";
 import { prisma } from "../../db/prisma.js";
 import { findSectionReadCredit } from "./sectionReadCredit.js";
+import { deadlineReopensCourse, findCurrentMajors } from "./newVersionDeadline.js";
 
 type CourseReportRow = {
   courseId: string;
@@ -89,11 +90,15 @@ function compareLearnerRows(a: CourseLearnerRow, b: CourseLearnerRow): number {
 // Publikummet er bevisst IKKE datofiltrert (det finnes ingen «var innmeldt i vinduet»-tilstand å
 // filtrere på — `resolveCourseAudience` beskriver nåsituasjonen). Fullføringsgraden med datofilter
 // leses derfor som «andelen av dagens publikum som fullførte i vinduet».
-async function resolveReportAudienceIds(courseId: string, orgUnit: string | undefined): Promise<string[]> {
-  const audience = await resolveCourseAudience(courseId);
+async function resolveReportAudience(courseId: string, orgUnit: string | undefined): Promise<{ userIds: string[]; reopenedUserIds: Set<string> }> {
+  const [audience, currentMajors] = await Promise.all([resolveCourseAudience(courseId), findCurrentMajors(prisma, [courseId])]);
+  // #1192 punkt 2: de i publikummet der fristen som gjelder, ble satt etter kursets nåværende hovedversjon. For dem er et eldre
+  // kursbevis ikke nok («Må ta ny versjon»); for alle andre er det fullført (`deadlineReopensCourse`, samme regel som Status).
+  const current = currentMajors.get(courseId);
+  const reopenedUserIds = new Set(audience.filter((member) => deadlineReopensCourse(member, current)).map((member) => member.userId));
   const userIds = audience.map((member) => member.userId);
-  if (!orgUnit) return userIds;
-  return findUserIdsInDepartment(userIds, orgUnit);
+  if (!orgUnit) return { userIds, reopenedUserIds };
+  return { userIds: await findUserIdsInDepartment(userIds, orgUnit), reopenedUserIds };
 }
 
 /**
@@ -132,9 +137,11 @@ async function resolveCourseParticipantIds(
   participantIds: Set<string>;
   completions: Awaited<ReturnType<typeof courseRepository.findCourseCompletionsForLearnerReport>>;
   submissions: Awaited<ReturnType<typeof courseRepository.findLearnerSubmissionsForModules>>;
+  /** #1192 punkt 2: hvem et eldre kursbevis ikke er nok for (ny frist etter ny hovedversjon). */
+  reopenedUserIds: Set<string>;
 }> {
-  const [audienceUserIds, completions, submissions, readers] = await Promise.all([
-    resolveReportAudienceIds(courseId, filters.orgUnit),
+  const [{ userIds: audienceUserIds, reopenedUserIds }, completions, submissions, readers] = await Promise.all([
+    resolveReportAudience(courseId, filters.orgUnit),
     courseRepository.findCourseCompletionsForLearnerReport(courseId, filters),
     courseRepository.findLearnerSubmissionsForModules(moduleIds, filters),
     findSectionReadCredit(prisma, { courseIds: [courseId], items: "all", filters }).then((credit) => credit.readerIds(courseId)),
@@ -145,7 +152,24 @@ async function resolveCourseParticipantIds(
   for (const submission of submissions) participantIds.add(submission.userId);
   for (const reader of readers) participantIds.add(reader);
 
-  return { participantIds, completions, submissions };
+  return { participantIds, completions, submissions, reopenedUserIds };
+}
+
+/**
+ * #1192 punkt 2: hvem som står som fullført i kursrapporten. Bevis for nåværende hovedversjon: alltid. Bevis bare for en eldre
+ * hovedversjon: fullført, med mindre fristen ble satt etter den nye hovedversjonen (`reopenedUserIds`). Sammendraget og detaljen
+ * teller de samme (planlesingen, Codex 3).
+ */
+function completedUserIds(
+  completions: Array<{ userId: string; versionMajor: number }>,
+  currentMajor: number,
+  reopenedUserIds: Set<string>,
+): Set<string> {
+  const out = new Set<string>();
+  for (const c of completions) {
+    if (c.versionMajor >= currentMajor || !reopenedUserIds.has(c.userId)) out.add(c.userId);
+  }
+  return out;
 }
 
 export async function getCourseReport(
@@ -170,17 +194,15 @@ export async function getCourseReport(
       // som sa «4/4». Det er nøyaktig selvmotsigelsen kommentaren over `resolveCourseParticipantIds`
       // sier ikke skal kunne oppstå.
       const activeModules = course.modules.filter((cm) => cm.module?.archivedAt == null);
-      const { participantIds, completions } = await resolveCourseParticipantIds(
+      const { participantIds, completions, reopenedUserIds } = await resolveCourseParticipantIds(
         course.id,
         activeModules.map((cm) => cm.moduleId),
         filters,
       );
       const enrolled = participantIds.size;
-      // #934: fullført = har bevis for kursets NÅVÆRENDE hovedversjon, telt én gang per person. Et bevis
-      // for en eldre hovedversjon står, men kurset er ikke fullført i den nye (produkteier 2026-11-01).
-      // Før 2.128.0 var beviset unikt per (bruker, kurs), og radantallet var antall personer; det er det
-      // ikke lenger.
-      const completed = new Set(completions.filter((c) => c.versionMajor === course.versionMajor).map((c) => c.userId)).size;
+      // #934: fullført telles én gang per person. #1192 punkt 2: et bevis for en eldre hovedversjon teller som fullført,
+      // med mindre fristen ble satt etter den nye hovedversjonen (`completedUserIds`, samme regel som detaljen).
+      const completed = completedUserIds(completions, course.versionMajor, reopenedUserIds).size;
 
       // ⚠️ #969/#996: modulraden hadde nøyaktig samme feil som kursraden, én etasje ned — telleren
       // var sertifiseringer i vinduet, nevneren innleveringer i vinduet, og de to målte ULIKE
@@ -279,7 +301,7 @@ export async function getCourseLearnerReport(
   //
   // To tall som motsier hverandre i samme klikk er verre enn ett tall som er litt feil: brukeren vet
   // ikke hvilket å tro på, og begge ser autoritative ut.
-  const { participantIds, completions, submissions } = await resolveCourseParticipantIds(
+  const { participantIds, completions, submissions, reopenedUserIds } = await resolveCourseParticipantIds(
     course.id,
     moduleIds,
     filters,
@@ -451,11 +473,12 @@ export async function getCourseLearnerReport(
       hasStarted,
     );
     // #934: et bevis for en eldre hovedversjon gir «må ta ny versjon» — med mindre kravet i den nåværende
-    // faktisk er oppfylt (beviset er da bare ikke utstedt ennå).
+    // faktisk er oppfylt (beviset er da bare ikke utstedt ennå). #1192 punkt 2: bare når fristen ble satt etter den nye
+    // hovedversjonen (`reopenedUserIds`); ellers er den nye versjonen frivillig, og kurset står som fullført.
     const status: CourseLearnerRow["status"] = learner.completion
       ? "COMPLETED"
       : learner.earlier && computed !== "COMPLETED"
-        ? "NEEDS_NEW_VERSION"
+        ? reopenedUserIds.has(learner.participantId) ? "NEEDS_NEW_VERSION" : "COMPLETED"
         : computed;
 
     return {

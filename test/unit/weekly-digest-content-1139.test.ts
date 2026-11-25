@@ -90,20 +90,24 @@ describe("#1139: hva som er utestående", () => {
     })).toBeNull();
   });
 
-  it("individuell frist går foran klassens; uten individuell frist gjelder klassens", () => {
+  // #1192 punkt 2 (planen, 2b): en TILDELING til personen vinner også uten frist, som Status; før tapte den mot klassen (`??`),
+  // så e-posten og Status viste ulik frist. En SELF-påmelding er ikke en tildeling: klassens frist gjelder (kontroll «c»).
+  it("individuell frist går foran klassens, også når tildelingen er uten frist; SELF gjør det ikke", () => {
     const content = classify({
-      progress: [course("a", "NOT_STARTED"), course("b", "NOT_STARTED")],
+      progress: [course("a", "NOT_STARTED"), course("b", "NOT_STARTED"), course("c", "NOT_STARTED")],
       individual: [
         { courseId: "a", source: "INDIVIDUAL", dueAt: new Date("2026-12-24T12:00:00Z") },
         { courseId: "b", source: "DEPARTMENT", dueAt: null },
+        { courseId: "c", source: "SELF", dueAt: null },
       ],
       classDue: [
         ["a", new Date("2026-11-20T12:00:00Z")],
         ["b", new Date("2026-11-20T12:00:00Z")],
+        ["c", new Date("2026-11-20T12:00:00Z")],
       ],
     });
-    expect(ids(content?.notStarted)).toEqual(["a"]);
-    expect(ids(content?.dueSoon)).toEqual(["b"]);
+    expect(ids(content?.notStarted)).toEqual(["a", "b"]);
+    expect(ids(content?.dueSoon)).toEqual(["c"]);
   });
 
   it("fristdager er Oslo-dager: frist kl. 00:30 Oslo i dag er ikke forfalt; dag 14 er «snart», dag 15 er ikke", () => {

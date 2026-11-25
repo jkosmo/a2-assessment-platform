@@ -423,6 +423,9 @@ function classFormBodyHtml() {
   const st = openClassState ?? { klass: null, members: [], courses: [], allCourses: [] };
   const k = st.klass;
   const isNew = !st.id;
+  // Produkteier 2026-11-08: ingen nye deltakere eller kurs i en arkivert klasse. Serveren nekter (`class_archived`); her vises ikke
+  // feltene i det hele tatt, bare hvorfor. Å fjerne en deltaker eller et kurs går fortsatt. Etter «Gjenopprett» er feltene tilbake.
+  const archived = Boolean(k?.archivedAt);
   // #1046 G1: den delte «rad i skjema» (shared.css .form-row) — samme rad som kursets innhold.
   const memberRows = st.members.map((m) => `<li class="form-row">
       <span class="form-row-title">${escapeHtml(m.name)}</span>
@@ -438,10 +441,21 @@ function classFormBodyHtml() {
       : c.coursePublished === false
         ? tNav("classes.course.unpublishedNote")
         : "";
-    return `<li class="form-row">
+    // #1192: fristen endres på raden. Før var eneste vei å fjerne kurset og legge det til igjen, som også sendte «nytt kurs» på
+    // nytt. Lagres med knappen, ikke ved `change`: et datofelt sender `change` for hver gyldig dato mens året skrives, og hver
+    // lagring flytter `dueSetAt` (som avgjør om en ny hovedversjon kreves). Arkivert klasse eller kurs: serveren nekter, så bare tekst.
+    const editable = !archived && !c.courseArchived;
+    const savedDue = c.dueAt ? String(c.dueAt).slice(0, 10) : "";
+    const dueHtml = editable
+      ? `<label class="form-row-due"><span class="form-row-meta">${escapeHtml(tNav("classes.course.deadline"))}</span>
+          <input type="date" data-course-due="${escapeHtml(c.courseId)}" data-saved="${escapeHtml(savedDue)}" value="${escapeHtml(savedDue)}"
+            aria-label="${escapeHtml(tf("classes.course.deadlineFor", { title: courseTitle(c.title) }))}" /></label>
+         <button type="button" class="row-action-btn" data-save-due="${escapeHtml(c.courseId)}" disabled>${escapeHtml(tNav("classes.course.saveDeadline"))}</button>`
+      : `<span class="form-row-meta">${due ? `${escapeHtml(tNav("classes.course.deadline"))}: ${escapeHtml(due)}` : escapeHtml(tNav("classes.course.noDeadline"))}</span>`;
+    return `<li class="form-row form-row--course">
       <span class="form-row-title">${escapeHtml(courseTitle(c.title))}</span>
       ${unreachable ? `<span class="form-row-meta form-row-meta--warn">${escapeHtml(unreachable)}</span>` : ""}
-      <span class="form-row-meta">${due ? `${escapeHtml(tNav("classes.course.deadline"))}: ${escapeHtml(due)}` : escapeHtml(tNav("classes.course.noDeadline"))}</span>
+      ${dueHtml}
       <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="${escapeHtml(tNav("classes.course.remove"))}">${escapeHtml(tNav("ui.action.remove"))}</button></span>
     </li>`;
   }).join("");
@@ -449,9 +463,6 @@ function classFormBodyHtml() {
   // #688: don't offer archived courses for assignment — they are retired and shouldn't be assigned.
   const courseOptions = st.allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.displayTitle))}</option>`).join("");
   const readOnly = Boolean(k?.isSystem);
-  // Produkteier 2026-11-08: ingen nye deltakere eller kurs i en arkivert klasse. Serveren nekter (`class_archived`); her vises ikke
-  // feltene i det hele tatt, bare hvorfor. Å fjerne en deltaker eller et kurs går fortsatt. Etter «Gjenopprett» er feltene tilbake.
-  const archived = Boolean(k?.archivedAt);
   const archivedNote = `<p class="small" data-class-archived-note style="margin:6px 0 0">${escapeHtml(tNav("classes.archivedReadonly"))}</p>`;
   return `
     <div data-form-tab="rediger">
@@ -596,7 +607,30 @@ function bindClassFormHandlers() {
       reloadOpenClass(id);
     } catch (err) { apiErrorToast(err); }
   });
+  // #1192: «Lagre frist» er aktiv bare når datoen er en annen enn den lagrede. En tom dato fjerner fristen.
+  document.getElementById("courseChips")?.addEventListener("input", (e) => {
+    const input = e.target.closest("[data-course-due]");
+    if (!input) return;
+    const save = input.closest("li")?.querySelector("[data-save-due]");
+    if (save) save.disabled = input.value === input.dataset.saved;
+  });
   document.getElementById("courseChips")?.addEventListener("click", async (e) => {
+    const saveBtn = e.target.closest("[data-save-due]");
+    if (saveBtn) {
+      const input = saveBtn.closest("li")?.querySelector("[data-course-due]");
+      if (!input) return;
+      const body = { courseId: saveBtn.dataset.saveDue, dueAt: input.value ? new Date(input.value + "T00:00:00.000Z").toISOString() : null };
+      saveBtn.disabled = true;
+      try {
+        await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/courses`, getHeaders, { method: "POST", body: JSON.stringify(body) });
+        showToast(tNav("classes.course.deadlineSaved"), "success");
+        reloadOpenClass(id);
+      } catch (err) {
+        saveBtn.disabled = false;
+        apiErrorToast(err);
+      }
+      return;
+    }
     const btn = e.target.closest("[data-remove-course]");
     if (!btn) return;
     try {

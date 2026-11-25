@@ -84,13 +84,19 @@ describe("#934 kursbevis per hovedversjon", () => {
     expect(ett.body).toMatchObject({ versionMajor: 1, versionMinor: 0, current: false });
   });
 
-  it("kursrapporten teller bevis for nåværende hovedversjon, og en med bare eldre bevis står som «må ta ny versjon»", async () => {
+  it("kursrapporten teller bevis for nåværende hovedversjon, og en med bare eldre bevis står som «må ta ny versjon» når en ny frist er satt", async () => {
     const { participant, course } = await courseWithOnePassedModule("rapport");
     await reconcileCourseCompletionsForUser(participant.id);
     const ny = await createPublishedModule(`934 rapport ny modul ${Date.now()}`);
     await prisma.courseItem.create({ data: { courseId: course.id, itemType: "MODULE", moduleId: ny.module.id, sortOrder: 2 } });
     await prisma.course.update({ where: { id: course.id }, data: { versionMajor: 2, versionMinor: 0 } });
+    await prisma.courseVersion.create({ data: { courseId: course.id, versionMajor: 2, publishedAt: new Date(Date.now() - 86_400_000), sectionVersionsJson: "[]" } });
     const admin = { "x-user-id": `v934-admin-${Date.now()}`, "x-user-email": `v934.admin.${Date.now()}@x.test`, "x-user-name": "Admin", "x-user-roles": "ADMINISTRATOR", "x-locale": "nb" };
+
+    // #1192 punkt 2 (produkteier 2026-11-24): uten en ny frist er den nye versjonen frivillig, og et eldre bevis står som fullført.
+    const frivillig = await request(app).get("/api/reports/courses/details").query({ selectedCourseId: course.id }).set(admin);
+    expect(frivillig.body.rows.find((r: { participantId: string }) => r.participantId === participant.id)).toMatchObject({ status: "COMPLETED", earlierCertificateVersion: 1 });
+    await nyFristEtterVersjonen(participant.id, course.id);
 
     const sammendrag = await request(app).get("/api/reports/courses").query({ selectedCourseId: course.id }).set(admin);
     expect(sammendrag.status).toBe(200);
@@ -523,7 +529,8 @@ describe("#934 skive 3 — forfatterens valg og seksjonsregelen", () => {
     await reconcileCourseCompletionsForUser(participant.id);
     expect(await completions(participant.id, course.id)).toEqual([{ versionMajor: 1, versionMinor: 0 }]);
 
-    // Kursrapporten teller det samme.
+    // Kursrapporten teller det samme. #1192 punkt 2: «må ta ny versjon» krever en frist satt etter den nye hovedversjonen.
+    await nyFristEtterVersjonen(participant.id, course.id);
     const rapport = await request(app).get("/api/reports/courses/details").query({ selectedCourseId: course.id }).set(admin());
     expect(rapport.body.rows.find((r: { participantId: string }) => r.participantId === participant.id)).toMatchObject({
       status: "NEEDS_NEW_VERSION",
@@ -807,6 +814,20 @@ function admin() {
 }
 
 const L = (text: string) => ({ "en-GB": text, nb: text, nn: text });
+
+/**
+ * #1192 punkt 2: en frist satt ETTER kursets nåværende hovedversjon, som en tildeling til personen. Bare da er et eldre kursbevis
+ * ikke nok (`isCertifiedForDeadline`). `dueSetAt` ligger et sekund fram, så den er etter publiseringen også i samme millisekund.
+ */
+async function nyFristEtterVersjonen(userId: string, courseId: string) {
+  const dueAt = new Date(Date.now() + 30 * 86_400_000);
+  const dueSetAt = new Date(Date.now() + 1000);
+  await prisma.courseEnrollment.upsert({
+    where: { userId_courseId: { userId, courseId } },
+    create: { userId, courseId, source: "INDIVIDUAL", dueAt, dueSetAt },
+    update: { source: "INDIVIDUAL", revokedAt: null, dueAt, dueSetAt },
+  });
+}
 
 async function version(courseId: string) {
   return prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { versionMajor: true, versionMinor: true } });

@@ -82,8 +82,8 @@ async function addMember(classId: string, userId: string) {
 
 // Uten frist: regelen ser ikke på fristen, og en frist på et upublisert kurs telles av m2-course-reminders.test.ts, som
 // teller slike rader i hele databasen (den feilet i full kjøring etter denne fila, 2026-11-09).
-async function assignCourse(classId: string, courseId: string) {
-  const response = await request(app).post(`/api/admin/content/classes/${classId}/courses`).set(adminHeaders).send({ courseId });
+async function assignCourse(classId: string, courseId: string, dueAt?: string) {
+  const response = await request(app).post(`/api/admin/content/classes/${classId}/courses`).set(adminHeaders).send({ courseId, ...(dueAt ? { dueAt } : {}) });
   expect(response.status, JSON.stringify(response.body)).toBe(201);
 }
 
@@ -339,8 +339,11 @@ describe("(b) filtrene for seg: hvert vilkår tar paret ut, og kontrollen viser 
     expect(await myCourses(m.userId, [m.courseId])).toEqual([m.courseId]);
     expect(await rule(m.userId, [m.courseId]), "veien er eldre enn v2").toEqual([]);
     await prisma.courseGroupAssignment.deleteMany({ where: { classId: m.classId, courseId: m.courseId } });
+    // #1192 punkt 2 (svar C): uten frist er den nye versjonen frivillig, og paret er ikke med.
     await assignCourse(m.classId, m.courseId);
-    expect(await rule(m.userId, [m.courseId]), "kurset lagt til etter v2").toEqual([m.courseId]);
+    expect(await rule(m.userId, [m.courseId]), "kurset lagt til etter v2, uten frist").toEqual([]);
+    await assignCourse(m.classId, m.courseId, "2030-01-01T00:00:00.000Z");
+    expect(await rule(m.userId, [m.courseId]), "kurset lagt til etter v2, med frist satt etter").toEqual([m.courseId]);
   });
 
   it("kursbevis for nåværende hovedversjon: ingen par. Et bevis for et ANNET kurs tar ikke dette ut", async () => {

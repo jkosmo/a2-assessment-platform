@@ -118,17 +118,19 @@ describe("#1146 — migreringen `settledAt`", () => {
     expect(await prisma.courseAssignmentNotice.count({ where: { courseId: course.id } })).toBe(rows.length);
 
     // Jobben etterpå: bare den uten kursbevis får en ny rad. Så legges kurset inn igjen. Da settes disse tilbake:
-    //   - `baseline` fra i går, `sent` og `failed`: veien er nyere enn `settledAt` (svar 3);
-    //   - den aktive kursbevisholderen i klassen: kurset er lagt til etter v2, så hen er med etter regelen (B1).
-    // Ikke den som har sluttet, og ikke den i den arkiverte klassen: regelen sier nei.
+    //   - `baseline` fra i går, `sent` og `failed`: veien er nyere enn `settledAt` (svar 3).
+    // Ikke den som har sluttet, og ikke den i den arkiverte klassen: regelen sier nei. #1192 punkt 2 (svar C, 2026-11-24): heller
+    // ikke den aktive kursbevisholderen, for kurset er lagt inn igjen UTEN frist, og uten en frist satt etter v2 er den nye
+    // versjonen frivillig. Med frist får hen e-posten «ny versjon av et kurs du har fullført» (`m2-course-assignment-email-1142`).
     const t0 = new Date(Date.now() - 2 * 60 * 60_000);
     expect(await runCourseAssignmentEmailSchedule({ now: t0, onlyCourseIds: [course.id] })).toMatchObject({ created: 1, reset: 0 });
     await unassign(classId, course.id);
     await assign(classId, course.id);
     const summary = await runCourseAssignmentEmailSchedule({ now: new Date(t0.getTime() + 60_000), onlyCourseIds: [course.id] });
     const reset = (await prisma.courseAssignmentNotice.findMany({ where: { courseId: course.id, reason: "re_added" }, select: { userId: true } })).map((r) => r.userId).sort();
-    // Kursbeviset på v1 + kurset lagt til klassen etter v2: med, som `m2-course-assignment-email-1142` («lagt til klassen etter v2»).
-    expect(reset).toEqual([readded.id, sentOne.id, failedOne.id, oldCertificate.id].sort());
-    expect(summary.reset).toBe(4);
+    expect(reset).toEqual([readded.id, sentOne.id, failedOne.id].sort());
+    expect(summary.reset).toBe(3);
+    // Kursbeviset på v1 + kurset lagt til igjen etter v2, uten frist: raden står som `baseline` fra migreringen.
+    expect((await prisma.courseAssignmentNotice.findUnique({ where: { userId_courseId: { userId: oldCertificate.id, courseId: course.id } } }))?.status).toBe("baseline");
   });
 });

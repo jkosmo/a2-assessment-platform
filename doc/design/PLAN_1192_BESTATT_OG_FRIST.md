@@ -180,3 +180,15 @@ tilbake etter revisjon (rettet med utfallene i 1b). Fem MIDDELS rettet i 1b, 2a,
 
 Del 1 og del 2 endrer to ulike begreper («bestått modul» og «fullført kurs»), men begge treffer kursrapporten. De bygges etter
 hverandre, del 1 først (bare lesere, ingen migrering), hver som egen versjon gjennom testrunde, QA-port og stage.
+
+## Bygget: del 2 (2026-11-24)
+
+Avvik fra planen, og hvorfor:
+- **2a og 2b i én omgang:** feltet `dueSetAt` ble lagt til før sammenslåingene, så fristen kunne følge med tidspunktet fra
+  starten. Migrering: `20261124210000_course_deadline_set_at` (to nullable kolonner, ingen tilbakefylling).
+- **SELF:** en SELF-påmelding er ikke en tildeling (ikke nevnt i planen). Se DECISIONS, «Valgt under byggingen av #1192 punkt 2».
+- **2f:** ingen endring i klienten. «Mine kurs» viser ingen frister, og et eldre kursbevis viser alt «Ny versjon».
+- **2g:** regelen står i SQL som før (vilkår 8), med en klassefrist satt etter hovedversjonen som tilleggsvilkår. Den ser ikke
+  individuelle tildelinger; kjent mangel.
+- **Funksjonene:** `effectiveDeadline` (effectiveDeadline.ts), `isCertifiedForDeadline`/`deadlineReopensCourse`
+  (newVersionDeadline.ts), `getClassAssignedCourseDeadlines` (classService.ts), `listParticipantEnrollments` (enrollmentService.ts).

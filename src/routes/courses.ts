@@ -12,14 +12,13 @@ import { requestLocale } from "../i18n/requestLocale.js";
 import { ConflictError, NotFoundError } from "../errors/AppError.js";
 import { sortCoursesForParticipant } from "../modules/course/courseOrdering.js";
 import {
-  listUserEnrollments,
   selfEnroll,
   // #959: deltakerrutene henter kurs GJENNOM denne. `findCourseById` er ufiltrert og hører til
   // forfatter-/systemflatene; `course-visibility-guard` nekter den i denne fila.
   findCourseForParticipant,
   getUserClassIds,
-  getClassAssignedCourseDueDates,
-  deriveStatuses,
+  getClassAssignedCourseDeadlines,
+  listParticipantEnrollments,
   sortThemesByName,
   getMyCoursesProgress,
 } from "../modules/course/index.js";
@@ -78,29 +77,16 @@ coursesRouter.get("/enrollments", async (request, response, next) => {
   }
   try {
     const now = new Date();
-    const individual = await listUserEnrollments(userId, now);
-    const seen = new Set(individual.map((e) => e.courseId));
-
     // #645/CL-2: also surface courses assigned via a class the user belongs to (dynamic, not stored).
-    // Individual enrolments win on overlap (they carry the explicit assignedAt/source).
+    // #1192 punkt 2: fristen per kurs etter `effectiveDeadline` (en tildeling vinner; en SELF-påmelding skjuler ikke klassens
+    // frist), og statusene i ett kall (#1156).
     const classIds = await getUserClassIds({
       userId,
       roles: request.context?.roles ?? [],
       groupIds: request.context?.principal?.groupIds,
     });
-    const classCourseDue = await getClassAssignedCourseDueDates(classIds, userId);
-    // #1156: statusene i ett kall (`deriveStatuses`), ikke ett per kurs.
-    const fromClasses = [...classCourseDue.entries()].filter(([courseId]) => !seen.has(courseId));
-    const statuses = await deriveStatuses(fromClasses.map(([courseId, dueAt]) => ({ userId, courseId, dueAt })), now);
-    const classEntries = fromClasses.map(([courseId, dueAt]) => ({
-      courseId,
-      source: "CLASS" as const,
-      dueAt: dueAt ? dueAt.toISOString() : null,
-      assignedAt: null,
-      status: statuses.get(pairKey(userId, courseId))!,
-    }));
-
-    response.json({ enrollments: [...individual, ...classEntries] });
+    const classDeadlines = await getClassAssignedCourseDeadlines(classIds, userId);
+    response.json({ enrollments: await listParticipantEnrollments(userId, classDeadlines, now) });
   } catch (error) {
     next(error);
   }
