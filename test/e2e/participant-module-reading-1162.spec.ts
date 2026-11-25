@@ -141,6 +141,45 @@ test.describe("#1162 skive 5: modulen åpnes som seksjonen", () => {
     await expect(page.locator("#submissionFields textarea").first()).toHaveValue("Et svar som skal stå.");
   });
 
+  test("QA 2.184.0: tegnes kurset på nytt mens modulen hentes, og hentingen feiler, står kurset igjen (ingen blindvei)", async ({ page }) => {
+    await mock(page, { order: ["s1", "m1", "s2"], moduleStatus: "NOT_STARTED" });
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    // Registrert etter mock(): vinner. Modullista holdes tilbake, og svarer så med en feil.
+    await page.route("**/api/modules**", async (route: Route) => {
+      await held;
+      await route.fulfill(json({ error: "internal_error" }, 500));
+    });
+    await page.goto("/participant");
+    await courseCard(page).locator(".course-accordion-header").click();
+    await moduleRow(page).click();
+    // Kurset tegnes på nytt mens modulen hentes (her språkbyttet; i bruk: kurslista som svarer etter «gå til testen»).
+    await page.locator("#localeSelect").selectOption("nn");
+    // Forutsetningen: panelet er montert i lesemodus før hentingen feiler. Uten den måler testen ikke blindveien.
+    await expect(courseCard(page)).toHaveClass(/course-reading/);
+    release();
+
+    await expect(page.locator(".toast").last()).toBeVisible();
+    await expect(courseCard(page)).not.toHaveClass(/course-reading/);
+    await expect(page.locator('.course-item[data-key="ci1"] .course-module-row')).toBeVisible();
+    await expect(moduleRow(page)).toBeEnabled();
+    await expect(page).toHaveURL(/courseId=c1$/);
+  });
+
+  test("QA 2.184.0: kurset tegnet på nytt uten fokus: fokus går til modulens tittel, som for seksjonen", async ({ page }) => {
+    await mock(page, { order: ["s1", "m1", "s2"], moduleStatus: "NOT_STARTED" });
+    await openModule(page);
+    // Tegn kurset på nytt (språkbyttet) uten at noe har fokus, som når en vurdering blir ferdig.
+    await page.evaluate(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      const select = document.querySelector<HTMLSelectElement>("#localeSelect")!;
+      select.value = "nn";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await expect(panel(page).locator(".course-inline-panel-tag")).toBeVisible();
+    await expect(panel(page).locator(".course-inline-panel-title")).toBeFocused();
+  });
+
   test("seksjonens merke heter «Lesestoff», og knappen i lista «Ta testen»", async ({ page }) => {
     await mock(page, { order: ["s1", "m1", "s2"], moduleStatus: "NOT_STARTED" });
     await page.goto("/participant");

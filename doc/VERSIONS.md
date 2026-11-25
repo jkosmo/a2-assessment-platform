@@ -33,6 +33,18 @@ En åpnet modul tar over kurskortet i lesemodus, som en seksjon, og rammen er li
   og svaret står).
 - **Mutasjoner:** 8 av 8 røde på nøyaktig den testen som skal fange dem. Telefontesten var først ustabil (1 av 5): merket og
   knappen ble målt i to kall mens siden ruller jevnt til raden; nå i én lesing, 50 av 50 grønne.
+- **QA-porten (Claude, bare lesing): GO.** To funn er rettet, med test og mutasjon:
+  - **Blindvei (innført av skiven):** ble kurset tegnet på nytt mens modulen ble hentet (kurslista svarer etter «Marker lest og
+    gå til testen»), og hentingen feilet, sto panelet i lesemodus med resten av kurset skjult, og verken «← Tilbake til
+    kurset» eller Escape virket. Nå lukkes elementet ordentlig (`collapseInlineOpen`) når hentingen feiler.
+  - **Fokus:** etter at kurset er tegnet på nytt (bestått, språkbytte) sto fokus på `<body>`; nå på modulens tittel, som for
+    seksjonen, når fokus alt var tapt.
+- **Kjente mangler (QA-porten):** fra en seksjon til en modul blinker kurset fram et øyeblikk før modulen får lesemodus (den
+  settes når modullista er hentet; å sette den før ville vist et tomt kurs). Ingen test går gjennom et ekte bestått (testen
+  tegner kurset på nytt med språkbyttet; at et avgjort bestått henter kurset på nytt, er målt i
+  `participant-course-retake-934-5a3`). Escape i KI-dialogen lukker også modulen (fra før).
+- **Full runde:** enhet 3528, DOM 108, integrasjon 1541, e2e 1299 + 1 ustabil under last (`admin-content-course-draft-1140`,
+  nedtrekkslista; 3 av 3 grønne alene, ikke rørt av denne endringen).
 
 ## 2.183.0 - 2026-11-25
 

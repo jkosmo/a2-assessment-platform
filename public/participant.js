@@ -5333,7 +5333,10 @@ async function openInlineItemByEntry(courseId, entry) {
       return;
     }
   } catch (error) {
-    inlineOpen = null;
+    // QA-porten 2.184.0: tegnes kurset på nytt mens modulen hentes (kurslista svarer etter «Marker lest og gå til testen»),
+    // er panelet alt montert i lesemodus. Bare `inlineOpen = null` lot det stå: resten av kurset skjult, og «← Tilbake til
+    // kurset» og Escape virket ikke (de lukker bare når `inlineOpen` er satt). Lukk det ordentlig, hvis det fortsatt er vårt.
+    if (inlineOpen?.courseId === courseId && inlineOpen.key === key) collapseInlineOpen();
     if (row) row.disabled = false;
     if (sameParticipantItem(readParticipantLocation(window.location.search).item, { type: "MODULE", id: entry.moduleId })) recordClosedItem();
     participantErrorToast(error, "courses.loadError");
@@ -5372,6 +5375,9 @@ function reopenInlineAfterRender(courseId, container) {
   if (row) row.disabled = false;
   if (inlineOpen.type === "MODULE") {
     buildModuleInlinePanel(panel, courseId, inlineOpen);
+    // QA-porten 2.184.0: som seksjonen under. Etter at kurset er tegnet på nytt (bestått, språkbytte) sto fokus på <body>.
+    // Bare når det alt er tapt; står det på noe annet (språkvelgeren), røres det ikke.
+    if (!document.activeElement || document.activeElement === document.body) focusInlinePanel(panel);
   } else {
     // Panelet er bygget på nytt, og elementet som hadde fokus (tittelen, satt ved åpning) er borte;
     // da står fokus på <body>. Det skjer hver gang kurslista svarer etter kurset ved «gå videre»
