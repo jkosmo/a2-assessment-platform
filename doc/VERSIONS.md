@@ -2,6 +2,38 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.184.0 - 2026-11-25
+
+**#1162 skive 5 · Modulen åpnes som seksjonen** (produkteier 21.11.2026; prototypen godkjent 25.11.2026: «ja, bygg skive 5»).
+En åpnet modul tar over kurskortet i lesemodus, som en seksjon, og rammen er lik:
+
+- Merket i hodet bruker ordene fra lista: «Test» og «Lesestoff» (før «Arbeidsflate» og «Leser»). «Steg 2 av 3» står også for
+  modulen, og «← Tilbake til kurset» står til høyre.
+- Én knapp videre nederst, og bare når modulen er bestått (avgjørelse 3): «Gå videre», eller «Avslutt kurset» på siste steg.
+  «Avslutt kurset» sender ingenting: beståtten har alt fullført kurset. Den lukker modulen og henter kurslista, som viser kurset
+  som fullført og feirer. Gjenstår noe annet, står hva og en knapp dit, som i seksjonen. «Gå til neste element: …», som sto
+  alltid, også før modulen var bestått, er borte.
+- Knappen i kurslista heter «Ta testen» (før «Gjennomfør»; engelsk «Take the test»).
+- Modulens innhold (oppgave, innlevering, resultat) er urørt.
+- **Prototypen** var den ekte deltakersiden med testdata, med rammen endret i DOM-en, ikke en tegning. Den fant tre ting som er
+  med: tittelen må også stå på arket (lesemodus skjuler tittelen i hodet på telefon, og modulen hadde ingen), merket «Test» skal
+  stå på telefon (skive 2 skjulte det utenfor lesemodus), og «← Tilbake til kurset» sto midt i hodet uten seksjonens
+  breddevelger.
+- **Endret oppførsel:** mens en modul er åpen, er resten av kurset og «← Tilbake til Mine kurs» borte, som for en seksjon. Veien
+  ut er «← Tilbake til kurset». Kursbeviset i kurshodet nås derfor etter at modulen er lukket.
+- **Ryddet bort:** CSS-regelen som skjulte knappen på det aktuelle steget når steget før sto åpent uten lesemodus (2.101.0), og
+  testen av den. Uten åpne steg utenfor lesemodus kan den ikke slå til. Nøklene `courses.section.readerTag`,
+  `courses.module.workspaceTag` og `courses.item.next` er tatt bort (ubrukte).
+- **Tester:** `test/e2e/participant-module-reading-1162.spec.ts` (10): lesemodus og hodet, ingen knapp før bestått, «Gå
+  videre», «Avslutt kurset», noe igjen på siste steg, knappen kommer når kurset tegnes på nytt med modulen bestått (og
+  arbeidsflaten og et skrevet svar står), «Lesestoff» og «Ta testen», engelsk, telefon på 390 og 360 px med bredeste font,
+  og tilbake til høyre på desktop. Fem eldre tester gikk via «← Tilbake til Mine kurs» mens en modul var åpen; de lukker nå
+  modulen først (`participant-module-course-context-1140`, `-course-retake-934-5a3`), og to er skrevet om til den nye veien
+  (`participant-item-url-1158`: historikken som for seksjonen; `participant-flow-1162`: beviset etter at modulen er lukket,
+  og svaret står).
+- **Mutasjoner:** 8 av 8 røde på nøyaktig den testen som skal fange dem. Telefontesten var først ustabil (1 av 5): merket og
+  knappen ble målt i to kall mens siden ruller jevnt til raden; nå i én lesing, 50 av 50 grønne.
+
 ## 2.183.0 - 2026-11-25
 
 **#1178 skive 2 · Publiseringen sjekker kursets navn og beskrivelse** (prinsipp 4 i «felles prinsipper»). Et kurs publiseres

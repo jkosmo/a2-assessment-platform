@@ -122,6 +122,10 @@ function courseCard(page: Page, courseTitle: string) {
 async function openCourse(page: Page, courseTitle: string) {
   const course = courseCard(page, courseTitle);
   await expect(course).toBeAttached();
+  // #1162 skive 5: en åpen modul står i lesemodus, som en seksjon. Da er resten av kurset og «← Tilbake til Mine kurs» borte,
+  // og veien ut er «← Tilbake til kurset» i modulens hode, som deltakeren bruker.
+  const openClose = page.locator(".course-item.open .course-inline-panel [data-role='close']");
+  if ((await openClose.count()) > 0 && (await openClose.first().isVisible())) await openClose.first().click();
   if (!(await course.isVisible())) await page.locator("#courseBackBtn").click();
   if ((await course.locator(".course-module-row").count()) === 0) await course.locator(".course-accordion-header").click();
   await expect(course.locator(".course-module-row").first()).toBeVisible();

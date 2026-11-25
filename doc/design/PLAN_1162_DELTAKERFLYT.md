@@ -1,6 +1,6 @@
 # #1162 — Deltakeren: seksjon og modul åpnes ulikt, «tilbake» heter mange ting, kursbeviset har tre navn
 
-Status: skive 1–4 bygget på grenen `1162-deltaker` (21.11.2026); skive 5 venter på prototype. Fra konsistenssjekken #1157.
+Status: skive 1–4 bygget på grenen `1162-deltaker` (21.11.2026); skive 5 bygget 25.11.2026 (2.184.0) etter prototypen (Artifact «Modul som seksjon», godkjent samme dag). Fra konsistenssjekken #1157.
 
 **Avgjort av produkteier 21.11.2026** (alle seks spørsmålene nederst; står også i `doc/DECISIONS.md`, «Deltakerflyten»): lang
 form på tilbake («← Tilbake til kurset», «← Tilbake til Mine kurs»); kursbeviset åpnes i samme fane; «Gå videre» i en modul bare
@@ -137,7 +137,7 @@ Hver skive kan rulles ut alene, i denne rekkefølgen. Ingen av dem rører server
 | 2. «Tilbake»-tekstene **(bygget;** seksjon og modul deler nå nøkkelen `courses.item.backToCourse`, og merket «Arbeidsflate» viker i modulens hode på telefon, ellers ble knappen kuttet på 360 px**)** | `courses.section.close`, `courses.module.close`, `courses.backToList`, `certificate.back`, `discussion.action.back` | Nei, men mål bredden: «← Tilbake til Mine kurs» og hodet med «← Tilbake til kurset» på 390 og 360 px | e2e på tre språk; skjermbilde på 360 px |
 | 3. Kursbeviset i samme fane **(bygget;** profilen husker i tillegg fanen i historikken, så tilbake fra beviset lander på «Beståtte kurs»**)** | Fjern `target="_blank"` (`participant.js:4875`, `:4887`, `profile.js:434`); `?fra=profil` og lenketeksten på beviset (`certificate.js`) | Nei, oppførsel; avgjørelse 2 først | e2e: åpne beviset, nettleserens tilbake står i kurset (med åpent element) og i profilen |
 | 4. Lest seksjon **(bygget;** «Avslutt kurset» på siste steg sender fortsatt lesingen, siden den er porten for kursbeviset**)** | `renderSectionReaderInto` velger tekst ut fra `entry.read`; ingen ny `POST …/read` når den er lest | Nei | e2e: lest seksjon viser «Gå videre» og sender ikke lesingen; ulest som før (kontroll) |
-| 5. Modulen som seksjonen | `openInlineItemByEntry` setter lesemodus for moduler; `buildModuleInlinePanel` får samme hode (merke, steg, tilbake) og hovedknapp; listeknappen «Ta testen» | **Ja.** Prototype (Artifact) av modul i lesemodus: før bestått, etter bestått, siste steg, på 1280 og 390 px | e2e: hodet og knappen for modul og seksjon side om side; arbeidsflaten overlever språkbytte (§ 6b i `FEATURE_SURFACE_MAP.md`); flaten etter innlevering (vurdering pågår) |
+| 5. Modulen som seksjonen **(bygget 2.184.0;** prototypen fant at tittelen må stå på arket på telefon, at merket «Test» skal stå på telefon, og at «← Tilbake til kurset» må skyves til høyre uten breddevelgeren**)** | `openInlineItemByEntry` setter lesemodus for moduler; `buildModuleInlinePanel` får samme hode (merke, steg, tilbake) og hovedknapp; listeknappen «Ta testen» | **Ja.** Prototype (Artifact) av modul i lesemodus: før bestått, etter bestått, siste steg, på 1280 og 390 px | e2e: hodet og knappen for modul og seksjon side om side; arbeidsflaten overlever språkbytte (§ 6b i `FEATURE_SURFACE_MAP.md`); flaten etter innlevering (vurdering pågår) |
 
 Skive 5 er den med risiko: modulens arbeidsflate er én felles DOM-node som flyttes inn i raden (`mountModuleWorkspaceInto`,
 § 6b i `doc/FEATURE_SURFACE_MAP.md`). Lesemodus skjuler resten av kortet med CSS, og arbeidsflaten må ikke havne i et skjult

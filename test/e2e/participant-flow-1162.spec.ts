@@ -420,7 +420,9 @@ async function mockSameTab(page: Page) {
 const certBack = (page: Page) => page.locator("#certBackLink");
 
 test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
-  test("fra kurset med en åpen modul: beviset i samme fane, og nettleserens tilbake står i kurset med modulen åpen", async ({ page }) => {
+  // #1162 skive 5: modulen står i lesemodus som seksjonen, og kurshodet med lenken til beviset er skjult mens den er åpen. Veien
+  // er «← Tilbake til kurset», så beviset. Før skive 5 sto lenken synlig over den åpne modulen, og tilbake åpnet modulen igjen.
+  test("fra kurset etter en modul: beviset i samme fane, nettleserens tilbake står i kurset, og svaret i modulen står", async ({ page }) => {
     await mockBase(page, "nb");
     await mockSameTab(page);
     await page.goto("/participant");
@@ -432,8 +434,11 @@ test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
     const answer = page.locator("#submissionFields textarea").first();
     await answer.fill("Et halvferdig svar jeg ikke vil miste.");
     await page.waitForTimeout(400); // kladden lagres 250 ms etter siste tastetrykk
-
     const earlier = item(page, "ny").locator("a.course-certificate-link--earlier");
+    await expect(earlier, "kurshodet er skjult mens modulen er åpen").toBeHidden();
+    await page.locator(".course-item.open .course-inline-panel [data-role='close']").click();
+    await expect(page).toHaveURL(/\/participant\?courseId=ny$/);
+
     await expect(earlier).not.toHaveAttribute("target", /.+/);
     const pagesBefore = page.context().pages().length;
     await earlier.click();
@@ -445,10 +450,11 @@ test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
     await expect(certBack(page)).toHaveText("← Tilbake til Mine kurs");
     await expect(certBack(page)).toHaveAttribute("href", "/participant");
 
-    // Nettleserens tilbake: kurset står, med modulen åpen.
+    // Nettleserens tilbake: kurset står, der deltakeren var. Modulen åpnet igjen har svaret.
     await page.goBack();
-    await expect(page).toHaveURL(/\/participant\?courseId=ny&moduleId=m1$/);
+    await expect(page).toHaveURL(/\/participant\?courseId=ny$/);
     await expect(item(page, "ny")).toHaveClass(/is-focused/);
+    await page.locator('.course-item[data-key="ny-2"] .course-module-row').click();
     await expect(page.locator('.course-item[data-key="ny-2"] .course-inline-panel #moduleWorkspace')).toBeVisible();
     await expect(page.locator("#submissionFields textarea").first()).toHaveValue("Et halvferdig svar jeg ikke vil miste.");
   });

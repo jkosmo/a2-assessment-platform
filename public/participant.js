@@ -5365,7 +5365,8 @@ function reopenInlineAfterRender(courseId, container) {
   itemWrap.classList.add("open");
   // Lesemodus (#1079): kurskortet er tegnet på nytt uten klassen (språkbytte, kurslista hentet på
   // nytt etter «gå videre»). QA-porten så seksjonen stå åpen med alle stegene synlige rundt seg.
-  itemWrap.closest(".course-accordion-item")?.classList.toggle("course-reading", inlineOpen.type === "SECTION");
+  // #1162 skive 5: også en modul åpnes i lesemodus, som seksjonen.
+  itemWrap.closest(".course-accordion-item")?.classList.add("course-reading");
   setHidden(panel, false);
   row?.setAttribute("aria-expanded", "true");
   if (row) row.disabled = false;
@@ -5386,36 +5387,106 @@ function reopenInlineAfterRender(courseId, container) {
   }
 }
 
-function buildInlineNextButton(courseId, key) {
-  const next = nextEntryAfter(courseId, key);
-  if (!next) return null;
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "btn-secondary";
-  btn.dataset.role = "next";
-  btn.textContent = t("courses.item.next").replace("{title}", localizePreviewText(next.title) || "");
-  btn.addEventListener("click", () => openCourseItemEntry(courseId, next));
-  return btn;
+/** «Steg 2 av 4»: hvor i kurset det åpne elementet står. Tom når elementet ikke står i rekka. Felles for seksjon og modul. */
+function stepPositionLabel(courseId, entry) {
+  const sequence = courseSequences[courseId] || [];
+  const position = sequence.findIndex((item) => courseItemKey(item) === courseItemKey(entry));
+  return position >= 0
+    ? t("courses.step.position").replace("{n}", String(position + 1)).replace("{total}", String(sequence.length))
+    : "";
 }
 
+/**
+ * #1162 skive 5 (produkteier 21.11.2026, avgjørelse 3): knappen videre fra en modul, som seksjonens hovedknapp. Den står bare
+ * når modulen er BESTÅTT; før det er veien ut «← Tilbake til kurset» i hodet. Før sto «Gå til neste element: …» alltid, også
+ * før modulen var bestått.
+ *
+ *   - Et neste element: «Gå videre».
+ *   - Siste steg, ingenting annet gjenstår: «Avslutt kurset». Kurset er alt fullført av beståtten (tjeneren utsteder kursbeviset
+ *     da), så knappen sender ingenting: den lukker modulen og henter kurslista, som viser kurset som fullført og feirer.
+ *   - Siste steg, noe gjenstår: hva, og en knapp dit, som i seksjonen.
+ *
+ * Panelet bygges på nytt når kurset tegnes på nytt (`reopenInlineAfterRender`). Et avgjort bestått henter kurslista og dermed
+ * kurset (renderResult), så knappen kommer når modulen blir bestått mens den står åpen.
+ */
+function buildModuleAdvance(courseId, entry) {
+  if (!entry || !isEntryDone(entry)) return null;
+  const nav = document.createElement("div");
+  nav.className = "course-inline-actions";
+  const next = nextEntryAfter(courseId, courseItemKey(entry));
+  if (next) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-primary";
+    btn.dataset.role = "next";
+    btn.textContent = t("courses.section.next");
+    btn.addEventListener("click", () => openCourseItemEntry(courseId, next));
+    nav.appendChild(btn);
+    return nav;
+  }
+  const outstanding = outstandingBeforeFinish(courseId, entry);
+  if (outstanding.length === 0) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-primary";
+    btn.dataset.role = "finishCourse";
+    btn.textContent = t("courses.section.finishCourse");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      closeInlineItem();
+      try {
+        await loadParticipantCourses();
+      } catch (error) {
+        participantErrorToast(error, "courses.loadError");
+      }
+    });
+    nav.appendChild(btn);
+    return nav;
+  }
+  const names = outstanding.map((e) => localizePreviewText(e.title) || "").filter(Boolean);
+  const blocked = document.createElement("p");
+  blocked.className = "small";
+  blocked.style.cssText = "color:var(--color-meta);margin:0";
+  blocked.textContent = names.length === outstanding.length
+    ? t("courses.section.finishBlockedNamed").replace("{items}", names.join(", "))
+    : t("courses.section.finishBlocked").replace("{remaining}", String(outstanding.length));
+  nav.appendChild(blocked);
+  const goTarget = outstanding.find(isEntryAvailable);
+  if (goTarget) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-secondary";
+    btn.dataset.role = "goOutstanding";
+    btn.textContent = t("courses.section.goToOutstanding").replace("{title}", localizePreviewText(goTarget.title) || "");
+    btn.addEventListener("click", () => openCourseItemEntry(courseId, goTarget));
+    nav.appendChild(btn);
+  }
+  return nav;
+}
+
+// #1162 skive 5: modulen åpnes som seksjonen — lesemodus (`course-reading` på kurskortet, satt av kallerne), samme hode («Test»,
+// «Steg n av N», «← Tilbake til kurset») og én knapp videre nederst. Tittelen står også på arket: på telefon skjuler lesemodus
+// tittelen i hodet. Modulens innhold (arbeidsflaten, § 6b i FEATURE_SURFACE_MAP.md) er urørt.
 function buildModuleInlinePanel(panel, courseId, ctx) {
+  // Elementet slik kurset står NÅ (status og rekkefølge); `ctx` er det som ble åpnet.
+  const entry = (courseSequences[courseId] || []).find((item) => courseItemKey(item) === ctx.key) ?? null;
+  const title = escapeHtmlP(localizePreviewText(entry?.title ?? ctx.title) || "");
+  const positionLabel = entry ? stepPositionLabel(courseId, entry) : "";
   panel.innerHTML = `
     <div class="course-inline-panel-sticky">
-      <span class="course-inline-panel-tag">${escapeHtmlP(t("courses.module.workspaceTag"))}</span>
-      <span class="course-inline-panel-title">${escapeHtmlP(localizePreviewText(ctx.title) || "")}</span>
+      <span class="course-inline-panel-tag">${escapeHtmlP(t("courses.kind.test"))}</span>
+      <span class="course-inline-panel-title">${title}</span>
+      ${positionLabel ? `<span class="course-reading-position">${escapeHtmlP(positionLabel)}</span>` : ""}
       <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.item.backToCourse"))}</button>
     </div>
-    <div class="course-inline-panel-body"></div>`;
+    <div class="course-inline-panel-body">
+      <h2 class="course-reading-title">${title}</h2>
+    </div>`;
   panel.querySelector('[data-role="close"]').addEventListener("click", () => closeInlineItem());
   const body = panel.querySelector(".course-inline-panel-body");
   mountModuleWorkspaceInto(body);
-  const nextBtn = buildInlineNextButton(courseId, ctx.key);
-  if (nextBtn) {
-    const nav = document.createElement("div");
-    nav.className = "course-inline-actions";
-    nav.appendChild(nextBtn);
-    body.appendChild(nav);
-  }
+  const advance = buildModuleAdvance(courseId, entry);
+  if (advance) body.appendChild(advance);
 }
 
 // #491/P1 — render a learning section's server-rendered, sanitised HTML inline in the participant's
@@ -5474,16 +5545,13 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   }
   // Lesemodus (#1079): hodet sier hvor i kurset leseren er, og lar den velge spaltebredde. Valget
   // huskes i nettleseren. På telefon er det bare én spalte, og velgeren er skjult (CSS).
-  const sequence = courseSequences[courseId] || [];
-  const position = sequence.findIndex((item) => courseItemKey(item) === courseItemKey(entry));
-  const positionLabel = position >= 0
-    ? t("courses.step.position").replace("{n}", String(position + 1)).replace("{total}", String(sequence.length))
-    : "";
+  const positionLabel = stepPositionLabel(courseId, entry);
   const readerWidth = readReaderWidth();
   panel.dataset.readerWidth = readerWidth;
+  // #1162 skive 5: merket bruker ordet fra lista («Lesestoff»), som modulens «Test».
   panel.innerHTML = `
     <div class="course-inline-panel-sticky">
-      <span class="course-inline-panel-tag">${escapeHtmlP(t("courses.section.readerTag"))}</span>
+      <span class="course-inline-panel-tag">${escapeHtmlP(t("courses.kind.reading"))}</span>
       <span class="course-inline-panel-title" id="sectionReaderTitle">${escapeHtmlP(localizePreviewText(entry.title) || "")}</span>
       ${positionLabel ? `<span class="course-reading-position">${escapeHtmlP(positionLabel)}</span>` : ""}
       <span class="course-reading-width" role="group" aria-label="${escapeHtmlP(t("courses.section.widthLabel"))}">

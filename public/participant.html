@@ -380,12 +380,8 @@
         pointer-events: none;
       }
       .course-step--now:hover .course-step-cta { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
-      .course-item.open .course-step--now { border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: 0; }
-      /* 2.101.0 (produkteier 25.10): knappen er overflødig når steget alt er åpent («Gjennomfør» over
-         en åpen modul), og når steget rett før er åpent — der står «Gå til neste element», som gjør
-         det samme. Kortet selv er fortsatt klikkbart. */
-      .course-item.open .course-step-cta,
-      .course-item.open + .course-item .course-step-cta { display: none; }
+      /* 2.101.0 skjulte knappen her når steget, eller steget før, sto åpent uten lesemodus. Fra #1162 skive 5 åpnes både
+         seksjon og modul i lesemodus, som skjuler alle radene, så regelene kunne ikke slå til lenger og er tatt bort. */
 
       /* Kurs-nivå diskusjon: én rolig linje til den åpnes. Ligger utenfor sporet (ingen node),
          fordi den ikke er et steg i kurset. */
@@ -441,10 +437,8 @@
       @media (max-width: 600px) {
         .course-inline-panel-body { padding: 8px; }
         .course-inline-panel-body .section-reader-body { padding: 12px; }
-        /* #1162: «← Tilbake til kurset» er lengre enn «Lukk modulen». Modulens hode står inne i kursets tidslinje (ikke i
-           lesemodus), og på 360 px ble knappen kuttet i høyre kant av panelet (merke 80 + knapp 132–146 px i et panel på
-           232). Merket viker på telefon, så tittelen får plassen. */
-        .course-item[data-type="MODULE"] .course-inline-panel-tag { display: none; }
+        /* #1162 skive 2 skjulte modulens merke her: hodet sto inne i kursets tidslinje, og knappen ble kuttet på 360 px. Fra
+           skive 5 åpnes modulen i lesemodus som seksjonen, der tittelen står på arket på telefon, og merket «Test» har plass. */
       }
       .course-inline-actions { display: flex; gap: var(--space-1); align-items: center; flex-wrap: wrap; margin-top: 12px; }
 
@@ -488,6 +482,9 @@
       .course-reading-width button[aria-pressed="true"] { background: var(--color-primary-tint); color: var(--color-primary-hover); font-weight: 600; }
       .course-reading-width button:focus-visible { outline: 3px solid var(--color-focus); outline-offset: -3px; }
       .course-reading .course-inline-panel-close { margin-left: 0; }
+      /* #1162 skive 5: modulen har ikke breddevelgeren (den har skjema, ikke lesetekst), som skyver tilbake-knappen til høyre
+         hos seksjonen. Uten den sto knappen midt i hodet. */
+      .course-reading .course-item[data-type="MODULE"] .course-inline-panel-close { margin-left: auto; }
       .course-reading .course-inline-panel-body { padding: 16px 0 0; max-width: 1100px; margin: 0 auto; }
       .course-reading .course-inline-panel[data-reader-width="narrow"] .course-inline-panel-body { max-width: 72ch; }
       .course-reading .course-inline-panel-body .section-reader-body { border: 0; border-radius: 2px; padding: 28px 36px 32px; font-size: 16px; line-height: 1.6; box-shadow: 0 1px 2px rgba(34, 31, 25, 0.10), 0 10px 30px -18px rgba(34, 31, 25, 0.45); }
