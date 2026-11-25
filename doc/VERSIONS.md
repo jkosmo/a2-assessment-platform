@@ -36,6 +36,22 @@ Plan, veiene inn og gjennomlesingen: `doc/design/PLAN_1178_KURS_PUBLISERINGSPORT
   - «Fyll inn» er ikke bundet til revisjonen forfatteren bekreftet; publiseringsruta tar ingen teller (gjelder all
     publisering).
   - Vedlikeholdsskriptet for titler skriver uten innholdslås.
+  - (QA-porten, GO) Tømmer forfatteren beskrivelsen på ett språk for å fjerne den, oversettes ikke tømmingen videre; porten
+    sier da at bokmål mangler, og «Fyll inn» oversetter den gamle teksten tilbake. Å fjerne beskrivelsen helt (alle tre tømt)
+    lar den stå på tjeneren, som før pakken.
+  - (QA-porten) Import med `replaceExisting` (bare via API) mot et publisert kurs med ufullstendig navn avpubliserer det, som
+    når en modul mangler språk (#996).
+  - (QA-porten) «Fyll inn» fra «Publiser» på et avpublisert kurs med et utkast liggende igjen får `409 course_has_draft`;
+    forkast utkastet først, som ved vanlig lagring.
+  - (QA-porten) «Fyll inn» på et kurs som har vært ute, kan gi to versjonsøkninger (navnet gir en mindre, kaskaden forfatterens
+    svar). Bare nummeret; e-post går etter svaret.
+- **QA-porten (Claude, bare lesing) for 2.181.9–2.183.0:** GO. Fant ingen vei til publisering av kursets navn utenom planens.
+- **Mot ekte data (stage hjemme, 25.11.2026):** 67 kurs, 16 publisert. Ingen mangler bokmålsnavnet, og ingen har navn eller
+  beskrivelse med et språk som mangler. Porten stopper altså ingen eksisterende kurs, og et kurs uten bokmålsnavn (som skive 1
+  ikke lenger fyller inn av seg selv ved lagring) finnes ikke.
+- **Full runde:** enhet 3528, DOM 108, integrasjon 1541, e2e 1290 + 1. Den ene e2e-testen («Sist endret» i kurslista) hadde
+  et kurs med navn bare på engelsk; den gamle lagringen oversatte navnet til bokmål av seg selv når beskrivelsen ble endret.
+  Fiksturen har nå navn på alle tre språk, som alle kurs på stage.
 
 ## 2.182.0 - 2026-11-25
 

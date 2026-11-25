@@ -3881,7 +3881,9 @@ test.describe("admin content browser coverage", () => {
       courses: [
         {
           id: "course-1",
-          title: { "en-GB": "Trade unions" },
+          // #1178: navnet på alle tre språk, som alle kurs på stage (67 av 67, 25.11.2026). Med bare engelsk oversatte den gamle
+          // lagringen navnet til bokmål av seg selv; nå oversettes bare det som er endret, og bokmålsnavnet kreves ved lagring.
+          title: { "en-GB": "Trade unions", nb: "Fagforeninger", nn: "Fagforeiningar" },
           description: { "en-GB": "Original description" },
           certificationLevel: "basic",
           moduleCount: 0,

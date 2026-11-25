@@ -9,9 +9,9 @@ import { validateTranslationCompleteness, type ValidationIssue } from "../adminC
  * valgfri; er den tom, er den komplett, og har den tekst, må den ha det på alle tre. En ren streng (fra før språkkartene) leses
  * som bokmål.
  *
- * Én funksjon for alle veiene som gjør navnet og beskrivelsen synlige for deltakerne: «Publiser» (`publishCourse`), kaskaden
- * (`publishCourseCascade`, før noe skrives), «Publiser utkastet» (etter at utkastet er skrevet til kurset, i samme transaksjon),
- * og importen, som holder kurset tilbake i stedet for å avvise.
+ * Én funksjon for alle veiene som gjør navnet og beskrivelsen synlige for deltakerne: «Publiser» og kaskaden (`publishCourse`;
+ * kaskaden kaller den til slutt i samme transaksjon, så elementene rulles tilbake), «Publiser utkastet» (etter at utkastet er
+ * skrevet til kurset, i samme transaksjon), og importen, som holder kurset tilbake i stedet for å avvise.
  */
 export function courseTextGateIssues(course: { title: string | null | undefined; description: string | null | undefined }): ValidationIssue[] {
   return validateTranslationCompleteness([
