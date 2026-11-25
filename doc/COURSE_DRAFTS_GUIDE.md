@@ -47,6 +47,15 @@ Fra 2.182.0 (#1178) oversettes kursets navn og beskrivelse slik seksjonene gjør
   oversettelse av noe som ikke står der lenger. Unntaket er navnet på bokmål, som må finnes for å lagre; der står det forrige.
 - Det finnes ingen egen «Oversett»-knapp. Se over de andre språkene etter lagring.
 
+**Ved publisering** (fra 2.183.0): kurset publiseres ikke før navnet finnes på bokmål, nynorsk og engelsk. Det samme gjelder
+beskrivelsen hvis den har tekst; en tom beskrivelse er i orden. Det gjelder både «Publiser» og «Publiser utkastet». Mangler noe,
+sier meldingen hva, og har knappen **«Fyll inn det som mangler»**. Den oversetter bare det som mangler, fra bokmål, lagrer og
+publiserer på nytt. Tekst du har skrevet på et språk, blir stående. Har noen andre lagret kurset i mellomtiden, publiseres
+ingenting; last siden på nytt.
+
+En kursfil som importeres som nytt kurs og var publisert, blir importert upublisert hvis navnet mangler et språk. Publiser det
+etterpå, så får du tilbud om å fylle inn.
+
 ## Når noe stopper deg
 
 - **«Noen andre har endret utkastet …»** To forfattere har hatt kurset åpent samtidig, og den andre lagret, publiserte eller

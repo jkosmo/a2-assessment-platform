@@ -397,7 +397,7 @@ function publishAudienceHtml(audience, keys) {
 
 // POST the publish. `publishItems` cascades the unpublished modules/sections; false is the plain
 // publish (used when everything is already live).
-async function commitCoursePublish(courseId, publishItems, triggerButton = null, versionAnswer = undefined) {
+async function commitCoursePublish(courseId, publishItems, triggerButton = null, versionAnswer = undefined, successText = null) {
   try {
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/publish`, getHeaders, {
       method: "POST",
@@ -405,7 +405,7 @@ async function commitCoursePublish(courseId, publishItems, triggerButton = null,
       // bekreftet når hovedversjonen sender e-post.
       body: JSON.stringify({ publishItems, ...versionRequestBody(versionAnswer, "courseVersion") }),
     });
-    showToast(t("adminContent.courses.message.published") || t("courses.published"), "success");
+    showToast(successText || t("adminContent.courses.message.published") || t("courses.published"), "success");
 
     const route = detectRoute();
     if (route.view === "list") {
@@ -424,9 +424,125 @@ async function commitCoursePublish(courseId, publishItems, triggerButton = null,
       await openPendingPublishDialog(courseId);
       return;
     }
+    // #1178 skive 2: navnet eller beskrivelsen mangler et språk. Meldingen sier hva, og «Fyll inn det som mangler» fyller
+    // hullene, lagrer kurset og publiserer på nytt med de samme svarene.
+    const gateIssues = courseTextGateIssuesFrom(err);
+    if (gateIssues) {
+      if (triggerButton) triggerButton.disabled = false;
+      showCourseTextGateToast(gateIssues, () => fillCourseTextThenPublish({ courseId, issues: gateIssues, publishItems, triggerButton, versionAnswer }));
+      return;
+    }
     apiErrorToast(err);
     returnFocusTo(triggerButton);
   }
+}
+
+// ---------------------------------------------------------------------------
+// #1178 skive 2: publiseringsporten for kursets navn og beskrivelse (doc/design/PLAN_1178_KURS_PUBLISERINGSPORT.md)
+// ---------------------------------------------------------------------------
+
+/** Feltene og språkene porten fant (`422 course_translation_incomplete`), eller `null` når feilen er en annen. */
+function courseTextGateIssuesFrom(err) {
+  if (apiErrorCode(err) !== "course_translation_incomplete") return null;
+  const issues = apiErrorBody(err)?.details?.issues;
+  const usable = Array.isArray(issues)
+    ? issues.filter((issue) => (issue?.field === "title" || issue?.field === "description") && Array.isArray(issue.missingLocales) && issue.missingLocales.length > 0)
+    : [];
+  return usable.length > 0 ? usable : null;
+}
+
+/** «Kan ikke publisere — kurset mangler navnet (nynorsk, engelsk). Bruk «Fyll inn …»», med knappen. Som seksjonene. */
+function showCourseTextGateToast(issues, fill) {
+  const parts = issues.map((issue) => {
+    const field = t(issue.field === "title" ? "courses.textGate.fieldTitle" : "courses.textGate.fieldDescription");
+    return `${field} (${issue.missingLocales.map((code) => localeLabels[code] ?? code).join(", ")})`;
+  });
+  const text = `${t("courses.textGate.blocked")} ${parts.join("; ")}. ${t("courses.textGate.hint")}`;
+  showToast(text, "error", "", { actionLabel: t("courses.textGate.fill"), onAction: fill });
+}
+
+/**
+ * Hullene porten fant, fylt inn i en kopi av `values` (`{ title, description }`, kart per språk) med oversettelser fra ett språk
+ * som har tekst i alle feltene som mangler noe: bokmål først, så grensesnittspråket. Bare hullene: et språk med tekst beholder
+ * den. Svarer `{ values, filled, stillMissing }`, eller `null` når ingen språk har teksten å oversette fra.
+ */
+async function translateCourseTextGaps(issues, values) {
+  const out = cloneCourseLocaleValues(values);
+  const fields = [...new Set(issues.map((issue) => issue.field))];
+  const has = (field, locale) => String(out[field]?.[locale] ?? "").trim().length > 0;
+  const sourceLocale = [...new Set(["nb", currentLocale, "en-GB", "nn"])].find((locale) => fields.every((field) => has(field, locale)));
+  if (!sourceLocale) return null;
+  const targets = [...new Set(issues.flatMap((issue) => issue.missingLocales))].filter((locale) => locale !== sourceLocale);
+  let filled = 0;
+  for (const target of targets) {
+    const holes = fields.filter((field) => !has(field, target));
+    if (holes.length === 0) continue;
+    try {
+      const result = await apiFetch("/api/admin/content/courses/localize-copy", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ ...Object.fromEntries(holes.map((field) => [field, out[field][sourceLocale].trim()])), sourceLocale, targetLocale: target }),
+      });
+      for (const field of holes) {
+        const translated = typeof result?.[field] === "string" ? result[field].trim() : "";
+        if (translated) { out[field][target] = translated; filled += 1; }
+      }
+    } catch {
+      // Avgjøres under, av hullene som står igjen.
+    }
+  }
+  const stillMissing = fields.some((field) => targets.some((locale) => !has(field, locale)));
+  return { values: out, filled, stillMissing };
+}
+
+/** Meldingen etter en utfylling som ikke endte i en publisering. */
+function reportCourseTextFill(outcome) {
+  if (outcome === "partial") showToast(t("courses.textGate.fillPartial"), "warning");
+  else if (outcome === "noSource") showToast(t("courses.textGate.fillNoSource"), "error");
+  else showToast(t("courses.textGate.fillFailed"), "error");
+}
+
+/**
+ * Vei 1 og 2 («Publiser», fra lista eller skjemaet): kurset er ikke publisert, så navn og beskrivelse lagres rett på kurset
+ * (`PUT …/:courseId`) med telleren som ble hentet. Har noen andre lagret kurset siden, avviser tjeneren (409), og ingenting
+ * endres. Så publiseres kurset på nytt med de samme svarene (versjon, e-posttall).
+ */
+async function fillCourseTextThenPublish({ courseId, issues, publishItems, triggerButton, versionAnswer }) {
+  let outcome;
+  try {
+    outcome = await runWithWorkDialog(t("courses.textGate.filling"), async () => {
+      const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, getHeaders);
+      const course = body?.course ?? null;
+      if (!course) return "failed";
+      const gaps = await translateCourseTextGaps(issues, {
+        title: parseLocalizedFieldValues(course.title),
+        description: parseLocalizedFieldValues(course.description),
+      });
+      if (!gaps) return "noSource";
+      if (gaps.filled === 0) return "failed";
+      await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, getHeaders, {
+        method: "PUT",
+        body: JSON.stringify({
+          title: normalizeLocalizedRequestValue(gaps.values.title),
+          description: normalizeLocalizedRequestValue(gaps.values.description),
+          expectedRevision: Number.isInteger(course.contentRevision) ? course.contentRevision : 0,
+        }),
+      });
+      return gaps.stillMissing ? "partial" : "saved";
+    });
+  } catch (err) {
+    apiErrorToast(err);
+    return;
+  }
+  if (outcome !== "saved") {
+    reportCourseTextFill(outcome);
+    if (outcome === "partial") {
+      const route = detectRoute();
+      if (route.view === "list") await renderListView();
+      else await renderDetailView(courseId);
+    }
+    return;
+  }
+  await commitCoursePublish(courseId, publishItems, triggerButton, versionAnswer, t("courses.textGate.filled"));
 }
 
 // ---------------------------------------------------------------------------
@@ -2617,7 +2733,47 @@ async function commitCourseDraftPublish(courseId, course, answer, changes, retri
       await commitCourseDraftPublish(courseId, asked, again, changes, true, audience);
       return;
     }
+    // #1178 skive 2: navnet eller beskrivelsen i det som skulle ut, mangler et språk. Utkastet står (transaksjonen er rullet
+    // tilbake), og «Fyll inn det som mangler» fyller hullene i skjemaet, lagrer utkastet og publiserer det på nytt.
+    const gateIssues = courseTextGateIssuesFrom(err);
+    if (gateIssues) {
+      showCourseTextGateToast(gateIssues, () => fillCourseDraftTextThenPublish({ courseId, course, issues: gateIssues, answer, changes, audience }));
+      return;
+    }
     showCourseDraftError(err);
+  }
+}
+
+/**
+ * #1178 skive 2, vei 3 («Publiser utkastet», bare i skjemaet): skjemaet viser utkastet slik det er lagret («Publiser utkastet»
+ * lagret ulagrede endringer først), med det utkastet lot stå «som publisert» fylt inn. Hullene fylles inn i feltene, utkastet
+ * lagres uten ny oversetting (ellers ville de utfylte språkene sett «endret» ut og blitt oversatt videre), og publiseres på nytt
+ * med de samme svarene. Utkastets id og teller følger lagringen: har noen andre lagret det siden, avviser tjeneren (409).
+ */
+async function fillCourseDraftTextThenPublish({ courseId, course, issues, answer, changes, audience }) {
+  const page = getCourseFormPage();
+  if (courseDraftActionRunning || page.state.saving || courseDetail?.courseId !== courseId) return;
+  courseDraftActionRunning = true;
+  try {
+    const outcome = await runWithWorkDialog(t("courses.textGate.filling"), async () => {
+      const gaps = await translateCourseTextGaps(issues, collectLocaleValues());
+      if (!gaps) return "noSource";
+      if (gaps.filled === 0) return "failed";
+      applyCourseLocaleValuesToForm(gaps.values);
+      const saved = await saveCourse(courseId, { beforePublish: true, skipTranslation: true });
+      if (!saved) return "notSaved";
+      page.markClean();
+      return gaps.stillMissing ? "partial" : "saved";
+    });
+    // Lagringen viste selv hvorfor den stoppet (feilbanneret).
+    if (outcome === "notSaved") return;
+    if (outcome !== "saved") {
+      reportCourseTextFill(outcome);
+      return;
+    }
+    await commitCourseDraftPublish(courseId, course, answer, changes, false, audience);
+  } finally {
+    courseDraftActionRunning = false;
   }
 }
 
@@ -3105,7 +3261,7 @@ function resolveActiveWorkspaceRoles() {
  * `beforePublish`: kalt av «Publiser utkastet». Da vises ingen melding, og visningen lastes ikke på nytt (publiseringen gjør det);
  * id-en og telleren til det lagrede utkastet huskes, så publiseringen sender dem.
  */
-async function saveCourse(courseId, { beforePublish = false } = {}) {
+async function saveCourse(courseId, { beforePublish = false, skipTranslation = false } = {}) {
   const saveBtn = document.getElementById("formSaveBtn");
   const errorBanner = document.getElementById("formErrorBanner");
 
@@ -3139,7 +3295,8 @@ async function saveCourse(courseId, { beforePublish = false } = {}) {
   const sortOrder = sortOrderRaw === "" ? null : Number.parseInt(sortOrderRaw, 10);
   const themeIds = collectCourseThemeIds();
   // #1178: bare det som er endret siden sist lagring, oversettes, fra språket forfatteren står i hvis det er endret.
-  const translationPlan = changedFieldTranslations(
+  // `skipTranslation`: «Fyll inn det som mangler» har alt oversatt hullene; de skal ikke oversettes videre til de andre språkene.
+  const translationPlan = skipTranslation ? {} : changedFieldTranslations(
     {
       title: { current: collectedValues.title, saved: initialDetailLocaleValues.title },
       description: { current: collectedValues.description, saved: initialDetailLocaleValues.description },

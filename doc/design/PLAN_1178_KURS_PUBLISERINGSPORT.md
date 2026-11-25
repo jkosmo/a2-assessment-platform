@@ -24,7 +24,7 @@ Punkt 3 i saken («publiseres uten dialog når alt er publisert») er alt rettet
 | # | Vei | Kode | Hva porten gjør |
 |---|-----|------|-----------------|
 | 1 | «Publiser», alt innhold publisert | `publishCourseChecked` → `publishCourse` | Sjekker kursraden etter låsen. Avviser. |
-| 2 | «Publiser», med upubliserte elementer | `publishCourseCascade` | Sjekker FØR noe skrives: i forhåndssjekken før låsen, og på nytt etter låsen, før første element publiseres. Avviser. |
+| 2 | «Publiser», med upubliserte elementer | `publishCourseCascade` → `publishCourse` | `publishCourse` kalles til slutt i SAMME transaksjon som publiserte elementene; avvisningen ruller dem tilbake. (Bygget: en egen sjekk før første element ble lagt inn og tatt ut igjen. Den kunne ikke gi noe synlig utslag, og en mutasjon av den overlevde av den grunn.) |
 | 3 | «Publiser utkastet» | `POST …/draft/publish` → `publishCourseDraft` | Sjekker kursraden ETTER `updateCourse` i samme transaksjon (utkastet kan utelate navnet, «som publisert»; det er resultatet som går ut). Avviser; transaksjonen rulles tilbake, og utkastet står. |
 | 4 | Import av et publisert kurs | `contentImportService` → `publishCourse` | Holder tilbake, avviser ikke: kurset importeres upublisert (`anyContentHeldBack`), som når en modul mangler språk (#896 S4, #996). Svaret sier at kurset ble holdt tilbake. |
 | 5 | Import som oppdaterer et kurs (`updatePlan`) | rører ikke publiseringen (#1095) | Ingenting. |
@@ -85,3 +85,19 @@ så grensesnittspråket), lagrer, og publiserer på nytt med de samme svarene (v
 Dette er et internt system for kompetanseutvikling. NO-GO bare for det som er sannsynlig i vanlig bruk og gjør reell skade,
 eller sjeldent men alvorlig og vanskelig å rette. Sjeldne kanttilfeller føres som kjente mangler, også når de kalles
 produktspørsmål.
+
+## Gjennomlesing av planen (Codex, 25.11.2026) og hva som ble gjort
+
+1. **Importoppdatering skriver navnet rett i et publisert kurs** (Codex: alvorlig). Ført som **kjent mangel**. Veien fantes fra
+   før og er ikke en publisering. Den brukes sjelden og bare av mennesker (skillet bruker aldri `replaceExisting`/oppdatering),
+   og fila er vanligvis en eksport med alle tre språk. Følgen er at en nynorskdeltaker ser navnet på bokmål. Å avvise hele
+   importen, eller avpublisere et levende kurs, er verre enn mangelen.
+2. **Utfyllingen er ikke bundet til revisjonen forfatteren bekreftet**, og publiseringsruta tar ingen teller. Kjent mangel;
+   gjelder enhver publisering i dag.
+3. **Utfylling av utkast bruker skjemaet.** «Publiser utkastet» lagrer ulagrede endringer først, og arbeidsdialogen er modal
+   under utfyllingen. Kjent mangel.
+4. **Tom beskrivelse:** rettet. `null`, en blank streng og et språkkart der alle verdiene er blanke, er tomme og dermed komplette
+   (`hasAnyText` i courseTextGate.ts; `localizedTextCodec.parse` gir et kart uten tekst tilbake som rå streng).
+5. **Gammel fane kan lagre direkte til et publisert kurs.** Kjent mangel (se «Andre veier» over).
+6. **Vedlikeholdsskriptet for titler** (`localizedTitleCleanup.ts`) skriver navn og beskrivelse uten innholdslås. Unntak fra
+   samtidighetsgarantien; kjent mangel.

@@ -64,7 +64,9 @@ vi.mock("../../src/db/transaction.js", () => ({
 
 function resetMocks() {
   courseUpdate.mockReset().mockResolvedValue({});
-  courseFindUnique.mockReset().mockResolvedValue({ publishedAt: null });
+  // #1178 skive 2: importen spør publiseringsporten om kursets navn før den publiserer. Kursraden har et komplett navn, så
+  // det er modulene som avgjør her, som før.
+  courseFindUnique.mockReset().mockResolvedValue({ publishedAt: null, title: JSON.stringify({ nb: "Kurs", nn: "Kurs", "en-GB": "Course" }), description: null });
   createModule.mockReset().mockResolvedValue({ id: "new-module-id" });
   createRubricVersion.mockReset().mockResolvedValue({ id: "rubric-id" });
   createPromptTemplateVersion.mockReset().mockResolvedValue({ id: "prompt-id" });

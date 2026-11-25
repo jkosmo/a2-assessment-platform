@@ -142,6 +142,7 @@ export const translations = {
     "errors.api.course_item_archived": "One or more items are archived and cannot be added to a course. Restore them first.",
     "errors.api.course_theme_not_found": "A theme no longer exists. Reload the page and choose again.",
     "errors.api.course_draft_item_unusable": "One or more items in the draft are archived, deleted or not published. Publish them or take them out of the draft, and publish again.",
+    "errors.api.course_translation_incomplete": "The course name or description is missing in one or more languages. Fill in what is missing, and publish again.",
     // #1140 etappe 2 (skive 2c): kursbyggerens utkast.
     "errors.api.course_draft_changed": "Someone else changed the draft after you opened the course. Nothing was saved. Copy what you wrote if you need it, reload the page and make your change again.",
     "errors.api.course_has_draft": "The course has a draft that is not published. Nothing was saved. Publish or discard the draft in the course builder first.",
@@ -731,6 +732,7 @@ export const translations = {
     "errors.api.course_item_archived": "Ett eller flere elementer er arkivert og kan ikke legges i et kurs. Gjenopprett dem først.",
     "errors.api.course_theme_not_found": "Et tema finnes ikke lenger. Last siden på nytt og velg igjen.",
     "errors.api.course_draft_item_unusable": "Ett eller flere elementer i utkastet er arkivert, slettet eller ikke publisert. Publiser dem eller ta dem ut av utkastet, og publiser på nytt.",
+    "errors.api.course_translation_incomplete": "Kursets navn eller beskrivelse mangler på ett eller flere språk. Fyll inn det som mangler, og publiser på nytt.",
     "errors.api.course_draft_changed": "Noen andre har endret utkastet etter at du åpnet kurset. Ingenting ble lagret. Kopier det du skrev om du trenger det, last siden på nytt og gjør endringen igjen.",
     "errors.api.course_has_draft": "Kurset har et utkast som ikke er publisert. Ingenting ble lagret. Publiser eller forkast utkastet i kursbyggeren først.",
     "errors.api.course_draft_requires_published": "Kurset er ikke publisert lenger, så utkastet kan ikke lagres eller publiseres. Ingenting ble endret. Last siden på nytt. Publiser kurset igjen for å fortsette på utkastet, eller forkast utkastet.",
@@ -1309,6 +1311,7 @@ export const translations = {
 "errors.api.course_item_archived": "Eitt eller fleire element er arkiverte og kan ikkje leggjast i eit kurs. Gjenopprett dei først.",
 "errors.api.course_theme_not_found": "Eit tema finst ikkje lenger. Last sida på nytt og vel igjen.",
 "errors.api.course_draft_item_unusable": "Eitt eller fleire element i utkastet er arkiverte, sletta eller ikkje publiserte. Publiser dei eller ta dei ut av utkastet, og publiser på nytt.",
+"errors.api.course_translation_incomplete": "Namnet eller skildringa til kurset manglar på eitt eller fleire språk. Fyll inn det som manglar, og publiser på nytt.",
     "errors.api.course_draft_changed": "Nokon andre har endra utkastet etter at du opna kurset. Ingenting vart lagra. Kopier det du skreiv om du treng det, last sida på nytt og gjer endringa igjen.",
     "errors.api.course_has_draft": "Kurset har eit utkast som ikkje er publisert. Ingenting vart lagra. Publiser eller forkast utkastet i kursbyggjaren først.",
     "errors.api.course_draft_requires_published": "Kurset er ikkje publisert lenger, så utkastet kan ikkje lagrast eller publiserast. Ingenting vart endra. Last sida på nytt. Publiser kurset igjen for å halde fram med utkastet, eller forkast utkastet.",

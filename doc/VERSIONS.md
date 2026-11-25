@@ -2,6 +2,41 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.183.0 - 2026-11-25
+
+**#1178 skive 2 · Publiseringen sjekker kursets navn og beskrivelse** (prinsipp 4 i «felles prinsipper»). Et kurs publiseres
+ikke før navnet finnes på nb, nn og en-GB, og beskrivelsen også, hvis den har tekst. Mangler noe, sier meldingen hva, og
+«Fyll inn det som mangler» oversetter bare hullene, lagrer og publiserer på nytt med de samme svarene. Som seksjonene (#1163).
+Plan, veiene inn og gjennomlesingen: `doc/design/PLAN_1178_KURS_PUBLISERINGSPORT.md`.
+
+- **Veiene:** «Publiser» og kaskaden (`publishCourse`, til slutt i kaskadens transaksjon, så elementene rulles tilbake);
+  «Publiser utkastet» (etter at utkastet er skrevet til kurset, i samme transaksjon; utkastet står); import av et publisert
+  kurs (holdes tilbake som upublisert, `heldBackByTranslationGate`). Ny kode: `422 course_translation_incomplete` med
+  `details.issues`. Én regel: `courseTextGateIssues` (src/modules/course/courseTextGate.ts).
+- **Hvorfor nå:** skive 1 lar et språk stå tomt når oversettingen feiler. Uten porten kunne kurset da publiseres med et hull.
+  Kommentaren i kurssiden sa at «publiseringsgaten krever alle tre»; det stemte ikke før nå.
+- **Tom beskrivelse:** `null`, blank, eller et språkkart med bare blanke verdier er tomt og dermed komplett (Codex-
+  gjennomlesingen av planen, punkt 4).
+- **Endret i en eldre test:** `m2-admin-courses.test.ts` oppdaterte kurset med navn og beskrivelse på bare engelsk og
+  publiserte det. Porten avviser det, med rette; fiksturen sender nå alle tre språk. Ingen andre av 1532 integrasjonstester
+  publiserte et kurs med et språk som manglet.
+- **Tester:** `test/m2-course-text-gate-1178.test.ts` (9: alle fire veier med kontroll, beskrivelse på bare bokmål, ingen
+  elementer publisert når kaskaden stopper, utkastet står), `test/unit/course-text-gate-1178.test.ts` (5),
+  `test/e2e/course-publish-text-gate-1178.spec.ts` (3: utfylling fra lista med hull i to felt, 409 under utfyllingen, og
+  «Publiser utkastet»).
+- **Mutasjoner:** 9 av 9 røde på riktig sted: porten borte i `publishCourse` (traff vei 1 og 2), i «Publiser utkastet» og i
+  importen; beskrivelsen aldri sjekket; et tomt kart regnet som tekst; nytt forsøk med andre svar; språk med tekst oversatt på
+  nytt; utkastlagringen oversetter videre; lagring uten telleren som ble hentet. Den første utgaven av e2e-testen kunne ikke se
+  at et språk med tekst ble oversatt på nytt (alle målene var hull i begge feltene); fiksturen har nå en beskrivelse med
+  nynorsk og uten engelsk.
+- **Kjente mangler** (fra gjennomlesingen):
+  - «Oppdater dette kurset» fra en kursfil skriver navnet rett i et publisert kurs, forbi porten. Sjelden, bare mennesker, og
+    følgen er at en deltaker ser navnet på et annet språk.
+  - En gammel fane (fra før #1140) kan lagre navnet direkte på et publisert kurs.
+  - «Fyll inn» er ikke bundet til revisjonen forfatteren bekreftet; publiseringsruta tar ingen teller (gjelder all
+    publisering).
+  - Vedlikeholdsskriptet for titler skriver uten innholdslås.
+
 ## 2.182.0 - 2026-11-25
 
 **#1178 skive 1 · Kurset oversetter bare det som er endret** (prinsipp 3 i «felles prinsipper», doc/DECISIONS.md, godtatt

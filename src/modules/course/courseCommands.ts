@@ -10,6 +10,7 @@ import { addContentOwner, deleteContentOwnersOf } from "../content/contentOwners
 import { checkCourseDelete, lockCourseDeleteLearners } from "./courseDeleteGuard.js";
 import { setCourseThemes } from "./courseThemeService.js";
 import { assignCourseSlugIfMissing } from "./courseSlug.js";
+import { assertCourseTextComplete } from "./courseTextGate.js";
 import { applyCourseVersionChange, claimCourseRevision, isCourseEverPublished, NO_SECTION_SNAPSHOT, sameLocalizedText, type CourseVersionBump, type CourseVersionChoice, type CourseVersionRequest } from "./courseVersioning.js";
 
 /**
@@ -284,6 +285,11 @@ export async function publishCourse(courseId: string, actorId: string | undefine
       "Cannot publish a course with no items. Add at least one module or section first.",
     );
   }
+  // #1178 skive 2: navnet og beskrivelsen går ut til deltakerne nå, og må finnes på alle tre språk. Gjelder «Publiser» og
+  // kaskaden: kaskaden kaller hit til slutt i SAMME transaksjon som publiserte elementene, så en avvisning her ruller dem
+  // tilbake (målt: test/m2-course-text-gate-1178.test.ts, vei 2). Importen spør porten før den kaller hit, og holder kurset
+  // tilbake i stedet (contentImportService.ts); «Publiser utkastet» spør etter at utkastet er skrevet (adminCourses.ts).
+  assertCourseTextComplete(course);
 
   // #803: publish + audit commit atomically.
   await tx.course.update({

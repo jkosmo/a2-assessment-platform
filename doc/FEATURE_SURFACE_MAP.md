@@ -1066,6 +1066,24 @@ section is published or its content saved.
 from `field` + `missingLocales` in the author's language, never from the server's English `message`,
 and a held-back save must not show a plain "Seksjon lagret."
 
+### 24b. Kursets navn og beskrivelse gjennom samme port (#1178, 2.183.0)
+
+Én regel (`courseTextGateIssues`, `src/modules/course/courseTextGate.ts`): navnet på nb, nn og en-GB; beskrivelsen bare når den
+har tekst (et kart med bare blanke verdier er tomt). Plan og veiene: `doc/design/PLAN_1178_KURS_PUBLISERINGSPORT.md`.
+
+| Dør | Hvor | Hva porten gjør |
+|-----|------|-----------------|
+| «Publiser» og kaskaden | `publishCourse` (courseCommands.ts), kalt til slutt i kaskadens transaksjon | `422 course_translation_incomplete` med `details.issues`; i kaskaden rulles elementene tilbake |
+| «Publiser utkastet» | `POST …/draft/publish` (adminCourses.ts), etter `updateCourse` i samme transaksjon | `422`; utkastet og kurset står som før |
+| Import av et publisert kurs | `contentImportService.ts`, før `publishCourse` | Holder tilbake: kurset importeres upublisert, `heldBackByTranslationGate: true` |
+| Import som oppdaterer (`updatePlan`) | rører ikke publiseringen | **Ikke vaktet (kjent mangel):** skriver navnet rett i et publisert kurs |
+| Direkte lagring av et publisert kurs (`PUT /courses/:id`, `…/content`, gammel fane) | lagring, ikke publisering | **Ikke vaktet (kjent mangel)** |
+
+Klienten: «Fyll inn det som mangler» i meldingen fra begge publiseringsflytene (`fillCourseTextThenPublish`,
+`fillCourseDraftTextThenPublish` i admin-content-courses.js) oversetter bare hullene og publiserer på nytt med de samme svarene.
+**Guards:** `test/m2-course-text-gate-1178.test.ts` (alle fire dører med kontroll), `test/unit/course-text-gate-1178.test.ts`,
+`test/e2e/course-publish-text-gate-1178.spec.ts`.
+
 ## 25. «Hva inneholder dette kurset?» — to navngitte dører, ikke åtte kallere (#958)
 
 Fram til v2.26.x fantes én aksessor, `courseRepository.findCourseItems(courseId)`. Den hentet

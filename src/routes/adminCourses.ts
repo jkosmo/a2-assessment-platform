@@ -59,6 +59,7 @@ import {
 } from "../modules/course/courseDraft.js";
 import { courseBodySchema, courseItemListSchema } from "../modules/course/courseSchemas.js";
 import { getCoursePublishAudience } from "../modules/course/coursePublishAudience.js";
+import { assertCourseTextComplete } from "../modules/course/courseTextGate.js";
 import { analyzeCourseArchive, analyzeCourseRestore } from "../modules/course/courseArchivePreview.js";
 import { prisma } from "../db/prisma.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
@@ -738,12 +739,16 @@ adminCoursesRouter.post("/:courseId/draft/publish", requireContentOwnership("COU
         const themeIds = payload.themeIds ? await findExistingThemeIds(tx, payload.themeIds) : undefined;
         // Ingen `expectedRevision`: mens utkastet finnes, stopper låsen alt annet som øker kursets teller, så kurset er
         // som da utkastet ble laget.
-        return updateCourse(courseId, { ...courseFieldsFromBody(payload), themeIds }, actorId, {
+        const published = await updateCourse(courseId, { ...courseFieldsFromBody(payload), themeIds }, actorId, {
           items: payload.items,
           version: parsed.data.version,
           confirmEmailRecipients: parsed.data.confirmEmailRecipients,
           publishingDraft: true,
         }, tx);
+        // #1178 skive 2: det som nå går ut (utkastet kan utelate navnet, «som publisert»), på alle tre språk. Avviser porten,
+        // rulles transaksjonen tilbake, og både kurset og utkastet står som før.
+        assertCourseTextComplete(published);
+        return published;
       },
     });
     response.json({ course });
