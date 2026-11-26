@@ -2555,3 +2555,20 @@ e-poster skal si det samme om samme person.
   sammenligner. Samme dato sendt på nytt gjør ikke en gammel frist ny.
 
 **Sak:** #1192 · **Dato:** 2026-11-24 · **Status:** valgt under byggingen
+
+## Handlinger og merker i hoder og rader (#1169, #1171, 2026-11-26)
+
+Kartlagt i `doc/design/PLAN_1169_1171_HODER_OG_RADER.md`. Produkteier avgjorde 26.11.2026 (alle fire som anbefalt):
+
+1. **«Mer» står fast i alle hoder og rader** (kurs, modul, seksjon, klasse), også når den bare har én eller to handlinger, med
+   samme rekkefølge overalt. Før kom «Mer» bare når det var mer enn fire handlinger.
+2. **«Dupliser kurs» gir et nytt kurs med de samme modulene og seksjonene**, ikke kopier av dem. Innholdet deles mellom kurs,
+   og en endring i en modul gjelder begge. Kopien tar ikke med klasser, tildelinger eller kursbevis.
+3. **Modulens innholdsverktøy** (Generer innhold, Be om endring, Generer spørsmål) står synlige i modulens hode, etter
+   hovedhandlingen og før «Mer».
+4. **En ny modul åpner fortsatt på Innstillinger** (typen trengs før innholdet kan lages); nytt kurs, ny seksjon og ny klasse på
+   Rediger.
+
+Valgt i planen, ikke spurt: **«Erstatt fra fil»** er navnet i hodet for både modul (før «Importer») og seksjon.
+
+**Sak:** #1169, #1171 · **Dato:** 2026-11-26 · **Status:** avgjort av produkteier (1–4)

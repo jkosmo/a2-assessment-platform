@@ -1,6 +1,6 @@
 # #1169 og #1171 — handlinger og tilstandsmerker i hoder og rader
 
-Status: kartlagt 26.11.2026. Venter på produkteiers avgjørelser (§ 4), så prototype (Artifact) før bygging. Fra konsistenssjekken
+Status: kartlagt 26.11.2026. Produkteier avgjorde § 4 samme dag (alle som anbefalt; doc/DECISIONS.md). Neste: prototype (Artifact) før bygging. Fra konsistenssjekken
 #1157; rekkefølgen godkjent 21.11.2026 (doc/DECISIONS.md).
 
 ## Kort fortalt
@@ -126,7 +126,7 @@ skive 5).
   `admin-content-module-header-newer-draft`, `admin-content-module-library` (fanen), `list-fits-frame-1084`,
   `row-more-last-row-1081`, og DOM-/enhetstestene for `form-page`, `list-page`, `row-actions` og `content-status-badge`.
 
-## 4. Det produkteier må avgjøre
+## 4. Det produkteier måtte avgjøre (avgjort 26.11.2026, alle som anbefalt; 5 valgt i planen)
 
 1. **Fast «Mer» i alle hoder og rader**, også når det bare er én eller to handlinger der? (Anbefalt ja: samme sted hver gang.
    Mot: ett klikk mer for Eksporter og Arkiver.)
