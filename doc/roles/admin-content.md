@@ -167,8 +167,20 @@ Velg etter hva du er ute etter: en kopi ved siden av, eller nytt innhold i modul
 #### Hvem ser et nytt kurs (#1164)
 
 Et nytt kurs er **begrenset**: bare de som er tildelt kurset (via en klasse eller enkeltvis) ser det. Det gjelder også et kurs
-du importerer som nytt, og kurs som lages med skillen. Vil du at alle deltakere skal se det, velger du **Åpen** under
-**Innstillinger → Synlighet**. Kurs som fantes fra før, er ikke endret.
+du importerer som nytt, og kurs som lages med skillen. Kurs som fantes fra før, er ikke endret: mange av dem er åpne.
+
+**Frivillig eller påkrevd for alle (#1197, 2.185.0).** Det er to måter å gi alle deltakere et kurs, og de betyr ulike ting:
+
+| | **Åpent for alle (frivillig)** — Innstillinger → «Hvem ser kurset» | **Tildelt klassen «Alle deltakere»** — Klasser |
+|---|---|---|
+| Hvem ser kurset | Alle deltakere | Alle deltakere |
+| Betyr | Tilgjengelig; deltakeren tar det når hen vil | Påkrevd for alle |
+| Frist og påminnelser | Nei | Ja, når du setter en frist |
+| E-post om nytt kurs | Nei | Ja |
+| Står som uferdig i Status, kursrapporten og mandagseposten | Nei | Ja |
+
+Skal alle *kunne* ta kurset, velger du «Åpent for alle». Skal alle *ta* det, tildeler du det klassen «Alle deltakere». Skjermen
+sier det samme under feltet, i klassen «Alle deltakere» og i publiseringsdialogen.
 
 #### Publisere et kurs (#1164)
 

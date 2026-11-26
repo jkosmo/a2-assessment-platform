@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.185.0 - 2026-11-26
+
+**#1197 · Skjermen sier forskjellen på «åpent for alle» og «påkrevd for alle».** En SME så flere kurs i «Mine kurs» enn klassene
+hans skulle gi. Det var ikke en feil: 14 av 16 publiserte kurs sto som «Åpen», og ett var tildelt «Alle deltakere» (data fra
+stage-kopien av prod, 22.11). Produkteier 26.11.2026: begge måtene beholdes, fordi de betyr ulike ting (doc/DECISIONS.md).
+«Åpen» gjør kurset tilgjengelig og frivillig; tildelt «Alle deltakere» gjør det påkrevd for alle, med frist, påminnelser, e-post
+og «utestående».
+
+- **Kursets Innstillinger:** feltet heter «Hvem ser kurset», valgene «Åpent for alle (frivillig)» og «Bare for de som er
+  tildelt», og en hjelpetekst under (knyttet til feltet med `aria-describedby`) sier at et påkrevd kurs for alle tildeles klassen
+  «Alle deltakere».
+- **Klassen «Alle deltakere»:** en linje om at kursene der er påkrevd for alle, og at et frivillig kurs heller settes til «Åpent
+  for alle».
+- **Publiseringsdialogen:** «Alle deltakere, som et frivillig kurs. … uten frist eller påminnelser.»
+- Tre språk. Brukerveiledningen (`doc/roles/admin-content.md`) har en tabell over de to.
+- **Tester:** `test/e2e/course-open-vs-required-1197.spec.ts` (3: Innstillinger på bokmål og engelsk, systemklassen med en vanlig
+  klasse som kontroll). Teksten i publiseringsdialogen er oppdatert i `admin-content-course-publish-dialog-1164.spec.ts` (tre
+  språk). Mutasjoner: 3 av 3 røde (hjelpeteksten borte, merknaden borte, merknaden i alle klasser).
+
 ## 2.184.0 - 2026-11-25
 
 **#1162 skive 5 · Modulen åpnes som seksjonen** (produkteier 21.11.2026; prototypen godkjent 25.11.2026: «ja, bygg skive 5»).

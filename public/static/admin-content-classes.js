@@ -478,6 +478,7 @@ function classFormBodyHtml() {
         <textarea id="classDescription" rows="3" ${readOnly ? "disabled" : ""}>${escapeHtml(k?.description ?? "")}</textarea>
       </div>
       ${readOnly ? `<p class="small">${escapeHtml(tNav("classes.systemReadonly"))}</p>` : ""}
+      ${readOnly ? `<p class="small" data-system-required-note>${escapeHtml(tNav("classes.systemRequiredNote"))}</p>` : ""}
     </div>
     ${isNew ? `<div class="detail-section" data-form-untracked><p class="small" style="margin:0">${escapeHtml(tNav("classes.saveFirstMembers"))}</p></div>` : `
     <div class="detail-section" data-form-untracked>

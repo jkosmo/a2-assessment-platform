@@ -2319,10 +2319,12 @@ function courseDetailBodyHtml() {
         <h2 class="detail-section-title">${escapeHtml(t("ui.tab.settings"))}</h2>
         <div class="form-field">
           <label for="enrollmentPolicy">${escapeHtml(t("courses.visibility"))}</label>
-          <select id="enrollmentPolicy">
+          <select id="enrollmentPolicy" aria-describedby="enrollmentPolicyHelp">
             <option value="OPEN"${enrollmentPolicy !== "RESTRICTED" ? " selected" : ""}>${escapeHtml(t("courses.visibility.open"))}</option>
             <option value="RESTRICTED"${enrollmentPolicy === "RESTRICTED" ? " selected" : ""}>${escapeHtml(t("courses.visibility.restricted"))}</option>
           </select>
+          <!-- #1197: «Åpent» er frivillig; påkrevd for alle er klassen «Alle deltakere» (doc/DECISIONS.md 2026-11-26). -->
+          <p class="small" id="enrollmentPolicyHelp" style="margin: 4px 0 0">${escapeHtml(t("courses.visibilityHelp"))}</p>
         </div>
         <div class="form-field" style="margin-top: var(--space-2)">
           <label for="sortOrder">${escapeHtml(t("courses.sortOrder"))}</label>
