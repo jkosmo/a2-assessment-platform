@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.186.0 - 2026-11-26
+
+**#1198 · Produsenter kan lese alle klasser** (produkteier 26.11.2026, doc/DECISIONS.md). En produsent kan åpne enhver klasse,
+også andres og systemklassen «Alle deltakere», og se kursene med frister og deltakerne. Bare eierne og administrator kan endre.
+Samme regel som for innhold (#1165, #1180).
+
+- **Tjeneren:** de tre lesingene (`GET /classes/:id`, `…/members`, `…/courses`) er åpne for alle produsenter; detaljen bærer
+  `canManage` for den som leser. Alle skriveveiene (endre, arkivere, gjenopprette, slette, legge til og ta bort deltakere og kurs,
+  endre frist) står bak eierskapsvakta som før. En deltaker kommer fortsatt ikke inn. #943 hadde lukket lesingen fordi
+  `/members` gir navn og e-post; produkteier åpnet den med det i tankene (produsentene ser alt deltakerne i kursrapporten).
+- **Klienten:** en klasse leseren ikke eier, har «Åpne» i lista (før bare «Kun for eier»), og åpnes skrivebeskyttet: navn og
+  beskrivelse sperret, linja «Du kan lese, men bare eierne kan endre.», kursene med frist og deltakerne med e-post, men ingen
+  «Fjern», ingen fristfelt, ingen søk etter deltakere, ingen tildeling, ingen Lagre og ingen Arkiver. Hjelpeteksten «Bare en eier
+  … kan åpne» heter nå «… kan endre».
+- **Endret i eldre tester:** `m2-content-ownership-enforcement.test.ts` festet at lesingen var vaktet (#943); den måler nå at
+  den er åpen, og vakta for ueide klasser måles på en skrivevei.
+- **Tester:** `test/m2-class-read-by-producers-1198.test.ts` (7: lesing med `canManage: false`, eier og admin som kontroll,
+  ni skriveveier som alle gir 403 uten å endre noe, eieren kan endre, systemklassen, en deltaker utenfor, 404),
+  `test/e2e/class-read-by-producers-1198.spec.ts` (2: skrivebeskyttet med alt synlig og ingen skrivekall; eieren som kontroll).
+- **Mutasjoner:** 5 av 5 røde (vakta tilbake på medlemslista, `canManage` alltid sann, ingen «Åpne», aldri skrivebeskyttet,
+  Lagre alltid skjult).
+
 ## 2.185.0 - 2026-11-26
 
 **#1197 · Skjermen sier forskjellen på «åpent for alle» og «påkrevd for alle».** En SME så flere kurs i «Mine kurs» enn klassene

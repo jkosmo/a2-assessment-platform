@@ -278,6 +278,13 @@ publiseres før kurset. Elementer som ble arkivert for seg, arkivert før 2.159.
 blir stående arkivert: gjenopprett dem hver for seg. Kurset selv kommer alltid tilbake som utkast. Publiser det når du er
 klar. Meldingen etterpå sier hva som faktisk kom tilbake.
 
+### 5a. Andres klasser (fra 2.186.0, #1198)
+
+Du kan åpne og lese alle klasser, også dem andre eier, og systemklassen «Alle deltakere»: kursene med frister og deltakerne
+(navn og e-post). En klasse du ikke eier, står med «Åpne» og «Kun for eier» i lista, og åpnes skrivebeskyttet: du kan ikke
+endre navnet, legge til eller fjerne deltakere eller kurs, endre fristen eller arkivere. Det kan bare eierne og en
+administrator. Vil du bli eier, ber du en av eierne (Innstillinger → Eiere).
+
 ### 5b. Arkivere, gjenopprette og slette en klasse, og slette et tema (fra 2.181.0, #1168)
 
 **Arkiver** på en klasse åpner en dialog som sier hva som skjer: klassen forsvinner fra de aktive, kurs medlemmene bare har fått

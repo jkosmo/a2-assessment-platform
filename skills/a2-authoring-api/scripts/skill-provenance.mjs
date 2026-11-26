@@ -14,7 +14,7 @@
 // «hvilken versjon av skillet laget dette?» kan besvares fra revisjonsraden.
 
 export const SKILL_NAME = "a2-authoring-api";
-export const SKILL_VERSION = "2.185.0";
+export const SKILL_VERSION = "2.186.0";
 
 /**
  * @param {{ agentRunId?: string }} [options]  agentRunId når kjøringen har en (samme id som API-veien bruker)

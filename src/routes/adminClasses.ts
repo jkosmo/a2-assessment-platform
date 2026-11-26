@@ -69,10 +69,20 @@ adminClassesRouter.post("/", async (request, response, next) => {
 });
 
 // #1046 nivå to: klassen som åpnet element — hent én, og lagre navn/beskrivelse med Lagre-knappen.
-adminClassesRouter.get("/:classId", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
+// #1198 (produkteier 26.11.2026, doc/DECISIONS.md): LESINGEN er åpen for alle produsenter, som for innhold (#1165): klassen,
+// kursene med frister og deltakerne (de tre GET-rutene her). Alle skriverutene står bak eierskapsvakta som før. `canManage`
+// sier om leseren kan endre klassen, så skjermen viser den skrivebeskyttet ellers (samme regel som lista, systemklassen bare
+// for administrator).
+adminClassesRouter.get("/:classId", async (request: Request<{ classId: string }>, response, next) => {
   try {
     const klass = await getClass(request.params.classId);
-    response.json({ class: { ...klass, lifecycle: deriveClassLifecycle(klass) } });
+    const manageable = await listManageableContentIds({
+      contentType: "CLASS",
+      contentIds: [klass.id],
+      actorUserId: request.context?.userId ?? "",
+      roles: request.context?.roles ?? [],
+    });
+    response.json({ class: { ...klass, lifecycle: deriveClassLifecycle(klass), canManage: manageable.has(klass.id) } });
   } catch (error) {
     next(error);
   }
@@ -129,7 +139,8 @@ adminClassesRouter.post("/:classId/restore", requireContentOwnership("CLASS", "c
 //
 // Trygt å stramme: «Administrer» er eneste vei inn i `openClass`, og den knappen rendres bare når
 // `canManage` er sann. Systemklasser er ueide og forvaltes dermed bare av administrator, som før.
-adminClassesRouter.get("/:classId/members", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
+// #1198: åpen for alle produsenter (lesing). Å legge til og ta bort deltakere står bak eierskapet.
+adminClassesRouter.get("/:classId/members", async (request: Request<{ classId: string }>, response, next) => {
   try {
     response.json({ members: await listClassMembers(request.params.classId) });
   } catch (error) {
@@ -169,7 +180,8 @@ const CLASS_OWNER_ASSIGNS_ANY_COURSE = requireContentOwnership("CLASS", "classId
 
 // #943: makkeren til `/members` — samme skjerm, samme kall, samme vakt. Uten den kunne en fremmed
 // SMO lese hvilke kurs en klasse er tildelt, og med hvilke frister.
-adminClassesRouter.get("/:classId/courses", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
+// #1198: åpen for alle produsenter (lesing). Å tildele, endre frist og ta bort står bak eierskapet.
+adminClassesRouter.get("/:classId/courses", async (request: Request<{ classId: string }>, response, next) => {
   try {
     response.json({ courses: await listClassCourseAssignments(request.params.classId, requestLocale(request)) });
   } catch (error) {

@@ -117,9 +117,16 @@ function getListPage() {
       // #787 slice 5: eier/admin styrer om handlingene vises (speiler eierskaps-vakta). Systemklasser
       // er ueide → bare admin forvalter dem, som før.
       const canManage = c.canManage !== false;
-      if (!canManage) return [`<span class="row-readonly-note" title="${escapeHtml(tNav("classes.ownerOnlyHint"))}">${escapeHtml(tNav("ui.ownerOnly"))}</span>`];
-      const archived = lifecycleOf(c) === "archived";
       const id = escapeHtml(c.id);
+      // #1198: alle produsenter kan lese alle klasser, så «Åpne» står også for en klasse leseren ikke eier (den åpnes
+      // skrivebeskyttet). Før sto bare «Kun for eier», uten vei inn.
+      if (!canManage) {
+        return [
+          `<button class="row-action-btn" data-action="open" data-id="${id}">${escapeHtml(tNav("ui.action.open"))}</button>`,
+          `<span class="row-readonly-note" title="${escapeHtml(tNav("classes.ownerOnlyHint"))}">${escapeHtml(tNav("ui.ownerOnly"))}</span>`,
+        ];
+      }
+      const archived = lifecycleOf(c) === "archived";
       const name = escapeHtml(c.name);
       // #1046 D3: Åpne · Arkiver, og på arkiverte rader Gjenopprett · Slett.
       return [
@@ -382,7 +389,8 @@ function getFormPage() {
     },
     tabs: { items: () => [{ id: "rediger", label: tNav("ui.tab.edit") }, { id: "innstillinger", label: tNav("ui.tab.settings") }], initial: "rediger" },
     body: () => classFormBodyHtml(),
-    save: { onSave: () => saveClassForm() },
+    // #1198: Lagre er skjult for en klasse leseren ikke kan endre (som `courseIsLocked` for kurs).
+    save: { onSave: () => saveClassForm(), get hidden() { return classIsLocked(); } },
     afterRender: () => bindClassFormHandlers(),
   });
   formPage.installGuards();
@@ -402,8 +410,9 @@ async function openClass(id) {
         apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/courses`, getHeaders).then((r) => r.courses ?? []),
         apiFetch("/api/admin/content/courses", getHeaders).then((r) => r.courses ?? []),
       ]);
-      // canManage kommer fra lista; enkeltoppslaget går gjennom eierskapsvakta, så den som kom hit kan forvalte.
-      if (klass) klass.canManage = true;
+      // #1198: lesingen er åpen for alle produsenter, og tjeneren sier `canManage` for den som leser. En eldre tjener sender
+      // ikke feltet; der gikk enkeltoppslaget gjennom eierskapsvakta, så den som kom hit, kunne forvalte.
+      if (klass) klass.canManage = klass.canManage !== false;
     }
   } catch (err) {
     if (token !== viewToken) return;
@@ -419,6 +428,12 @@ async function openClass(id) {
   if (!id) document.getElementById("className")?.focus();
 }
 
+/** #1198: den åpne klassen er lagret, og leseren kan ikke endre den (ikke eier; systemklassen for en produsent). */
+function classIsLocked() {
+  const st = openClassState;
+  return Boolean(st?.id) && st?.klass?.canManage === false;
+}
+
 function classFormBodyHtml() {
   const st = openClassState ?? { klass: null, members: [], courses: [], allCourses: [] };
   const k = st.klass;
@@ -426,11 +441,15 @@ function classFormBodyHtml() {
   // Produkteier 2026-11-08: ingen nye deltakere eller kurs i en arkivert klasse. Serveren nekter (`class_archived`); her vises ikke
   // feltene i det hele tatt, bare hvorfor. Å fjerne en deltaker eller et kurs går fortsatt. Etter «Gjenopprett» er feltene tilbake.
   const archived = Boolean(k?.archivedAt);
+  // #1198: en klasse leseren ikke kan endre (ikke eier, eller systemklassen for en produsent), vises skrivebeskyttet: ingen «Fjern»,
+  // ingen fristfelt, ingen søk etter deltakere eller tildeling av kurs, og Lagre er skjult (`classIsLocked`). Tjeneren nekter
+  // skrivingene uansett (eierskapsvakta); dette er for at skjermen ikke skal tilby noe som gir 403.
+  const locked = classIsLocked();
   // #1046 G1: den delte «rad i skjema» (shared.css .form-row) — samme rad som kursets innhold.
   const memberRows = st.members.map((m) => `<li class="form-row">
       <span class="form-row-title">${escapeHtml(m.name)}</span>
       ${m.email ? `<span class="form-row-meta">${escapeHtml(m.email)}</span>` : ""}
-      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-member="${escapeHtml(m.userId)}" aria-label="${escapeHtml(tNav("ui.action.remove"))} ${escapeHtml(m.name)}">${escapeHtml(tNav("ui.action.remove"))}</button></span>
+      ${locked ? "" : `<span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-member="${escapeHtml(m.userId)}" aria-label="${escapeHtml(tNav("ui.action.remove"))} ${escapeHtml(m.name)}">${escapeHtml(tNav("ui.action.remove"))}</button></span>`}
     </li>`).join("");
   const courseRows = st.courses.map((c) => {
     const due = formatDueDate(c.dueAt);
@@ -444,7 +463,7 @@ function classFormBodyHtml() {
     // #1192: fristen endres på raden. Før var eneste vei å fjerne kurset og legge det til igjen, som også sendte «nytt kurs» på
     // nytt. Lagres med knappen, ikke ved `change`: et datofelt sender `change` for hver gyldig dato mens året skrives, og hver
     // lagring flytter `dueSetAt` (som avgjør om en ny hovedversjon kreves). Arkivert klasse eller kurs: serveren nekter, så bare tekst.
-    const editable = !archived && !c.courseArchived;
+    const editable = !archived && !c.courseArchived && !locked;
     const savedDue = c.dueAt ? String(c.dueAt).slice(0, 10) : "";
     const dueHtml = editable
       ? `<label class="form-row-due"><span class="form-row-meta">${escapeHtml(tNav("classes.course.deadline"))}</span>
@@ -456,19 +475,22 @@ function classFormBodyHtml() {
       <span class="form-row-title">${escapeHtml(courseTitle(c.title))}</span>
       ${unreachable ? `<span class="form-row-meta form-row-meta--warn">${escapeHtml(unreachable)}</span>` : ""}
       ${dueHtml}
-      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="${escapeHtml(tNav("classes.course.remove"))}">${escapeHtml(tNav("ui.action.remove"))}</button></span>
+      ${locked ? "" : `<span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="${escapeHtml(tNav("classes.course.remove"))}">${escapeHtml(tNav("ui.action.remove"))}</button></span>`}
       ${editable && Number(c.courseVersionMajor) > 1 ? `<p class="form-row-note" data-due-note hidden>${escapeHtml(tf("classes.course.newVersionDeadlineNote", { major: c.courseVersionMajor }))}</p>` : ""}
     </li>`;
   }).join("");
   const assignedIds = new Set(st.courses.map((c) => c.courseId));
   // #688: don't offer archived courses for assignment — they are retired and shouldn't be assigned.
   const courseOptions = st.allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}" data-major="${escapeHtml(String(c.versionMajor ?? 1))}">${escapeHtml(courseTitle(c.displayTitle))}</option>`).join("");
-  const readOnly = Boolean(k?.isSystem);
+  const readOnly = Boolean(k?.isSystem) || locked;
   const archivedNote = `<p class="small" data-class-archived-note style="margin:6px 0 0">${escapeHtml(tNav("classes.archivedReadonly"))}</p>`;
+  // #1198: i stedet for søk og tildeling, for den som bare kan lese. Systemklassen har sin egen linje (under).
+  const lockedNote = locked && !k?.isSystem ? `<p class="small" data-class-readonly-note>${escapeHtml(tNav("adminContent.readOnlyNotice"))}</p>` : "";
   return `
     <div data-form-tab="rediger">
     <div class="detail-section">
       <h2>${escapeHtml(tNav("ui.kind.class"))}</h2>
+      ${lockedNote}
       <div class="form-field">
         <label for="className">${escapeHtml(tNav("ui.name"))} <span class="required-note">${escapeHtml(tNav("ui.required"))}</span></label>
         <input type="text" id="className" data-form-title value="${escapeHtml(k?.name ?? "")}" ${readOnly ? "disabled" : ""} autocomplete="off" />
@@ -477,14 +499,14 @@ function classFormBodyHtml() {
         <label for="classDescription">${escapeHtml(tNav("ui.description"))}</label>
         <textarea id="classDescription" rows="3" ${readOnly ? "disabled" : ""}>${escapeHtml(k?.description ?? "")}</textarea>
       </div>
-      ${readOnly ? `<p class="small">${escapeHtml(tNav("classes.systemReadonly"))}</p>` : ""}
-      ${readOnly ? `<p class="small" data-system-required-note>${escapeHtml(tNav("classes.systemRequiredNote"))}</p>` : ""}
+      ${k?.isSystem ? `<p class="small">${escapeHtml(tNav("classes.systemReadonly"))}</p>` : ""}
+      ${k?.isSystem ? `<p class="small" data-system-required-note>${escapeHtml(tNav("classes.systemRequiredNote"))}</p>` : ""}
     </div>
     ${isNew ? `<div class="detail-section" data-form-untracked><p class="small" style="margin:0">${escapeHtml(tNav("classes.saveFirstMembers"))}</p></div>` : `
     <div class="detail-section" data-form-untracked>
       <h2>${escapeHtml(tf("classes.membersHeading", { count: st.members.length }))}</h2>
       <ul class="form-rows" id="memberChips">${memberRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noMembers"))}</li>`}</ul>
-      ${archived ? archivedNote : `<div class="form-add-row">
+      ${locked ? "" : archived ? archivedNote : `<div class="form-add-row">
         <label for="studentSearch" class="sr-only">${escapeHtml(tNav("classes.memberSearchLabel"))}</label>
         <input type="text" id="studentSearch" placeholder="${escapeHtml(tNav("classes.memberSearchPlaceholder"))}" autocomplete="off" />
       </div>
@@ -493,7 +515,7 @@ function classFormBodyHtml() {
     <div class="detail-section" data-form-untracked>
       <h2>${escapeHtml(tf("classes.coursesHeading", { count: st.courses.length }))}</h2>
       <ul class="form-rows" id="courseChips">${courseRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noCourses"))}</li>`}</ul>
-      ${archived ? archivedNote : `<div class="form-add-row">
+      ${locked ? "" : archived ? archivedNote : `<div class="form-add-row">
         <label for="courseSelect" class="sr-only">${escapeHtml(tNav("classes.courseSelectLabel"))}</label>
         <select id="courseSelect"><option value="">${escapeHtml(tNav("classes.pickCourse"))}</option>${courseOptions}</select>
         <label for="dueAtInput" style="font-size:13px;color:var(--color-meta);display:inline-flex;align-items:center;gap:6px">
