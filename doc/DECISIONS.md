@@ -2572,3 +2572,18 @@ Kartlagt i `doc/design/PLAN_1169_1171_HODER_OG_RADER.md`. Produkteier avgjorde 2
 Valgt i planen, ikke spurt: **«Erstatt fra fil»** er navnet i hodet for både modul (før «Importer») og seksjon.
 
 **Sak:** #1169, #1171 · **Dato:** 2026-11-26 · **Status:** avgjort av produkteier (1–4)
+
+## «Åpen» og «Alle deltakere» er to ting; produsenter leser alle klasser (2026-11-26)
+
+Produkteier 26.11.2026, etter at en SME så flere kurs i «Mine kurs» enn klassene skulle gi (det var kursenes «Åpen»):
+
+- **Begge måtene å gi alle et kurs beholdes**, fordi de betyr ulike ting. «Åpen» (kursets Innstillinger) gjør kurset
+  **tilgjengelig og frivillig**: ingen frist, ingen påminnelser eller e-post, ikke utestående. Tildeling til systemklassen «Alle
+  deltakere» gjør det **påkrevd for alle**: frist, påminnelser, e-post om nytt kurs, og utestående i Status, kursrapporten og
+  mandagseposten. Samme regel som #1175: et begrep med to betydninger får to navn. Skjermen skal si forskjellen (#1197).
+- **Alle produsenter kan lese alle klasser** (kursene med frister og deltakerne); bare eierne og administrator endrer. Samme regel
+  som for innhold (#1165, #1180). Deltakerlistene har navn og e-post til kolleger; det er godtatt fordi produsentene alt ser
+  deltakerne i kursrapporten, og plattformen er intern (#1198).
+- **Rekkefølgen:** #1197 og #1198 før #1169/#1171, fordi de rører de samme skjermene.
+
+**Sak:** #1197, #1198 · **Dato:** 2026-11-26 · **Status:** avgjort av produkteier
