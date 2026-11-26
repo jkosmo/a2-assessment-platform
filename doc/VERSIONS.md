@@ -23,6 +23,13 @@ Samme regel som for innhold (#1165, #1180).
   `test/e2e/class-read-by-producers-1198.spec.ts` (2: skrivebeskyttet med alt synlig og ingen skrivekall; eieren som kontroll).
 - **Mutasjoner:** 5 av 5 røde (vakta tilbake på medlemslista, `canManage` alltid sann, ingen «Åpne», aldri skrivebeskyttet,
   Lagre alltid skjult).
+- **QA-porten (Claude, bare lesing): GO.** Ingen skrivevei er åpnet (alle åtte skriverutene og
+  `CLASS_OWNER_ASSIGNS_ANY_COURSE` krever eierskap; eierpanelets skriving vaktes for seg). Bare ADMINISTRATOR og
+  SUBJECT_MATTER_OWNER slipper inn i ruteren; agent-tokenet når ingen klasserute. To svakheter i e2e-testen er rettet: mocken
+  for eierpanelet sendte et felt panelet ikke leser (nå `canManage`, og testen sjekker at «Rediger» for eiere mangler, med eieren
+  som kontroll), og skrivinger mot deltakere og kurs ble ikke fanget. Kjent mangel: en arkivert klasse leseren ikke eier, viser
+  ikke arkivlinja i skjemaet (merket «Arkivert» står i hodet).
+- **Integrasjon:** 1548 av 1548.
 
 ## 2.185.0 - 2026-11-26
 

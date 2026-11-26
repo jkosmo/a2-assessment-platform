@@ -24,13 +24,20 @@ async function mock(page: Page, canManage: boolean) {
     if (route.request().method() !== "GET") { writes.push(`${route.request().method()} ${route.request().url()}`); return route.fulfill(json({ error: "content_ownership" }, 403)); }
     return route.fulfill(json({ class: { ...klass, lifecycle: "active" } }));
   });
-  await page.route("**/api/admin/content/classes/*/members", (route: Route) =>
-    route.fulfill(json({ members: [{ userId: "u1", name: "Kari Nordmann", email: "kari@x.no", addedAt: "2026-11-01T00:00:00.000Z" }] })));
-  await page.route("**/api/admin/content/classes/*/courses", (route: Route) =>
-    route.fulfill(json({ courses: [{ courseId: "course-1", title: "Arbeidsmiljø", dueAt: "2027-01-15T00:00:00.000Z", coursePublished: true, courseArchived: false, courseVersionMajor: 1 }] })));
+  // QA 2.186.0: skrivinger mot deltakere og kurs (også /members/:userId og /courses/:courseId) fanges, ikke bare mot klassen.
+  await page.route("**/api/admin/content/classes/*/members**", (route: Route) => {
+    if (route.request().method() !== "GET") { writes.push(`${route.request().method()} ${route.request().url()}`); return route.fulfill(json({ error: "content_ownership" }, 403)); }
+    return route.fulfill(json({ members: [{ userId: "u1", name: "Kari Nordmann", email: "kari@x.no", addedAt: "2026-11-01T00:00:00.000Z" }] }));
+  });
+  await page.route("**/api/admin/content/classes/*/courses**", (route: Route) => {
+    if (route.request().method() !== "GET") { writes.push(`${route.request().method()} ${route.request().url()}`); return route.fulfill(json({ error: "content_ownership" }, 403)); }
+    return route.fulfill(json({ courses: [{ courseId: "course-1", title: "Arbeidsmiljø", dueAt: "2027-01-15T00:00:00.000Z", coursePublished: true, courseArchived: false, courseVersionMajor: 1 }] }));
+  });
   await page.route("**/api/admin/content/courses", (route: Route) =>
     route.fulfill(json({ courses: [{ id: "course-2", title: JSON.stringify({ nb: "Personvern" }), displayTitle: "Personvern", archivedAt: null }] })));
-  await page.route("**/api/admin/content-owners/CLASS/*", (route: Route) => route.fulfill(json({ owners: [], canManageOwners: false })));
+  // Feltet eierpanelet leser, er `canManage` (owner-panel.js); tjeneren avgjør det.
+  await page.route("**/api/admin/content-owners/CLASS/*", (route: Route) =>
+    route.fulfill(json({ owners: [{ userId: "smo-1", name: "Eier Eiersen", email: "eier@x.no" }], canManage })));
   return writes;
 }
 
@@ -57,6 +64,10 @@ test("en klasse leseren ikke eier: «Åpne» i lista, og klassen vises skrivebes
   await expect(page.locator("#assignCourseBtn")).toHaveCount(0);
   await expect(page.locator("#formSaveBtn")).toHaveCount(0);
   await expect(page.locator('.form-page-actions [data-action="archive"]')).toHaveCount(0);
+  // Eierne vises, men kan ikke endres herfra.
+  await page.locator("#formTab-innstillinger").click();
+  await expect(page.locator("#classOwnerPanelHost")).toContainText("Eier Eiersen");
+  await expect(page.locator("#classOwnerPanelHost .owner-edit-toggle, #classOwnerPanelHost .owner-remove")).toHaveCount(0);
   expect(writes).toEqual([]);
 });
 
@@ -71,4 +82,6 @@ test("kontroll: eieren får klassen redigerbar, som før", async ({ page }) => {
   await expect(page.locator("#studentSearch")).toBeVisible();
   await expect(page.locator("#assignCourseBtn")).toBeVisible();
   await expect(page.locator("#formSaveBtn")).toBeVisible();
+  await page.locator("#formTab-innstillinger").click();
+  await expect(page.locator("#classOwnerPanelHost .owner-edit-toggle")).toHaveCount(1);
 });
