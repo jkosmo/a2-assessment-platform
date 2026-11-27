@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.187.1 - 2026-11-28
+
+**#1171 · Arkiverte kurs beholder versjonsbrikken.** Sjekket mot ekte stage-data etter 2.187.0: 20 av 51 arkiverte kurs står på
+v1.0 uten `publishedAt` og mistet brikken. Om de var publisert, kan klienten ikke vite (kurset har ikke noe «noen gang
+publisert»-felt; `CourseVersion` får rader bare ved en hovedversjon). Regelen er nå: ingen brikke bare for et kurs i utkast på v1.0
+uten `publishedAt`. Kjent mangel som står igjen: et kurs på v1.0 som er avpublisert, mister brikken (0 slike på stage). Seksjoner:
+210 på stage, 126 publiserte med brikke, 84 arkiverte uten (før viste kolonnen «v1» for dem uansett).
+
+- **Tester:** `test/e2e/state-words-1171.spec.ts` (kurslista: et arkivert v1.0-kurs har «v1.0»). Mutasjon: 1 av 1 rød (den gamle
+  regelen tilbake).
+
 ## 2.187.0 - 2026-11-27
 
 **#1171 skive 1 · Ett ord per tilstand, versjonen som egen brikke, «Alt lagret» bare når noe er lagret**

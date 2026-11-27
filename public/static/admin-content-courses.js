@@ -946,11 +946,13 @@ function initPendingPublishDialog() {
 // kursets nåværende hovedversjon, stilles ikke spørsmålet. Tjeneren eier reglene (og gjør en hovedversjon
 // uten kursbevis til mindre); dialogen viser konsekvensen.
 
-// #1171: ingen brikke før første publisering. Kurset har ikke noe «noen gang publisert»-felt; et kurs som aldri er publisert, står på
-// v1.0 uten publishedAt. Kjent mangel: et kurs på v1.0 som er avpublisert eller arkivert, mister også brikken.
+// #1171: ingen brikke før første publisering. Kurset har ikke noe «noen gang publisert»-felt (`CourseVersion` får rader bare ved en
+// hovedversjon); et kurs som aldri er publisert, står i utkast på v1.0 uten publishedAt. Et ARKIVERT kurs beholder brikken som før:
+// på stage 28.11.2026 var 20 av 51 arkiverte kurs v1.0 uten publishedAt, og om de var publisert, kan ikke klienten vite.
+// Kjent mangel: et kurs på v1.0 som er avpublisert (utkast igjen), mister brikken.
 function courseEverPublished(course) {
   const life = lifecycleOf(course);
-  return Boolean(course?.publishedAt) || life === "published" || life === "published_with_draft"
+  return Boolean(course?.publishedAt) || life !== "draft"
     || (Number(course?.versionMajor) || 1) > 1 || (Number(course?.versionMinor) || 0) > 0;
 }
 

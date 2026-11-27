@@ -121,12 +121,16 @@ test.describe("#1171 — listene", () => {
     await page.route("**/api/admin/content/courses", (route: Route) => route.fulfill(json({ courses: [
       kurs("k-ny", "Aldri publisert", { publishedAt: null, lifecycle: "draft", versionMajor: 1, versionMinor: 0 }),
       kurs("k-pub", "Publisert kurs", { publishedAt: "2026-10-01T08:00:00.000Z", lifecycle: "published", versionMajor: 3, versionMinor: 2 }),
+      // Arkivert på v1.0 uten publishedAt: kan ha vært publisert, så brikken står som før (stage-data 28.11.2026).
+      kurs("k-ark", "Arkivert kurs", { publishedAt: null, archivedAt: "2026-10-05T08:00:00.000Z", lifecycle: "archived", versionMajor: 1, versionMinor: 0 }),
     ] })));
     await page.goto("/admin-content/courses");
     const rad = (tekst: string) => page.locator(".list-table tr", { hasText: tekst });
     await expect(rad("Publisert kurs").locator(".course-version-chip")).toHaveText("v3.2");
     await expect(rad("Aldri publisert").locator(".status-badge--draft")).toHaveText("Utkast");
     await expect(rad("Aldri publisert").locator(".course-version-chip")).toHaveCount(0);
+    await page.locator('.list-filter-btn[data-filter="archived"], [data-list-filter="archived"]').first().click();
+    await expect(rad("Arkivert kurs").locator(".course-version-chip")).toHaveText("v1.0");
   });
 });
 
