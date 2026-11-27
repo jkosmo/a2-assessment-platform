@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.187.0 - 2026-11-27
+
+**#1171 skive 1 · Ett ord per tilstand, versjonen som egen brikke, «Alt lagret» bare når noe er lagret**
+(doc/design/PLAN_1169_1171_HODER_OG_RADER.md, «Merkene»). Bare klienten.
+
+- **Ordene:** «Utkast», «Publisert» og «Nyere utkast» overalt. I modulen viker «Arbeidsutkast» (hodet for en ny modul,
+  «Forhåndsvisning viser»), «Live» og «Live + utkast» (forhåndsvisningens merke; «Live + utkast» sto også for et utkast som
+  aldri var publisert), «Modulgrunnlag», og «Live» / «Åpen nå» i versjonslista (nå «Publisert» / «Åpen»). Samtaleloggen sier
+  «Publisert v2.1» i stedet for «Live – Modul v2.1». To nøkler som ikke lenger brukes, er fjernet (`stateRail.editing.workingDraft`,
+  `stateRail.live.published`).
+- **Versjonen** står som egen brikke ved merket, likt for kurs, modul og seksjon, i lista og i hodet (`versionChipHtml` i
+  `content-status-badge.js`). Modulens hode sa «Publisert v2.1» i ett merke; seksjonslista hadde en egen versjonskolonne som viste
+  «v1» også for et utkast som aldri var publisert. **Ingen brikke før første publisering**: et nytt kurs viste «v1.0».
+- **Én form:** modullistas lokale pille (`admin-content-library.html`) er borte; merket er det i `shared.css`.
+- **«Alt lagret»** står ikke på en ny side før noe er lagret (`isNew` i `form-page.js`, satt på kurs, modul, seksjon og klasse).
+- **Ikke en feil likevel:** planen kalte «Ulagrede endringer» rett etter at en ny modul er lagret med bare navnet en feil. QA-porten
+  viste at det er sant: typen (fritekst/flervalg) lagres på modulversjonen, ikke med navnet (`POST /modules` tar den ikke), og
+  finnes bare i det beholdte utkastet til innholdet lagres. Den første rettelsen (merke utkastet som plassholder) ville vist «Alt
+  lagret» mens typen gikk tapt ved å gå bort, og er tatt ut. Testen fester nå at merket står. Skal merket bort, må typen lagres med
+  navnet (en tjenerendring), og det hører til en senere skive.
+- **Avpublisert modul:** hodet sa «Utkast v2.1» i ett merke; nå «Utkast» og versjonsbrikken (QA-porten).
+- **Én form også i forhåndsvisningen:** modulens forhåndsvisningsmerke brukte en egen pille (`admin-content.html`); nå
+  `.status-badge--*` som ellers (QA-porten).
+- **Kjente mangler:** brikken forsvinner når innholdet ikke er publisert NÅ. Kurset har ikke noe «noen gang publisert»-felt, så et
+  kurs på v1.0 som er avpublisert eller arkivert, mister brikken (regelen: publisert nå, eller versjon over 1.0). Modul- og
+  seksjonslista viser versjonen tjeneren kaller aktiv, og den er tom etter avpublisering. Modulens hode viser den (fra den åpnede
+  versjonen). Rettes eventuelt med et felt fra tjeneren; sjeldent, og ingen data går tapt.
+- **Endret i eldre tester:** fire e2e-er leste versjonen inne i «Publisert»-merket eller fant én `.status-chip` der det nå er to
+  (`admin-content-module-header-newer-draft`, `module-version-number-934-5b`, `section-draft-1163`,
+  `section-publish-new-version-1095`); `admin-content-state-rail.test.js` festet nøklene som er borte (også
+  `shell.header.draftVersion`).
+- **Tester:** `test/e2e/state-words-1171.spec.ts` (10).
+- **Mutasjoner:** 7 av 7 røde («Alt lagret» på ny side, kursbrikke før publisering, seksjonsbrikke for utkast, «Nyere utkast» for et
+  utkast uten publisert versjon, ingen versjonsbrikke i modulhodet, «Utkast v2.1» i ett merke, «Arbeidsutkast» tilbake).
+- **QA-porten:** NO-GO i første runde (plassholderen over, riktig funnet), rettet. Rotårsak: planen kalte merket en feil ut fra
+  koden (`sessionDraft` legges tilbake), uten å spørre hva utkastet bar. Sjekken som fanget det, var porten; pre-flight punkt 2
+  («hvem leser tilstanden jeg skriver») ville også gjort det — det var ikke kjørt for en endring som så ut som ren visning.
+
 ## 2.186.1 - 2026-11-27
 
 **#1198 · «Alle deltakere» viste «Deltakere (0)»** (produkteier 27.11.2026, etter stage-sjekken av 2.186.0). Systemklassen har

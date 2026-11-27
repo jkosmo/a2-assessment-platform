@@ -120,7 +120,7 @@ Lag en modul der **ett** språk mangler i oppgaveteksten.
 ## 3 · Versjonshistorikk (S5)
 
 - [ ] Lag to tydelig forskjellige versjoner gjennom vanlig lagring.
-- [ ] **Innstillinger → Lagrede versjoner**: nyeste først, merker for **Live** og **Åpen nå**.
+- [ ] **Innstillinger → Lagrede versjoner**: nyeste først, merker for **Publisert** og **Åpen** (før 2.187.0: «Live» og «Åpen nå»).
 - [ ] **Gjenopprett** den eldste. Kontroller at
       - Rediger faktisk viser det gamle innholdet (oppgavetekst, fasit, kriterier, prompt, MCQ),
       - historikken fikk **nøyaktig én** ny versjon — ingenting slettet,

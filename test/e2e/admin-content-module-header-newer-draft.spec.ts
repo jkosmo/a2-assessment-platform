@@ -32,8 +32,10 @@ test.describe("modulhodet sier «Nyere utkast» når skjemaet viser en lagring o
   test("publisert med en nyere lagring åpen: «Publisert v1.2» og «Nyere utkast», ikke bare «Utkast»", async ({ page }) => {
     await aapneModul(page, { live: LIVE, lastet: UTKAST });
     const tilstand = page.locator("#moduleFormHead .form-page-state");
-    await expect(tilstand.locator(".status-badge--published")).toHaveText(/v1\.2/);
-    await expect(tilstand.locator(".status-chip")).toHaveText(nyereUtkast);
+    // #1171: versjonen er en egen brikke ved merket (før «Publisert v1.2» i ett merke).
+    await expect(tilstand.locator(".status-badge--published")).toHaveCount(1);
+    await expect(tilstand.locator(".version-chip")).toHaveText("v1.2");
+    await expect(tilstand.locator(".status-chip:not(.version-chip)")).toHaveText(nyereUtkast);
     await expect(tilstand.locator(".status-badge--draft")).toHaveCount(0);
   });
 
@@ -41,15 +43,16 @@ test.describe("modulhodet sier «Nyere utkast» når skjemaet viser en lagring o
     await aapneModul(page, { live: null, lastet: UTKAST });
     const tilstand = page.locator("#moduleFormHead .form-page-state");
     await expect(tilstand.locator(".status-badge--draft")).toHaveText(bareUtkast);
-    await expect(tilstand.locator(".status-chip")).toHaveCount(0);
+    await expect(tilstand.locator(".status-chip:not(.version-chip)")).toHaveCount(0);
     await expect(tilstand.locator(".status-badge--published")).toHaveCount(0);
   });
 
   test("kontroll: den publiserte versjonen åpen gir bare «Publisert v1.2»", async ({ page }) => {
     await aapneModul(page, { live: LIVE, lastet: LIVE });
     const tilstand = page.locator("#moduleFormHead .form-page-state");
-    await expect(tilstand.locator(".status-badge--published")).toHaveText(/v1\.2/);
-    await expect(tilstand.locator(".status-chip")).toHaveCount(0);
+    await expect(tilstand.locator(".status-badge--published")).toHaveCount(1);
+    await expect(tilstand.locator(".version-chip")).toHaveText("v1.2");
+    await expect(tilstand.locator(".status-chip:not(.version-chip)")).toHaveCount(0);
     await expect(tilstand.locator(".status-badge--draft")).toHaveCount(0);
   });
 });

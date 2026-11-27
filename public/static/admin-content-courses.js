@@ -3,7 +3,7 @@ const formatDate = createDateFormatter(() => currentLocale);
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "");
 import { pickLocalizedText, resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
 import { escapeHtml } from "./html-escape.js";
-import { lifecycleBadge, lifecycleOf, retentionLineHtml } from "./content-status-badge.js";
+import { lifecycleBadge, lifecycleOf, retentionLineHtml, versionChipHtml } from "./content-status-badge.js";
 import {
   supportedLocales,
   localeLabels,
@@ -946,9 +946,17 @@ function initPendingPublishDialog() {
 // kursets nåværende hovedversjon, stilles ikke spørsmålet. Tjeneren eier reglene (og gjør en hovedversjon
 // uten kursbevis til mindre); dialogen viser konsekvensen.
 
+// #1171: ingen brikke før første publisering. Kurset har ikke noe «noen gang publisert»-felt; et kurs som aldri er publisert, står på
+// v1.0 uten publishedAt. Kjent mangel: et kurs på v1.0 som er avpublisert eller arkivert, mister også brikken.
+function courseEverPublished(course) {
+  const life = lifecycleOf(course);
+  return Boolean(course?.publishedAt) || life === "published" || life === "published_with_draft"
+    || (Number(course?.versionMajor) || 1) > 1 || (Number(course?.versionMinor) || 0) > 0;
+}
+
 function courseVersionChipHtml(course) {
-  const label = courseVersionLabel(course);
-  return label ? ` <span class="status-chip course-version-chip" title="${escapeHtml(t("courses.version.chipTitle"))}">${escapeHtml(label)}</span>` : "";
+  if (!courseEverPublished(course)) return "";
+  return versionChipHtml(courseVersionLabel(course), { className: "course-version-chip", title: t("courses.version.chipTitle") });
 }
 
 /** Kursets innhold er rekkefølgen av moduler og seksjoner (diskusjonsbryteren er ikke innhold). */
@@ -2458,6 +2466,7 @@ function getCourseFormPage() {
       return courseDetail?.course ? (localizedText(courseDetail.course.title) || "") : "";
     },
     item: () => courseDetail?.course ?? null,
+    isNew: () => !courseDetail?.courseId,
     // #934 skive 3: versjonen («v3.2») ved statusmerket. Et nytt kurs har ingen ennå.
     // #1140 etappe 2: med utkast «Publisert» + «Nyere utkast» (det felles merket), og linja om hvem som lagret det.
     statusHtml: () => {

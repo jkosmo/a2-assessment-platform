@@ -376,6 +376,7 @@ function getFormPage() {
     onBack: () => goToList(),
     title: () => (document.getElementById("className")?.value ?? openClassState?.klass?.name ?? "").trim(),
     item: () => openClassState?.klass ?? null,
+    isNew: () => !openClassState?.id,
     t: tNav,
     actions: () => {
       const k = openClassState?.klass;

@@ -19,7 +19,7 @@ import { showToast } from "/static/toast.js";
 import { runWithBusyButton } from "/static/busy-button.js";
 import { describeAltWarnings } from "/static/mcq-cue-warnings.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
-import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf, retentionLineHtml } from "/static/content-status-badge.js";
+import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf, retentionLineHtml, versionChipHtml } from "/static/content-status-badge.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { createListPage } from "/static/list-page.js";
@@ -243,8 +243,9 @@ function getListPage() {
       // #894: hvilke språk tittelen MANGLER. Ved siden av navnet, fordi det er navnet det gjelder.
       { key: "lang", label: t("ui.lang.col"), className: "col-lang", sortValue: (s) => manglendeSpraak(s).length, render: (s) => spraakMerkeHtml(s, tf) },
       // #1046 steg B/C8: «Nyere utkast»-brikken følger med når tjeneren sier published_with_draft.
-      { key: "status", label: L("colStatus"), className: "col-status", render: (s, ctx) => lifecycleBadge(s, tNav) + (ctx.filter === "archived" ? retentionLineHtml(s, "section", tNav, currentLocale) : "") },
-      { key: "version", label: L("colVersion"), className: "col-version", render: (s) => `v${escapeHtml(s.versionNo ?? "1")}` },
+      // #1171: versjonen som brikke ved merket, som for kurs og modul (før egen kolonne, og «v1» også for et utkast som aldri er
+      // publisert). `versionNo` er den publiserte versjonen fra tjeneren; uten den er det ingen brikke.
+      { key: "status", label: L("colStatus"), className: "col-status", render: (s, ctx) => lifecycleBadge(s, tNav) + sectionVersionChipHtml(s.versionNo) + (ctx.filter === "archived" ? retentionLineHtml(s, "section", tNav, currentLocale) : "") },
       { key: "courses", label: L("colCourses"), className: "col-courses", sortValue: (s) => Number(s.courseCount ?? 0), render: (s) => {
         const courseCount = Number(s.courseCount ?? 0);
         return courseCount > 0
@@ -931,10 +932,11 @@ function getFormPage() {
     onBack: goBackFromEditor,
     title: () => (editing?.title?.[editing.editLocale] ?? "").trim() || pickLocalizedText(editing?.title ?? {}, currentLocale),
     item: () => sectionHeaderItem(),
+    isNew: () => !editing?.id,
     // #1151 skive 3c: merket som før, og for en arkivert seksjon linja om hvorfor den ikke kan endres (som kurset og modulen).
     statusHtml: () => {
       const item = sectionHeaderItem();
-      return item ? lifecycleBadge(item, tNav) + sectionArchivedNoticeHtml() + sectionDraftLineHtml() : "";
+      return item ? lifecycleBadge(item, tNav) + sectionVersionChipHtml(editing?.activeVersionId ? editing.publishedVersionNo : null) + sectionArchivedNoticeHtml() + sectionDraftLineHtml() : "";
     },
     t: tNav,
     actions: () => sectionActions(),
@@ -977,6 +979,11 @@ function sectionCanManage() {
 
 function sectionCanEdit() {
   return sectionCanManage() && !editing?.archivedAt;
+}
+
+/** #1171: «v5» ved merket, bare for en publisert versjon. */
+function sectionVersionChipHtml(versionNo) {
+  return Number.isInteger(versionNo) ? versionChipHtml(`v${versionNo}`, { className: "section-version-chip" }) : "";
 }
 
 function sectionHeaderItem() {

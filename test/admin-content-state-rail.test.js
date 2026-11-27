@@ -180,8 +180,9 @@ describe("state rail is gone — badges in the header, «preview shows» in the 
     // Merkene i hodet: statusHtml til form-page.js.
     expect(js).toContain("statusHtml: moduleStatusBadgesHtml");
     expect(js).toContain('getElementById("previewShows")');
-    expect(js).toContain('"stateRail.live.published"');
-    expect(js).toContain('"shell.header.draftVersion"');
+    // #1171: «Publisert» + versjonsbrikken (før «Publisert v2.1» i ett merke, `stateRail.live.published`).
+    expect(js).toContain('lifecycleStatusBadge("published", t) + versionChipHtml(');
+    expect(js).toContain('lifecycleStatusBadge("draft", t) + versionChipHtml(');
     expect(js).not.toContain("makeSrBadge");
   });
 });

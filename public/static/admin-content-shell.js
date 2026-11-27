@@ -1,7 +1,7 @@
 import { escapeHtml } from "./html-escape.js";
 import { confirmModuleDelete } from "./module-lifecycle-dialogs.js";
 import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
-import { lifecycleBadge } from "./content-status-badge.js";
+import { lifecycleBadge, lifecycleStatusBadge, versionChipHtml } from "./content-status-badge.js";
 import { createFormPage, formPageTexts } from "./form-page.js";
 import { createSettingsTab } from "./admin-content-settings-tab.js";
 import { createPublishFlow } from "./admin-content-publish.js";
@@ -973,11 +973,13 @@ function renderPreview() {
       audience: forParticipant ? "participant" : "author",
       versionChain: versionChainParts.join(" · "),
       badgeClass: hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell",
+      // #1171: samme ord som merkene ellers — «Publisert», «Nyere utkast» (en lagret versjon nyere enn den publiserte), «Utkast».
+      // Før «Live», «Live + utkast» (også for et utkast som aldri var publisert) og «Modulgrunnlag».
       badgeText: hasDraft
         ? t("shell.draft.unsavedBadge")
-        : isLive ? t("adminContent.status.badge.live")
-        : isDraft ? t("adminContent.status.badge.draft")
-        : t("adminContent.status.badge.shellOnly"),
+        : isLive ? t("adminContent.lifecycle.status.published")
+        : isDraft && mod.activeVersionId ? t("adminContent.lifecycle.newerDraft")
+        : t("adminContent.lifecycle.status.draft"),
     }, opts);
   } else if (hasDraft) {
     previewContent.innerHTML = buildPreviewHtml({
@@ -2220,6 +2222,9 @@ async function saveDraftBundleInBackground(options = {}) {
     if (!hasContent) {
       const keep = sessionDraft;
       await loadModule(selectedModuleId);
+      // #1171 (QA-porten 27.11.2026): «Ulagrede endringer» etter denne lagringen er SANT, ikke en feil. Typen (fritekst/flervalg)
+      // lagres på modulversjonen, ikke med navnet (`POST /modules` tar den ikke), og finnes bare i det beholdte utkastet til
+      // innholdet lagres. Ikke merk utkastet som plassholder her: da sto «Alt lagret», og typen gikk tapt hvis man gikk bort.
       sessionDraft = keep;
       showDraftReadyActions({ quiet: true });
       switchToTab("edit");
@@ -3524,11 +3529,15 @@ function moduleStatusBadgesHtml() {
   const liveNo = moduleVersionNumber(liveVersion) ?? chains?.liveChain?.[0]?.versionNo ?? null;
   const parts = [];
   if (bundle?.module?.archivedAt) parts.push(lifecycleBadge({ lifecycle: "archived" }, t));
-  else if (liveNo != null) parts.push(`<span class="status-badge status-badge--published">${escapeHtml(tf("stateRail.live.published", { versionNo: liveNo }))}</span>`);
+  // #1171: «Publisert» og versjonen som egen brikke, likt kurs og seksjon (før «Publisert v2.1» i ett merke).
+  else if (liveNo != null) parts.push(lifecycleStatusBadge("published", t) + versionChipHtml(`v${liveNo}`, { className: "module-version-chip", title: t("library.versionChipTitle") }));
   // Et utkast som aldri er publisert, har ikke noe nummer. Rekkefølgen av lagringer ved siden av «v2.1» ville sett ut som en høyere versjon.
   const editingNo = moduleVersionNumber(loaded);
-  if (sessionDraft && !loaded) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(t("stateRail.editing.workingDraft"))}</span>`);
-  else if (editingNo != null && !loadedIsLive) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(tf("shell.header.draftVersion", { versionNo: editingNo }))}</span>`);
+  // #1171: «Utkast», samme ord som overalt ellers (før «Arbeidsutkast»).
+  if (sessionDraft && !loaded) parts.push(lifecycleStatusBadge("draft", t));
+  // En tidligere publisert versjon som ikke er den publiserte nå (avpublisert, eller en eldre åpnet): «Utkast» og versjonen som
+  // brikke, som ellers (QA-porten 27.11.2026; før «Utkast v2.1» i ett merke).
+  else if (editingNo != null && !loadedIsLive) parts.push(lifecycleStatusBadge("draft", t) + versionChipHtml(`v${editingNo}`, { className: "module-version-chip", title: t("library.versionChipTitle") }));
   // Produkteier 13.11.2026: ved siden av «Publisert v1.2» sa «Utkast» for lite — forfatteren så ikke at skjemaet viste en
   // nyere, upublisert lagring. Samme ord og samme brikke som kurs og seksjoner bruker: «Nyere utkast». Uten en live versjon
   // er det fortsatt bare «Utkast».
@@ -3687,6 +3696,7 @@ function createModuleFormPage() {
     // #1151 skive 3c: en arkivert modul har ingen Lagre/Avbryt. Leses hver gang hodet tegnes (som kursets).
     save: { onSave: async () => { saveFromHeader(); return false; }, onDiscard: discardFromHeader, get hidden() { return moduleIsLocked(); } },
     isDirty: () => moduleDirtyKind() !== null,
+    isNew: () => !selectedModuleId,
     body: () => "",
   });
   moduleFormHost.addEventListener("click", (event) => {

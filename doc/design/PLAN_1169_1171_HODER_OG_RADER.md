@@ -1,6 +1,6 @@
 # #1169 og #1171 — handlinger og tilstandsmerker i hoder og rader
 
-Status: kartlagt 26.11.2026. Produkteier avgjorde § 4 samme dag (alle som anbefalt; doc/DECISIONS.md). Neste: prototype (Artifact) før bygging. Fra konsistenssjekken
+Status: kartlagt 26.11.2026. Produkteier avgjorde § 4 samme dag (alle som anbefalt; doc/DECISIONS.md). Skive 1 (merkene og «Alt lagret») bygget i 2.187.0. Neste: prototype (Artifact) av hodene og radene før skive 2 og 3. Fra konsistenssjekken
 #1157; rekkefølgen godkjent 21.11.2026 (doc/DECISIONS.md).
 
 ## Kort fortalt
@@ -53,7 +53,7 @@ Kurs kan ikke dupliseres eller døpes om fra lista. «Publiser utkastet» og «P
 | Publisert | «Publisert v1.0» i ett merke (modulens hode); «Publisert» + brikken «v1.0» (kurs, lister); «Live» (modulens versjonsliste, forhåndsvisning); «Live – Modul v…» (samtaleloggen) |
 | Versjonen | Kurs «v3.2», også før første publisering («v1.0», fordi `versionMajor` er 1 fra start). Modul «v2.1», ingen brikke før publisering. Seksjon «v1»/«v5» som heltall i egen kolonne; et utkast som aldri er publisert, viser «v1». Klasse: ingen |
 | Formen | «Publisert» er en pille i modullista (`admin-content-library.html:38`), en firkant ellers (`shared.css:1327`) |
-| Lagret | «Alt lagret» på en ny, tom side før noe er lagret (alle fire: sidene kaller `markClean()` etter første tegning). Modulen viser «Ulagrede endringer» rett etter første lagring med bare navn (`shell.js:2221–2223`: `sessionDraft` legges tilbake etter `loadModule`) — **en feil**, ikke et ordvalg |
+| Lagret | «Alt lagret» på en ny, tom side før noe er lagret (alle fire: sidene kaller `markClean()` etter første tegning). Modulen viser «Ulagrede endringer» rett etter første lagring med bare navn (`shell.js:2221–2223`: `sessionDraft` legges tilbake etter `loadModule`) — **ikke en feil** (rettet 27.11.2026): typen lagres først med innholdet, så noe er ulagret |
 | Annet | Modulens versjonsliste: «Live» og «Åpen nå». «Slett seksjon» mot «Slett» overalt ellers. «Be om endring» er to nøkler i modulens hode |
 
 Ny modul åpner på **Innstillinger**; nytt kurs, ny seksjon og ny klasse på **Rediger**.
@@ -101,7 +101,7 @@ Nytt for seksjon: **Slett** i lista (arkivert), **Dupliser** i hodet.
   før første publisering** (et kurs som aldri er publisert, viser ikke «v1.0»; en seksjon ikke «v1»).
 - **Én form** for merket (den i `shared.css`); modullistas lokale pille viker.
 - **«Alt lagret» bare når noe er lagret.** En ny side som ikke er lagret, viser ingenting der (eller «Ikke lagret ennå», se
-  prototypen). Modulens «Ulagrede endringer» etter første lagring rettes (feil).
+  prototypen). Modulens «Ulagrede endringer» etter første lagring står (ikke en feil: typen lagres først med innholdet; se § 1).
 
 ### Skiver
 

@@ -76,6 +76,17 @@ export function lifecycleBadge(item, t) {
   return lifecycleStatusBadge(lifecycle, t);
 }
 
+/**
+ * #1171: versjonen som egen brikke ved siden av merket — likt for kurs («v3.2»), modul («v2.1») og seksjon («v5»), i lista og
+ * i hodet. Ingen brikke før første publisering: kalleren sender tom `label` da. `className` beholder sidens egen klasse
+ * (testene og stilene leser den).
+ */
+export function versionChipHtml(label, { className = "", title = "" } = {}) {
+  if (!label) return "";
+  const cls = `status-chip version-chip${className ? ` ${className}` : ""}`;
+  return ` <span class="${escapeHtml(cls)}"${title ? ` title="${escapeHtml(title)}"` : ""}>${escapeHtml(label)}</span>`;
+}
+
 // ---------------------------------------------------------------------------
 // #1152 skive 4b (doc/design/PLAN_1148_ARKIVERING_OG_SLETTING.md, «Hva forfatteren ser»): under «Arkiverte» i kurslista,
 // modulbiblioteket og seksjonslista står en linje under statusmerket: «Slettes 13.05.2027» eller «Beholdes: <grunn>».

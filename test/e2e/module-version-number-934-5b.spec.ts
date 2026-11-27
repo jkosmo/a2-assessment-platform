@@ -42,7 +42,9 @@ test.describe("#934 skive 5b — modulsiden", () => {
     const hode = page.locator("#moduleFormHead");
     await expect(hode).toContainText("Publisert v2.1");
     // 2.158.0: «Nyere utkast», samme ord som kurs og seksjoner. Før sto det «Utkast».
-    await expect(hode.locator(".status-chip")).toHaveText("Nyere utkast");
+    // #1171: versjonen står som egen brikke (.version-chip) ved merket; «Nyere utkast» er den andre brikken.
+    await expect(hode.locator(".status-chip:not(.version-chip)")).toHaveText("Nyere utkast");
+    await expect(hode.locator(".version-chip")).toHaveText("v2.1");
     await expect(hode).not.toContainText("v6");
   });
 

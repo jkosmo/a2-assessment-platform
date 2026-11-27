@@ -93,7 +93,7 @@ test.describe("#1163 — seksjonsredigereren lagrer et utkast", () => {
     // Den røde meldingen fra før (#916) er borte.
     await expect(page.locator(".toast--error")).toHaveCount(0);
     // Stripen og merket.
-    await expect(page.locator(".status-chip")).toHaveText("Nyere utkast");
+    await expect(page.locator(".status-chip:not(.version-chip)")).toHaveText("Nyere utkast");
     await expect(page.locator("[data-section-draft-line]")).toContainText("Deltakerne ser versjon 1 til utkastet er publisert.");
 
     // Revisjonen er oppdatert etter lagringen: neste lagring i samme fane sender versjon 2 og tittelen den sendte.

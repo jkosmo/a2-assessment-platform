@@ -58,6 +58,7 @@ export function formPageTexts(t, page) {
  * @property {{ onSave: () => Promise<boolean|void>, onDiscard?: () => void, hidden?: boolean }} [save]
  *   onDiscard: forkast ulagrede endringer (standard: last sida på nytt — det viser det som er lagret,
  *   og et nytt element blir tomt igjen)
+ * @property {() => boolean} [isNew]  elementet er aldri lagret (ingen id ennå): da står ikke «Alt lagret» (#1171).
  * @property {() => boolean} [isDirty]  sider som avleder «ulagret» fra egen tilstand (modulen: skjema,
  *   innstillinger eller utkast) i stedet for å bruke markDirty/markClean. Leses ved hver refreshDirty().
  * @property {(root: HTMLElement) => void} [afterRender]
@@ -159,9 +160,12 @@ export function createFormPage(config) {
     const T = texts();
     const badge = host.querySelector("#formPageDirty");
     if (badge) {
-      badge.textContent = state.dirty ? T.unsaved : T.savedAll;
+      // #1171: «Alt lagret» bare når noe ER lagret. En ny side som aldri er lagret, sier ingenting der før man skriver.
+      const neverSaved = !state.dirty && Boolean(config.isNew?.());
+      badge.textContent = state.dirty ? T.unsaved : neverSaved ? "" : T.savedAll;
       badge.classList.toggle("is-dirty", state.dirty);
       badge.classList.toggle("is-clean", !state.dirty);
+      setHidden(badge, neverSaved);
     }
     const off = !state.dirty || state.saving || state.busy;
     const btn = host.querySelector("#formSaveBtn");

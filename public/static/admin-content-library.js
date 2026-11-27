@@ -2,7 +2,7 @@ import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "./html-escape.js";
 import { createListPage } from "./list-page.js";
-import { lifecycleBadge, lifecycleOf, retentionLineHtml } from "./content-status-badge.js";
+import { lifecycleBadge, lifecycleOf, retentionLineHtml, versionChipHtml } from "./content-status-badge.js";
 import { moduleVersionLabel } from "./version-label.js";
 import {
   supportedLocales,
@@ -181,7 +181,7 @@ function resolveActiveWorkspaceRoles() {
 // #934 skive 5b: versjonen som er ute, i samme merke som i kurslista. En modul uten aktiv versjon har ikke noe å vise.
 function moduleVersionChipHtml(m) {
   const label = moduleVersionLabel({ versionMajor: m.activeVersionMajor, versionMinor: m.activeVersionMinor, versionNo: m.activeVersionNo });
-  return label ? ` <span class="status-chip module-version-chip" title="${escapeHtml(t("library.versionChipTitle"))}">${escapeHtml(label)}</span>` : "";
+  return versionChipHtml(label, { className: "module-version-chip", title: t("library.versionChipTitle") });
 }
 
 function getListPage() {
