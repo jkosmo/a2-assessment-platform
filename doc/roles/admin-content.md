@@ -285,6 +285,9 @@ Du kan åpne og lese alle klasser, også dem andre eier, og systemklassen «Alle
 endre navnet, legge til eller fjerne deltakere eller kurs, endre fristen eller arkivere. Det kan bare eierne og en
 administrator. Vil du bli eier, ber du en av eierne (Innstillinger → Eiere).
 
+«Alle deltakere» har ingen deltakerliste: alle med deltakerrollen er med automatisk, og klassen sier det der lista ellers står
+(fra 2.186.1).
+
 ### 5b. Arkivere, gjenopprette og slette en klasse, og slette et tema (fra 2.181.0, #1168)
 
 **Arkiver** på en klasse åpner en dialog som sier hva som skjer: klassen forsvinner fra de aktive, kurs medlemmene bare har fått

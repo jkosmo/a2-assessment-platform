@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.186.1 - 2026-11-27
+
+**#1198 · «Alle deltakere» viste «Deltakere (0)»** (produkteier 27.11.2026, etter stage-sjekken av 2.186.0). Systemklassen har
+ingen medlemsrader: alle med deltakerrollen er med (`getUserClassIds`). Inne i klassen sto likevel «Deltakere (0)» og «Ingen
+deltakere ennå», som leste som en tom klasse. Nå står overskriften «Deltakere» uten tall og linja «Alle med deltakerrollen er med
+i denne klassen automatisk. De står ikke oppført her, fordi medlemskapet følger rollen.» (nb, nn, en-GB). Bare klienten.
+
+- **Fra QA-porten (GO):** klasselista viste «0» i Medlemmer-kolonnen for systemklassen; nå «Alle» (størst ved sortering).
+  Administrator fikk søkefeltet for å legge deltakere til systemklassen, som tjeneren alltid avviser; det er borte (kurs kan
+  fortsatt tildeles). Flatekartet §14 har fått systemklassens flater.
+- **Tester:** `test/e2e/class-read-by-producers-1198.spec.ts` (+2: linja og «Alle» i lista med produksjonsformen
+  `_count.members: 0`, ikke «0» og ikke «Ingen deltakere ennå»; administrator uten deltakersøk, med kurstildeling som kontroll).
+- **Mutasjoner:** 3 av 3 røde (linja aldri vist, lista viser tallet, søket vises for systemklassen).
+
 ## 2.186.0 - 2026-11-26
 
 **#1198 · Produsenter kan lese alle klasser** (produkteier 26.11.2026, doc/DECISIONS.md). En produsent kan åpne enhver klasse,

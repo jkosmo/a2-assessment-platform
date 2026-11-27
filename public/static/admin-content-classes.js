@@ -109,7 +109,8 @@ function getListPage() {
       { key: "name", label: tNav("ui.name"), className: "col-name", sortValue: (c) => c.name ?? "", render: (c) =>
         `${escapeHtml(c.name)}${c.isSystem ? `<span class="system-badge">${escapeHtml(tNav("classes.type.system"))}</span>` : ""}${lifecycleOf(c) === "archived" ? ` <span class="status-badge status-badge--archived">${escapeHtml(tNav("ui.status.archived"))}</span>` : ""}` },
       { key: "type", label: tNav("ui.type"), render: (c) => escapeHtml(classTypeLabel(c)) },
-      { key: "members", label: tNav("classes.col.members"), sortValue: (c) => c._count?.members ?? 0, render: (c) => String(c._count?.members ?? 0) },
+      // 2.186.1: systemklassen har ingen medlemsrader (alle med deltakerrollen er med), så «0» her var feil. «Alle», og størst ved sortering.
+      { key: "members", label: tNav("classes.col.members"), sortValue: (c) => c.isSystem ? Number.MAX_SAFE_INTEGER : c._count?.members ?? 0, render: (c) => c.isSystem ? escapeHtml(tNav("classes.systemMembersCount")) : String(c._count?.members ?? 0) },
       { key: "courses", label: tNav("classes.col.assignedCourses"), sortValue: (c) => c._count?.courseAssignments ?? 0, render: (c) => String(c._count?.courseAssignments ?? 0) },
     ],
     rowId: (c) => c.id,
@@ -504,9 +505,14 @@ function classFormBodyHtml() {
     </div>
     ${isNew ? `<div class="detail-section" data-form-untracked><p class="small" style="margin:0">${escapeHtml(tNav("classes.saveFirstMembers"))}</p></div>` : `
     <div class="detail-section" data-form-untracked>
-      <h2>${escapeHtml(tf("classes.membersHeading", { count: st.members.length }))}</h2>
-      <ul class="form-rows" id="memberChips">${memberRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noMembers"))}</li>`}</ul>
-      ${locked ? "" : archived ? archivedNote : `<div class="form-add-row">
+      ${k?.isSystem
+        // Produkteier 27.11.2026: systemklassen har ingen medlemsrader — alle med deltakerrollen er med (getUserClassIds). «Deltakere (0)»
+        // og «Ingen deltakere ennå» leste som at klassen var tom, så her står hvem som er med i stedet.
+        ? `<h2>${escapeHtml(tNav("classes.systemMembersHeading"))}</h2>
+      <p class="small" id="memberChips" data-system-members-note>${escapeHtml(tNav("classes.systemMembersNote"))}</p>`
+        : `<h2>${escapeHtml(tf("classes.membersHeading", { count: st.members.length }))}</h2>
+      <ul class="form-rows" id="memberChips">${memberRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noMembers"))}</li>`}</ul>`}
+      ${locked || k?.isSystem ? "" : archived ? archivedNote : `<div class="form-add-row">
         <label for="studentSearch" class="sr-only">${escapeHtml(tNav("classes.memberSearchLabel"))}</label>
         <input type="text" id="studentSearch" placeholder="${escapeHtml(tNav("classes.memberSearchPlaceholder"))}" autocomplete="off" />
       </div>

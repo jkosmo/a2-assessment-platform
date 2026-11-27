@@ -648,6 +648,8 @@ pages — they are separate static JS/HTML files, so consistency is by conventio
 
 **Guards:** `test/e2e/admin-content-classes.spec.ts` "admin buttons + top nav render in prod-shaped config" (asserts a REAL i18n key resolves, not raw); `test/e2e/admin-content-workspaces.spec.ts` course archive (filter pill), unpublish, sections lifecycle; `test/e2e/admin-content-course-links-library-filter.spec.ts` course filter (modules + sections). When adding a column/filter to one list, mirror it where it applies and update this entry.
 
+**The system class «Alle deltakere» has no member rows (2.186.1).** Membership follows the participant role (`getUserClassIds` adds `cls_all_participants`; `courseReminderService` expands it), so `_count.members` and `/members` are always 0/empty, and the server refuses adding members (`classService`). Every surface that shows class members must special-case `isSystem`: the list's Medlemmer column («Alle», sorted largest), the detail's members section (heading without count + `data-system-members-note`, no member search, also for administrator). Guard: `test/e2e/class-read-by-producers-1198.spec.ts` (system class tests).
+
 ### Liste og skjema i samme element (2.157.2)
 
 På **Seksjoner** og **Klasser** tegner lista (`list-page.js`) og skjemaet (`form-page.js`) i samme `pageContent`, og

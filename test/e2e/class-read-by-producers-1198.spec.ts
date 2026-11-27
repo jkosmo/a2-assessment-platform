@@ -6,7 +6,7 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 
 const json = (body: unknown, status = 200) => ({ status, contentType: "application/json", body: JSON.stringify(body) });
 
-async function mock(page: Page, canManage: boolean) {
+async function mock(page: Page, canManage: boolean, system = false) {
   await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* standardspråk */ } });
   await page.route("**/participant/config", (route: Route) =>
     route.fulfill(json({
@@ -17,7 +17,7 @@ async function mock(page: Page, canManage: boolean) {
   );
   await page.route("**/version", (route: Route) => route.fulfill(json({ version: "test" })));
   await page.route("**/api/me", (route: Route) => route.fulfill(json({ user: { roles: ["SUBJECT_MATTER_OWNER"] }, consent: { accepted: true, currentVersion: "1.0" } })));
-  const klass = { id: "cls-1", name: "Prosjektledere Bergen", description: "Kull høsten 2026", isSystem: false, kind: "MANUAL", archivedAt: null, canManage, _count: { members: 1, courseAssignments: 1 } };
+  const klass = { id: "cls-1", name: system ? "Alle deltakere" : "Prosjektledere Bergen", description: "Kull høsten 2026", isSystem: system, kind: "MANUAL", archivedAt: null, canManage, _count: { members: system ? 0 : 1, courseAssignments: 1 } };
   const writes: string[] = [];
   await page.route("**/api/admin/content/classes", (route: Route) => route.fulfill(json({ classes: [klass] })));
   await page.route("**/api/admin/content/classes/*", (route: Route) => {
@@ -27,7 +27,7 @@ async function mock(page: Page, canManage: boolean) {
   // QA 2.186.0: skrivinger mot deltakere og kurs (også /members/:userId og /courses/:courseId) fanges, ikke bare mot klassen.
   await page.route("**/api/admin/content/classes/*/members**", (route: Route) => {
     if (route.request().method() !== "GET") { writes.push(`${route.request().method()} ${route.request().url()}`); return route.fulfill(json({ error: "content_ownership" }, 403)); }
-    return route.fulfill(json({ members: [{ userId: "u1", name: "Kari Nordmann", email: "kari@x.no", addedAt: "2026-11-01T00:00:00.000Z" }] }));
+    return route.fulfill(json({ members: system ? [] : [{ userId: "u1", name: "Kari Nordmann", email: "kari@x.no", addedAt: "2026-11-01T00:00:00.000Z" }] }));
   });
   await page.route("**/api/admin/content/classes/*/courses**", (route: Route) => {
     if (route.request().method() !== "GET") { writes.push(`${route.request().method()} ${route.request().url()}`); return route.fulfill(json({ error: "content_ownership" }, 403)); }
@@ -84,4 +84,30 @@ test("kontroll: eieren får klassen redigerbar, som før", async ({ page }) => {
   await expect(page.locator("#formSaveBtn")).toBeVisible();
   await page.locator("#formTab-innstillinger").click();
   await expect(page.locator("#classOwnerPanelHost .owner-edit-toggle")).toHaveCount(1);
+});
+
+// Produkteier 27.11.2026: systemklassen har ingen medlemsrader (alle med deltakerrollen er med), så «Deltakere (0)» og «Ingen
+// deltakere ennå» leste som en tom klasse. Inne i klassen står det nå hvem som er med.
+test("systemklassen «Alle deltakere» sier hvem som er med, ikke «0 deltakere»", async ({ page }) => {
+  await mock(page, false, true);
+  await page.goto("/deltakere/klasser");
+  // Lista: tjeneren teller null medlemsrader (produksjonsformen), men klassen har alle deltakerne. QA 2.186.1.
+  await expect(page.locator('#classesTableBody tr[data-row-id="cls-1"] td[data-label="Medlemmer"]')).toHaveText("Alle");
+  await page.locator('[data-action="open"][data-id="cls-1"]').click();
+  await expect(page.locator("[data-system-members-note]")).toHaveText("Alle med deltakerrollen er med i denne klassen automatisk. De står ikke oppført her, fordi medlemskapet følger rollen.");
+  await expect(page.locator("[data-system-members-note]")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Deltakere", exact: true })).toBeVisible();
+  await expect(page.getByText("Ingen deltakere ennå.")).toHaveCount(0);
+  await expect(page.getByText("Deltakere (0)")).toHaveCount(0);
+  await expect(page.locator("#courseChips")).toContainText("Arbeidsmiljø");
+});
+
+test("systemklassen for administrator: ingen søk etter deltakere, for tjeneren nekter det alltid", async ({ page }) => {
+  await mock(page, true, true);
+  await page.goto("/deltakere/klasser");
+  await page.locator('[data-action="open"][data-id="cls-1"]').click();
+  await expect(page.locator("[data-system-members-note]")).toBeVisible();
+  await expect(page.locator("#studentSearch")).toHaveCount(0);
+  // Kontroll: kurs kan administrator fortsatt tildele systemklassen.
+  await expect(page.locator("#assignCourseBtn")).toBeVisible();
 });
