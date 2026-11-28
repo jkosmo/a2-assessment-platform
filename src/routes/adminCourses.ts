@@ -6,6 +6,7 @@ import { assertContentOwnership, listManageableContentIds } from "../modules/con
 import { z } from "zod";
 import {
   createCourse,
+  duplicateCourse,
   updateCourse,
   unpublishCourse,
   archiveCourse,
@@ -165,6 +166,25 @@ adminCoursesRouter.post("/", idempotency("courses.create"), async (request, resp
       links: courseAdminLinks(course.id),
       ...(parsed.data.clientRef !== undefined ? { clientRef: parsed.data.clientRef } : {}),
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #1169 skive 4b (doc/design/PLAN_1169_4B_DUPLISER_KURS.md): «Dupliser kurs». Et nytt kurs med de samme modulene og seksjonene, eid
+// av den som kopierer. Ingen eierskapsvakt: å lese kilden er åpent for alle produsenter (#1165), og kopien er et nytt element — som
+// «Dupliser» for modul og seksjon. Idempotensnøkkelen har kildens id: kroppen er tom, så samme nøkkel for to kilder ville ellers gitt
+// den første kopien igjen (#906). Feil: 404 course_not_found, 400 course_archived (kilden) og course_item_archived /
+// course_duplicate_item (et element); da er ingenting laget.
+adminCoursesRouter.post("/:courseId/duplicate", idempotency((req) => `courses.duplicate:${req.params.courseId}`), async (request, response, next) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    const course = await duplicateCourse(String(request.params.courseId), actorId);
+    response.status(201).json({ course, links: courseAdminLinks(course.id) });
   } catch (error) {
     next(error);
   }

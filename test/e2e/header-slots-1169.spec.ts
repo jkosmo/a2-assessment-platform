@@ -27,7 +27,7 @@ test.describe("#1169 — kursets hode", () => {
     await openCourse(page, { publishedAt: "2026-10-01T08:00:00.000Z", lifecycle: "published" });
     await expect(primary(page)).toHaveCount(0);
     await expect(visible(page)).toHaveCount(0);
-    await expect(menu(page)).toHaveText(["Eksporter", "Avpubliser", "Arkiver"]);
+    await expect(menu(page)).toHaveText(["Dupliser", "Eksporter", "Avpubliser", "Arkiver"]);
   });
 
   test("arkivert: «Gjenopprett» som fylt knapp; «Mer» med Eksporter · Slett; ingen Lagre", async ({ page }) => {
@@ -40,7 +40,7 @@ test.describe("#1169 — kursets hode", () => {
   test("en annens kurs: bare «Mer» med Eksporter", async ({ page }) => {
     await openCourse(page, { publishedAt: "2026-10-01T08:00:00.000Z", lifecycle: "published", canManage: false });
     await expect(primary(page)).toHaveCount(0);
-    await expect(menu(page)).toHaveText(["Eksporter"]);
+    await expect(menu(page)).toHaveText(["Dupliser", "Eksporter"]);
   });
 
   test("et valg under «Mer» virker: Arkiver starter arkiveringen", async ({ page }) => {

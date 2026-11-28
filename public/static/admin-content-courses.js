@@ -19,6 +19,7 @@ import {
 import { initConsentGuard } from "/static/consent-guard.js";
 import { setHidden } from "/static/dom-visibility.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
+import { confirmLifecycleStep } from "/static/module-lifecycle-dialogs.js";
 import { runWithBusyButton } from "/static/busy-button.js";
 import {
   resolveWorkspaceNavigationItems,
@@ -1137,11 +1138,14 @@ function getListPage() {
       // at endringene er eiernes.
       const openLink = `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`;
       const exportBtn = `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`;
+      // #1169 skive 4b: «Dupliser» — et nytt kurs med de samme modulene og seksjonene. Også for den som ikke eier kurset (kopien er
+      // hens egen), ikke for et arkivert (tjeneren nekter også).
+      const duplicateBtn = lifecycle === "archived" ? "" : `<button class="row-action-btn" data-action="duplicate" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.duplicate"))}</button>`;
       // #1169 skive 3 (doc/DECISIONS.md 28.11.2026): raden har hodets regel — Åpne · hovedhandlingen · «Mer» i fast rekkefølge.
       if (!canManage) {
         return {
           primary: [openLink],
-          more: [exportBtn],
+          more: [duplicateBtn, exportBtn],
           after: [`<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`],
         };
       }
@@ -1173,7 +1177,7 @@ function getListPage() {
         : "";
       return {
         primary: [openLink, lifecycle === "archived" ? archiveToggle : (live ? publishDraftLink : publishToggle)],
-        more: [exportBtn, live ? publishToggle : "", lifecycle === "archived" ? "" : archiveToggle, deleteBtn, cascadeDeleteBtn],
+        more: [duplicateBtn, exportBtn, live ? publishToggle : "", lifecycle === "archived" ? "" : archiveToggle, deleteBtn, cascadeDeleteBtn],
       };
     },
     emptyHtml: () => `
@@ -1439,6 +1443,10 @@ function handleListTableClick(event, btn = event.target.closest("[data-action]")
   }
   if (btn.dataset.action === "export") {
     exportCoursePackage(btn.dataset.courseId, btn.dataset.courseTitle, btn);
+    return;
+  }
+  if (btn.dataset.action === "duplicate") {
+    duplicateCourseInAdmin(btn.dataset.courseId, btn.dataset.courseTitle, btn);
     return;
   }
   if (btn.dataset.action === "publish-pending") {
@@ -1907,6 +1915,48 @@ function initCourseRestoreDialog() {
     pendingCourseRestore = null;
     returnFocusTo(trigger);
   });
+}
+
+// ---------------------------------------------------------------------------
+// #1169 skive 4b: «Dupliser kurs» (doc/design/PLAN_1169_4B_DUPLISER_KURS.md)
+// ---------------------------------------------------------------------------
+
+let courseDuplicateBusy = false;
+
+/**
+ * Sidas egen bekreftelse (#1168) sier hva kopien er: de SAMME modulene og seksjonene (en endring gjelder begge kursene), uten klasser,
+ * tildelinger, kursbevis eller utkast, og upublisert. Tjeneren lager kopien i én transaksjon; så åpnes den. Ulagrede endringer i
+ * hodet er spurt om før dette (`confirmLeave`), så nettleseren skal ikke spørre en gang til (`leaveAnswered`, som modulens hode).
+ * Sperren står til den nye sida har tatt over, så et klikk til ikke lager en kopi til.
+ */
+async function duplicateCourseInAdmin(courseId, courseTitle, triggerButton) {
+  if (!courseId || courseDuplicateBusy) return;
+  const confirmed = await confirmLifecycleStep({
+    kind: "duplicate",
+    title: tf("courses.duplicateDialog.title", { title: courseTitle || courseId }),
+    text: t("courses.duplicateDialog.text"),
+    confirmLabel: t("ui.action.duplicate"),
+    t,
+    returnFocusTo: triggerButton,
+  });
+  if (!confirmed) return;
+  courseDuplicateBusy = true;
+  try {
+    const body = await runWithWorkDialog(t("adminContent.work.copying"), () => apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/duplicate`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify({}),
+      headers: { "Idempotency-Key": `duplicate-${courseId}-${Date.now()}` },
+    }));
+    const copyId = body?.course?.id;
+    if (!copyId) throw new Error(t("courses.noIdReturned"));
+    queueToast(tf("courses.duplicated", { title: courseTitle || courseId }), "success");
+    courseFormPage?.leaveAnswered?.();
+    window.location.href = `/admin-content/courses/${encodeURIComponent(copyId)}`;
+  } catch (err) {
+    courseDuplicateBusy = false;
+    apiErrorToast(err);
+    returnFocusTo(triggerButton);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2531,9 +2581,11 @@ function courseDetailActions() {
   // publisert kurs (serveren avviser ellers); «Forkast utkast» alltid, så et utkast aldri står uten en vei ut.
   const draftLoaded = courseDraft != null && courseHasDraft(c);
   const exportBtn = `<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`;
-  // #1165: en annens kurs leses og eksporteres; resten er eiernes (tjeneren avviser det med 403).
-  if (courseIsReadOnly()) return { more: [exportBtn] };
   const archived = lifecycle === "archived";
+  // #1169 skive 4b: «Dupliser» først under «Mer», også for den som ikke eier kurset; ikke for et arkivert.
+  const duplicateBtn = archived ? "" : `<button type="button" class="row-action-btn" data-action="duplicate" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.duplicate"))}</button>`;
+  // #1165: en annens kurs leses, kopieres og eksporteres; resten er eiernes (tjeneren avviser det med 403).
+  if (courseIsReadOnly()) return { more: [duplicateBtn, exportBtn] };
   const live = isLiveLifecycle(lifecycle);
   // #1169 skive 2 (doc/DECISIONS.md 28.11.2026): hovedhandlingen for tilstanden som fylt knapp, resten under «Mer» i fast
   // rekkefølge (Eksporter · Forkast utkast · Avpubliser · Arkiver / Slett). «Publiser nye versjoner (n)» fører også arbeidet
@@ -2553,6 +2605,7 @@ function courseDetailActions() {
         : "",
     ];
   const more = [
+    duplicateBtn,
     exportBtn,
     draftLoaded
       ? `<button type="button" id="discardCourseDraftBtn" class="row-action-btn" data-action="discard-draft" data-course-id="${cid}">${escapeHtml(t("courses.draft.discardAction"))}</button>`

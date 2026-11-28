@@ -2,6 +2,45 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.191.0 - 2026-11-28
+
+**#1169 skive 4b · «Dupliser kurs»** (doc/design/PLAN_1169_4B_DUPLISER_KURS.md; produkteier 26.11.2026, doc/DECISIONS.md punkt 2).
+
+- **Tjeneren:** `POST /api/admin/content/courses/:courseId/duplicate` → `duplicateCourse` (courseCommands.ts). Et NYTT kurs med DE
+  SAMME modulene og seksjonene, i samme rekkefølge og med samme `discussionsEnabled`, i én transaksjon under innholdslåsen:
+  `createCourse` (den eneste opprettelsesveien: begrenset, den som kopierer blir eneste eier) og `setCourseItems` (elementvaktene,
+  modulkravene). « (kopi)» på navnet i hvert språk; beskrivelse, nivå, diskusjonsvalg og tema kopiert; upublisert, v1.0, ingen slug
+  og ingen fast plass. Ikke med: eiere, klasser og tildelinger, påmeldinger, kursbevis, et utkast som venter, versjonsrader. Ingen
+  eierskapsvakt (lesing er åpen for alle produsenter, #1165). Kilden arkivert → `400 course_archived`; et arkivert element →
+  `400 course_item_archived`; i begge tilfeller er ingenting laget. Idempotensnøkkelen har kildens id (#906). Revisjonslogg
+  `course_duplicated { courseId, sourceCourseId, itemCount }`. Agent-tokenet når ikke ruta.
+- **Klienten:** «Dupliser» først under «Mer» i kurslista og kursets hode (Dupliser · Eksporter · …), også for et kurs du ikke
+  eier; ikke for et arkivert. Sidas egen bekreftelse sier hva kopien er (de samme modulene og seksjonene, uten klasser, tildelinger,
+  kursbevis og utkast). Arbeidsdialogen mens ruta går, så åpnes kopien. Sperren står til den nye sida har tatt over;
+  `leaveAnswered()` før navigeringen (som modulens hode).
+- **Følger av delt innhold (produkteierens avgjørelse, sagt i veiledningen):** en lest seksjon teller i kopien når den er
+  publisert og deltakeren ser den (#1156). Et **bestått i en modul teller i kopien også når deltakeren ikke ser den** — regelen
+  fra #1156 gjelder bare seksjoner («Moduler er uendret», courseCompletionService.ts). En kopi med bare moduler gir derfor
+  kursbevis til alle som har bestått modulene, så snart den er publisert, også i et begrenset kurs de ikke er tildelt. Regelen
+  fantes fra før (et kurs bygget av de samme modulene for hånd), men duplisering gjør det til ett klikk. Lagt fram for
+  produkteier før prod. Så lenge kopien finnes, er modulene «i bruk» og kan ikke avpubliseres eller arkiveres; modulens versjoner
+  berører begge kursene.
+- **Planlest** av en uavhengig agent før bygging (Codex nådde utgiftstaket): ingen blokkere, ti rettelser lagt inn i planen (400,
+  ikke 409; nøkkelen med kursets id; temaene lest i låsen; `contentRevision` 1; `leaveAnswered`; fem eldre e2e).
+- **Endret i eldre tester:** «Dupliser» først i kursets «Mer» (`header-slots-1169`, `row-slots-1169`,
+  `admin-content-readonly-others-1165`, `admin-content-course-draft-1140`); `/duplicate` i agent-tokenets `FORBIDDEN`.
+- **Tester:** `test/m2-course-duplicate-1169.test.ts` (5), `test/e2e/header-duplicate-archive-1169.spec.ts` (+4).
+- **Mutasjoner:** 10 av 10 røde (elementene, « (kopi)», arkivert kilde, nøkkelen, temaene, begrenset; i klienten Dupliser for en
+  annens kurs, bekreftelsen, idempotensnøkkelen, arkivert kurs).
+- **Gjennomgang (Claude-agent): GO.** Rettet: tellingene i integrasjonstesten gjelder nå bare det fila lager (parallelle
+  kjøringer), og en e2e for kursets hode med ulagrede endringer (ett spørsmål fra nettleseren, ikke «forlate sida?» i tillegg).
+- **Kjente mangler:** «Påbegynt» i kurslista teller for en ny, upublisert kopi alle som har levert på de delte modulene (eksisterende
+  regel); kursets hode med ulagrede endringer spør først med nettleserens spørsmål, så med sidas dialog; feilmeldingene
+  (`course_item_archived` «gjenopprett dem først», `course_archived`) er skrevet for endring, ikke for kopi. «Døp om» for kurs
+  (planens § 6) gjenstår. Modulkravet i kopien er modulens nåværende hovedversjon, ikke
+  kildens (et eldre bestått kan telle i kilden, men ikke i kopien). Eldre data med samme element to ganger gir
+  `course_duplicate_item`.
+
 ## 2.190.0 - 2026-11-28
 
 **#1169 skive 4a · Handlingene som manglet i hodene og listene** (doc/design/PLAN_1169_1171_HODER_OG_RADER.md § 2). Bare klienten.

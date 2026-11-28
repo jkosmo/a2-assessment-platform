@@ -32,11 +32,11 @@ test("kurslista: Åpne · hovedhandlingen · «Mer» i fast rekkefølge", async 
   ] })));
   await page.goto("/admin-content/courses");
   await expect(visible(page, "k-pub")).toHaveText(["Åpne"]);
-  await expect(menu(page, "k-pub")).toHaveText(["Eksporter", "Avpubliser", "Arkiver"]);
+  await expect(menu(page, "k-pub")).toHaveText(["Dupliser", "Eksporter", "Avpubliser", "Arkiver"]);
   await expect(visible(page, "k-utk")).toHaveText(["Åpne", "Publiser"]);
-  await expect(menu(page, "k-utk")).toHaveText(["Eksporter", "Arkiver"]);
+  await expect(menu(page, "k-utk")).toHaveText(["Dupliser", "Eksporter", "Arkiver"]);
   await expect(visible(page, "k-annen")).toHaveText(["Åpne"]);
-  await expect(menu(page, "k-annen")).toHaveText(["Eksporter"]);
+  await expect(menu(page, "k-annen")).toHaveText(["Dupliser", "Eksporter"]);
   await expect(row(page, "k-annen").locator(":scope > .row-readonly-note")).toHaveText("Kun for eier");
   // Hovedhandlingen i en rad er ikke fylt (prototypen): en fylt knapp i hver rad ville ikke skilt noe ut.
   await expect(page.locator(".list-table .row-action-btn.is-primary")).toHaveCount(0);

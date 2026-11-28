@@ -294,6 +294,22 @@ publiseres før kurset. Elementer som ble arkivert for seg, arkivert før 2.159.
 blir stående arkivert: gjenopprett dem hver for seg. Kurset selv kommer alltid tilbake som utkast. Publiser det når du er
 klar. Meldingen etterpå sier hva som faktisk kom tilbake.
 
+### 5c. Dupliser et kurs (fra 2.191.0, #1169)
+
+«Mer» → **Dupliser** i kurslista eller i kursets hode lager et nytt kurs med **de samme** modulene og seksjonene, ikke kopier av
+dem. Du blir eier av kopien, også når kurset er en annens. Kopien er ikke publisert, er «Bare for de som er tildelt», og heter det
+samme med « (kopi)» etter. Klasser, tildelinger, kursbevis og et utkast som ikke er publisert, blir ikke med. Et arkivert kurs kan
+ikke dupliseres.
+
+Fordi innholdet deles, gjelder dette:
+- En endring i en modul eller seksjon gjelder begge kursene.
+- Når kopien er publisert, teller det en deltaker har bestått i modulene, også i kopien — **også når hen ikke er tildelt kopien**.
+  Lesing av seksjoner teller bare når hen ser kopien. Har kopien bare moduler, kan alle som har bestått dem, få kursbevis for
+  kopien med en gang den er publisert.
+- Så lenge kopien finnes, også som upublisert, er modulene og seksjonene «i bruk» i den. Da kan de ikke avpubliseres eller
+  arkiveres, heller ikke av eieren av modulen.
+- Gi kopien et nytt navn før du publiserer den: delingslenka får navnet ved første publisering og endres ikke etterpå.
+
 ### 5a. Andres klasser (fra 2.186.0, #1198)
 
 Du kan åpne og lese alle klasser, også dem andre eier, og systemklassen «Alle deltakere»: kursene med frister og deltakerne

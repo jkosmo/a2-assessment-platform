@@ -220,6 +220,13 @@ const courseRows: Row[] = [
   { route: "DELETE /:courseId/enrollments/:userId", call: () => other.del(K(courseId, `/enrollments/${participantId}`)) },
 ];
 
+// Skriveruter på et kurs som med vilje er ÅPNE for alle produsenter. De endrer ikke kurset i stien, men lager noe nytt av det som
+// alle kan lese (#1165). Hver har en kontroll under: en annen produsent slipper inn, og kurset i stien er urørt.
+// #1169 skive 4b: «Dupliser kurs» lager et nytt kurs med de samme elementene, eid av den som kopierer.
+const openCourseWrites: Row[] = [
+  { route: "POST /:courseId/duplicate", call: () => other.post(K(courseId, "/duplicate")) },
+];
+
 const moduleRows: Row[] = [
   { route: "PATCH /modules/:moduleId/title", call: () => other.patch(M(moduleId, "/title"), { title: L("Nytt navn") }) },
   { route: "DELETE /modules/:moduleId", call: () => other.del(M(moduleId)) },
@@ -306,7 +313,7 @@ describe("#1165: skrivingen er fortsatt eiernes", () => {
     expect(courseRoutes.length).toBeGreaterThan(10);
     expect(moduleRoutes.length).toBeGreaterThan(10);
     expect(sectionRoutes.length).toBeGreaterThan(5);
-    expect(courseRoutes, "ny skriverute på kurset uten rad i tabellen").toEqual(courseRows.map((row) => row.route).sort());
+    expect(courseRoutes, "ny skriverute på kurset uten rad i tabellen").toEqual([...courseRows, ...openCourseWrites].map((row) => row.route).sort());
     expect(moduleRoutes, "ny skriverute på modulen uten rad i tabellen").toEqual(moduleRows.map((row) => row.route).sort());
     expect(sectionRoutes, "ny skriverute på seksjonen uten rad i tabellen").toEqual(sectionRows.map((row) => row.route).sort());
   });
@@ -318,6 +325,15 @@ describe("#1165: skrivingen er fortsatt eiernes", () => {
       expect(refused.status, `${row.route}: ${show(refused)}`).toBe(403);
       expect(["content_ownership", "forbidden"]).toContain(refused.body.error);
       expect(await fingerprint(), `${row.route} endret noe`).toBe(before);
+    });
+  }
+
+  for (const row of openCourseWrites) {
+    it(`åpen med vilje: ${row.route} slipper en annen produsent inn, og kurset i stien er urørt`, async () => {
+      const before = await fingerprint();
+      const res = await row.call();
+      expect(res.status, `${row.route}: ${show(res)}`).toBeLessThan(300);
+      expect(await fingerprint(), `${row.route} endret kurset i stien`).toBe(before);
     });
   }
 

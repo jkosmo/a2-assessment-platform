@@ -413,6 +413,69 @@ export async function deleteCourse(courseId: string, actorId?: string) {
   if (!result.deleted) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 }
 
+/** « (kopi)» på hvert språk som har tekst, som for modul og seksjon (public/static/content-duplicate.js). Tittelen er lagret JSON. */
+function withCopySuffix(storedTitle: string): string {
+  try {
+    const parsed: unknown = JSON.parse(storedTitle);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: Record<string, unknown> = {};
+      for (const [locale, value] of Object.entries(parsed as Record<string, unknown>)) {
+        out[locale] = typeof value === "string" && value.trim() ? `${value} (kopi)` : value;
+      }
+      return JSON.stringify(out);
+    }
+  } catch {
+    // En ren streng (eldre rader): én « (kopi)».
+  }
+  return storedTitle.trim() ? `${storedTitle} (kopi)` : storedTitle;
+}
+
+/**
+ * #1169 skive 4b (doc/design/PLAN_1169_4B_DUPLISER_KURS.md; produkteier 26.11.2026, doc/DECISIONS.md punkt 2): «Dupliser kurs» er
+ * et NYTT kurs med DE SAMME modulene og seksjonene — ikke kopier av dem. Klasser, tildelinger, påmeldinger, kursbevis, utkast,
+ * versjoner og eiere blir ikke med; den som kopierer, blir eneste eier. Kopien er upublisert, v1.0, begrenset (#1164), uten slug og
+ * fast plass. Kopien lages av kursets LAGREDE elementer (`CourseItem`), ikke av et utkast som venter.
+ *
+ * Én transaksjon under innholdslåsen: `createCourse` (den eneste opprettelsesveien) og `setCourseItems` (elementvaktene,
+ * modulkravene, revisjonsloggen). Feiler et element (arkivert, eller to like i eldre data), er ingenting laget.
+ */
+export async function duplicateCourse(sourceCourseId: string, actorId: string) {
+  return runContentWrite(async (tx) => {
+    const source = await tx.course.findUnique({ where: { id: sourceCourseId } });
+    if (!source) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    // Vakta i `setCourseItems` ser bare det nye kurset; kilden sjekkes her.
+    await assertNotArchived(tx, { type: "COURSE", id: sourceCourseId });
+    const sourceItems = await createCourseRepository(tx).findAllCourseItems(sourceCourseId);
+    // Temaene leses inne i låsen (ikke `findThemeIdsForCourse`, som leser utenfor).
+    const themeIds = (await tx.courseThemeAssignment.findMany({ where: { courseId: sourceCourseId }, select: { themeId: true } })).map((row) => row.themeId);
+    const items: CourseItemInput[] = sourceItems.map((item) => item.itemType === "MODULE"
+      ? { type: "MODULE", moduleId: item.moduleId as string, discussionsEnabled: item.discussionsEnabled }
+      : { type: "SECTION", sectionId: item.sectionId as string, discussionsEnabled: item.discussionsEnabled });
+    const copy = await createCourse({
+      title: withCopySuffix(source.title),
+      description: source.description,
+      certificationLevel: source.certificationLevel,
+      discussionsEnabled: source.discussionsEnabled,
+      discussionOwnerNotifications: source.discussionOwnerNotifications,
+      themeIds,
+      actorId,
+    }, tx);
+    await setCourseItems(copy.id, items, { actorId, revision: { expected: copy.contentRevision } }, tx);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: copy.id,
+        action: auditActions.course.duplicated,
+        actorId,
+        metadata: { courseId: copy.id, sourceCourseId, itemCount: items.length },
+      },
+      tx,
+    );
+    // Telleren er økt av elementene; svaret er kurset slik det står nå.
+    return tx.course.findUniqueOrThrow({ where: { id: copy.id } });
+  });
+}
+
 export type CourseItemInput =
   | { type: "MODULE"; moduleId: string; discussionsEnabled?: boolean }
   | { type: "SECTION"; sectionId: string; discussionsEnabled?: boolean };

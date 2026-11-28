@@ -1987,7 +1987,7 @@ er latt stå og gjelder bare rader opprettet utenom (testfiksturer).
 | Agent-API-et (skillen, agent-token) | `POST /courses` (`agentTokenScope.ts`) | utelatt → `createCourse` → begrenset |
 | «Importer som nytt kurs» | `POST /courses/import` `createNew` → `importCourseFromEnvelope` → `createCourse` | eksporten bærer ingen synlighet → begrenset |
 | «Oppdater dette kurset» / `replaceExisting` | samme rute | eksisterende kurs, synligheten røres ikke |
-| Dupliser kurs | finnes ikke | — (kommer den, må den gå gjennom `createCourse`) |
+| Dupliser kurs | `POST /courses/:courseId/duplicate` → `duplicateCourse` (courseCommands.ts): `createCourse` + `setCourseItems` i én transaksjon (#1169, 2.191.0) | Kurslista og kursets hode («Mer» → Dupliser, `duplicateCourseInAdmin`); de samme modulene og seksjonene, ikke kopier. Guard: `test/m2-course-duplicate-1169.test.ts`, `test/e2e/header-duplicate-archive-1169.spec.ts` |
 
 **Publiseringen** («Publiser» i lista og i hodet, «Publiser utkastet»): dialogen spør alltid, og sier hvem som ser kurset etterpå
 (`GET …/publish-audience`, `coursePublishAudience.ts`, regnet på tjeneren). Én dialog: `openCoursePublishDialog` (lista over

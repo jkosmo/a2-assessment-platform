@@ -201,3 +201,89 @@ test("modulens hode, publisert med nyere utkast og ulagrede endringer: kopien ta
   // Ett spørsmål (sidas eget om de ulagrede endringene), ikke nettleserens «forlate sida?» i tillegg.
   expect(dialogs).toEqual(["confirm"]);
 });
+
+// #1169 skive 4b: «Dupliser kurs» — et nytt kurs med de samme modulene og seksjonene (tjeneren), fra raden og hodet.
+async function openCourseForDuplicate(page: Page, course: Record<string, unknown>) {
+  await mockCommonApis(page, { courses: [{ id: "course-1", title: "Informasjonssikkerhet", modules: [], ...course } as never] });
+  await nb(page);
+  const calls: Array<{ url: string; key: string | null }> = [];
+  await page.route("**/api/admin/content/courses/course-1/duplicate", (r: Route) => {
+    calls.push({ url: r.request().url(), key: r.request().headers()["idempotency-key"] ?? null });
+    return r.fulfill(json({ course: { id: "course-kopi", title: L3("Informasjonssikkerhet (kopi)") }, links: {} }, 201));
+  });
+  return calls;
+}
+
+test("kursets hode: «Dupliser» først under «Mer»; dialogen sier hva kopien er; ja lager kopien på tjeneren og åpner den", async ({ page }) => {
+  const calls = await openCourseForDuplicate(page, { publishedAt: "2026-10-01T08:00:00.000Z", lifecycle: "published" });
+  await page.goto("/admin-content/courses/course-1");
+  await page.locator("#title-nb").waitFor();
+  await expect(menu(page)).toHaveText(["Dupliser", "Eksporter", "Avpubliser", "Arkiver"]);
+  await actions(page).locator("details.row-more > summary").click();
+  await actions(page).locator('.row-more-menu [data-action="duplicate"]').click();
+  const dialog = page.locator("dialog[open]");
+  await expect(dialog).toContainText("Dupliser «");
+  await expect(dialog).toContainText("de samme modulene og seksjonene");
+  await expect(dialog).toContainText("Klasser, tildelinger og kursbevis blir ikke med");
+  expect(calls).toEqual([]);
+  await page.locator("#moduleLifecycleDialogConfirmBtn").click();
+  await page.waitForURL("**/admin-content/courses/course-kopi");
+  expect(calls).toHaveLength(1);
+  expect(calls[0].key).toMatch(/^duplicate-course-1-/);
+});
+
+test("kursets hode: Avbryt i dialogen lager ingen kopi", async ({ page }) => {
+  const calls = await openCourseForDuplicate(page, { publishedAt: "2026-10-01T08:00:00.000Z", lifecycle: "published" });
+  await page.goto("/admin-content/courses/course-1");
+  await page.locator("#title-nb").waitFor();
+  await actions(page).locator("details.row-more > summary").click();
+  await actions(page).locator('.row-more-menu [data-action="duplicate"]').click();
+  await page.locator("#moduleLifecycleDialogCancelBtn").click();
+  await page.waitForTimeout(300);
+  expect(calls).toEqual([]);
+});
+
+test("et arkivert kurs har ikke «Dupliser» i hodet", async ({ page }) => {
+  await openCourseForDuplicate(page, { publishedAt: null, archivedAt: "2026-10-05T08:00:00.000Z", lifecycle: "archived" });
+  await page.goto("/admin-content/courses/course-1");
+  await page.locator("#title-nb").waitFor();
+  await expect(actions(page).locator('[data-action="duplicate"]')).toHaveCount(0);
+});
+
+test("kurslista: «Dupliser» i raden lager kopien og åpner den; feil fra tjeneren vises, og ingen side åpnes", async ({ page }) => {
+  await mockCommonApis(page, {});
+  await nb(page);
+  await page.route("**/api/admin/content/courses", (r: Route) => r.fulfill(json({ courses: [
+    { id: "k1", title: L3("Informasjonssikkerhet"), description: null, certificationLevel: "basic", enrollmentPolicy: "OPEN", moduleCount: 1, sortOrder: null, updatedAt: "2026-11-01T08:00:00.000Z", archivedAt: null, inProgressCount: 0, canManage: true, themes: [], publishedAt: "2026-10-01T08:00:00.000Z", lifecycle: "published", versionMajor: 2, versionMinor: 1 },
+  ] })));
+  let fail = true;
+  await page.route("**/api/admin/content/courses/k1/duplicate", (r: Route) => fail
+    ? r.fulfill(json({ error: "course_item_archived", message: "x", details: { itemType: "MODULE" } }, 400))
+    : r.fulfill(json({ course: { id: "k-kopi" }, links: {} }, 201)));
+  await page.goto("/admin-content/courses");
+  const row = page.locator('tr[data-row-id="k1"] .row-actions');
+  await row.locator("details.row-more > summary").click();
+  await row.locator('.row-more-menu [data-action="duplicate"]').click();
+  await page.locator("#moduleLifecycleDialogConfirmBtn").click();
+  await expect(page.locator(".toast--error")).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/admin-content/courses");
+  fail = false;
+  await row.locator("details.row-more > summary").click();
+  await row.locator('.row-more-menu [data-action="duplicate"]').click();
+  await page.locator("#moduleLifecycleDialogConfirmBtn").click();
+  await page.waitForURL("**/admin-content/courses/k-kopi");
+});
+
+test("kursets hode med ulagrede endringer: ett spørsmål om dem, så sidas dialog; nettleseren spør ikke «forlate sida?» etterpå", async ({ page }) => {
+  const calls = await openCourseForDuplicate(page, { publishedAt: "2026-10-01T08:00:00.000Z", lifecycle: "published" });
+  const dialogs: string[] = [];
+  page.on("dialog", (d) => { dialogs.push(d.type()); void d.accept().catch(() => {}); });
+  await page.goto("/admin-content/courses/course-1");
+  await page.locator("#title-nb").fill("Informasjonssikkerhet (endret)");
+  await actions(page).locator("details.row-more > summary").click();
+  await actions(page).locator('.row-more-menu [data-action="duplicate"]').click();
+  await page.locator("#moduleLifecycleDialogConfirmBtn").click();
+  await page.waitForURL("**/admin-content/courses/course-kopi");
+  expect(calls).toHaveLength(1);
+  expect(dialogs).toEqual(["confirm"]);
+});

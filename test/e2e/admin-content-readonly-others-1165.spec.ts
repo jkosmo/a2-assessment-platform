@@ -87,7 +87,8 @@ for (const viewport of VIEWPORTS) {
       await expect(page.locator("[data-course-archived-notice]")).toHaveCount(0);
       await expect(page.locator("#formSaveBtn")).toHaveCount(0);
       await expect(page.locator("#formCancelLink")).toHaveCount(0);
-      await expect.poll(() => headerActions(page)).toEqual(["export"]);
+      // #1169 skive 4b: Dupliser også (kopien er hens egen).
+      await expect.poll(() => headerActions(page)).toEqual(["duplicate", "export"]);
       await expect(page.locator("#title-nb")).toBeDisabled();
       await expect(page.locator("#certLevel")).toBeDisabled();
       await expect(page.locator("#comboboxInput")).toBeDisabled();

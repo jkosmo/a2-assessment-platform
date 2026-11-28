@@ -583,7 +583,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
       els.map((el) => (el as HTMLElement).id || (el as HTMLElement).dataset.action || el.textContent?.trim()));
     expect(ids).toEqual(["formSaveBtn", "formCancelLink", "publishCourseDraftBtn", "Mer"]);
     const more = await row.locator(".row-more-menu > button").evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.action));
-    expect(more).toEqual(["export", "discard-draft", "unpublish", "archive"]);
+    expect(more).toEqual(["duplicate", "export", "discard-draft", "unpublish", "archive"]);
     await expect(row.locator("#publishCourseDraftBtn")).toHaveClass(/is-primary/);
   });
 

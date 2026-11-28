@@ -47,6 +47,8 @@ const ALLOWED: Array<[string, string]> = [
 const FORBIDDEN: Array<[string, string]> = [
   ["POST", "/api/admin/content/courses/course_abc/publish"],
   ["POST", "/api/admin/content/courses/course_abc/archive"],
+  // #1169 skive 4b: «Dupliser kurs» er en menneskes handling; agenten lager kurs med POST /courses + PUT /items.
+  ["POST", "/api/admin/content/courses/course_abc/duplicate"],
   ["DELETE", "/api/admin/content/courses/course_abc"],
   ["DELETE", "/api/admin/content/modules/mod_abc"],
   ["POST", "/api/admin/content/modules/mod_abc/publish"],
