@@ -30,6 +30,7 @@ import { runWithBusyButton } from "/static/busy-button.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { confirmModuleArchive, confirmModuleDelete } from "./module-lifecycle-dialogs.js";
+import { duplicateModuleCopy } from "./content-duplicate.js";
 import {
   manglendeSpraak,
   medHullAv,
@@ -245,13 +246,19 @@ function getListPage() {
       // #459: Avpubliser bare for moduler som er aktivt publisert.
       const isPublished = lifecycle === "published" || lifecycle === "published_with_draft";
       // #1169 skive 3 (doc/DECISIONS.md 28.11.2026): Åpne · hovedhandlingen (Gjenopprett for en arkivert modul) · «Mer» i fast
-      // rekkefølge (Døp om · Dupliser · Eksporter · Avpubliser · Arkiver / Slett). «Publiser» står bare i modulens hode ennå: den
-      // tar med spørsmålene der (ulagrede endringer, bestått som erstattes).
+      // rekkefølge (Døp om · Dupliser · Eksporter · Avpubliser · Arkiver / Slett). «Publiser» er en lenke til modulens hode, som
+      // spør (skive 4a).
       const restoreBtn = canManage && isArchived ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.restore"))}</button>` : "";
+      // #1169 skive 4: Publiser (et lagret utkast som aldri er publisert) og Publiser utkastet (publisert, med en nyere lagring). Lenka
+      // åpner modulen med `?publish=1`, og hodets publisering kjøres der, med sine spørsmål. Et tomt modulgrunnlag har ingenting å
+      // publisere (ingen lagret versjon, `latestVersionNo` tomt). Tilstanden leses fra `lifecycle` (#1046 steg B).
+      const publishLabel = !canManage ? "" : lifecycle === "published_with_draft" ? t("courses.draft.publishAction")
+        : (lifecycle === "draft" && m.latestVersionNo != null ? t("ui.action.publish") : "");
+      const publishLink = publishLabel ? `<a href="${openConvUrl}?publish=1" class="row-action-btn" data-action-link="publish">${escapeHtml(publishLabel)}</a>` : "";
       return {
         // #896 S3c: knappen sier hva den gjør — åpner modulen.
         // #1165 (produkteier 14.11.2026): også for den som ikke eier modulen. Modulsida viser den skrivebeskyttet.
-        primary: [`<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`, restoreBtn],
+        primary: [`<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`, restoreBtn || publishLink],
         more: [
         // #894: omdøping er en langt vanligere handling enn innholdsredigering, og krever ingen av
         // trinnene rundt. Egen knapp, ikke klikk på navnet — et klikk i raden åpner elementet.
@@ -518,35 +525,9 @@ async function duplicateModule(moduleId, btn) {
   btn.disabled = true;
   const original = allModules.find(m => m.id === moduleId);
   const sourceTitle = original?.title ?? t("ui.kind.module");
-
   try {
-    // /export-package, ikke /export (live editing-bundle) — det er
-    // sistnevnte som returnerer a2-content-export/v1-envelope-en /import faktisk forventer.
-    const exportResult = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`, getHeaders);
-    const envelope = exportResult?.envelope ?? exportResult;
-    if (!envelope || envelope.exportFormat !== "a2-content-export/v1" || !envelope.module) {
-      throw new Error(t("library.exportUnexpected"));
-    }
-
-    // Suffiks " (kopi)" på tittelen i alle locales så listen viser kopien tydelig.
-    const srcTitle = envelope.module?.module?.title;
-    if (srcTitle && typeof srcTitle === "object") {
-      envelope.module.module.title = Object.fromEntries(
-        Object.entries(srcTitle).map(([l, v]) => [l, v ? `${v} (kopi)` : v])
-      );
-    } else if (typeof srcTitle === "string" && srcTitle) {
-      envelope.module.module.title = `${srcTitle} (kopi)`;
-    }
-
-    // #456: autoPublish=false så kopien lander som «Upublisert utkast» uansett
-    // om kilden var publisert. Forfatter skal eksplisitt publisere etter gjennomgang.
-    // 2.101.2: vis at det jobbes, og sperr siden imens (work-dialog.js).
-    const importResult = await runWithWorkDialog(t("adminContent.work.copying"), () => apiFetch("/api/admin/content/modules/import", getHeaders, {
-      method: "POST",
-      body: JSON.stringify({ payload: envelope, mode: "createNew", autoPublish: false }),
-    }));
-    if (!importResult?.moduleId) throw new Error(t("library.importNoId"));
-
+    // #1169 skive 4: samme kopi som fra modulens hode (content-duplicate.js).
+    await duplicateModuleCopy({ moduleId, apiFetch, getHeaders, t });
     showToast(tf("library.duplicatedToast", { title: sourceTitle }), "success");
     await loadModules();
   } catch (err) {

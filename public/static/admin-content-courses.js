@@ -1165,10 +1165,14 @@ function getListPage() {
         ? `<button class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>`
         : "";
       // Hovedhandlingen: Publiser (et utkast med innhold) eller Gjenopprett (arkivert). Avpubliser og Arkiver står under «Mer».
-      // «Publiser utkastet» står bare i hodet ennå: den lagrer og spør om versjonen der.
+      // «Publiser utkastet» er en lenke til kursets hode, som spør om versjonen (skive 4a).
       const live = isLiveLifecycle(lifecycle);
+      // #1169 skive 4: et publisert kurs med et utkast får «Publiser utkastet» her også. Lenka åpner kurset og kjører hodets knapp.
+      const publishDraftLink = lifecycle === "published_with_draft"
+        ? `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}?publishDraft=1" class="row-action-btn" data-action-link="publish-draft">${escapeHtml(t("courses.draft.publishAction"))}</a>`
+        : "";
       return {
-        primary: [openLink, lifecycle === "archived" ? archiveToggle : (live ? "" : publishToggle)],
+        primary: [openLink, lifecycle === "archived" ? archiveToggle : (live ? publishDraftLink : publishToggle)],
         more: [exportBtn, live ? publishToggle : "", lifecycle === "archived" ? "" : archiveToggle, deleteBtn, cascadeDeleteBtn],
       };
     },
@@ -2261,6 +2265,17 @@ async function renderDetailView(courseId) {
     const query = params.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
     if ((pendingVersions?.items?.length ?? 0) > 0) await openPendingPublishDialog(courseId);
+  }
+  // #1169 skive 4: «Publiser utkastet» i kurslista åpner kurset med `?publishDraft=1`, og hodets knapp kjøres — med versjonsspørsmålet
+  // og porten der. Bare når knappen faktisk står (et publisert kurs med et lesbart utkast). Flagget fjernes, som over.
+  if (courseId && params.has("publishDraft")) {
+    params.delete("publishDraft");
+    const query = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    // Kurset spør alltid i sin dialog før noe publiseres. QA 2.190.0: er det ikke noe utkast å publisere (lista var gammel, eller
+    // utkastet kan ikke leses), sier sida det i stedet for å gjøre ingenting.
+    if (document.getElementById("publishCourseDraftBtn")) await publishCourseDraftFromForm();
+    else showToast(t("courses.draft.publishNothing"), "info");
   }
 }
 

@@ -356,6 +356,11 @@ export function createFormPage(config) {
     markDirty,
     markClean,
     confirmLeave,
+    /**
+     * QA-porten 2.190.0: sida har selv spurt om ulagrede endringer og fått ja, og forlater sida fra kode (`location.href`). Svaret
+     * gjelder den ene navigeringen, så nettleseren ikke spør en gang til (samme regel som for lenker og «Tilbake», #1155).
+     */
+    leaveAnswered() { leaveAnsweredAt = Date.now(); },
     save,
     installGuards,
     /**

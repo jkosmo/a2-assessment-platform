@@ -125,6 +125,8 @@ type Setup = {
   draft?: ServerState["draft"];
   locale?: string;
   failNext?: ServerState["failNext"];
+  /** #1169 skive 4: flagg i adressen, f.eks. `?publishDraft=1` fra kurslista. */
+  query?: string;
 };
 
 async function openBuilder(page: Page, setup: Setup = {}) {
@@ -257,7 +259,7 @@ async function openBuilder(page: Page, setup: Setup = {}) {
     return json(route, 200, { course: courseRow(state) });
   });
 
-  await page.goto(COURSE_URL);
+  await page.goto(`${COURSE_URL}${setup.query ?? ""}`);
   // Ikke `#title-nb`: med engelsk meny står det engelske språkpanelet åpent.
   await expect(page.locator("#comboboxInput")).toBeVisible();
   return state;
@@ -376,6 +378,25 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     await expect(line).toContainText("Utkast lagret ");
     await expect(line).not.toContainText(" av ");
     await expect(line).toContainText("Deltakerne ser versjon 3.1 til utkastet er publisert.");
+  });
+
+  // #1169 skive 4: «Publiser utkastet» i kurslista åpner kurset med `?publishDraft=1`, og hodets knapp kjøres med samme dialog.
+  test("?publishDraft=1 fra kurslista: hodets «Publiser utkastet» kjøres, og flagget forsvinner fra adressen", async ({ page }) => {
+    const state = await openBuilder(page, { draft: draftWith(PUBLISHED_ITEMS), query: "?publishDraft=1" });
+    await expect(page.locator("#cascadePublishDialog")).toBeVisible();
+    expect(new URL(page.url()).search).toBe("");
+    await page.locator("#cascadePublishConfirmBtn").click();
+    await expect.poll(() => writes(state).length).toBe(1);
+    expect(writes(state)[0].path).toBe(`${API}/draft/publish`);
+  });
+
+  test("kontroll: ?publishDraft=1 uten utkast publiserer ingenting, og sida sier det", async ({ page }) => {
+    const state = await openBuilder(page, { query: "?publishDraft=1" });
+    // QA 2.190.0: ikke stille — lista kan ha vært gammel.
+    await expect(page.getByText("Ingenting å publisere: kurset har ikke noe utkast som kan publiseres.")).toBeVisible();
+    await expect(page.locator("#cascadePublishDialog")).toBeHidden();
+    expect(writes(state)).toEqual([]);
+    expect(new URL(page.url()).search).toBe("");
   });
 
   test("«Publiser utkastet» uten spørsmål: lista er som publisert (bare navnet endret), selv med kursbevis", async ({ page }) => {

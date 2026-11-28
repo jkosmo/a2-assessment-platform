@@ -25,6 +25,7 @@ import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { createListPage } from "/static/list-page.js";
 import { setHidden } from "/static/dom-visibility.js";
 import { confirmSectionArchive, confirmSectionDelete } from "/static/module-lifecycle-dialogs.js";
+import { duplicateSectionCopy } from "/static/content-duplicate.js";
 import {
   lagretTittelkart,
   manglendeSpraak,
@@ -849,25 +850,15 @@ async function importSectionPackage(input) {
 // #1046 D3: Dupliser på seksjoner, på samme måte som på moduler (#348): eksportpakke → import som
 // ny. Kopien får « (kopi)» på tittelen i alle språk og lander alltid som utkast — importen
 // publiserer aldri ved ankomst (#916), så forfatteren må publisere selv etter gjennomgang.
-async function duplicateSection(sectionId, btn) {
+// #1169 skive 4: fra lista tegnes lista på nytt; fra redigereren (`openCopy`) åpnes kopien. Samme kopi begge steder
+// (content-duplicate.js).
+async function duplicateSection(sectionId, btn, { openCopy = false } = {}) {
   if (btn) btn.disabled = true;
   try {
-    const body = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}/export-package`, getHeaders);
-    const envelope = body?.envelope ?? null;
-    if (!envelope?.section) throw new Error("Eksport returnerte tom envelope.");
-    const srcTitle = envelope.section.title;
-    if (srcTitle && typeof srcTitle === "object") {
-      envelope.section.title = Object.fromEntries(Object.entries(srcTitle).map(([l, v]) => [l, v ? `${v} (kopi)` : v]));
-    } else if (typeof srcTitle === "string" && srcTitle) {
-      envelope.section.title = `${srcTitle} (kopi)`;
-    }
-    const result = await runWithWorkDialog(t("adminContent.work.copying"), () => apiFetch("/api/admin/content/sections/import", getHeaders, {
-      method: "POST",
-      body: JSON.stringify({ payload: envelope, mode: "createNew" }),
-    }));
-    if (!result?.sectionId) throw new Error("Import-respons mangler sectionId.");
+    const copyId = await duplicateSectionCopy({ sectionId, apiFetch, getHeaders, t });
     showToast(L("duplicated"));
-    await renderListView();
+    if (openCopy) goTo("editor", copyId);
+    else await renderListView();
   } catch (err) {
     apiErrorToast(err);
   } finally {
@@ -1061,6 +1052,9 @@ function sectionActions() {
       ? [editing.hasUnpublishedChanges ? `<button type="button" class="row-action-btn is-primary" id="sectionPublishNewBtn" data-editor-action="publish">${escapeHtml(L("publishNewVersion"))}</button>` : ""]
       : [`<button type="button" class="row-action-btn is-primary" id="sectionLifecycleBtn" data-editor-action="publish">${escapeHtml(L("publish"))}</button>`];
   const more = [
+    // #1169 skive 4: Dupliser også i hodet, som i lista — ikke for en arkivert seksjon (produkteier 13.11). Også for en som ikke
+    // eier seksjonen: kopien er hens egen.
+    archived ? "" : `<button type="button" class="row-action-btn" data-editor-action="duplicate">${escapeHtml(L("duplicate"))}</button>`,
     `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>`,
     edit ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
     manage && published ? `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="unpublish">${escapeHtml(L("unpublish"))}</button>` : "",
@@ -1129,6 +1123,8 @@ function bindHeaderActions() {
     if (action === "replace") return document.getElementById("replaceFromFileInput")?.click();
     if (!getFormPage().confirmLeave()) return;
     if (action === "export") return exportSectionPackage(editing.id, btn);
+    // Kopien lages av det som er lagret; spørsmålet over har tatt seg av det ulagrede. Etterpå åpnes kopien.
+    if (action === "duplicate") return duplicateSection(editing.id, btn, { openCopy: true });
     if (action === "publish" || action === "unpublish") return toggleSectionLifecycle(action, btn);
     if (action === "archive") return archiveSectionInEditor(btn);
     if (action === "restore") return lifecycleInEditor("restore", "restoredAsDraft");

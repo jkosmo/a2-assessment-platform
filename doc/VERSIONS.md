@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.190.0 - 2026-11-28
+
+**#1169 skive 4a · Handlingene som manglet i hodene og listene** (doc/design/PLAN_1169_1171_HODER_OG_RADER.md § 2). Bare klienten.
+
+- **Modulens hode:** «Dupliser» og «Arkiver» under «Mer» (Dupliser · Eksporter · Erstatt fra fil · Avpubliser · Arkiver). Arkiver
+  bruker samme forhåndsvisning og dialog som lista (#1168) og viser den arkiverte modulen etterpå. Dupliser åpner kopien. Begge
+  spør først om ulagrede endringer (som Publiser, #1189). En annens modul har Dupliser · Eksporter; en arkivert har ikke Dupliser.
+- **Seksjonens hode:** «Dupliser» under «Mer»; kopien åpnes. Ikke for en arkivert seksjon.
+- **Én kopi:** `content-duplicate.js` lager kopien for lista og hodet (eksportpakken med « (kopi)», importert som nytt, modulen
+  upublisert). Før lå koden i hver liste.
+- **«Publiser» i modullista** (et lagret utkast som aldri er publisert) og **«Publiser utkastet»** i modullista og kurslista
+  (publisert, med et nyere utkast): lenker som åpner elementet med `?publish=1` / `?publishDraft=1`, og hodets publisering kjøres
+  der, med spørsmålene og porten der. Flagget fjernes fra adressen, så en omlasting ikke publiserer på nytt. Et tomt modulgrunnlag
+  har ingen Publiser.
+- **QA-porten (NO-GO, rettet):** «Dupliser» fra modulens hode kopierte den publiserte versjonen, ikke det nyere utkastet
+  skjermen viste (eksportpakken tar den publiserte uten `moduleVersionId`; eksporten i hodet sender den, dupliseringen gjorde ikke).
+  Nå sendes versjonen som vises. Og etter «ja» til de ulagrede endringene spurte nettleseren en gang til da kopien ble åpnet; «Bli»
+  lot kopien stå uten et ord. Nå regnes svaret (`formPage.leaveAnswered()`, samme regel som #1155). Rotårsak: den felles
+  kopifunksjonen ble laget av listas kode, og lista har ingen «versjon som vises»; at hodet viser noe annet enn lista, ble ikke
+  sjekket. Seksjonens eksport tar den nyeste versjonen som standard (#931), så seksjonen var riktig.
+- **Gjennomgang 2 (Claude-agent, Codex nådde utgiftstaket): GO**, med fire funn rettet. En adresse med `?publish=1` fra
+  nettleserens historikk eller et bokmerke publiserte modulen uten spørsmål når ingen hadde bestått, og ingenting skal publiseres
+  uten at et menneske klikker. Nå spør sida først i sin egen dialog («Publisere «{navn}»?»). Flagget uten noe å publisere ga stillhet;
+  nå sier sida «Ingenting å publisere» (modul og kurs). En Publiser-lenke for en annens modul er sperret og testet. Sperren mot et
+  nytt klikk på Dupliser står nå til den nye sida har tatt over (før kunne et klikk til lage en kopi til).
+- **Kjente mangler:** modullista kopierer den publiserte versjonen, modulens hode den som vises (lista kjenner ikke id-en til et
+  nyere utkast); seksjonen tar alltid den nyeste. Når et ulagret, generert utkast er åpent i modulen, står ikke Dupliser og Arkiver
+  i hodet (som Eksporter og Erstatt fra fil, eksisterende mønster).
+- **Tester:** `test/e2e/header-duplicate-archive-1169.spec.ts` (12), `admin-content-course-draft-1140.spec.ts` (+2: flagget, og
+  kontroll uten utkast); `header-slots-1169` følger den nye rekkefølgen.
+- **Mutasjoner:** 14 av 14 røde (seks for rettelsene fra de to gjennomgangene).
+- **Ikke i denne:** «Dupliser kurs» (ny rute på tjeneren) og «Døp om» for kurs — skive 4b.
+
 ## 2.189.0 - 2026-11-28
 
 **#1169 skive 3 · Radene har hodets regel** (doc/DECISIONS.md, produkteier 26. og 28.11.2026; prototypen

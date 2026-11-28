@@ -31,11 +31,12 @@ Når et kurs, en modul, en seksjon eller en klasse er åpnet, står handlingene 
    endringer som ikke er publisert ennå) eller **Gjenopprett** (arkivert). Et publisert element uten utkast har ingen.
 3. For en modul: **Generer innhold**, **Be om endring** og **Generer spørsmål**. På telefon ligger de under «Mer».
 4. **Mer**, med resten i fast rekkefølge: Eksporter · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver · Slett (det som
-   gjelder). Modulens hode har ennå ikke Arkiver; den arkiveres fra lista.
+   gjelder). Fra 2.190.0 har modulens hode også Dupliser og Arkiver, og seksjonens hode Dupliser. En kopi åpnes med en gang.
 
 I listene (fra 2.189.0) står det samme i hver rad: **Åpne**, hovedhandlingen (Publiser, Publiser utkastet eller Gjenopprett) og
 **Mer** med Døp om · Dupliser · Eksporter · Avpubliser · Arkiver · Slett. «Slett» står også i seksjonslista for en arkivert
-seksjon. Et kurs med et utkast og en modul publiserer du fra hodet når de er åpnet.
+seksjon. «Publiser» og «Publiser utkastet» i modullista og kurslista åpner elementet og starter publiseringen der, med de samme
+spørsmålene som i hodet (fra 2.190.0).
 
 ### 1. Opprette ny modul fra bunnen
 

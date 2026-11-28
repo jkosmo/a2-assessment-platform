@@ -75,7 +75,8 @@ test.describe("#1169 — modulens hode", () => {
     await expect(primary(page)).toHaveText(["Publiser utkastet"]);
     await expect(actions(page).locator(':scope > [data-ws-key="generateContent"]')).toBeVisible();
     const items = await menu(page).allTextContents();
-    expect(items.slice(0, 3)).toEqual(["Eksporter", "Erstatt fra fil", "Avpubliser"]);
+    // #1169 skive 4: Dupliser først og Arkiver i hodet også.
+    expect(items).toEqual(["Dupliser", "Eksporter", "Erstatt fra fil", "Avpubliser", "Arkiver"]);
     // Merkene: versjonen rett etter «Publisert», så «Nyere utkast».
     await expect(page.locator("#moduleFormHead .form-page-state")).toContainText(/Publisert\s*v2\.1\s*Nyere utkast/);
   });
@@ -122,7 +123,7 @@ async function sectionBase(page: Page) {
 }
 
 test.describe("#1169 — seksjonens hode", () => {
-  test("publisert med nyere utkast: «Publiser utkastet» fylt; «Mer» med Eksporter · Erstatt fra fil · Avpubliser · Arkiver; Avpubliser virker", async ({ page }) => {
+  test("publisert med nyere utkast: «Publiser utkastet» fylt; «Mer» med Dupliser · Eksporter · Erstatt fra fil · Avpubliser · Arkiver; Avpubliser virker", async ({ page }) => {
     await sectionBase(page);
     const sek = { id: "sec-x", title: L3("Grunnleggende prinsipper"), bodyMarkdown: L3("Tekst"), activeVersionId: "v1", archivedAt: null, hasUnpublishedChanges: true, versionNo: 2, publishedVersionNo: 1, assets: [], canManage: true, courses: [] };
     await page.route("**/api/admin/content/sections/sec-x", (r: Route) => r.fulfill(json({ section: sek })));
@@ -130,7 +131,7 @@ test.describe("#1169 — seksjonens hode", () => {
     await page.route("**/api/admin/content/sections/sec-x/unpublish", (r: Route) => { calls.push("unpublish"); return r.fulfill(json({ section: { ...sek, activeVersionId: null, hasUnpublishedChanges: false } })); });
     await page.goto("/admin-content/sections?id=sec-x");
     await expect(primary(page)).toHaveText(["Publiser utkastet"]);
-    await expect(menu(page)).toHaveText(["Eksporter", "Erstatt fra fil", "Avpubliser", "Arkiver"]);
+    await expect(menu(page)).toHaveText(["Dupliser", "Eksporter", "Erstatt fra fil", "Avpubliser", "Arkiver"]);
     await expect(page.locator(".form-page-state")).toContainText(/Publisert\s*v1\s*Nyere utkast/);
     page.on("dialog", (d) => d.accept());
     await actions(page).locator("details.row-more > summary").click();
@@ -144,7 +145,7 @@ test.describe("#1169 — seksjonens hode", () => {
     await page.route("**/api/admin/content/sections/sec-y", (r: Route) => r.fulfill(json({ section: sek })));
     await page.goto("/admin-content/sections?id=sec-y");
     await expect(primary(page)).toHaveText(["Publiser"]);
-    await expect(menu(page)).toHaveText(["Eksporter", "Erstatt fra fil", "Arkiver"]);
+    await expect(menu(page)).toHaveText(["Dupliser", "Eksporter", "Erstatt fra fil", "Arkiver"]);
   });
 });
 

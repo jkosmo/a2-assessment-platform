@@ -1,6 +1,6 @@
 # #1169 og #1171 — handlinger og tilstandsmerker i hoder og rader
 
-Status: kartlagt 26.11.2026. Produkteier avgjorde § 4 samme dag (alle som anbefalt; doc/DECISIONS.md). Skive 1 (merkene og «Alt lagret») bygget i 2.187.0. Prototypen godkjent 28.11.2026 (doc/DECISIONS.md, punkt 5–7). Skive 2 (hodene) bygget i 2.188.0, skive 3 (radene) i 2.189.0. «Publiser» i modullista og «Publiser utkastet» i kurslista er flyttet til skive 4: de trenger publiseringsflyten fra hodet. Neste: skive 4. Fra konsistenssjekken
+Status: kartlagt 26.11.2026. Produkteier avgjorde § 4 samme dag (alle som anbefalt; doc/DECISIONS.md). Skive 1 (merkene og «Alt lagret») bygget i 2.187.0. Prototypen godkjent 28.11.2026 (doc/DECISIONS.md, punkt 5–7). Skive 2 (hodene) bygget i 2.188.0, skive 3 (radene) i 2.189.0. Skive 4a i 2.190.0: Dupliser og Arkiver i hodene der de manglet, og «Publiser» / «Publiser utkastet» i modul- og kurslista (lenke med flagg til hodets publisering). Neste: skive 4b, «Dupliser kurs» (ny rute) og «Døp om» for kurs. Fra konsistenssjekken
 #1157; rekkefølgen godkjent 21.11.2026 (doc/DECISIONS.md).
 
 ## Kort fortalt
