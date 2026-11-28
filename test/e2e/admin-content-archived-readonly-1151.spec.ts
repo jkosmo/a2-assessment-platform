@@ -93,7 +93,9 @@ test.describe("#1151 skive 3c — modulsida", () => {
     await expect(page.locator("[data-module-archived-notice]")).toHaveText("Modulen er arkivert og kan ikke endres. Gjenopprett den for å endre den.");
     await expect(page.locator("#formSaveBtn")).toHaveCount(0);
     await expect(page.locator("#formCancelLink")).toHaveCount(0);
-    await expect.poll(() => wsKeys(page)).toEqual(["export", "restore", "delete"]);
+    // #1169 skive 2: Gjenopprett er hovedhandlingen (først, fylt); Eksporter og Slett under «Mer».
+    await expect.poll(() => wsKeys(page)).toEqual(["restore", "export", "delete"]);
+    await expect(page.locator("#moduleFormHead [data-ws-key=\"restore\"]")).toHaveClass(/is-primary/);
 
     // Rediger: feltene og knappene i skjemaet er sperret (fieldseten rundt innholdet).
     await expect(page.locator("#previewEditTitle")).toBeDisabled();

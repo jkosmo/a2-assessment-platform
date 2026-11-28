@@ -22,9 +22,11 @@ const STATUS_KEYS = {
 
 // status ∈ {draft, published, archived}. opts.chipKey renders a secondary marker
 // (e.g. "nyere utkast") after the badge without changing the primary status word.
+// opts.versionChip (#1169): versjonsbrikken (`versionChipHtml`) står rett etter merket, FØR «Nyere utkast» — «Publisert · v2.1 ·
+// Nyere utkast», likt i alle lister og hoder. Versjonen hører til det som er publisert.
 export function lifecycleStatusBadge(status, t, opts = {}) {
   const key = STATUS_KEYS[status] ?? STATUS_KEYS.draft;
-  const badge = `<span class="status-badge status-badge--${escapeHtml(status)}">${escapeHtml(t(key))}</span>`;
+  const badge = `<span class="status-badge status-badge--${escapeHtml(status)}">${escapeHtml(t(key))}</span>${opts.versionChip ?? ""}`;
   if (!opts.chipKey) return badge;
   return `${badge} <span class="status-chip">${escapeHtml(t(opts.chipKey))}</span>`;
 }
@@ -69,11 +71,12 @@ export function lifecycleOf(item) {
 }
 
 /** Merket for en rad, med «Nyere utkast»-brikken når det finnes en versjon nyere enn den som er live. */
-export function lifecycleBadge(item, t) {
+export function lifecycleBadge(item, t, opts = {}) {
   const lifecycle = lifecycleOf(item);
-  if (lifecycle === "published_with_draft") return lifecycleStatusBadge("published", t, { chipKey: "adminContent.lifecycle.newerDraft" });
+  const versionChip = opts.versionChip ?? "";
+  if (lifecycle === "published_with_draft") return lifecycleStatusBadge("published", t, { chipKey: "adminContent.lifecycle.newerDraft", versionChip });
   if (lifecycle === "active") return "";
-  return lifecycleStatusBadge(lifecycle, t);
+  return lifecycleStatusBadge(lifecycle, t, { versionChip });
 }
 
 /**

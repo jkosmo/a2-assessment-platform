@@ -24,7 +24,29 @@ export function rowActionsHtml(buttons, options = {}) {
   if (items.length <= max) return items.join("");
   const shown = items.slice(0, max - 1);
   const rest = items.slice(max - 1);
-  return `${shown.join("")}<details class="row-more"><summary class="row-action-btn" aria-label="${moreLabel} handlinger">${moreLabel}</summary><div class="row-more-menu">${rest.join("")}</div></details>`;
+  return `${shown.join("")}<details class="row-more"><summary class="row-action-btn">${moreLabel}</summary><div class="row-more-menu">${rest.join("")}</div></details>`;
+}
+
+/**
+ * #1169 skive 2 (doc/DECISIONS.md, produkteier 26. og 28.11.2026): hodet har faste plasser, i denne rekkefølgen —
+ *   hovedhandlingen for tilstanden (`primary`, en fylt knapp) · innholdsverktøyene (`tools`, bare modulen) · «Mer» (`more`).
+ * «Mer» står alltid når den har noe i seg, også med én handling, og rekkefølgen inni den er sidens (fast: Dupliser · Eksporter
+ * · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver / Gjenopprett · Slett). På smal skjerm (`narrow`) legges verktøyene
+ * først i «Mer» i stedet for å stå som egne knapper (de ga fire linjer med knapper på 390 px).
+ *
+ * @param {{ primary?: Array<string|false|null|undefined>, tools?: Array<string|false|null|undefined>, more?: Array<string|false|null|undefined> }} slots
+ * @param {{ moreLabel?: string, narrow?: boolean }} [options]
+ */
+export function slotActionsHtml(slots, options = {}) {
+  const keep = (list) => (list ?? []).filter((b) => typeof b === "string" && b.trim().length > 0);
+  const moreLabel = options.moreLabel ?? "Mer";
+  const primary = keep(slots.primary);
+  const tools = keep(slots.tools);
+  const more = [...(options.narrow ? tools : []), ...keep(slots.more)];
+  const menu = more.length
+    ? `<details class="row-more"><summary class="row-action-btn">${moreLabel}</summary><div class="row-more-menu">${more.join("")}</div></details>`
+    : "";
+  return primary.join("") + (options.narrow ? "" : tools.join("")) + menu;
 }
 
 let installed = false;
@@ -50,6 +72,12 @@ function fitOpenMenus(root) {
   }
   for (const open of root.querySelectorAll("details.row-more[open]")) {
     const menu = open.querySelector(".row-more-menu");
+    // #1169: menyen henger fra høyre kant av «Mer». Står «Mer» langt til venstre (telefon, når raden brekker), gikk menyen ut av
+    // skjermen. Da åpner den mot høyre i stedet.
+    if (menu) {
+      menu.classList.remove("row-more-menu--start");
+      if (menu.getBoundingClientRect().left < 0) menu.classList.add("row-more-menu--start");
+    }
     const clip = clippingAncestor(open);
     if (!menu || !clip) continue;
     const over = menu.getBoundingClientRect().bottom - clip.getBoundingClientRect().bottom;

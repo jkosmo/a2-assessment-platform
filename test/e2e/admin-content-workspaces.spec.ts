@@ -1151,7 +1151,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     const chooser = page.waitForEvent("filechooser");
-    await clickEnabledButton(page, /^Importer$|^Import$/);
+    await clickEnabledButton(page, /^Erstatt fra fil$|^Replace from file$/);
     await (await chooser).setFiles({
       name: "module.json",
       mimeType: "application/json",
@@ -1195,7 +1195,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     const chooser = page.waitForEvent("filechooser");
-    await clickEnabledButton(page, /^Importer$|^Import$/);
+    await clickEnabledButton(page, /^Erstatt fra fil$|^Replace from file$/);
     await (await chooser).setFiles({
       name: "course.json",
       mimeType: "application/json",

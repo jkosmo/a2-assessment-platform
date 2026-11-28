@@ -22,6 +22,17 @@ API:
 
 ## Sentrale arbeidsflyter
 
+### Handlingene i hodet (fra 2.188.0, #1169)
+
+Når et kurs, en modul, en seksjon eller en klasse er åpnet, står handlingene øverst til høyre i samme rekkefølge overalt:
+
+1. **Lagre** og **Avbryt**.
+2. **Hovedhandlingen** for tilstanden, som en fylt knapp: **Publiser** (aldri publisert), **Publiser utkastet** (publisert, med
+   endringer som ikke er publisert ennå) eller **Gjenopprett** (arkivert). Et publisert element uten utkast har ingen.
+3. For en modul: **Generer innhold**, **Be om endring** og **Generer spørsmål**. På telefon ligger de under «Mer».
+4. **Mer**, med resten i fast rekkefølge: Eksporter · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver · Slett (det som
+   gjelder). Modulens hode har ennå ikke Arkiver; den arkiveres fra lista.
+
 ### 1. Opprette ny modul fra bunnen
 
 1. Gå til `/admin-content` → fanen **Moduler**

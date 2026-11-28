@@ -1118,7 +1118,7 @@ function getListPage() {
         // Alfabetisk står temaene under navnet; etter tema sier overskriften det.
         + (view === "alphabetical" && (c.themes ?? []).length > 0 ? `<span class="list-group-themes">${escapeHtml(c.themes.map((theme) => theme.name).join(" · "))}</span>` : "") },
       // #934 skive 3: versjonen ved statusen («v3.2») — et merke, ikke en kolonne (#1084).
-      { key: "status", label: t("ui.status"), className: "col-status", render: (c, ctx) => lifecycleBadge(c, t) + courseVersionChipHtml(c) + (ctx.filter === "archived" ? retentionLineHtml(c, "course", t, currentLocale) : "") },
+      { key: "status", label: t("ui.status"), className: "col-status", render: (c, ctx) => lifecycleBadge(c, t, { versionChip: courseVersionChipHtml(c) }) + (ctx.filter === "archived" ? retentionLineHtml(c, "course", t, currentLocale) : "") },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (c) => certBadge(c.certificationLevel) },
       { key: "moduleCount", label: t("courses.col.moduleCount"), className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
       { key: "inProgress", label: t("courses.col.inProgress"), className: "col-inprogress", title: t("courses.col.inProgressHint"), sortValue: (c) => c.inProgressCount ?? 0, render: (c) => (c.inProgressCount > 0 ? String(c.inProgressCount) : "–") },
@@ -2473,7 +2473,7 @@ function getCourseFormPage() {
     // #1140 etappe 2: med utkast «Publisert» + «Nyere utkast» (det felles merket), og linja om hvem som lagret det.
     statusHtml: () => {
       const course = courseDetail?.course ?? null;
-      return course ? lifecycleBadge(course, t) + courseVersionChipHtml(course) + courseDraftStateHtml(course) + courseArchivedNoticeHtml() : "";
+      return course ? lifecycleBadge(course, t, { versionChip: courseVersionChipHtml(course) }) + courseDraftStateHtml(course) + courseArchivedNoticeHtml() : "";
     },
     t,
     actions: () => courseDetailActions(),
@@ -2504,32 +2504,42 @@ function courseDetailActions() {
   // #1140 etappe 2: rett etter Lagre og Avbryt, og bare når kurset har et lagret utkast. «Publiser utkastet» bare for et
   // publisert kurs (serveren avviser ellers); «Forkast utkast» alltid, så et utkast aldri står uten en vei ut.
   const draftLoaded = courseDraft != null && courseHasDraft(c);
+  const exportBtn = `<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`;
   // #1165: en annens kurs leses og eksporteres; resten er eiernes (tjeneren avviser det med 403).
-  if (courseIsReadOnly()) {
-    return [`<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`];
-  }
-  return [
-    draftLoaded && isLiveLifecycle(lifecycle) && !courseDraft.unreadable
-      ? `<button type="button" id="publishCourseDraftBtn" class="row-action-btn" data-action="publish-draft" data-course-id="${cid}">${escapeHtml(t("courses.draft.publishAction"))}</button>`
-      : "",
+  if (courseIsReadOnly()) return { more: [exportBtn] };
+  const archived = lifecycle === "archived";
+  const live = isLiveLifecycle(lifecycle);
+  // #1169 skive 2 (doc/DECISIONS.md 28.11.2026): hovedhandlingen for tilstanden som fylt knapp, resten under «Mer» i fast
+  // rekkefølge (Eksporter · Forkast utkast · Avpubliser · Arkiver / Slett). «Publiser nye versjoner (n)» fører også arbeidet
+  // videre og står ved hovedhandlingen, uten fyll når kurset har et utkast å publisere.
+  const publishDraft = draftLoaded && live && !courseDraft.unreadable;
+  const primary = archived
+    ? [`<button type="button" class="row-action-btn is-primary" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.restore"))}</button>`]
+    : [
+      publishDraft
+        ? `<button type="button" id="publishCourseDraftBtn" class="row-action-btn is-primary" data-action="publish-draft" data-course-id="${cid}">${escapeHtml(t("courses.draft.publishAction"))}</button>`
+        : "",
+      !live && moduleCount > 0
+        ? `<button type="button" id="publishCourseBtn" class="row-action-btn is-primary" data-action="publish" data-course-id="${cid}">${escapeHtml(t("ui.action.publish"))}</button>`
+        : "",
+      pendingCount > 0
+        ? `<button type="button" class="row-action-btn${publishDraft || (!live && moduleCount > 0) ? "" : " is-primary"}" data-action="publish-pending" data-course-id="${cid}">${escapeHtml(tf("adminContent.courses.pendingPublish.action", { count: pendingCount }))}</button>`
+        : "",
+    ];
+  const more = [
+    exportBtn,
     draftLoaded
       ? `<button type="button" id="discardCourseDraftBtn" class="row-action-btn" data-action="discard-draft" data-course-id="${cid}">${escapeHtml(t("courses.draft.discardAction"))}</button>`
       : "",
-    pendingCount > 0
-      ? `<button type="button" class="row-action-btn" data-action="publish-pending" data-course-id="${cid}">${escapeHtml(tf("adminContent.courses.pendingPublish.action", { count: pendingCount }))}</button>`
+    !archived && live
+      ? `<button type="button" class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.unpublish"))}</button>`
       : "",
-    `<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`,
-    lifecycle === "archived" ? ""
-      : isLiveLifecycle(lifecycle)
-        ? `<button type="button" class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.unpublish"))}</button>`
-        : (moduleCount > 0 ? `<button type="button" id="publishCourseBtn" class="row-action-btn" data-action="publish" data-course-id="${cid}">${escapeHtml(t("ui.action.publish"))}</button>` : ""),
-    lifecycle === "archived"
-      ? `<button type="button" class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.restore"))}</button>`
-      : `<button type="button" class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.archive"))}</button>`,
-    lifecycle === "archived" ? `<button type="button" class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
+    archived ? "" : `<button type="button" class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.archive"))}</button>`,
+    archived ? `<button type="button" class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
     // #1151 skive 3b/3c: «Slett med innhold» bare for et arkivert kurs, som i lista (tjeneren: `delete_requires_archived`).
-    isAdministrator() && lifecycle === "archived" ? `<button type="button" class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>` : "",
+    isAdministrator() && archived ? `<button type="button" class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>` : "",
   ];
+  return { primary, more };
 }
 
 /**

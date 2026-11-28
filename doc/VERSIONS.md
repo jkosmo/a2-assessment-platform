@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.188.0 - 2026-11-28
+
+**#1169 skive 2 · Hodene har faste plasser** (doc/DECISIONS.md, produkteier 26. og 28.11.2026; prototypen
+https://claude.ai/artifact/RuABRhvRBxfQwnzJ2jYMU8). Bare klienten.
+
+- **Regelen** (`slotActionsHtml` i `row-actions.js`, brukt av `form-page.js`): Lagre/Avbryt · hovedhandlingen for tilstanden som
+  fylt knapp (`is-primary`: Publiser, Publiser utkastet, Gjenopprett) · modulens innholdsverktøy · «Mer», alltid når den har noe,
+  i fast rekkefølge: Eksporter · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver / Slett. Før viste hodet de tre første
+  handlingene og resten under «Mer» først når det var flere enn fire, så hva som havnet der, avhang av tilstanden.
+- **Alle fire hodene:** kurs (`courseDetailActions`), modul (`moduleHeaderSlots`), seksjon (`sectionActions`), klasse.
+  «Publiser nye versjoner (n)» i kurset står ved hovedhandlingen (fylt bare når den er alene).
+- **Smal skjerm (under 700 px):** modulens innholdsverktøy ligger først under «Mer»; hodet tegnes på nytt når bredden krysser
+  grensen.
+- **«Mer» åpner mot høyre** når menyen ellers ville gått ut av skjermen til venstre (`row-more-menu--start`). Gjelder også
+  listene.
+- **Navn:** «Publiser ny versjon» (seksjon) heter «Publiser utkastet», som kurset; modulen sier «Publiser utkastet» når den er
+  publisert og har et nyere utkast. Modulens «Importer» heter «Erstatt fra fil», som seksjonens.
+- **Merkene:** «Publisert · v2.1 · Nyere utkast» i alle lister og hoder (`lifecycleBadge(item, t, { versionChip })`). Skive 1
+  satte versjonen etter «Nyere utkast» i listene og i kursets og seksjonens hode.
+- **Endret i eldre tester:** handlinger som nå ligger under «Mer», åpnes med `revealRowAction` eller telles i stedet for å kreves
+  synlige (`admin-content-course-draft-1140`, `admin-content-course-publish-pending`, `section-publish-new-version-1095`,
+  `section-jobs-stay-in-their-section-1154`); rekkefølgen i hodet (`admin-content-archived-readonly-1151`, `…-course-draft-1140`);
+  de nye navnene (`admin-content-module-publish-unsaved-1189`, `admin-content-workspaces`, `section-publish-new-version-1095`);
+  «Nyere utkast» er ikke lenger første brikke.
+- **QA-porten (GO):** to funn rettet. Klassens hode bandt klikklytteren direkte på `.form-page-actions`; når hodet tegnes på nytt
+  (bredden krysser 700 px), fulgte lytteren med det gamle elementet, og «Arkiver» gjorde ingenting. Nå delegert fra `pageContent`,
+  bundet én gang, som kurset og seksjonen. Rotårsak: den nye grunnen til å tegne hodet på nytt (bredden) ble ikke sjekket mot
+  hvem som lytter på hodet; minnet «omtegnet hode dreper lyttere» gjaldt. «Mer» hadde `aria-label="… handlinger"` på bokmål
+  i alle språk («More handlinger»); nå er navnet knappens tekst.
+- **Kjent mangel (eksisterende):** `participant-module-course-context-1140.spec.ts:233` feiler to av seks ganger også på 2.187.1
+  (målt med endringene lagt til side); deltakersiden er ikke rørt.
+- **Tester:** `test/e2e/header-slots-1169.spec.ts` (15).
+- **Mutasjoner:** 9 av 9 røde (klassens lytter på det gamle hodet, verktøyene aldri under «Mer», «Mer» bare med to eller flere, Gjenopprett ikke fylt, menyen ut av
+  skjermen, versjonen etter «Nyere utkast», «Publiser» i stedet for «Publiser utkastet», ingen ny tegning ved bredde, «Mer» uten
+  fast rekkefølge). Menyen-ut-av-skjermen overlevde først: på 390 px står «Mer» aldri så langt til venstre; testen kjører nå på
+  320 px og krever at forutsetningen holder.
+- **Ikke i denne skiven:** radene (skive 3), Dupliser og Arkiver der de mangler (skive 4).
+
 ## 2.187.1 - 2026-11-28
 
 **#1171 · Arkiverte kurs beholder versjonsbrikken.** Sjekket mot ekte stage-data etter 2.187.0: 20 av 51 arkiverte kurs står på

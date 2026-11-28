@@ -1,6 +1,6 @@
 # #1169 og #1171 — handlinger og tilstandsmerker i hoder og rader
 
-Status: kartlagt 26.11.2026. Produkteier avgjorde § 4 samme dag (alle som anbefalt; doc/DECISIONS.md). Skive 1 (merkene og «Alt lagret») bygget i 2.187.0. Neste: prototype (Artifact) av hodene og radene før skive 2 og 3. Fra konsistenssjekken
+Status: kartlagt 26.11.2026. Produkteier avgjorde § 4 samme dag (alle som anbefalt; doc/DECISIONS.md). Skive 1 (merkene og «Alt lagret») bygget i 2.187.0. Prototypen godkjent 28.11.2026 (doc/DECISIONS.md, punkt 5–7). Skive 2 (hodene) bygget i 2.188.0. Neste: skive 3 (radene). Fra konsistenssjekken
 #1157; rekkefølgen godkjent 21.11.2026 (doc/DECISIONS.md).
 
 ## Kort fortalt

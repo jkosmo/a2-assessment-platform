@@ -3682,8 +3682,7 @@ function createModuleFormPage() {
     statusHtml: moduleStatusBadgesHtml,
     t,
     // `data-ws-key`: hvilken handling knappen er (testene og #1151 leser den); klikket slås fortsatt opp på indeksen.
-    actions: () => workspaceActionChoices.map((choice, i) =>
-      `<button type="button" class="row-action-btn workspace-action-btn${choice.destructive ? " destructive" : ""}" data-ws-action="${i}" data-ws-key="${escapeHtml(choice.key ?? "")}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
+    actions: () => moduleHeaderSlots(),
     languages: { locales: supportedLocales, labels: localeLabels, current: () => contentLocale, onChange: switchContentLocale },
     tabs: {
       label: t("shell.tab.listLabel"),
@@ -3705,6 +3704,35 @@ function createModuleFormPage() {
   });
   formPage.render();
   formPage.installGuards();
+}
+
+// #1169 skive 2 (doc/DECISIONS.md 28.11.2026): plassene i hodet. Hovedhandlingen for tilstanden (Publiser / Publiser utkastet,
+// Gjenopprett) som fylt knapp · innholdsverktøyene (på smal skjerm under «Mer», form-page.js) · «Mer» i fast rekkefølge:
+// Eksporter · Erstatt fra fil · Avpubliser · Slett. Klikket slås fortsatt opp på indeksen i `workspaceActionChoices`.
+const MODULE_SLOT = {
+  publish: "primary", restore: "primary",
+  generateContent: "tools", resumeChatEdit: "tools", revise: "tools", generateMcq: "tools",
+  export: "more", import: "more", unpublish: "more", delete: "more",
+};
+const MODULE_MORE_ORDER = ["export", "import", "unpublish", "delete"];
+function moduleHeaderSlots() {
+  const slots = { primary: [], tools: [], more: [] };
+  const more = [];
+  workspaceActionChoices.forEach((choice, i) => {
+    const slot = MODULE_SLOT[choice.key] ?? "more";
+    // Publisert med et nyere, lagret utkast: «Publiser utkastet», som kurset og seksjonen.
+    const label = choice.key === "publish" && bundle?.module?.activeVersionId ? t("courses.draft.publishAction") : resolveChoiceLabel(choice);
+    const cls = `row-action-btn workspace-action-btn${slot === "primary" ? " is-primary" : ""}${choice.destructive ? " destructive" : ""}`;
+    const html = `<button type="button" class="${cls}" data-ws-action="${i}" data-ws-key="${escapeHtml(choice.key ?? "")}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(label)}</button>`;
+    if (slot === "more") more.push({ key: choice.key, html });
+    else slots[slot].push(html);
+  });
+  more.sort((a, b) => {
+    const ia = MODULE_MORE_ORDER.indexOf(a.key), ib = MODULE_MORE_ORDER.indexOf(b.key);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  slots.more = more.map((m) => m.html);
+  return slots;
 }
 
 function saveFromHeader() {

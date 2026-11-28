@@ -245,7 +245,7 @@ function getListPage() {
       // #1046 steg B/C8: «Nyere utkast»-brikken følger med når tjeneren sier published_with_draft.
       // #1171: versjonen som brikke ved merket, som for kurs og modul (før egen kolonne, og «v1» også for et utkast som aldri er
       // publisert). `versionNo` er den publiserte versjonen fra tjeneren; uten den er det ingen brikke.
-      { key: "status", label: L("colStatus"), className: "col-status", render: (s, ctx) => lifecycleBadge(s, tNav) + sectionVersionChipHtml(s.versionNo) + (ctx.filter === "archived" ? retentionLineHtml(s, "section", tNav, currentLocale) : "") },
+      { key: "status", label: L("colStatus"), className: "col-status", render: (s, ctx) => lifecycleBadge(s, tNav, { versionChip: sectionVersionChipHtml(s.versionNo) }) + (ctx.filter === "archived" ? retentionLineHtml(s, "section", tNav, currentLocale) : "") },
       { key: "courses", label: L("colCourses"), className: "col-courses", sortValue: (s) => Number(s.courseCount ?? 0), render: (s) => {
         const courseCount = Number(s.courseCount ?? 0);
         return courseCount > 0
@@ -936,7 +936,7 @@ function getFormPage() {
     // #1151 skive 3c: merket som før, og for en arkivert seksjon linja om hvorfor den ikke kan endres (som kurset og modulen).
     statusHtml: () => {
       const item = sectionHeaderItem();
-      return item ? lifecycleBadge(item, tNav) + sectionVersionChipHtml(editing?.activeVersionId ? editing.publishedVersionNo : null) + sectionArchivedNoticeHtml() + sectionDraftLineHtml() : "";
+      return item ? lifecycleBadge(item, tNav, { versionChip: sectionVersionChipHtml(editing?.activeVersionId ? editing.publishedVersionNo : null) }) + sectionArchivedNoticeHtml() + sectionDraftLineHtml() : "";
     },
     t: tNav,
     actions: () => sectionActions(),
@@ -1034,29 +1034,30 @@ function sectionActions() {
   const edit = sectionCanEdit();
   const status = editorSectionStatus();
   const id = editing.id ? escapeHtml(editing.id) : "";
-  // Rekkefølge som i lista (D2): det man gjør ofte først, det farlige sist — tre vises, resten under «Mer».
-  return [
-    // #1163 skive 2 (prinsipp 3): ingen «Oversett»-knapp. Tittelen, teksten og figurene oversettes når seksjonen lagres.
-    id ? `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>` : "",
-    // #1095: den nye versjonen redigereren viser, er ikke den deltakerne ser — publiser den.
-    // Livssyklus og «Erstatt fra fil» bare for den som kan styre seksjonen (eier eller administrator) —
-    // en ikke-eier fikk 403 (QA-porten 2.88.3). Eksporter er en lese-/kopihandling.
-    id && manage && status === "published" && editing.hasUnpublishedChanges
-      ? `<button type="button" class="row-action-btn" id="sectionPublishNewBtn" data-editor-action="publish">${escapeHtml(L("publishNewVersion"))}</button>`
-      : "",
-    id && manage && status && status !== "archived"
-      ? (status === "published"
-        ? `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="unpublish">${escapeHtml(L("unpublish"))}</button>`
-        : `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="publish">${escapeHtml(L("publish"))}</button>`)
-      : "",
-    id && edit ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
-    id && manage && status ? (status === "archived"
-      ? `<button type="button" class="row-action-btn" data-editor-action="restore">${escapeHtml(L("restore"))}</button>`
-      : `<button type="button" class="row-action-btn" data-editor-action="archive">${escapeHtml(L("archive"))}</button>`) : "",
+  if (!id) return [];
+  // #1169 skive 2 (doc/DECISIONS.md 28.11.2026): hovedhandlingen for tilstanden som fylt knapp, resten under «Mer» i fast
+  // rekkefølge (Eksporter · Erstatt fra fil · Avpubliser · Arkiver / Slett). Livssyklus og «Erstatt fra fil» bare for den som kan
+  // styre seksjonen (eier eller administrator) — en ikke-eier fikk 403 (QA-porten 2.88.3). Eksporter er en lese-/kopihandling.
+  // #1163 skive 2 (prinsipp 3): ingen «Oversett»-knapp. Tittelen, teksten og figurene oversettes når seksjonen lagres.
+  const archived = status === "archived";
+  const published = status === "published";
+  const primary = !manage || !status ? [] : archived
+    ? [`<button type="button" class="row-action-btn is-primary" data-editor-action="restore">${escapeHtml(L("restore"))}</button>`]
+    : published
+      // #1095: den nye versjonen redigereren viser, er ikke den deltakerne ser — publiser den.
+      ? [editing.hasUnpublishedChanges ? `<button type="button" class="row-action-btn is-primary" id="sectionPublishNewBtn" data-editor-action="publish">${escapeHtml(L("publishNewVersion"))}</button>` : ""]
+      : [`<button type="button" class="row-action-btn is-primary" id="sectionLifecycleBtn" data-editor-action="publish">${escapeHtml(L("publish"))}</button>`];
+  const more = [
+    `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>`,
+    edit ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
+    manage && published ? `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="unpublish">${escapeHtml(L("unpublish"))}</button>` : "",
+    manage && status && !archived ? `<button type="button" class="row-action-btn" data-editor-action="archive">${escapeHtml(L("archive"))}</button>` : "",
     // #1046 D3: sletting bor her, ikke i lista — og bare for en arkivert seksjon.
-    id && manage && status === "archived" ? `<button type="button" class="row-action-btn destructive" id="sectionDeleteBtn" data-editor-action="delete">${escapeHtml(L("del"))}</button>` : "",
+    manage && archived ? `<button type="button" class="row-action-btn destructive" id="sectionDeleteBtn" data-editor-action="delete">${escapeHtml(L("del"))}</button>` : "",
   ];
+  return { primary, more };
 }
+
 
 // Tre faner (produkteier 13.09): Rediger i full bredde — spaltene side om side ble for smale —
 // Forhåndsvisning for seg, og Innstillinger med eierne.

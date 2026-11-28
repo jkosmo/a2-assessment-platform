@@ -685,6 +685,8 @@ rette på én liste og glemme på de andre:
 |---|---|---|
 | **Kort under 600 px:** kolonnenavn foran hver verdi, ingenting utenfor kortet | `data-label` settes i `list-page.js`; telefonregelen for `.list-table` i `shared.css` | Navnekolonnen heter `col-name` i Moduler og Klasser, `col-title` i Kurs og Seksjoner — **to velgere**, og en regel som bare nevner den ene lar to lister stå igjen |
 | **«Mer»-menyen klippes ikke** av tabellrammen | `fitOpenMenus` i `row-actions.js` låner luft i bunnen av nærmeste ramme som klipper | Alle som bruker `rowActionsHtml`: de fire listene, `form-page.js`, `admin-content-shell.js`, `results.js` |
+| **«Mer» åpner innenfor skjermen** (#1169, 2.188.0) | `fitOpenMenus` gir menyen `row-more-menu--start` (åpner mot høyre) når den ellers går ut til venstre | Samme flater; telefon når raden brekker |
+| **Hodets faste plasser** (#1169 skive 2, 2.188.0) | `slotActionsHtml` i `row-actions.js`; `form-page.js` tar `{ primary, tools, more }` og legger `tools` under «Mer» under 700 px | Kurs `courseDetailActions`, modul `moduleHeaderSlots`, seksjon `sectionActions`, klasse (`actions` i `admin-content-classes.js`). Hovedknappen har `is-primary`. Rekkefølgen i «Mer» er sidens: Eksporter · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver / Slett. Guard: `test/e2e/header-slots-1169.spec.ts` |
 
 **Guards:** `test/e2e/list-mobile-labels-1080.spec.ts` (modullista for `col-name`, kurslista for
 `col-title`, omdøpingsfeltet på 390 px, kontroll for skrivebord) og

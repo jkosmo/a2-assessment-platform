@@ -59,7 +59,8 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     await page.goto("/admin-content/sections");
     const knapp = page.locator('[data-action="publish-new"][data-id="sec-ny"]');
     await expect(knapp).toBeVisible();
-    await expect(knapp).toHaveText("Publiser ny versjon");
+    // #1169: samme ord som kurset og modulen.
+    await expect(knapp).toHaveText("Publiser utkastet");
     await expect(page.locator('[data-action="publish-new"][data-id="sec-lik"]')).toHaveCount(0);
     // Den står synlig (ikke under «Mer»): den er rett i raden.
     expect(await knapp.evaluate((el) => Boolean(el.closest("details.row-more")))).toBe(false);
@@ -98,7 +99,8 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     await expect(page.locator(".status-chip:not(.version-chip)")).toHaveText("Nyere utkast");
     const knapp = page.locator("#sectionPublishNewBtn");
     await expect(knapp).toBeVisible();
-    await expect(knapp).toHaveText("Publiser ny versjon");
+    // #1169: samme ord som kurset og modulen.
+    await expect(knapp).toHaveText("Publiser utkastet");
 
     await knapp.click();
     // #1163: dialogen først.
@@ -145,7 +147,7 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     await expect(page.locator("#sectionPublishNewBtn")).toHaveCount(0);
     // Hodet er tegnet på nytt igjen: «Avpubliser» virker også.
     page.once("dialog", (d) => d.accept());
-    await page.locator("#sectionLifecycleBtn").click();
+    await (await revealRowAction(page, page.locator("#sectionLifecycleBtn"))).click();
     await expect.poll(() => kall).toEqual(["publish", "unpublish"]);
   });
 

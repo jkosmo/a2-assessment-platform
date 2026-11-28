@@ -223,7 +223,7 @@ function getListPage() {
       // #894: hvilke språk tittelen MANGLER. Står ved siden av navnet fordi det er navnet det
       // gjelder — ikke modulens tilstand.
       { key: "lang", label: t("ui.lang.col"), className: "col-lang", sortValue: (m) => manglendeSpraak(m).length, render: (m) => spraakMerkeHtml(m, tf) },
-      { key: "status", label: t("ui.status"), className: "col-status", render: (m, ctx) => lifecycleBadge(m, t) + moduleVersionChipHtml(m) + (ctx.filter === "archived" ? retentionLineHtml(m, "module", t, currentLocale) : "") },
+      { key: "status", label: t("ui.status"), className: "col-status", render: (m, ctx) => lifecycleBadge(m, t, { versionChip: moduleVersionChipHtml(m) }) + (ctx.filter === "archived" ? retentionLineHtml(m, "module", t, currentLocale) : "") },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (m) => certBadge(m.certificationLevel) },
       { key: "courses", label: t("library.col.usedInCourses"), className: "col-courses", sortValue: (m) => m.courseCount ?? 0, render: (m) => (m.courseCount > 0
         ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${escapeHtml(tf("library.courseCountAria", { count: m.courseCount }))}">${m.courseCount}</button>`

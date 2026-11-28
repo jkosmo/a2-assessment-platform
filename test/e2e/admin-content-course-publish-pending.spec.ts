@@ -138,7 +138,8 @@ test.describe("2.101.0 publiser alle nye versjoner i kurset", () => {
   test("ingenting ligger klar: ingen knapp, og flagget åpner ingen dialog", async ({ page }) => {
     await mockPending(page, [pending({ items: [], passedTotal: 0, modulesWithPasses: 0 })]);
     await page.goto(`${COURSE}?publishPending=1`);
-    await expect(page.locator('.form-page-actions [data-action="export"]')).toBeVisible();
+    // #1169 skive 2: Eksporter står under «Mer».
+    await expect(page.locator('.form-page-actions [data-action="export"]')).toHaveCount(1);
     await expect(page.locator('[data-action="publish-pending"]')).toHaveCount(0);
     await expect(page.locator("#pendingPublishDialog")).toBeHidden();
   });

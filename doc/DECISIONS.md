@@ -2573,6 +2573,20 @@ Valgt i planen, ikke spurt: **«Erstatt fra fil»** er navnet i hodet for både 
 
 **Sak:** #1169, #1171 · **Dato:** 2026-11-26 · **Status:** avgjort av produkteier (1–4)
 
+Etter prototypen (https://claude.ai/artifact/RuABRhvRBxfQwnzJ2jYMU8) avgjorde produkteier 28.11.2026, alle tre som anbefalt:
+
+5. **Regelen er godkjent slik prototypen viser den:** Lagre/Avbryt · hovedhandlingen for tilstanden · (modul) innholdsverktøyene
+   · «Mer» med fast rekkefølge (Døp om (rad) · Dupliser · Eksporter · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver /
+   Gjenopprett · Slett). I raden står «Åpne» først. Unntak: en klasse leseren ikke eier, har ingen «Mer» (ingenting å vise).
+6. **På smal skjerm ligger modulens innholdsverktøy under «Mer»** (punkt 3 gjelder bred skjerm): på 390 px ga de fire linjer med
+   knapper i hodet.
+7. **Hovedhandlingen er en fylt knapp**, så neste steg synes. De andre handlingene står som før.
+
+Også fra prototypen, uten spørsmål: merkene står i rekkefølgen «Publisert · v2.1 · Nyere utkast» overalt, og «Mer» åpner mot høyre
+når menyen ellers ville gått ut av skjermen.
+
+**Sak:** #1169 · **Dato:** 2026-11-28 · **Status:** avgjort av produkteier (5–7)
+
 ## «Åpen» og «Alle deltakere» er to ting; produsenter leser alle klasser (2026-11-26)
 
 Produkteier 26.11.2026, etter at en SME så flere kurs i «Mine kurs» enn klassene skulle gi (det var kursenes «Åpen»):

@@ -382,12 +382,12 @@ function getFormPage() {
       const k = openClassState?.klass;
       if (!k?.id || k.isSystem || k.canManage === false) return [];
       const archived = Boolean(k.archivedAt);
-      return [
-        archived
-          ? `<button class="row-action-btn" data-action="restore">${escapeHtml(tNav("ui.action.restore"))}</button>`
-          : `<button class="row-action-btn" data-action="archive">${escapeHtml(tNav("ui.action.archive"))}</button>`,
-        archived ? `<button class="row-action-btn destructive" data-action="delete">${escapeHtml(tNav("ui.action.delete"))}</button>` : "",
-      ];
+      // #1169 skive 2 (doc/DECISIONS.md 28.11.2026): Gjenopprett er hovedhandlingen for en arkivert klasse; Arkiver og Slett står
+      // under «Mer», som i de andre hodene.
+      return archived
+        ? { primary: [`<button class="row-action-btn is-primary" data-action="restore">${escapeHtml(tNav("ui.action.restore"))}</button>`],
+          more: [`<button class="row-action-btn destructive" data-action="delete">${escapeHtml(tNav("ui.action.delete"))}</button>`] }
+        : { more: [`<button class="row-action-btn" data-action="archive">${escapeHtml(tNav("ui.action.archive"))}</button>`] };
     },
     tabs: { items: () => [{ id: "rediger", label: tNav("ui.tab.edit") }, { id: "innstillinger", label: tNav("ui.tab.settings") }], initial: "rediger" },
     body: () => classFormBodyHtml(),
@@ -571,21 +571,31 @@ async function saveClassForm() {
   }
 }
 
+// Handlingsraden i hodet. ⚠️ Delegert fra `pageContent`, bundet ÉN gang, og klassen leses når det klikkes: hodet tegnes på nytt
+// (`refreshHeader`, f.eks. når bredden krysser grensen for smal skjerm, #1169), og en lytter på `.form-page-actions` fulgte med det
+// gamle elementet ut — «Arkiver» lukket menyen og gjorde ingenting (QA-porten 2.188.0; samme feil som kurset i 2.89.1 og
+// seksjonen i 2.88.3). Lista har ingen `.form-page-actions`, så radhandlingene røres ikke.
+let classHeaderActionsBound = false;
+function bindClassHeaderActions() {
+  if (classHeaderActionsBound) return;
+  classHeaderActionsBound = true;
+  pageContent.addEventListener("click", async (e) => {
+    const btn = e.target instanceof Element ? e.target.closest(".form-page-actions [data-action]") : null;
+    const k = openClassState?.klass;
+    if (!btn || !k) return;
+    if (!getFormPage().confirmLeave()) return;
+    if (btn.dataset.action === "archive") { await archiveClass(k.id, k.name, { stay: true, button: btn }); return; }
+    if (btn.dataset.action === "restore") { await restoreClassInAdmin(k.id, k.name, { stay: true, button: btn }); return; }
+    if (btn.dataset.action === "delete") { await deleteClassInAdmin(k.id, k.name, { button: btn }); }
+  });
+}
+
 function bindClassFormHandlers() {
   const st = openClassState;
   if (!st) return;
   const id = st.id;
 
-  // Handlingsraden i hodet.
-  pageContent.querySelector(".form-page-actions")?.addEventListener("click", async (e) => {
-    const btn = e.target.closest("[data-action]");
-    if (!btn || !st.klass) return;
-    if (!getFormPage().confirmLeave()) return;
-    const k = st.klass;
-    if (btn.dataset.action === "archive") { await archiveClass(k.id, k.name, { stay: true, button: btn }); return; }
-    if (btn.dataset.action === "restore") { await restoreClassInAdmin(k.id, k.name, { stay: true, button: btn }); return; }
-    if (btn.dataset.action === "delete") { await deleteClassInAdmin(k.id, k.name, { button: btn }); }
-  });
+  bindClassHeaderActions();
 
   if (!id) return;
 

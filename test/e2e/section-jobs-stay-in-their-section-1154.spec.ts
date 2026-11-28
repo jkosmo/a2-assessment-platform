@@ -280,7 +280,8 @@ test.describe("#1154 — en jobb skriver bare i visningen den startet i", () => 
     });
     await page.goto("/admin-content/sections");
     await aapne(page, "sec-a");
-    await page.locator("#sectionLifecycleBtn").click();
+    // #1169 skive 2: Avpubliser står under «Mer».
+    await (await revealRowAction(page, page.locator("#sectionLifecycleBtn"))).click();
     await expect.poll(() => svar.kall).toBe(1);
     await page.goBack();
     await aapne(page, "sec-b");

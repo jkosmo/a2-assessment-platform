@@ -36,6 +36,7 @@ describe("#1046 D5 — maks fire i raden", () => {
     expect(ROW_ACTIONS_MAX).toBe(4);
     const html = rowActionsHtml([knapp("A"), knapp("B"), knapp("C"), knapp("D"), knapp("E")], { moreLabel: "Meir" });
     expect(html).toContain(">Meir</summary>");
-    expect(html).toContain('aria-label="Meir handlinger"');
+    // QA-porten 2.188.0: navnet er knappens tekst på sidens språk. Før sto «handlinger» på bokmål i alle språk («More handlinger»).
+    expect(html).not.toContain("handlinger");
   });
 });

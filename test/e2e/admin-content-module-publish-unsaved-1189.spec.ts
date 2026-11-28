@@ -39,7 +39,8 @@ async function aapneModulMedNyereUtkast(page: Page) {
   return publiseringer;
 }
 
-const publiserKnapp = (page: Page) => page.locator("#moduleFormHead [data-ws-action]").filter({ hasText: /^(Publiser|Publish)$/ });
+// #1169 skive 2: en publisert modul med nyere utkast har «Publiser utkastet» som hovedhandling.
+const publiserKnapp = (page: Page) => page.locator("#moduleFormHead [data-ws-key=\"publish\"]");
 
 test.describe("#1189 — modulens Publiser med ulagrede endringer", () => {
   test("spør først; nei publiserer ingenting og lar det som er skrevet stå", async ({ page }) => {
@@ -82,8 +83,8 @@ test.describe("#1189 — modulens Publiser med ulagrede endringer", () => {
     expect(dialoger.some((m) => sporsmal.test(m))).toBe(true);
   });
 
-  // Avpubliser og Importer laster også modulen på nytt. Begge spør nå når Rediger har ulagrede endringer.
-  for (const [navn, tekst] of [["Avpubliser", /^(Avpubliser|Unpublish)$/], ["Importer", /^(Importer|Import)$/]] as const) {
+  // Avpubliser og Erstatt fra fil (før «Importer», #1169) laster også modulen på nytt. Begge spør nå når Rediger har ulagrede endringer.
+  for (const [navn, tekst] of [["Avpubliser", /^(Avpubliser|Unpublish)$/], ["Erstatt fra fil", /^(Erstatt fra fil|Replace from file)$/]] as const) {
     test(`${navn} spør også først når Rediger har ulagrede endringer, og nei rører ingenting`, async ({ page }) => {
       const dialoger: string[] = [];
       page.on("dialog", (d) => { dialoger.push(d.message()); void d.dismiss(); });
