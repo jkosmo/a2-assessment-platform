@@ -16,8 +16,10 @@
  * Bare lesing: tilkoblingen åpnes med `default_transaction_read_only=on`. Skriver kurs-id, tittel og antall. Ingen navn,
  * e-postadresser eller bruker-id-er.
  *
- *   dotenv -e .env.<env> -- tsx scripts/maintenance/count-module-credit-visibility.ts
- *   npm run maint:count-module-credit-visibility   (med DATABASE_URL satt i miljøet)
+ *   npm run maint:count-module-credit-visibility   (med DATABASE_URL satt i miljøet; tsx)
+ *   node dist/src/scripts/countModuleCreditVisibility.js   (i containeren, der bygget ligger og tsx ikke finnes)
+ *
+ * Ligger i src/scripts (ikke scripts/maintenance), så bygget tar den med i bildet: stage hjemme har ikke tsx.
  */
 
 function readOnlyUrl(url: string | undefined): string {
@@ -38,8 +40,8 @@ function titleOf(raw: string): string {
 }
 
 async function main() {
-  const { prisma } = await import("../../src/db/prisma.js");
-  const { createCourseRepository } = await import("../../src/modules/course/courseRepository.js");
+  const { prisma } = await import("../db/prisma.js");
+  const { createCourseRepository } = await import("../modules/course/courseRepository.js");
   try {
     const readOnly = await prisma.$queryRaw<Array<{ transaction_read_only: string }>>`SHOW transaction_read_only`;
     if (readOnly[0]?.transaction_read_only !== "on") throw new Error("The connection is not read-only; stopping.");

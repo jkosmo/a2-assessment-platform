@@ -58,7 +58,8 @@ doc/design/PLAN_MODULER_TELLER_DER_DELTAKEREN_SER.md) **og #1169 skive 4c, «Dø
   deltaker tildelingen til et begrenset kurs, teller beståttene ikke der lenger; utstedte kursbevis står. Et åpent kurs er uendret.
   Utrullingen utsteder ingen kursbevis.
 - **Før prod:** `npm run maint:count-module-credit-visibility` (bare lesing) teller per begrenset kurs hvor mange rader i
-  rapporten som får færre beståtte, og hvor mange uten kursbevis som har bestått alle modulene før og etter.
+  rapporten som får færre beståtte, og hvor mange uten kursbevis som har bestått alle modulene før og etter. I containeren:
+  `node dist/src/scripts/countModuleCreditVisibility.js` (flyttet til src/scripts i 2.193.0, så bygget tar den med).
 - **Ikke gjort, med vilje (fra planlesingen):** innleverne filtreres ikke på synlighet i kursrapportens deltakere og i «midt i
   kurset». Rapporten tar dem med for å dekke Entra-klasser (#996, festet i `course-report-audience-969`), og «midt i» teller i den
   trygge retningen. Følgen er en kjent mangel: i en begrenset kopi står de som har levert på de delte modulene et annet sted, som
