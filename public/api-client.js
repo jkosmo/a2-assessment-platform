@@ -555,8 +555,18 @@ function applyNavBadge(navEl, selector, total) {
 
 let consoleConfigPromise = null;
 
-let defaultLocale = "en-GB";
-/** Organisasjonens standardspråk (fra /participant/config). «en-GB» til konfigurasjonen er lest. */
+// #1191: siste kjente standardspråk huskes i nettleseren, så startspråket (resolveInitialLocale, som kjøres før konfigurasjonen er
+// lest) kan bruke det. Første besøk har ikke noe husket svar og får «en-GB» til konfigurasjonen er lest.
+const DEFAULT_LOCALE_CACHE_KEY = "org.defaultLocale";
+function readCachedDefaultLocale() {
+  try {
+    return localStorage.getItem(DEFAULT_LOCALE_CACHE_KEY);
+  } catch {
+    return null;
+  }
+}
+let defaultLocale = readCachedDefaultLocale() || "en-GB";
+/** Organisasjonens standardspråk (fra /participant/config). Husket verdi, ellers «en-GB», til konfigurasjonen er lest. */
 export function getDefaultLocale() {
   return defaultLocale;
 }
@@ -571,7 +581,14 @@ export async function getConsoleConfig() {
 
       const config = await parseResponseBody(response);
       // #1046: organisasjonens standardspråk — leses av pickLocalizedText (i18n-locale.js).
-      if (config && typeof config.defaultLocale === "string") defaultLocale = config.defaultLocale;
+      if (config && typeof config.defaultLocale === "string") {
+        defaultLocale = config.defaultLocale;
+        try {
+          localStorage.setItem(DEFAULT_LOCALE_CACHE_KEY, defaultLocale);
+        } catch {
+          // Privat vindu eller blokkert lagring: startspråket bruker da «en-GB» for ukjente nettleserspråk, som før.
+        }
+      }
 
       if (config.authMode === "entra" && config.entra) {
         await initMsal(config.entra);

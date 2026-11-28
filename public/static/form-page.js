@@ -17,7 +17,7 @@
 // Sidens eget — feltene, dialogene, hva Lagre gjør — kommer inn som HTML og funksjoner.
 
 import { escapeHtml } from "./html-escape.js";
-import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
+import { rowActionsHtml, slotActionsHtml, installRowMoreMenus } from "./row-actions.js";
 import { lifecycleBadge } from "./content-status-badge.js";
 import { setHidden } from "./dom-visibility.js";
 
@@ -58,6 +58,7 @@ export function formPageTexts(t, page) {
  * @property {{ onSave: () => Promise<boolean|void>, onDiscard?: () => void, hidden?: boolean }} [save]
  *   onDiscard: forkast ulagrede endringer (standard: last sida på nytt — det viser det som er lagret,
  *   og et nytt element blir tomt igjen)
+ * @property {() => boolean} [isNew]  elementet er aldri lagret (ingen id ennå): da står ikke «Alt lagret» (#1171).
  * @property {() => boolean} [isDirty]  sider som avleder «ulagret» fra egen tilstand (modulen: skjema,
  *   innstillinger eller utkast) i stedet for å bruke markDirty/markClean. Leses ved hver refreshDirty().
  * @property {(root: HTMLElement) => void} [afterRender]
@@ -77,6 +78,12 @@ export function createFormPage(config) {
 
   installRowMoreMenus();
 
+  // #1169 (produkteier 28.11.2026): på smal skjerm ligger modulens innholdsverktøy under «Mer». Hodet tegnes på nytt når bredden
+  // krysser grensen (snu telefonen, endre vindu).
+  const NARROW = "(max-width: 700px)";
+  const narrowQuery = typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia(NARROW) : null;
+  function isNarrow() { return Boolean(narrowQuery?.matches); }
+
   function texts() { return resolve(config.texts); }
 
   function headerHtml() {
@@ -85,7 +92,12 @@ export function createFormPage(config) {
     const status = config.statusHtml
       ? config.statusHtml(config.t ?? ((k) => k))
       : config.item ? lifecycleBadge(config.item(), config.t ?? ((k) => k)) : "";
-    const rest = config.actions ? rowActionsHtml(config.actions(), { moreLabel: T.more ?? "Mer" }) : "";
+    // #1169 skive 2: en side som sender plassene ({ primary, tools, more }), får hodets faste regel (slotActionsHtml). En liste er
+    // den gamle regelen (tre synlige og resten under «Mer»).
+    const acts = config.actions ? config.actions() : null;
+    const rest = !acts ? ""
+      : Array.isArray(acts) ? rowActionsHtml(acts, { moreLabel: T.more ?? "Mer" })
+        : slotActionsHtml(acts, { moreLabel: T.more ?? "Mer", narrow: isNarrow() });
     const pair = config.save && !config.save.hidden
       ? `<button type="button" id="formSaveBtn" class="row-action-btn btn-save" disabled>${escapeHtml(T.save)}</button>` +
         `<button type="button" id="formCancelLink" class="row-action-btn btn-cancel" disabled>${escapeHtml(T.cancel)}</button>` +
@@ -159,9 +171,12 @@ export function createFormPage(config) {
     const T = texts();
     const badge = host.querySelector("#formPageDirty");
     if (badge) {
-      badge.textContent = state.dirty ? T.unsaved : T.savedAll;
+      // #1171: «Alt lagret» bare når noe ER lagret. En ny side som aldri er lagret, sier ingenting der før man skriver.
+      const neverSaved = !state.dirty && Boolean(config.isNew?.());
+      badge.textContent = state.dirty ? T.unsaved : neverSaved ? "" : T.savedAll;
       badge.classList.toggle("is-dirty", state.dirty);
       badge.classList.toggle("is-clean", !state.dirty);
+      setHidden(badge, neverSaved);
     }
     const off = !state.dirty || state.saving || state.busy;
     const btn = host.querySelector("#formSaveBtn");
@@ -318,7 +333,9 @@ export function createFormPage(config) {
     if (el.matches("input, textarea, select")) markDirty();
   });
 
-  return {
+  narrowQuery?.addEventListener?.("change", () => { if (isShown()) api.refreshHeader(); });
+
+  const api = {
     state,
     render,
     refreshTitle,
@@ -339,6 +356,11 @@ export function createFormPage(config) {
     markDirty,
     markClean,
     confirmLeave,
+    /**
+     * QA-porten 2.190.0: sida har selv spurt om ulagrede endringer og fått ja, og forlater sida fra kode (`location.href`). Svaret
+     * gjelder den ene navigeringen, så nettleseren ikke spør en gang til (samme regel som for lenker og «Tilbake», #1155).
+     */
+    leaveAnswered() { leaveAnsweredAt = Date.now(); },
     save,
     installGuards,
     /**
@@ -350,4 +372,5 @@ export function createFormPage(config) {
     showTab(id) { if (config.tabs) selectTab(id); },
     get tab() { return state.tab; },
   };
+  return api;
 }

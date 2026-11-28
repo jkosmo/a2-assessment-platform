@@ -12,11 +12,17 @@ const LOCALES: Locale[] = ["nb", "nn", "en-GB"];
 const TEXT: Record<Locale, { view: string; earlier: string; toCourse: string; toList: string; toPosts: string }> = {
   nb: { view: "Vis kursbevis", earlier: "Vis kursbevis for versjon 2", toCourse: "← Tilbake til kurset", toList: "← Tilbake til Mine kurs", toPosts: "← Tilbake til innleggene" },
   nn: { view: "Vis kursbevis", earlier: "Vis kursbevis for versjon 2", toCourse: "← Tilbake til kurset", toList: "← Tilbake til Mine kurs", toPosts: "← Tilbake til innlegga" },
-  "en-GB": { view: "View course certificate", earlier: "View course certificate for version 2", toCourse: "← Back to the course", toList: "← Back to My courses", toPosts: "← Back to the posts" },
+  // Engelsk «View certificate», ikke «View course certificate» (produkteier 2026-11-22): den lange teksten tok så mye av kursraden
+  // på 360 px at tittelen ble delt midt i ordet. Bevissiden heter fortsatt «Course certificate».
+  "en-GB": { view: "View certificate", earlier: "View certificate for version 2", toCourse: "← Back to the course", toList: "← Back to My courses", toPosts: "← Back to the posts" },
 };
 
-// Ordet som er borte. «Sertifikat» står fortsatt i «Sertifiseringsnivå» på beviset, men ikke som navn på beviset.
-const OLD_WORDS = /Sertifikat\b|Vis bevis\b|View certificate\b|Certificate,/;
+// Ordene som er borte. «Sertifikat» står fortsatt i «Sertifiseringsnivå» på beviset, men ikke som navn på beviset.
+const OLD_WORDS = /Sertifikat\b|Vis bevis\b|Certificate,/;
+
+// Arial: Mac, iPhone og Linux (CI) har den og ikke Segoe UI, som Windows viser. Arial er bredest av dem vi har målt, så telefontesten
+// tvinger den — ellers er testen grønn på Windows og rød i CI (2.176.0–2.178.0: kursraden 59 px lokalt, 77,6 px i CI).
+const WIDEST_FONT = "body, body * { font-family: Arial, sans-serif !important; }";
 
 const LONG_TITLE = "Informasjonssikkerhetsopplæringsprogrammetsrepetisjonskurs";
 
@@ -123,6 +129,7 @@ test.describe("#1162 skive 1: kursbeviset heter «Kursbevis», lenken «Vis kurs
         await mockBase(page, locale);
         await mockCertificates(page);
         await page.goto("/participant");
+        await page.addStyleTag({ content: WIDEST_FONT });
 
         for (const id of ["done", "lang"]) {
           const link = item(page, id).locator(".course-certificate-link");
@@ -135,7 +142,11 @@ test.describe("#1162 skive 1: kursbeviset heter «Kursbevis», lenken «Vis kurs
           // Lenken står på én linje (13 px tekst).
           expect(linkBox.height).toBeLessThan(26);
         }
-        // Raden med kort tittel er høyst to linjer. Engelsk på 360 px brekker tittel og telling over to (målt 59 px).
+        // Den korte tittelen («Personvern») står på én linje, ikke delt midt i ordet. Med «View course certificate» fikk tittelen
+        // rundt 80 px på 360 px og ble «Personve-rn» — på Windows også; bare høyden under avslørte det, og bare med Arial.
+        const title = (await item(page, "done").locator(".course-accordion-title").boundingBox())!;
+        expect(title.height).toBeLessThan(26);
+        // Raden med kort tittel er høyst to linjer: tittel og telling (målt 40,8 px med Arial).
         const row = (await item(page, "done").locator(".course-done-row").boundingBox())!;
         expect(row.height).toBeLessThanOrEqual(64);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -409,7 +420,9 @@ async function mockSameTab(page: Page) {
 const certBack = (page: Page) => page.locator("#certBackLink");
 
 test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
-  test("fra kurset med en åpen modul: beviset i samme fane, og nettleserens tilbake står i kurset med modulen åpen", async ({ page }) => {
+  // #1162 skive 5: modulen står i lesemodus som seksjonen, og kurshodet med lenken til beviset er skjult mens den er åpen. Veien
+  // er «← Tilbake til kurset», så beviset. Før skive 5 sto lenken synlig over den åpne modulen, og tilbake åpnet modulen igjen.
+  test("fra kurset etter en modul: beviset i samme fane, nettleserens tilbake står i kurset, og svaret i modulen står", async ({ page }) => {
     await mockBase(page, "nb");
     await mockSameTab(page);
     await page.goto("/participant");
@@ -421,8 +434,11 @@ test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
     const answer = page.locator("#submissionFields textarea").first();
     await answer.fill("Et halvferdig svar jeg ikke vil miste.");
     await page.waitForTimeout(400); // kladden lagres 250 ms etter siste tastetrykk
-
     const earlier = item(page, "ny").locator("a.course-certificate-link--earlier");
+    await expect(earlier, "kurshodet er skjult mens modulen er åpen").toBeHidden();
+    await page.locator(".course-item.open .course-inline-panel [data-role='close']").click();
+    await expect(page).toHaveURL(/\/participant\?courseId=ny$/);
+
     await expect(earlier).not.toHaveAttribute("target", /.+/);
     const pagesBefore = page.context().pages().length;
     await earlier.click();
@@ -434,10 +450,11 @@ test.describe("#1162 skive 3: kursbeviset åpnes i samme fane", () => {
     await expect(certBack(page)).toHaveText("← Tilbake til Mine kurs");
     await expect(certBack(page)).toHaveAttribute("href", "/participant");
 
-    // Nettleserens tilbake: kurset står, med modulen åpen.
+    // Nettleserens tilbake: kurset står, der deltakeren var. Modulen åpnet igjen har svaret.
     await page.goBack();
-    await expect(page).toHaveURL(/\/participant\?courseId=ny&moduleId=m1$/);
+    await expect(page).toHaveURL(/\/participant\?courseId=ny$/);
     await expect(item(page, "ny")).toHaveClass(/is-focused/);
+    await page.locator('.course-item[data-key="ny-2"] .course-module-row').click();
     await expect(page.locator('.course-item[data-key="ny-2"] .course-inline-panel #moduleWorkspace')).toBeVisible();
     await expect(page.locator("#submissionFields textarea").first()).toHaveValue("Et halvferdig svar jeg ikke vil miste.");
   });

@@ -195,6 +195,8 @@ function resolveHelpContext(location) {
   // #1046 B6: seksjoner og klasser hadde ingen egen hjelp — seksjoner fikk deltakerhjelpen, klasser ingen knapp.
   if (path === "/admin-content/sections") return "admin-content-sections";
   if (path === "/admin-content/classes") return "admin-content-classes";
+  // #1171: tema-siden fikk deltakerhjelpen (eller ingen knapp).
+  if (path === "/admin-content/themes") return "admin-content-themes";
   if (path === "/deltakere/status") return "cohort-status";
   if (path === "/deltakere/aktivitet") return "participant-activity";
   // #896 S3c: the Avansert routes now redirect into the workspace, so this branch could only ever

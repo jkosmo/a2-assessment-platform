@@ -21,7 +21,7 @@ import { auditActions, auditEntityTypes } from "../observability/auditEvents.js"
 import { AppError } from "../errors/AppError.js";
 import { DEFAULT_CONSENT_BODY } from "../config/consent.js";
 import { localizeContentText } from "../i18n/content.js";
-import { normalizeLocale } from "../i18n/locale.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { registerExternalCompletions } from "../modules/course/externalCompletionService.js";
 import { sendWeeklyDigestToSelf } from "../modules/weeklyDigest/weeklyDigestJob.js";
@@ -178,7 +178,7 @@ adminPlatformRouter.get("/failed-assessments", async (request, response, next) =
     // merket og 100 rader på siden, og trodd tallene var i utakt igjen.
     // #1022: tittelen er en lokalisert JSON-streng i databasen. Sendes den rått, må hver klient
     // tolke den selv — og da får vi to implementasjoner av «hvilket språk viser vi».
-    const locale = normalizeLocale(request.context?.locale) ?? "nb";
+    const locale = requestLocale(request);
     const LIST_LIMIT = 100;
     const [stuck, total] = await Promise.all([
       assessmentJobRepository.findStuckFailedAssessments(LIST_LIMIT),

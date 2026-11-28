@@ -7,6 +7,7 @@ import { enrollmentRepository } from "./enrollmentRepository.js";
 import { classRepository } from "./classRepository.js";
 import { findActiveParticipants } from "../../repositories/userRepository.js";
 import { isReachableParticipant } from "../user/participantReach.js";
+import { effectiveDeadline, type ClassDeadlineRow, type IndividualDeadlineRow } from "./effectiveDeadline.js";
 
 // #498: teacher/SMO cohort-status dashboard. Aggregates the EnrollmentStatus (ASSIGNED / IN_PROGRESS /
 // OVERDUE / COMPLETED) over a course's EFFECTIVE audience — individual CourseEnrollment rows plus
@@ -20,7 +21,9 @@ const STATUSES: EnrollmentStatus[] = ["ASSIGNED", "IN_PROGRESS", "OVERDUE", "COM
 
 type AudienceMember = {
   userId: string;
+  /** Fristen etter `effectiveDeadline` (#1192 punkt 2): en tildeling til personen vinner, ellers den tidligste fra klassene. */
   dueAt: Date | null;
+  dueSetAt: Date | null;
   source: "individual" | "class";
   classId: string | null;
   className: string | null;
@@ -28,6 +31,9 @@ type AudienceMember = {
 
 export async function resolveCourseAudience(courseId: string): Promise<AudienceMember[]> {
   const map = new Map<string, AudienceMember>();
+  // #1192 punkt 2: radene fristen regnes fra, per person. Medlemskap og kilde avgjøres som før; fristen til slutt, ett sted.
+  const individualRow = new Map<string, IndividualDeadlineRow>();
+  const classRows = new Map<string, ClassDeadlineRow[]>();
 
   // 1. Individual (explicitly assigned) enrolments — active (non-revoked) rows.
   // #968: samme regel som for klassemedlemmer under. Før talte en deaktivert deltaker med individuell
@@ -36,9 +42,11 @@ export async function resolveCourseAudience(courseId: string): Promise<AudienceM
   const enrollments = await enrollmentRepository.findActiveEnrollmentsForCourse(courseId);
   for (const enrollment of enrollments) {
     if (!isReachableParticipant(enrollment.user)) continue;
+    individualRow.set(enrollment.userId, { dueAt: enrollment.dueAt, dueSetAt: enrollment.dueSetAt, source: enrollment.source });
     map.set(enrollment.userId, {
       userId: enrollment.userId,
-      dueAt: enrollment.dueAt,
+      dueAt: null,
+      dueSetAt: null,
       source: "individual",
       classId: null,
       className: null,
@@ -58,22 +66,27 @@ export async function resolveCourseAudience(courseId: string): Promise<AudienceM
 
     for (const user of members) {
       if (!isReachableParticipant(user)) continue;
-      const existing = map.get(user.id);
-      if (existing) {
-        // Individual wins; among class assignments keep the earliest due date.
-        if (existing.source === "class" && assignment.dueAt && (!existing.dueAt || assignment.dueAt < existing.dueAt)) {
-          existing.dueAt = assignment.dueAt;
-        }
-        continue;
-      }
+      const rows = classRows.get(user.id) ?? [];
+      rows.push({ dueAt: assignment.dueAt, dueSetAt: assignment.dueSetAt });
+      classRows.set(user.id, rows);
+      if (map.has(user.id)) continue;
       map.set(user.id, {
         userId: user.id,
-        dueAt: assignment.dueAt,
+        dueAt: null,
+        dueSetAt: null,
         source: "class",
         classId: assignment.class.id,
         className: assignment.class.name,
       });
     }
+  }
+
+  // Fristen: en tildeling til personen vinner (også uten frist), en SELF-påmelding gjør det ikke; ellers den tidligste fra
+  // klassene (`findCourseGroupAssignmentsForCourse` tar bare aktive klasser). Før vant enhver individuell rad, også SELF.
+  for (const member of map.values()) {
+    const deadline = effectiveDeadline({ individual: individualRow.get(member.userId), classes: classRows.get(member.userId) });
+    member.dueAt = deadline.dueAt;
+    member.dueSetAt = deadline.dueSetAt;
   }
 
   return Array.from(map.values());
@@ -123,7 +136,7 @@ export async function getCohortStatus(courseId: string, now: Date = new Date()):
   const counts = emptyCounts();
   const byClassMap = new Map<string, CohortClassBreakdown>();
 
-  const statuses = await deriveStatuses(audience.map((member) => ({ userId: member.userId, courseId, dueAt: member.dueAt })), now);
+  const statuses = await deriveStatuses(audience.map((member) => ({ userId: member.userId, courseId, dueAt: member.dueAt, dueSetAt: member.dueSetAt })), now);
   for (const member of audience) {
     const status = statuses.get(pairKey(member.userId, courseId))!;
     counts[status] += 1;

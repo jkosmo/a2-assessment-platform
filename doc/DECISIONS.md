@@ -1386,6 +1386,10 @@ eller det første). En som strøk og venter på sensor etter et nytt forsøk, st
 vurdering», ikke «ikke bestått». Alle forsøk vises i en egen kolonne «Forsøk». Feltnavnene i API og
 CSV (`totalSubmissions` osv.) er beholdt for ikke å brekke eksporter; betydningen er nå personer.
 
+**Erstattet 2026-11-24 (#1192 punkt 1):** personer telles fortsatt én gang, men utfallet er ståstedet: en gjeldende bestått står
+uansett hva senere forsøk ga, og et pass bare på en eldre hovedversjon er «Må ta ny versjon». Siste forsøk avgjør bare når det
+ikke finnes et gjeldende pass. Se «Fire avgjørelser fra kompleksitetsskanningen».
+
 ## Steg for steg, skriv selv og repetisjonskort (#1075, #1076, #1078): rammer i teksten (2026-10-19)
 
 Produkteier godkjente skissen («Ser fint ut»): alle tre er rammer i seksjonsteksten, som «tenk først»
@@ -1558,7 +1562,8 @@ til folk i en arkivert klasse.» Og: heller ikke tildele kurs til en arkivert kl
   kunne en deltaker mistet kurset og likevel fått e-post med lenke til en side som svarer 404. Med vilje litt videre enn kursdetaljens telling:
   en lesing teller også når seksjonen er endret i en senere hovedversjon, og en innlevering også når modulen er arkivert. Det
   deltakeren har gjort, skal ikke forsvinne. (`findStartedOrCompletedCourseIds`.)
-- **Fristen** regnes som før, den tidligste over alle klassene som gir kurset, også arkiverte.
+- **Fristen** regnes som før, den tidligste over alle klassene som gir kurset, også arkiverte. **Erstattet 2026-11-24 (#1192
+  punkt 3):** en arkivert klasse gir ikke frist lenger.
 - **En arkivert klasse tar ikke imot deltakere eller kurs:** `400 class_archived`. Å fjerne en deltaker eller et kurs går. Etter
   «Gjenopprett» går alt igjen. Påminnelsene, kullstatus og kursrapportens publikum hoppet alt over arkiverte klasser.
 - **Kjent mangel til #1142:** e-posten om et nytt kurs i klassen sendes etter transaksjonen. Arkiveres klassen i sekundene mellom
@@ -1605,10 +1610,14 @@ Kjente mangler, godtatt fordi plattformen er intern og utrullinger skjer om kvel
   legges til igjen. Kjennetegnet er at alle åpne veier til kurset (klasse, medlemskap, tildeling) er nyere enn forrige varsel
   (`settledAt`). Linja over, «finnes raden, kommer det aldri en ny e-post om samme kurs», gjelder ikke lenger.
 - **Har personen kurset fra en annen klasse,** går det ingen e-post når kurset legges til en klasse til. Kurset forsvant aldri.
-- **En ny frist er fortsatt ikke et nytt kurs.**
+- **En ny frist er fortsatt ikke et nytt kurs.** *Presisert 2026-11-24 (#1192 punkt 2, svar C):* en ren fristendring gir fortsatt
+  ingen e-post, men for den som har et eldre kursbevis gjør en frist satt etter den nye hovedversjonen kurset utestående igjen
+  (Status, påminnelsene, den ukentlige e-posten, kursrapporten).
 - **Kursbevis på kursets hovedversjon** gir fortsatt ingen e-post. **Kursbevis på en eldre hovedversjon** gir e-post, men bare
   når kurset er lagt til (eller medlemmet lagt inn) etter den nye hovedversjonen. Ellers ville hver ny hovedversjon gitt
-  «nytt kurs» i tillegg til e-posten fra #934. Påbegynt teller bare for den som ikke har kursbevis.
+  «nytt kurs» i tillegg til e-posten fra #934. Påbegynt teller bare for den som ikke har kursbevis. *Endret 2026-11-24 (#1192
+  punkt 2, svar C):* og bare når tildelingen har en frist satt etter den nye hovedversjonen; e-posten sier da «ny versjon av et
+  kurs du har fullført».
 
 ## Kursbevis for kurs tatt utenfor plattformen (#1145, 2026-11-09/10)
 
@@ -1712,7 +1721,8 @@ Da kursbyggeren skulle bygges, svarte produkteier på fire spørsmål (skissen: 
 - **Et upublisert element stopper publiseringen bare når det er NYTT i utkastet.** Et element som alt står i det
   publiserte kurset, slipper gjennom selv om det ikke er publisert (kursimporten kan legge en ny seksjon inn som utkast).
   Det er tilstanden kurset alt har, og utkastet gjør den ikke verre. Uten dette ville et slikt kurs ikke fått publisert
-  noe utkast (QA-porten, skive 2c).
+  noe utkast (QA-porten, skive 2c). **For seksjoner erstattet 2026-11-24 (#1192 punkt 4):** en upublisert seksjon stopper
+  ikke publiseringen lenger; den er skjult for deltakerne. Regelen gjelder fortsatt for moduler.
 
 ## Arkiverte kurs teller ikke som bruk (#1149, 2026-11-13)
 
@@ -2060,8 +2070,8 @@ byggenotatet (`PLAN_1148`, «Byggenotat for 4c») og ble lest to ganger, av Code
 - **En lest seksjon teller i alle kurs som inneholder den** (produkteier 13.11.2026), som en bestått modul. Hvert kurs avgjør
   fortsatt om lesingen gjelder for kursets nåværende hovedversjon (#934).
 - **Bare i kurs deltakeren ser** (produkteier 14.11.2026, «ja»): åpne kurs, og begrensede kurs deltakeren er tildelt. Det
-  gjelder fremdriften og kursbeviset. Moduler beholder dagens oppførsel (en bestått teller også i kurs deltakeren ikke ser);
-  spørsmålet for begge tas i #1157. Grunnen: et kursbevis kan ikke trekkes tilbake og holder kurset igjen fra sletting for
+  gjelder fremdriften og kursbeviset. Moduler beholdt først dagens oppførsel; fra 2.192.0 gjelder det samme for dem (produkteier
+  28.11.2026, «Handlinger og merker i hoder og rader», punkt 9). Grunnen: et kursbevis kan ikke trekkes tilbake og holder kurset igjen fra sletting for
   alltid, og utrullingen ville ellers utstedt bevis i bulk i begrensede kurs.
 - **Fremdrift og kursbevis teller på tvers; e-post og synlighet krever aktivitet i kurset selv** (produkteier 14.11.2026,
   «OK»). «Seksjoner 1/9» og kursbeviset regnes på tvers. Vilkår 9 i tildelings-e-posten, «i gang» i den ukentlige e-posten og
@@ -2469,4 +2479,133 @@ Kartlagt i `doc/design/PLAN_1162_DELTAKERFLYT.md`. Produkteier avgjorde:
 
 Skive 5 (modulen åpnes som seksjonen) vises som prototype før den bygges.
 
+**Tillegg 2026-11-22 (2.178.1):** på engelsk heter lenken **«View certificate»**, ikke «View course certificate» (også «View
+certificate for version {n}» og i profilen). Den lange teksten tok så mye av kursraden på 360 px at en kort tittel ble delt midt
+i ordet. Lenken står på kursraden, så hvilket kurs beviset gjelder er tydelig. Bevissiden heter fortsatt «Course certificate»;
+bokmål og nynorsk er uendret. Avgjort av produkteier.
+
 **Sak:** #1162, #1170 · **Dato:** 2026-11-21 · **Status:** avgjort av produkteier
+
+## Startspråk og ulagrede endringer på modulsida (2.181.3, 2026-11-23)
+
+**Startspråk for et ukjent nettleserspråk.** Klienten falt til en-GB for alt som ikke begynte på nb, nn eller en. Tjeneren
+bruker organisasjonens standardspråk (`DEFAULT_LOCALE`) i samme situasjon. Klienten sender språket som `x-locale`, og det blir
+mottakerens språk i e-postene, så «da» og «sv» ga engelske e-poster. Nå bruker klienten også organisasjonens standardspråk,
+husket i nettleseren fra forrige gang konfigurasjonen ble lest (første besøk: en-GB til den er lest). «no» og «no-NO» betyr
+bokmål i begge lag. Et lagret en-GB som brukeren ikke har valgt i språkvelgeren (`participant.localeChosen`), i en nettleser som
+ikke er engelsk, gjettes på nytt. Valgt under byggingen av #1191, ikke av produkteier: det følger regelen tjeneren allerede hadde.
+
+**Publiser, Avpubliser og Importer med ulagrede endringer på modulsida** spør nå (`window.confirm`), som seksjon og klasse, i
+stedet for å forkaste det som var skrevet uten et ord. Kurset lagrer først («Publiser utkastet», #1140); modulen gjør ikke det,
+fordi lagringen i Rediger ikke kan ventes på uten en omskriving. Valgt under byggingen av #1189.
+
+**Sak:** #1189, #1191 · **Dato:** 2026-11-23 · **Status:** valgt under byggingen
+
+## Fire avgjørelser fra kompleksitetsskanningen (#1192, 2026-11-24)
+
+Produkteier svarte ja på alle fire (2026-11-24). Felles begrunnelse: den nyeste beslutningen gjelder, og alle skjermer og
+e-poster skal si det samme om samme person.
+
+1. **En bestått modul står til modulen revideres, overalt.** Det gjelder allerede kurset og kursbeviset («Moduler utløper
+   ikke», 2026-08-22, og regelen fra 2026-11-03). Nå skal også modulrapportene, `CertificationStatus` (`/recertification`) og
+   profilen følge den. Et senere forsøk som stryker, tar ikke fra deltakeren en bestått modul. «Fullføring per modul»
+   (2026-10-19) teller fortsatt hver person én gang, men en person som har bestått den gjeldende hovedversjonen, står som
+   bestått selv om det siste forsøket strøk. Dette erstatter «siste forsøk» der.
+2. **En ny frist etter en ny hovedversjon gjør kurset uferdig igjen** for den som bare har kursbevis for en eldre
+   hovedversjon. Slik var det tenkt i `doc/DESIGN_934.md` (avgjort 2026-11-01, punkt 2): den nye hovedversjonen er frivillig
+   til noen setter en ny frist. Uten en ny frist står et oppfylt kurs som fullført, og ingen får påminnelse. Resultater,
+   Status og tildelingse-posten skal si det samme: «Må ta ny versjon» bare når det finnes en slik frist.
+3. **Arkiverte klasser gir ikke frist.** Arkiveringsdialogen lover at påminnelsene stopper, og fristen i «Mine kurs» og i den
+   ukentlige e-posten skal da ikke komme fra en arkivert klasse. Dette erstatter linja «Fristen regnes som før, den tidligste
+   over alle klassene som gir kurset, også arkiverte» (2026-11-08). Et påbegynt kurs fra en arkivert klasse vises fortsatt i
+   «Mine kurs», men uten frist fra den klassen.
+4. **Upubliserte seksjoner i et publisert kurs er tillatt, også når kursutkastet publiseres.** Beslutningen fra 2026-08-23
+   gjelder: seksjonen er skjult for deltakerne og har ingen konsekvenser for dem før den er publisert. «Publiser utkastet»
+   skal ikke lenger avvise en ny upublisert seksjon. Det erstatter regelen fra #1140 etappe 2 («Et upublisert element stopper
+   publiseringen bare når det er NYTT i utkastet») for seksjoner. Kursbyggeren, lagringen og importen gjorde det allerede slik.
+
+**Presisert samme dag** (produkteier, ja på spørsmål A, B og C i `doc/design/PLAN_1192_BESTATT_OG_FRIST.md`):
+
+- **A. Modulnivå:** i modulrapportene og profilen er en bestått gjeldende bare på modulens nyeste hovedversjon, også når et
+  kurs har valgt å ikke kreve den. Kurset godtar fortsatt det gamle passet; modulrapporten viser at modulen er revidert.
+- **B. Frister som finnes:** regnes som satt før den nye hovedversjonen. Utrullingen endrer ingen status og sender ingen
+  påminnelser.
+- **C. Tildelingse-posten til en med eldre kursbevis:** går bare når tildelingen gjør kurset utestående (en frist satt etter
+  den nye hovedversjonen), med teksten «ny versjon av et kurs du har fullført». Uten frist sendes ingenting. En ren
+  fristendring på en tildeling som finnes, gir ingen e-post. Dette endrer «En ny frist er fortsatt ikke et nytt kurs»
+  (#1146, 2026-11-10) for den som har et eldre kursbevis.
+
+**Sak:** #1192 · **Dato:** 2026-11-24 · **Status:** avgjort av produkteier
+### Valgt under byggingen av #1192 punkt 2 (2026-11-24)
+
+- **En SELF-påmelding er ikke en tildeling** og avgjør ikke fristen. Den som har meldt seg på selv og så får kurset fra en klasse,
+  har klassens frist på alle flater. Før skjulte SELF-raden klassens frist i Status og «Mine kurs»/`/enrollments`, mens den ukentlige
+  e-posten (som alt regnet SELF som ikke-tildeling, PLAN_1139) og påminnelsene brukte klassens.
+- **En tildeling til personen vinner over klassen, også uten frist** (som Status gjorde). Den ukentlige e-posten og påminnelsene
+  lot klassens frist vinne når tildelingen ikke hadde frist eller fristen lå utenfor påminnelsesvinduet.
+- **Ved lik dato følger det seneste `dueSetAt` med**, så en frist satt på nytt etter en ny hovedversjon ikke skjules av en eldre
+  med samme dato.
+- **«Påbegynt» etter en ny hovedversjon** regnes som før (lesinger og innleveringer i kurset, også fra den gamle versjonen). En
+  med eldre kursbevis og ny frist står derfor gjerne som «I gang» (eller «Forfalt»), ikke «Tildelt».
+- **«Mine kurs» endres ikke:** sida viser ingen frister, og et eldre kursbevis viser alt «Ny versjon» med en nøytral tekst.
+- **Tildelingse-posten:** vilkåret er at alle veier til kurset åpnet etter den nye hovedversjonen (som før) OG at minst én
+  klassetildeling har en frist satt etter den. Kjent mangel: har personen i tillegg en tildeling (individuell) eller en eldre
+  klasse med tidligere frist, kan e-posten og Status være uenige om kurset er utestående. Begge krever flere veier inn samtidig.
+- **`dueSetAt` skrives bare når datoen endres** (og ved ny eller gjenopprettet tildeling med frist), i samme `UPDATE` som
+  sammenligner. Samme dato sendt på nytt gjør ikke en gammel frist ny.
+
+**Sak:** #1192 · **Dato:** 2026-11-24 · **Status:** valgt under byggingen
+
+## Handlinger og merker i hoder og rader (#1169, #1171, 2026-11-26)
+
+Kartlagt i `doc/design/PLAN_1169_1171_HODER_OG_RADER.md`. Produkteier avgjorde 26.11.2026 (alle fire som anbefalt):
+
+1. **«Mer» står fast i alle hoder og rader** (kurs, modul, seksjon, klasse), også når den bare har én eller to handlinger, med
+   samme rekkefølge overalt. Før kom «Mer» bare når det var mer enn fire handlinger.
+2. **«Dupliser kurs» gir et nytt kurs med de samme modulene og seksjonene**, ikke kopier av dem. Innholdet deles mellom kurs,
+   og en endring i en modul gjelder begge. Kopien tar ikke med klasser, tildelinger eller kursbevis.
+3. **Modulens innholdsverktøy** (Generer innhold, Be om endring, Generer spørsmål) står synlige i modulens hode, etter
+   hovedhandlingen og før «Mer».
+4. **En ny modul åpner fortsatt på Innstillinger** (typen trengs før innholdet kan lages); nytt kurs, ny seksjon og ny klasse på
+   Rediger.
+
+Valgt i planen, ikke spurt: **«Erstatt fra fil»** er navnet i hodet for både modul (før «Importer») og seksjon.
+
+**Sak:** #1169, #1171 · **Dato:** 2026-11-26 · **Status:** avgjort av produkteier (1–4)
+
+Etter prototypen (https://claude.ai/artifact/RuABRhvRBxfQwnzJ2jYMU8) avgjorde produkteier 28.11.2026, alle tre som anbefalt:
+
+5. **Regelen er godkjent slik prototypen viser den:** Lagre/Avbryt · hovedhandlingen for tilstanden · (modul) innholdsverktøyene
+   · «Mer» med fast rekkefølge (Døp om (rad) · Dupliser · Eksporter · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver /
+   Gjenopprett · Slett). I raden står «Åpne» først. Unntak: en klasse leseren ikke eier, har ingen «Mer» (ingenting å vise).
+6. **På smal skjerm ligger modulens innholdsverktøy under «Mer»** (punkt 3 gjelder bred skjerm): på 390 px ga de fire linjer med
+   knapper i hodet.
+7. **Hovedhandlingen er en fylt knapp**, så neste steg synes. De andre handlingene står som før.
+
+Også fra prototypen, uten spørsmål: merkene står i rekkefølgen «Publisert · v2.1 · Nyere utkast» overalt, og «Mer» åpner mot høyre
+når menyen ellers ville gått ut av skjermen.
+
+Etter gjennomgangen av 2.191.0 («Dupliser kurs») avgjorde produkteier 28.11.2026, begge som anbefalt («1: OK 2: OK»):
+
+8. **«Døp om» for et publisert kurs skriver navnet i utkastet**, slik seksjonen (#1163) og kursets utkast (#1140). Et kurs som
+   ikke er publisert, får navnet med en gang. Plan: `doc/design/PLAN_1169_4B_DUPLISER_KURS.md`, § 6.
+9. **Et bestått i en modul teller bare i kurs deltakeren ser**, slik en lest seksjon fra #1156 (se «Lest seksjon teller i alle
+   kurs deltakeren ser»; spørsmålet sto åpent for moduler). Skal være på plass før «Dupliser kurs» går til prod: ellers gir en
+   publisert kopi med bare moduler kursbevis til alle som har bestått dem. Plan: `doc/design/PLAN_MODULER_TELLER_DER_DELTAKEREN_SER.md`.
+
+**Sak:** #1169 · **Dato:** 2026-11-28 · **Status:** avgjort av produkteier (5–9)
+
+## «Åpen» og «Alle deltakere» er to ting; produsenter leser alle klasser (2026-11-26)
+
+Produkteier 26.11.2026, etter at en SME så flere kurs i «Mine kurs» enn klassene skulle gi (det var kursenes «Åpen»):
+
+- **Begge måtene å gi alle et kurs beholdes**, fordi de betyr ulike ting. «Åpen» (kursets Innstillinger) gjør kurset
+  **tilgjengelig og frivillig**: ingen frist, ingen påminnelser eller e-post, ikke utestående. Tildeling til systemklassen «Alle
+  deltakere» gjør det **påkrevd for alle**: frist, påminnelser, e-post om nytt kurs, og utestående i Status, kursrapporten og
+  mandagseposten. Samme regel som #1175: et begrep med to betydninger får to navn. Skjermen skal si forskjellen (#1197).
+- **Alle produsenter kan lese alle klasser** (kursene med frister og deltakerne); bare eierne og administrator endrer. Samme regel
+  som for innhold (#1165, #1180). Deltakerlistene har navn og e-post til kolleger; det er godtatt fordi produsentene alt ser
+  deltakerne i kursrapporten, og plattformen er intern (#1198).
+- **Rekkefølgen:** #1197 og #1198 før #1169/#1171, fordi de rører de samme skjermene.
+
+**Sak:** #1197, #1198 · **Dato:** 2026-11-26 · **Status:** avgjort av produkteier

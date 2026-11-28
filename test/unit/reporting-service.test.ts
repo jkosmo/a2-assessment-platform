@@ -39,13 +39,16 @@ vi.mock("../../src/config/reportingAnalytics.js", () => ({
   }),
 }));
 
-vi.mock("../../src/modules/certification/index.js", () => ({
-  isCertificationPassed: (status: string | null | undefined) =>
-    status != null && status !== "NOT_CERTIFIED",
+// #1192 punkt 1: rapportene spør `findModuleStanding` om ståstedet. Her: ingen pass, så siste forsøk avgjør som før.
+const standingOf = vi.fn((_userId: string, _moduleId: string): "PASSED" | "REVISED" | null => null);
+vi.mock("../../src/modules/course/moduleCredit.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/modules/course/moduleCredit.js")>()),
+  findModuleStanding: async () => ({ standing: standingOf, passedUserIds: () => new Set(), passedAt: () => null }),
 }));
 
 // #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
 warmModuleGraph(() => import("../../src/modules/reporting/index.js"));
+warmModuleGraph(() => import("../../src/modules/reporting/completionReport.js"));
 
 describe("reporting service", () => {
   beforeEach(() => {
@@ -98,6 +101,7 @@ describe("reporting service", () => {
         passCount: 1,
         failCount: 0,
         underReviewCount: 0,
+        revisedCount: 0,
         passRate: 1,
       },
     ]);
@@ -107,6 +111,7 @@ describe("reporting service", () => {
       passCount: 1,
       failCount: 0,
       underReviewCount: 0,
+      revisedCount: 0,
       passRate: 1,
     });
   });
@@ -114,9 +119,9 @@ describe("reporting service", () => {
   it("completion: one row per module in title order, people counted once by their latest attempt", async () => {
     // Spørringen leverer nyeste først per bruker; Beta kommer før Alfa i svaret.
     findSubmissionsForCompletionReport.mockResolvedValue([
-      { moduleId: "m-b", userId: "u-1", submissionStatus: SubmissionStatus.COMPLETED, module: { id: "m-b", title: "Beta" } },
-      { moduleId: "m-a", userId: "u-1", submissionStatus: SubmissionStatus.UNDER_REVIEW, module: { id: "m-a", title: "Alfa" } },
-      { moduleId: "m-a", userId: "u-1", submissionStatus: SubmissionStatus.COMPLETED, module: { id: "m-a", title: "Alfa" } },
+      { moduleId: "m-b", userId: "u-1", submissionStatus: SubmissionStatus.COMPLETED, module: { id: "m-b", title: "Beta" }, decisions: [] },
+      { moduleId: "m-a", userId: "u-1", submissionStatus: SubmissionStatus.UNDER_REVIEW, module: { id: "m-a", title: "Alfa" }, decisions: [] },
+      { moduleId: "m-a", userId: "u-1", submissionStatus: SubmissionStatus.COMPLETED, module: { id: "m-a", title: "Alfa" }, decisions: [] },
     ]);
     const { getCompletionReport } = await import("../../src/modules/reporting/index.js");
     const report = await getCompletionReport({}, "nb");
@@ -300,5 +305,45 @@ describe("reporting service", () => {
     );
 
     expect(csv).toBe('moduleId,title,note\nmodule-1,"One, ""Quoted"" Module",');
+  });
+});
+
+// #1192 punkt 1 (produkteier 2026-11-24): modulrapportene følger regelen fra kurset. En gjeldende bestått står uansett hva
+// senere forsøk ga; et pass bare på en eldre hovedversjon er «Må ta ny versjon», og et gammelt bestått-vedtak gir det ikke tilbake.
+describe("#1192 punkt 1: ståstedet avgjør, siste forsøk bare når det ikke finnes et gjeldende pass", () => {
+  beforeEach(() => {
+    findSubmissionsForPassRatesReport.mockReset();
+    standingOf.mockReset();
+    standingOf.mockImplementation(() => null);
+  });
+
+  it("personModuleOutcome: hele tabellen", async () => {
+    const { personModuleOutcome } = await import("../../src/modules/reporting/completionReport.js");
+    // Gjeldende pass: bestått, også når et senere forsøk strøk eller er under vurdering.
+    expect(personModuleOutcome("PASSED", SubmissionStatus.COMPLETED, false)).toBe("PASSED");
+    expect(personModuleOutcome("PASSED", SubmissionStatus.UNDER_REVIEW, undefined)).toBe("PASSED");
+    // Bare pass på en eldre hovedversjon, og det siste forsøket er det gamle beståtte: må ta ny versjon.
+    expect(personModuleOutcome("REVISED", SubmissionStatus.COMPLETED, true)).toBe("NEEDS_NEW_VERSION");
+    // Revidert, men har prøvd den nye versjonen: det forsøket avgjør.
+    expect(personModuleOutcome("REVISED", SubmissionStatus.COMPLETED, false)).toBe("FAILED");
+    expect(personModuleOutcome("REVISED", SubmissionStatus.UNDER_REVIEW, undefined)).toBe("UNDER_REVIEW");
+    // Kontroll: uten pass avgjør siste forsøk som før.
+    expect(personModuleOutcome(null, SubmissionStatus.COMPLETED, false)).toBe("FAILED");
+    expect(personModuleOutcome(null, SubmissionStatus.UNDER_REVIEW, undefined)).toBe("UNDER_REVIEW");
+  });
+
+  it("bestått-andelen: gjeldende pass med et senere stryk er bestått; gammelt pass er «revidert», ikke med i andelen", async () => {
+    findSubmissionsForPassRatesReport.mockResolvedValue([
+      // u-1: gjeldende pass, siste forsøk strøk.
+      { id: "s-1", userId: "u-1", submissionStatus: SubmissionStatus.COMPLETED, module: { id: "m-1", title: "M" }, decisions: [{ passFailTotal: false }] },
+      // u-2: pass bare på en eldre hovedversjon, siste forsøk er det gamle beståtte.
+      { id: "s-2", userId: "u-2", submissionStatus: SubmissionStatus.COMPLETED, module: { id: "m-1", title: "M" }, decisions: [{ passFailTotal: true }] },
+      // u-3: kontroll, ingen pass, strøk.
+      { id: "s-3", userId: "u-3", submissionStatus: SubmissionStatus.COMPLETED, module: { id: "m-1", title: "M" }, decisions: [{ passFailTotal: false }] },
+    ]);
+    standingOf.mockImplementation((userId: string) => (userId === "u-1" ? "PASSED" : userId === "u-2" ? "REVISED" : null));
+    const { getPassRatesReport } = await import("../../src/modules/reporting/index.js");
+    const report = await getPassRatesReport({ moduleId: "m-1" });
+    expect(report.rows[0]).toMatchObject({ totalSubmissions: 3, passCount: 1, failCount: 1, revisedCount: 1, underReviewCount: 0, decisionCount: 2, passRate: 0.5 });
   });
 });

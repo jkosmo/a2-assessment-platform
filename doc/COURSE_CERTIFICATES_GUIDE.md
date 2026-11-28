@@ -18,6 +18,26 @@ En bestått modul og en lest seksjon teller i alle kurs som har dem (#1156: seks
 lesing eller én bestått flere kurs, utstedes et kursbevis i hvert av dem. Kursbevisene i de andre kursene enn det deltakeren står
 i, utstedes like etter, av workeren; mangler ett, kommer det når «Mine kurs» åpnes.
 
+## Ny hovedversjon: når må deltakeren ta kurset på nytt? (#1192, 2.181.8)
+
+Når et kurs får en ny hovedversjon, beholder den som fullførte en eldre versjon kursbeviset sitt. Den nye versjonen er
+**frivillig** for dem til noen setter en ny frist.
+
+**Slik krever du den nye versjonen:** åpne klassen under Deltakere → Klasser, sett en ny dato i «Frist» på kursraden og trykk
+«Lagre frist». En frist satt etter at den nye versjonen ble publisert, gjør kurset uferdig igjen for dem i klassen som bare har
+kursbevis for en eldre versjon. De får påminnelser, står som uferdige i Status og kursrapporten, og kurset kommer med i
+mandagse-posten. En tom dato fjerner fristen. Skjermen varsler under raden før du lagrer (fra 2.181.9), også når du tildeler et kurs i versjon 2 eller høyere med frist.
+
+- Uten ny frist står kurset som fullført. Kursrapporten viser da «Fullført (versjon 1)», så du ser at beviset gjelder en eldre
+  versjon.
+- Å endre fristen sender ingen e-post om nytt kurs. Påminnelsene går som vanlig.
+- **Også en flyttet frist teller som ny.** Gir du klassen en uke ekstra etter at kurset har fått en ny hovedversjon, må de med
+  kursbevis for en eldre versjon ta den nye.
+- Frister som fantes før 2.181.8, regnes som satt før den nye versjonen. Vil du kreve den nye versjonen, setter du fristen på
+  nytt.
+- Kjent mangel: har deltakeren i tillegg en tidligere frist fra en annen klasse, eller kurset tildelt direkte, gjelder den, og den
+  nye fristen virker ikke for den personen.
+
 ## Feiringen
 
 - Når en **modul** bestås, vises en tydelig «bestått»-feiring (banner + konfetti), og «slett og

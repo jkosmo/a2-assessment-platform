@@ -40,7 +40,8 @@ function walk(dir: string): string[] {
   });
 }
 
-const FALLBACK = /context\??\.locale\s*\?\?/;
+// #1194: også `normalizeLocale(request.context?.locale) ?? …` og `request.context?.locale || …` — den første skrivemåten slapp gjennom.
+const FALLBACK = /context\??\.locale\)?\s*(\?\?|\|\|)/;
 describe("#984 — vakt: ingen rute har sin egen reserve lenger", () => {
   // Testgjennomgangen 2026-11 (avsnitt 5.3): kontrollen. Skrives reserven om i hjelperen, kan mønsteret slutte å treffe
   // noe, og vakta under blir grønn uten å se. Da skal denne bli rød.

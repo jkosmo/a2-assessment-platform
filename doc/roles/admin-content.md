@@ -22,6 +22,22 @@ API:
 
 ## Sentrale arbeidsflyter
 
+### Handlingene i hodet (fra 2.188.0, #1169)
+
+Når et kurs, en modul, en seksjon eller en klasse er åpnet, står handlingene øverst til høyre i samme rekkefølge overalt:
+
+1. **Lagre** og **Avbryt**.
+2. **Hovedhandlingen** for tilstanden, som en fylt knapp: **Publiser** (aldri publisert), **Publiser utkastet** (publisert, med
+   endringer som ikke er publisert ennå) eller **Gjenopprett** (arkivert). Et publisert element uten utkast har ingen.
+3. For en modul: **Generer innhold**, **Be om endring** og **Generer spørsmål**. På telefon ligger de under «Mer».
+4. **Mer**, med resten i fast rekkefølge: Eksporter · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver · Slett (det som
+   gjelder). Fra 2.190.0 har modulens hode også Dupliser og Arkiver, og seksjonens hode Dupliser. En kopi åpnes med en gang.
+
+I listene (fra 2.189.0) står det samme i hver rad: **Åpne**, hovedhandlingen (Publiser, Publiser utkastet eller Gjenopprett) og
+**Mer** med Døp om · Dupliser · Eksporter · Avpubliser · Arkiver · Slett. «Slett» står også i seksjonslista for en arkivert
+seksjon. «Publiser» og «Publiser utkastet» i modullista og kurslista åpner elementet og starter publiseringen der, med de samme
+spørsmålene som i hodet (fra 2.190.0).
+
 ### 1. Opprette ny modul fra bunnen
 
 1. Gå til `/admin-content` → fanen **Moduler**
@@ -73,6 +89,14 @@ API:
 **Slette:** bare en arkivert modul. **Slett** åpner en dialog («Slett «…»»), og modulen slettes først når du klikker
 **Slett modulen**. Kan den ikke slettes (besvarelser, kursbevis, et kurs eller et kursutkast holder den igjen), sier meldingen
 hvorfor.
+
+#### Arkivere, gjenopprette og slette en seksjon (fra 2.179.0, #1168)
+
+Seksjonene virker som modulene over. **Arkiver** (i seksjonslista eller i hodet når seksjonen er åpen) sjekker først om et
+kurs holder seksjonen igjen. Står den i et aktivt kurs eller i et lagret kursutkast, viser dialogen kursene med lenker og bare
+«Lukk». Ellers sier den hva som skjer, og seksjonen arkiveres når du klikker **Arkiver seksjonen** (en publisert seksjon
+avpubliseres også). **Gjenopprett** spør ikke, og sier at seksjonen kom tilbake som utkast. **Slett** finnes bare på en
+arkivert seksjon, i hodet når den er åpen, og åpner en dialog; seksjonen slettes først når du klikker **Slett seksjonen**.
 
 #### Hva du ser på en arkivert modul eller seksjon
 
@@ -159,8 +183,20 @@ Velg etter hva du er ute etter: en kopi ved siden av, eller nytt innhold i modul
 #### Hvem ser et nytt kurs (#1164)
 
 Et nytt kurs er **begrenset**: bare de som er tildelt kurset (via en klasse eller enkeltvis) ser det. Det gjelder også et kurs
-du importerer som nytt, og kurs som lages med skillen. Vil du at alle deltakere skal se det, velger du **Åpen** under
-**Innstillinger → Synlighet**. Kurs som fantes fra før, er ikke endret.
+du importerer som nytt, og kurs som lages med skillen. Kurs som fantes fra før, er ikke endret: mange av dem er åpne.
+
+**Frivillig eller påkrevd for alle (#1197, 2.185.0).** Det er to måter å gi alle deltakere et kurs, og de betyr ulike ting:
+
+| | **Åpent for alle (frivillig)** — Innstillinger → «Hvem ser kurset» | **Tildelt klassen «Alle deltakere»** — Klasser |
+|---|---|---|
+| Hvem ser kurset | Alle deltakere | Alle deltakere |
+| Betyr | Tilgjengelig; deltakeren tar det når hen vil | Påkrevd for alle |
+| Frist og påminnelser | Nei | Ja, når du setter en frist |
+| E-post om nytt kurs | Nei | Ja |
+| Står som uferdig i Status, kursrapporten og mandagseposten | Nei | Ja |
+
+Skal alle *kunne* ta kurset, velger du «Åpent for alle». Skal alle *ta* det, tildeler du det klassen «Alle deltakere». Skjermen
+sier det samme under feltet, i klassen «Alle deltakere» og i publiseringsdialogen.
 
 #### Publisere et kurs (#1164)
 
@@ -174,6 +210,14 @@ du importerer som nytt, og kurs som lages med skillen. Vil du at alle deltakere 
 Har kurset innhold som ikke er publisert, står det i den samme dialogen, og publiseres sammen med kurset. Har noen kursbevis,
 og innholdet er endret, spør den samme dialogen om det er en mindre eller en hovedversjon. **Avbryt** eller Esc publiserer
 ingenting. Ved **Publiser utkastet** gjelder synligheten slik den står i utkastet.
+
+#### Avpublisere et kurs (fra 2.180.0, #1168)
+
+**Avpubliser** spør i den samme dialogen, og sier **hvem som mister tilgangen**: alle deltakere når kurset er åpent, eller de
+tildelte (klassene, de enkeltvis tildelte og tallet i alt) når det er begrenset. Kurset blir skjult for deltakerne til du
+publiserer det igjen. **Avbryt** eller Esc avpubliserer ingenting.
+
+**Slette et kurs:** slettedialogen sier at modulene og seksjonene blir stående i biblioteket som de er. Bare kurset slettes.
 
 #### Andres kurs, moduler og seksjoner (#1165, seksjoner fra 2.177.0, #1180)
 
@@ -249,6 +293,52 @@ versjon som før. Var et element et utkast, eller finnes versjonen ikke lenger, 
 publiseres før kurset. Elementer som ble arkivert for seg, arkivert før 2.159.0, eller arkivert sammen med et annet kurs,
 blir stående arkivert: gjenopprett dem hver for seg. Kurset selv kommer alltid tilbake som utkast. Publiser det når du er
 klar. Meldingen etterpå sier hva som faktisk kom tilbake.
+
+### 5c. Dupliser et kurs (fra 2.191.0, #1169)
+
+«Mer» → **Dupliser** i kurslista eller i kursets hode lager et nytt kurs med **de samme** modulene og seksjonene, ikke kopier av
+dem. Du blir eier av kopien, også når kurset er en annens. Kopien er ikke publisert, er «Bare for de som er tildelt», og heter det
+samme med « (kopi)» etter. Klasser, tildelinger, kursbevis og et utkast som ikke er publisert, blir ikke med. Et arkivert kurs kan
+ikke dupliseres.
+
+Fordi innholdet deles, gjelder dette:
+- En endring i en modul eller seksjon gjelder begge kursene.
+- Når kopien er publisert og en deltaker ser den, teller det hen har bestått og lest, også i kopien — hen kan få kursbevis for
+  kopien med en gang. «Ser» betyr at kopien er åpen, eller at hen er tildelt den (fra 2.192.0 også for moduler). Kopien er
+  begrenset fra start; gjør du den åpen, gjelder det alle som har bestått modulene.
+- Så lenge kopien finnes, også som upublisert, er modulene og seksjonene «i bruk» i den. Da kan de ikke avpubliseres eller
+  arkiveres, heller ikke av eieren av modulen.
+- Gi kopien et nytt navn før du publiserer den: delingslenka får navnet ved første publisering og endres ikke etterpå.
+
+### 5d. Døp om et kurs i lista (fra 2.192.0, #1169)
+
+«Mer» → **Døp om** i kurslista endrer navnet i raden, på språket lista viser: Enter lagrer, Escape avbryter. Som for moduler og
+seksjoner endres bare det språket; «Oversett» tar de andre.
+- **Et kurs som ikke er publisert,** får det nye navnet med en gang.
+- **Et publisert kurs** får navnet i utkastet. Deltakerne ser det gamle navnet til du publiserer utkastet (kursets hode,
+  «Publiser utkastet»). Har kurset et utkast fra før, er det bare navnet i det som endres. Raden viser det publiserte navnet til da;
+  merket «Nyere utkast» sier at noe venter.
+- Har noen andre endret navnet siden du åpnet lista, lagres ingenting, og lista lastes på nytt.
+
+### 5a. Andres klasser (fra 2.186.0, #1198)
+
+Du kan åpne og lese alle klasser, også dem andre eier, og systemklassen «Alle deltakere»: kursene med frister og deltakerne
+(navn og e-post). En klasse du ikke eier, står med «Åpne» og «Kun for eier» i lista, og åpnes skrivebeskyttet: du kan ikke
+endre navnet, legge til eller fjerne deltakere eller kurs, endre fristen eller arkivere. Det kan bare eierne og en
+administrator. Vil du bli eier, ber du en av eierne (Innstillinger → Eiere).
+
+«Alle deltakere» har ingen deltakerliste: alle med deltakerrollen er med automatisk, og klassen sier det der lista ellers står
+(fra 2.186.1).
+
+### 5b. Arkivere, gjenopprette og slette en klasse, og slette et tema (fra 2.181.0, #1168)
+
+**Arkiver** på en klasse åpner en dialog som sier hva som skjer: klassen forsvinner fra de aktive, kurs medlemmene bare har fått
+gjennom klassen og ikke har begynt på, forsvinner fra «Mine kurs», påbegynte og fullførte kurs blir stående, og påminnelsene
+stopper. **Gjenopprett** spør ikke, og sier hvilken klasse som kom tilbake. **Slett** (bare en arkivert klasse) åpner en dialog
+med rød knapp; medlemslista og kurstildelingene forsvinner, deltakernes egen fremdrift beholdes.
+
+**Slett** på et tema (administratorer) teller kursene på nytt når dialogen åpnes: alle kurs som mister temaet, også arkiverte.
+Er noen av dem arkivert, sier dialogen det: et arkivert kurs som gjenopprettes, kommer tilbake uten temaet.
 
 ### 6. Klasser: hva medlemmene får på e-post
 

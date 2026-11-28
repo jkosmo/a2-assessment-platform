@@ -7,6 +7,8 @@ import { enrollmentRepository, createEnrollmentRepository } from "./enrollmentRe
 import { runInTransaction } from "../../db/transaction.js";
 import { deriveEnrollmentStatus, type EnrollmentStatus } from "./enrollmentStatus.js";
 import { getUserClassIds, getClassAssignedCourseDueDates } from "./classService.js";
+import { effectiveDeadline, type EffectiveDeadline } from "./effectiveDeadline.js";
+import { findCertificateMajors, findCurrentMajors, isCertifiedForDeadline } from "./newVersionDeadline.js";
 // #959: deltakerdøra bor her, ved siden av regelen den håndhever. `courseRepository` importerer
 // ikke denne fila, så retningen er entydig og det finnes ingen sirkel.
 import { courseRepository } from "./courseRepository.js";
@@ -225,14 +227,17 @@ export async function selfEnroll(courseId: string, userId: string): Promise<void
   });
 }
 
-export type EnrollmentStatusInput = { userId: string; courseId: string; dueAt: Date | null };
+/** `dueSetAt`: når fristen ble satt (#1192 punkt 2). Utelatt eller null: satt før feltet fantes, regnes som gammel. */
+export type EnrollmentStatusInput = { userId: string; courseId: string; dueAt: Date | null; dueSetAt?: Date | null };
 
 /**
  * Status for mange (deltaker, kurs) på én gang, i et fast antall spørringer (#1156, QA-porten: kullstatusen, påminnelsene og
  * påmeldingslistene gikk én deltaker om gangen). Svaret har nøkkelen `pairKey(userId, courseId)`.
  *
- * «Fullført»: #934, bevis for HVILKEN SOM HELST hovedversjon oppfyller tildelingen. Produkteier 2026-11-01: en frist som er
- * oppfylt, står som oppfylt; en ny hovedversjon er frivillig til noen setter en ny frist, og gir ingen påminnelser.
+ * «Fullført»: #934, bevis for hovedversjonen eller nyere oppfyller tildelingen. Et bevis for en ELDRE hovedversjon oppfyller den
+ * også, med mindre fristen ble satt etter at den nye hovedversjonen ble publisert (#1192 punkt 2, `isCertifiedForDeadline`):
+ * den nye versjonen er frivillig til noen setter en ny frist (produkteier 2026-11-01 og 2026-11-24). Er den satt, er kurset
+ * tildelt, i gang eller forfalt igjen, og påminnelsene går.
  * «Påbegynt»: en lesing gjort i kurset (uansett seksjon og hovedversjon, som før), en lesing gjort et annet sted som teller her
  * (#1156, `findSectionReadCredit`, bare i kurs deltakeren ser), eller en innlevering på en av kursets moduler (også arkiverte).
  * Statusen vises i `/enrollments`, kullstatusen og administratorens påmeldingsliste; påminnelsene ser bare på «fullført» og fristen.
@@ -242,17 +247,13 @@ export async function deriveStatuses(pairs: EnrollmentStatusInput[], now: Date):
   if (pairs.length === 0) return statuses;
   const userIds = [...new Set(pairs.map((pair) => pair.userId))];
   const courseIds = [...new Set(pairs.map((pair) => pair.courseId))];
-  const [completions, ownReads, credit, moduleItems] = await Promise.all([
-    prisma.courseCompletion.findMany({
-      where: { userId: { in: userIds }, courseId: { in: courseIds } },
-      distinct: ["userId", "courseId"],
-      select: { userId: true, courseId: true },
-    }),
+  const [certificateMajors, currentMajors, ownReads, credit, moduleItems] = await Promise.all([
+    findCertificateMajors(prisma, userIds, courseIds),
+    findCurrentMajors(prisma, courseIds),
     findOwnReadPairs(prisma, userIds, courseIds),
     findSectionReadCredit(prisma, { userIds, courseIds, items: "participant" }),
     findModuleItemsForCourses(prisma, courseIds),
   ]);
-  const completed = new Set(completions.map((row) => pairKey(row.userId, row.courseId)));
   const coursesByModule = new Map<string, string[]>();
   for (const item of moduleItems) {
     if (item.moduleId) coursesByModule.set(item.moduleId, [...(coursesByModule.get(item.moduleId) ?? []), item.courseId]);
@@ -268,7 +269,10 @@ export async function deriveStatuses(pairs: EnrollmentStatusInput[], now: Date):
   }
   for (const pair of pairs) {
     const key = pairKey(pair.userId, pair.courseId);
-    const isCompleted = completed.has(key);
+    const isCompleted = isCertifiedForDeadline(certificateMajors.get(key), currentMajors.get(pair.courseId), {
+      dueAt: pair.dueAt,
+      dueSetAt: pair.dueSetAt ?? null,
+    });
     const hasStarted = isCompleted || ownReads.has(key) || submitted.has(key) || credit.readSectionIds(pair.userId, pair.courseId).size > 0;
     statuses.set(key, deriveEnrollmentStatus({ isCompleted, hasStarted, dueAt: pair.dueAt, now }));
   }
@@ -290,7 +294,7 @@ export interface UserEnrollmentView {
 /** A participant's active enrolments, each with derived status. */
 export async function listUserEnrollments(userId: string, now: Date = new Date()): Promise<UserEnrollmentView[]> {
   const enrollments = await enrollmentRepository.findActiveEnrollmentsForUser(userId);
-  const statuses = await deriveStatuses(enrollments.map((e) => ({ userId, courseId: e.courseId, dueAt: e.dueAt })), now);
+  const statuses = await deriveStatuses(enrollments.map((e) => ({ userId, courseId: e.courseId, dueAt: e.dueAt, dueSetAt: e.dueSetAt })), now);
   return enrollments.map((e) => ({
     courseId: e.courseId,
     source: e.source,
@@ -298,6 +302,56 @@ export async function listUserEnrollments(userId: string, now: Date = new Date()
     assignedAt: e.assignedAt.toISOString(),
     status: statuses.get(pairKey(userId, e.courseId))!,
   }));
+}
+
+export interface ParticipantEnrollmentView {
+  courseId: string;
+  source: CourseEnrollmentSource | "CLASS";
+  dueAt: string | null;
+  assignedAt: string | null;
+  status: EnrollmentStatus;
+}
+
+/**
+ * «Mine kurs»/`/enrollments`: personens påmeldinger og kursene fra klasser, med fristen etter `effectiveDeadline` (#1192 punkt 2)
+ * og statusen i ett kall. En påmelding står som før (kilden og tidspunktet), men en SELF-påmelding skjuler ikke lenger klassens
+ * frist. Kurs bare fra klasser står med kilden `CLASS`.
+ */
+export async function listParticipantEnrollments(
+  userId: string,
+  classDeadlines: Map<string, EffectiveDeadline>,
+  now: Date = new Date(),
+): Promise<ParticipantEnrollmentView[]> {
+  const enrollments = await enrollmentRepository.findActiveEnrollmentsForUser(userId);
+  const seen = new Set(enrollments.map((e) => e.courseId));
+  const classOnly = [...classDeadlines].filter(([courseId]) => !seen.has(courseId));
+  const deadlineOf = new Map<string, EffectiveDeadline>();
+  for (const e of enrollments) {
+    const fromClass = classDeadlines.get(e.courseId);
+    deadlineOf.set(e.courseId, effectiveDeadline({ individual: e, classes: fromClass ? [fromClass] : [] }));
+  }
+  for (const [courseId, deadline] of classOnly) deadlineOf.set(courseId, deadline);
+  const statuses = await deriveStatuses(
+    [...deadlineOf].map(([courseId, d]) => ({ userId, courseId, dueAt: d.dueAt, dueSetAt: d.dueSetAt })),
+    now,
+  );
+  const iso = (d: Date | null) => (d ? d.toISOString() : null);
+  return [
+    ...enrollments.map((e) => ({
+      courseId: e.courseId,
+      source: e.source,
+      dueAt: iso(deadlineOf.get(e.courseId)!.dueAt),
+      assignedAt: e.assignedAt.toISOString(),
+      status: statuses.get(pairKey(userId, e.courseId))!,
+    })),
+    ...classOnly.map(([courseId, d]) => ({
+      courseId,
+      source: "CLASS" as const,
+      dueAt: iso(d.dueAt),
+      assignedAt: null,
+      status: statuses.get(pairKey(userId, courseId))!,
+    })),
+  ];
 }
 
 export interface CourseEnrollmentView {
@@ -315,7 +369,7 @@ export interface CourseEnrollmentView {
 export async function listCourseEnrollments(courseId: string, now: Date = new Date()): Promise<CourseEnrollmentView[]> {
   await requireCourse(courseId);
   const enrollments = await enrollmentRepository.findActiveEnrollmentsForCourse(courseId);
-  const statuses = await deriveStatuses(enrollments.map((e) => ({ userId: e.userId, courseId, dueAt: e.dueAt })), now);
+  const statuses = await deriveStatuses(enrollments.map((e) => ({ userId: e.userId, courseId, dueAt: e.dueAt, dueSetAt: e.dueSetAt })), now);
   return enrollments.map((e) => ({
       userId: e.userId,
       name: e.user.name,

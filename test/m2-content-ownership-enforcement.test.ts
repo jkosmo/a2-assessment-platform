@@ -144,30 +144,26 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
   // av det er slettet; den var en delmengde av «COURSE list: canManage true for owner+admin, false for non-owner» over, som
   // leser lista som fremmed SMO og krever `canManage: false`. Lukkes lista, blir den rød.
 
-  // ⚠️ Denne er saken #943 IKKE navnga — den pekte på kurs. Klassene har samme form én ruter
-  // bortenfor, og lesingen der er den som lekker mest: `/members` gir NAVN og E-POST.
-  it("CLASS-lesing: medlemmer og kurstildelinger er vaktet — /members gir navn og e-post", async () => {
+  // #943 vaktet lesingen av klassens deltakere og kurs, fordi `/members` gir NAVN og E-POST. Produkteier 26.11.2026 (#1198,
+  // doc/DECISIONS.md): alle produsenter skal kunne LESE alle klasser, også deltakerne, som for innhold (#1165). Personopplysningene
+  // er vurdert der: produsentene ser alt deltakerne i kursrapporten, og plattformen er intern. Skrivingen er fortsatt vaktet
+  // (test/m2-class-read-by-producers-1198.test.ts måler hver skrivevei).
+  it("CLASS-lesing: en annen produsent kan lese klassen, deltakerne og kurstildelingene (#1198)", async () => {
     const create = await request(app).post("/api/admin/content/classes").set(smoA).send({ name: `Read-guard-${Date.now()}` });
     expect(create.status).toBe(201);
     const id = create.body.class.id as string;
 
-    const members = await request(app).get(`/api/admin/content/classes/${id}/members`).set(smoA);
-    expect(members.status).toBe(200);
-    expect((await request(app).get(`/api/admin/content/classes/${id}/courses`).set(smoA)).status).toBe(200);
-    expect((await request(app).get(`/api/admin/content/classes/${id}/members`).set(admin)).status).toBe(200);
-    expect((await request(app).get(`/api/admin/content/classes/${id}/courses`).set(admin)).status).toBe(200);
-
-    for (const path of [`/api/admin/content/classes/${id}/members`, `/api/admin/content/classes/${id}/courses`]) {
-      const blocked = await request(app).get(path).set(smoB);
-      expect(blocked.status, path).toBe(403);
-      expect(blocked.body.error).toBe("content_ownership");
+    for (const headers of [smoA, admin, smoB]) {
+      for (const path of [`/api/admin/content/classes/${id}`, `/api/admin/content/classes/${id}/members`, `/api/admin/content/classes/${id}/courses`]) {
+        expect((await request(app).get(path).set(headers)).status, path).toBe(200);
+      }
     }
   });
 
-  // Det som faktisk lekket: at responsen bærer personopplysninger. Uten denne kunne `/members` en
-  // dag slutte å sende e-post, vakta bli overflødig, og testen over fortsatt vært grønn — og da
-  // ville ingen visst hvorfor vakta sto der.
-  it("CLASS /members bærer personopplysninger — derfor står vakta der", async () => {
+  // At responsen bærer personopplysninger. Det var grunnen til vakta før #1198, og er grunnen til at åpningen er en avgjørelse
+  // (DECISIONS.md 26.11.2026), ikke et uhell: uten denne kunne `/members` slutte å sende e-post uten at noen visste hva som ble
+  // vurdert.
+  it("CLASS /members bærer personopplysninger (lesingen for alle produsenter er avgjort med det i tankene, #1198)", async () => {
     const create = await request(app).post("/api/admin/content/classes").set(smoA).send({ name: `Pii-${Date.now()}` });
     const id = create.body.class.id as string;
     // Klassemedlemskap peker på den INTERNE bruker-id-en, ikke externalId fra headeren.
@@ -218,15 +214,17 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
       .toBeLessThan(300);
   });
 
-  it("UEID klasse: SMO får content_unowned på medlemslista, administrator kommer inn", async () => {
+  // #1198: lesingen av en klasse er åpen for alle produsenter, så vakta for ueide klasser måles på en skrivevei.
+  it("UEID klasse: SMO får content_unowned når hen endrer den, administrator kommer inn; lesingen er åpen (#1198)", async () => {
     const create = await request(app).post("/api/admin/content/classes").set(smoA).send({ name: `Orphan-${Date.now()}` });
     const id = create.body.class.id as string;
     await prisma.contentOwner.deleteMany({ where: { contentType: "CLASS", contentId: id } });
 
-    const orphaned = await request(app).get(`/api/admin/content/classes/${id}/members`).set(smoA);
+    const orphaned = await request(app).patch(`/api/admin/content/classes/${id}`).set(smoA).send({ description: "x" });
     expect(orphaned.status).toBe(403);
     expect(orphaned.body.error).toBe("content_unowned");
 
-    expect((await request(app).get(`/api/admin/content/classes/${id}/members`).set(admin)).status).toBe(200);
+    expect((await request(app).patch(`/api/admin/content/classes/${id}`).set(admin).send({ description: "x" })).status).toBe(200);
+    expect((await request(app).get(`/api/admin/content/classes/${id}/members`).set(smoA)).status).toBe(200);
   });
 });

@@ -241,7 +241,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
   return `
     <div class="preview-module-header">
       ${titleHtml}
-      <span class="module-status-badge ${escapeHtml(badgeClass)}">${escapeHtml(badgeText)}</span>
+      <span class="module-status-badge ${escapeHtml(badgeClass)} status-badge status-badge--${badgeClass === "live" ? "published" : "draft"}">${escapeHtml(badgeText)}</span>
     </div>
     ${descriptionHtml}
     ${versionChainHtml}

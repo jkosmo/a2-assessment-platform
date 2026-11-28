@@ -71,6 +71,10 @@ async function openPublishedSection(page: Page, locale: string, archiveResponse:
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ owners: [], canManageOwners: false }) }));
   await page.route("**/api/admin/content/sections/sec-1150", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: publishedSection }) }));
+  // #1168: «Arkiver» spør først. Forhåndsvisningen sier at ingen kurs holder seksjonen igjen; utkastet kommer til mellom
+  // forhåndsvisningen og arkiveringen, og sperren fra tjeneren vises da som før.
+  await page.route("**/api/admin/content/sections/sec-1150/archive-preview", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sectionId: "sec-1150", archived: false, published: true, uses: [] }) }));
   let archiveCalls = 0;
   await page.route("**/api/admin/content/sections/sec-1150/archive", (route: Route) => {
     archiveCalls += 1;
@@ -88,8 +92,8 @@ test.describe("#1150 — arkivering stoppet av et lagret utkast: meldingen sier 
         body: { error: "content_in_course_draft", message: SERVER_MESSAGE, details: DETAILS },
       });
 
-      page.once("dialog", (dialog) => dialog.accept());
       await (await revealRowAction(page, page.locator('[data-editor-action="archive"]'))).click();
+      await page.locator("#moduleLifecycleDialogConfirmBtn").click();
       await expect.poll(archiveCalls).toBe(1);
 
       const toast = page.locator(".toast__message");
@@ -107,8 +111,8 @@ test.describe("#1150 — arkivering stoppet av et lagret utkast: meldingen sier 
       status: 400,
       body: { error: "content_in_use", message: SERVER_MESSAGE, details: { count: 1, courseTitles: ["Kurs A"] } },
     });
-    page.once("dialog", (dialog) => dialog.accept());
     await (await revealRowAction(page, page.locator('[data-editor-action="archive"]'))).click();
+    await page.locator("#moduleLifecycleDialogConfirmBtn").click();
     await expect.poll(archiveCalls).toBe(1);
     await expect(page.locator(".toast__message")).toHaveText("Innholdet er i bruk i 1 kurs: Kurs A. Fjern det fra kursene først, eller avpubliser dem.");
   });

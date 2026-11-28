@@ -1,6 +1,6 @@
 {
   "name": "a2-assessment-platform",
-  "version": "2.178.0",
+  "version": "2.193.0",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
@@ -29,6 +29,7 @@
     "stage-copy:neutralize-email": "tsx scripts/maintenance/stage-copy-neutralize-email.ts",
     "maint:count-readded-assignment-notices": "tsx scripts/maintenance/count-readded-assignment-notices.ts",
     "maint:count-section-read-certificates": "tsx scripts/maintenance/count-section-read-certificates.ts",
+    "maint:count-module-credit-visibility": "tsx src/scripts/countModuleCreditVisibility.ts",
     "maint:archived-retention-preview": "tsx scripts/maintenance/archived-retention-preview.ts",
     "complexity": "tsx scripts/complexity/report.ts",
     "build": "tsc -p tsconfig.json",

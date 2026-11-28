@@ -1,7 +1,8 @@
 import { escapeHtml } from "./html-escape.js";
-import { confirmModuleDelete } from "./module-lifecycle-dialogs.js";
+import { confirmLifecycleStep, confirmModuleArchive, confirmModuleDelete } from "./module-lifecycle-dialogs.js";
+import { duplicateModuleCopy } from "./content-duplicate.js";
 import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
-import { lifecycleBadge } from "./content-status-badge.js";
+import { lifecycleBadge, lifecycleStatusBadge, versionChipHtml } from "./content-status-badge.js";
 import { createFormPage, formPageTexts } from "./form-page.js";
 import { createSettingsTab } from "./admin-content-settings-tab.js";
 import { createPublishFlow } from "./admin-content-publish.js";
@@ -973,11 +974,13 @@ function renderPreview() {
       audience: forParticipant ? "participant" : "author",
       versionChain: versionChainParts.join(" · "),
       badgeClass: hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell",
+      // #1171: samme ord som merkene ellers — «Publisert», «Nyere utkast» (en lagret versjon nyere enn den publiserte), «Utkast».
+      // Før «Live», «Live + utkast» (også for et utkast som aldri var publisert) og «Modulgrunnlag».
       badgeText: hasDraft
         ? t("shell.draft.unsavedBadge")
-        : isLive ? t("adminContent.status.badge.live")
-        : isDraft ? t("adminContent.status.badge.draft")
-        : t("adminContent.status.badge.shellOnly"),
+        : isLive ? t("adminContent.lifecycle.status.published")
+        : isDraft && mod.activeVersionId ? t("adminContent.lifecycle.newerDraft")
+        : t("adminContent.lifecycle.status.draft"),
     }, opts);
   } else if (hasDraft) {
     previewContent.innerHTML = buildPreviewHtml({
@@ -2220,6 +2223,9 @@ async function saveDraftBundleInBackground(options = {}) {
     if (!hasContent) {
       const keep = sessionDraft;
       await loadModule(selectedModuleId);
+      // #1171 (QA-porten 27.11.2026): «Ulagrede endringer» etter denne lagringen er SANT, ikke en feil. Typen (fritekst/flervalg)
+      // lagres på modulversjonen, ikke med navnet (`POST /modules` tar den ikke), og finnes bare i det beholdte utkastet til
+      // innholdet lagres. Ikke merk utkastet som plassholder her: da sto «Alt lagret», og typen gikk tapt hvis man gikk bort.
       sessionDraft = keep;
       showDraftReadyActions({ quiet: true });
       switchToTab("edit");
@@ -3481,6 +3487,14 @@ let workspaceActionChoices = [];
 // #1046 A1: et nytt, tomt element har et plassholder-utkast som ikke teller som «ulagret» før noe
 // er skrevet. Flagget slås av når skjemaet bekreftes, assistenten fyller utkastet, eller modulen lages.
 let newModulePlaceholder = false;
+// #1189: Publiser og Avpubliser bruker det som er lagret og laster modulen på nytt. Ulagrede endringer forsvant uten et ord
+// (kurset lagrer først, seksjon og klasse spør). Spør, som importen gjør. Alle slags ulagret teller: også et utkast, som er der
+// Rediger legger endringene når forfatteren går til Forhåndsvisning (QA 2026-11-23).
+function confirmDiscardUnsavedEdits(key) {
+  if (!moduleDirtyKind()) return true;
+  return window.confirm(t(key));
+}
+
 function moduleDirtyKind() {
   if (activeTab === "settings" && settingsTab.hasUnsavedSettingsEdits()) return "settings";
   if (hasOpenEditForm()) return "form";
@@ -3516,11 +3530,15 @@ function moduleStatusBadgesHtml() {
   const liveNo = moduleVersionNumber(liveVersion) ?? chains?.liveChain?.[0]?.versionNo ?? null;
   const parts = [];
   if (bundle?.module?.archivedAt) parts.push(lifecycleBadge({ lifecycle: "archived" }, t));
-  else if (liveNo != null) parts.push(`<span class="status-badge status-badge--published">${escapeHtml(tf("stateRail.live.published", { versionNo: liveNo }))}</span>`);
+  // #1171: «Publisert» og versjonen som egen brikke, likt kurs og seksjon (før «Publisert v2.1» i ett merke).
+  else if (liveNo != null) parts.push(lifecycleStatusBadge("published", t) + versionChipHtml(`v${liveNo}`, { className: "module-version-chip", title: t("library.versionChipTitle") }));
   // Et utkast som aldri er publisert, har ikke noe nummer. Rekkefølgen av lagringer ved siden av «v2.1» ville sett ut som en høyere versjon.
   const editingNo = moduleVersionNumber(loaded);
-  if (sessionDraft && !loaded) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(t("stateRail.editing.workingDraft"))}</span>`);
-  else if (editingNo != null && !loadedIsLive) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(tf("shell.header.draftVersion", { versionNo: editingNo }))}</span>`);
+  // #1171: «Utkast», samme ord som overalt ellers (før «Arbeidsutkast»).
+  if (sessionDraft && !loaded) parts.push(lifecycleStatusBadge("draft", t));
+  // En tidligere publisert versjon som ikke er den publiserte nå (avpublisert, eller en eldre åpnet): «Utkast» og versjonen som
+  // brikke, som ellers (QA-porten 27.11.2026; før «Utkast v2.1» i ett merke).
+  else if (editingNo != null && !loadedIsLive) parts.push(lifecycleStatusBadge("draft", t) + versionChipHtml(`v${editingNo}`, { className: "module-version-chip", title: t("library.versionChipTitle") }));
   // Produkteier 13.11.2026: ved siden av «Publisert v1.2» sa «Utkast» for lite — forfatteren så ikke at skjemaet viste en
   // nyere, upublisert lagring. Samme ord og samme brikke som kurs og seksjoner bruker: «Nyere utkast». Uten en live versjon
   // er det fortsatt bare «Utkast».
@@ -3596,7 +3614,13 @@ function applyModuleArchivedLock() {
 /** Handlingsraden for en arkivert modul: lese og ta med seg, gjenopprette, slette. Ikke «Dupliser» (produkteier 13.11). */
 function archivedModuleActions() {
   // #1165: den som ikke kan endre modulen, kan bare ta den med seg. Gjenopprett og Slett er eiernes.
-  if (!moduleCanManage()) return [{ key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() }];
+  // #1169 skive 4: en annens modul som ikke er arkivert, kan også dupliseres herfra, som i lista; kopien er hens egen.
+  if (!moduleCanManage()) {
+    return [
+      moduleIsArchived() ? null : { key: "duplicate", labelKey: "ui.action.duplicate", action: () => duplicateModuleFromHeader() },
+      { key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
+    ].filter(Boolean);
+  }
   return [
     { key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
     { key: "restore", labelKey: "ui.action.restore", action: () => restoreArchivedModule() },
@@ -3613,6 +3637,53 @@ function moduleLifecycleErrorToast(err) {
 }
 
 /** «Gjenopprett»: modulen lastes på nytt, og sida blir redigerbar igjen (sperren og handlingene følger `archivedAt`). */
+/**
+ * #1169 skive 4: «Dupliser» fra hodet. Kopien lages av det som er lagret (samme kopi som fra lista, content-duplicate.js), og
+ * åpnes etterpå. Ulagrede endringer tas ikke med; spør først, som Publiser gjør (#1189).
+ */
+async function duplicateModuleFromHeader() {
+  const moduleId = selectedModuleId;
+  if (!moduleId || moduleLifecycleBusy) return;
+  if (!confirmDiscardUnsavedEdits("shell.module.duplicateConfirmDiscardEdits")) return;
+  moduleLifecycleBusy = true;
+  try {
+    // Kopien lages av versjonen sida viser (et nyere lagret utkast), ikke den publiserte — som eksporten (QA-porten 2.190.0).
+    const moduleVersionId = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
+    const copyId = await duplicateModuleCopy({ moduleId, moduleVersionId, apiFetch, getHeaders, t });
+    queueToast(tf("library.duplicatedToast", { title: localizeValue(bundle?.module?.title) || moduleId }), "success");
+    // Forfatteren har alt svart ja på de ulagrede endringene; nettleseren skal ikke spørre igjen (da kunne «Bli» latt kopien stå
+    // uten et ord, og et nytt forsøk laget en kopi til).
+    formPage?.leaveAnswered();
+    // QA 2.190.0: sperren står til den nye sida har tatt over (som «Slett»), så et klikk til før den kommer ikke lager en kopi til.
+    window.location.href = `/admin-content/module/${encodeURIComponent(copyId)}/conversation`;
+  } catch (err) {
+    moduleLifecycleBusy = false;
+    moduleLifecycleErrorToast(err);
+  }
+}
+
+/** #1169 skive 4: «Arkiver» fra hodet, med samme forhåndsvisning og dialog som i lista (#1168). Etterpå vises den arkiverte modulen. */
+async function archiveModuleFromHeader() {
+  const moduleId = selectedModuleId;
+  if (!moduleId || moduleLifecycleBusy) return;
+  if (!confirmDiscardUnsavedEdits("shell.module.archiveConfirmDiscardEdits")) return;
+  const title = localizeValue(bundle?.module?.title) || moduleId;
+  moduleLifecycleBusy = true;
+  try {
+    const trigger = document.querySelector('#moduleFormHead [data-ws-key="archive"]');
+    const answer = await confirmModuleArchive({ moduleId, title, t, tf, apiFetch, getHeaders, returnFocusTo: trigger });
+    if (answer.error) { moduleLifecycleErrorToast(answer.error); return; }
+    if (!answer.confirmed) return;
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/archive`, getHeaders, { method: "POST" });
+    showToast(t("library.archived"), "success");
+    await loadModule(moduleId);
+  } catch (err) {
+    moduleLifecycleErrorToast(err);
+  } finally {
+    moduleLifecycleBusy = false;
+  }
+}
+
 async function restoreArchivedModule() {
   const moduleId = selectedModuleId;
   if (!moduleId || moduleLifecycleBusy) return;
@@ -3665,8 +3736,7 @@ function createModuleFormPage() {
     statusHtml: moduleStatusBadgesHtml,
     t,
     // `data-ws-key`: hvilken handling knappen er (testene og #1151 leser den); klikket slås fortsatt opp på indeksen.
-    actions: () => workspaceActionChoices.map((choice, i) =>
-      `<button type="button" class="row-action-btn workspace-action-btn${choice.destructive ? " destructive" : ""}" data-ws-action="${i}" data-ws-key="${escapeHtml(choice.key ?? "")}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
+    actions: () => moduleHeaderSlots(),
     languages: { locales: supportedLocales, labels: localeLabels, current: () => contentLocale, onChange: switchContentLocale },
     tabs: {
       label: t("shell.tab.listLabel"),
@@ -3679,6 +3749,7 @@ function createModuleFormPage() {
     // #1151 skive 3c: en arkivert modul har ingen Lagre/Avbryt. Leses hver gang hodet tegnes (som kursets).
     save: { onSave: async () => { saveFromHeader(); return false; }, onDiscard: discardFromHeader, get hidden() { return moduleIsLocked(); } },
     isDirty: () => moduleDirtyKind() !== null,
+    isNew: () => !selectedModuleId,
     body: () => "",
   });
   moduleFormHost.addEventListener("click", (event) => {
@@ -3687,6 +3758,35 @@ function createModuleFormPage() {
   });
   formPage.render();
   formPage.installGuards();
+}
+
+// #1169 skive 2 (doc/DECISIONS.md 28.11.2026): plassene i hodet. Hovedhandlingen for tilstanden (Publiser / Publiser utkastet,
+// Gjenopprett) som fylt knapp · innholdsverktøyene (på smal skjerm under «Mer», form-page.js) · «Mer» i fast rekkefølge:
+// Eksporter · Erstatt fra fil · Avpubliser · Slett. Klikket slås fortsatt opp på indeksen i `workspaceActionChoices`.
+const MODULE_SLOT = {
+  publish: "primary", restore: "primary",
+  generateContent: "tools", resumeChatEdit: "tools", revise: "tools", generateMcq: "tools",
+  duplicate: "more", export: "more", import: "more", unpublish: "more", archive: "more", delete: "more",
+};
+const MODULE_MORE_ORDER = ["duplicate", "export", "import", "unpublish", "archive", "delete"];
+function moduleHeaderSlots() {
+  const slots = { primary: [], tools: [], more: [] };
+  const more = [];
+  workspaceActionChoices.forEach((choice, i) => {
+    const slot = MODULE_SLOT[choice.key] ?? "more";
+    // Publisert med et nyere, lagret utkast: «Publiser utkastet», som kurset og seksjonen.
+    const label = choice.key === "publish" && bundle?.module?.activeVersionId ? t("courses.draft.publishAction") : resolveChoiceLabel(choice);
+    const cls = `row-action-btn workspace-action-btn${slot === "primary" ? " is-primary" : ""}${choice.destructive ? " destructive" : ""}`;
+    const html = `<button type="button" class="${cls}" data-ws-action="${i}" data-ws-key="${escapeHtml(choice.key ?? "")}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(label)}</button>`;
+    if (slot === "more") more.push({ key: choice.key, html });
+    else slots[slot].push(html);
+  });
+  more.sort((a, b) => {
+    const ia = MODULE_MORE_ORDER.indexOf(a.key), ib = MODULE_MORE_ORDER.indexOf(b.key);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  slots.more = more.map((m) => m.html);
+  return slots;
 }
 
 function saveFromHeader() {
@@ -3794,11 +3894,15 @@ function showModuleActions() {
       hintKey: "shell.draftReady.publishHint",
       // #997: kalles uten argumenter — funksjonen tar valget «erstatter tidligere bestått» som
       // parameter, og en klikkhendelse skal ikke havne der.
-      action: () => publishFlow.publishLatestDraftInBackground(),
+      // Sier forfatteren nei, tegnes handlingene på nytt (som importen): valget kan ha slått av menyen.
+      action: () => {
+        if (!confirmDiscardUnsavedEdits("shell.module.publishConfirmDiscardEdits")) { showModuleActions(); return; }
+        publishFlow.publishLatestDraftInBackground();
+      },
     },
     unpublish: {
       labelKey: "shell.module.unpublish",
-      action: () => confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", publishFlow.unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
+      action: () => (confirmDiscardUnsavedEdits("shell.module.unpublishConfirmDiscardEdits") ? true : (showModuleActions(), false)) && confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", publishFlow.unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
     },
   };
   const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
@@ -3812,8 +3916,11 @@ function showModuleActions() {
   // status model describes — they are available whenever a module is.
   if (selectedModuleId) {
     actions.push(
+      // #1169 skive 4: Dupliser og Arkiver i hodet også, som i lista (før bare der).
+      { key: "duplicate", labelKey: "ui.action.duplicate", action: () => duplicateModuleFromHeader() },
       { key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
       { key: "import", labelKey: "shell.module.importPackage", action: () => startImportPackageFlow() },
+      { key: "archive", labelKey: "ui.action.archive", action: () => archiveModuleFromHeader() },
     );
   }
   renderWorkspaceActions(actions);
@@ -3889,7 +3996,8 @@ function startImportPackageFlow() {
 
   // Same combined guard as restore: the settings inputs are DOM-only until Lagre, so `sessionDraft`
   // alone does not know whether the reload after import would throw work away.
-  if ((sessionDraft || settingsTab.hasUnsavedSettingsEdits()) && !window.confirm(t("shell.module.importConfirmDiscardDraft"))) {
+  // #1189: også et åpent, endret skjema i Rediger — importen laster modulen på nytt, og det som var skrevet forsvant.
+  if ((sessionDraft || hasOpenEditForm() || settingsTab.hasUnsavedSettingsEdits()) && !window.confirm(t("shell.module.importConfirmDiscardDraft"))) {
     // Choosing this action already disabled the menu. Declining must not leave the workspace with
     // no actions at all.
     showModuleActions();
@@ -5173,6 +5281,32 @@ async function initShell() {
   }
   if (autoModuleId) {
     await loadModule(autoModuleId, { resumeEditing });
+    // #1169 skive 4: «Publiser» / «Publiser utkastet» i modullista åpner modulen med `?publish=1`. Flagget fjernes, så en omlasting
+    // ikke spør på nytt. QA 2.190.0: adressen med flagget kan komme tilbake fra nettleserens historikk eller et bokmerke, og ingenting
+    // publiseres uten at et menneske klikker — sida spør derfor først i sin egen dialog, og så kjøres hodets Publiser med sine
+    // spørsmål. Er det ingenting å publisere (lista var gammel), sier sida det i stedet for å gjøre ingenting.
+    const params = new URLSearchParams(location.search);
+    if (params.has("publish")) {
+      params.delete("publish");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+      const publish = workspaceActionChoices.find((choice) => choice.key === "publish");
+      if (!publish) {
+        showToast(t("shell.module.publishNothing"), "info");
+      } else {
+        const title = localizeValue(bundle?.module?.title) || autoModuleId;
+        const label = bundle?.module?.activeVersionId ? t("courses.draft.publishAction") : t("ui.action.publish");
+        const confirmed = await confirmLifecycleStep({
+          kind: "publish",
+          title: tf("shell.module.publishFromListTitle", { title }),
+          text: t("shell.module.publishFromListText"),
+          confirmLabel: label,
+          t,
+          returnFocusTo: document.querySelector('#moduleFormHead [data-ws-key="publish"]'),
+        });
+        if (confirmed) publish.action?.();
+      }
+    }
     return;
   }
 

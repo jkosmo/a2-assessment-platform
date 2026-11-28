@@ -5,7 +5,9 @@ import { deriveContentLifecycle } from "../modules/content/lifecycle.js";
 import { assertContentOwnership, listManageableContentIds } from "../modules/content/contentOwnershipService.js";
 import { z } from "zod";
 import {
+  courseItemInputsFromRows,
   createCourse,
+  duplicateCourse,
   updateCourse,
   unpublishCourse,
   archiveCourse,
@@ -50,15 +52,18 @@ import {
   courseDraftPayloadSchema,
   discardCourseDraft,
   findCourseDraft,
+  findCourseDraftTitles,
   findCourseIdsWithDraft,
   publishCourseDraft,
   readCourseDraftPayload,
+  renameCourse,
   saveCourseDraft,
   type CourseDraftPayload,
   type CourseDraftRow,
 } from "../modules/course/courseDraft.js";
 import { courseBodySchema, courseItemListSchema } from "../modules/course/courseSchemas.js";
 import { getCoursePublishAudience } from "../modules/course/coursePublishAudience.js";
+import { assertCourseTextComplete } from "../modules/course/courseTextGate.js";
 import { analyzeCourseArchive, analyzeCourseRestore } from "../modules/course/courseArchivePreview.js";
 import { prisma } from "../db/prisma.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
@@ -169,6 +174,25 @@ adminCoursesRouter.post("/", idempotency("courses.create"), async (request, resp
   }
 });
 
+// #1169 skive 4b (doc/design/PLAN_1169_4B_DUPLISER_KURS.md): «Dupliser kurs». Et nytt kurs med de samme modulene og seksjonene, eid
+// av den som kopierer. Ingen eierskapsvakt: å lese kilden er åpent for alle produsenter (#1165), og kopien er et nytt element — som
+// «Dupliser» for modul og seksjon. Idempotensnøkkelen har kildens id: kroppen er tom, så samme nøkkel for to kilder ville ellers gitt
+// den første kopien igjen (#906). Feil: 404 course_not_found, 400 course_archived (kilden) og course_item_archived /
+// course_duplicate_item (et element); da er ingenting laget.
+adminCoursesRouter.post("/:courseId/duplicate", idempotency((req) => `courses.duplicate:${req.params.courseId}`), async (request, response, next) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    const course = await duplicateCourse(String(request.params.courseId), actorId);
+    response.status(201).json({ course, links: courseAdminLinks(course.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminCoursesRouter.post("/localize-copy", generateLimiter, async (request, response, next) => {
   const parsed = courseLocalizationBodySchema.safeParse(request.body);
   if (!parsed.success) {
@@ -226,9 +250,12 @@ adminCoursesRouter.get("/", async (request, response, next) => {
     const themesByCourse = await findLocalizedThemesForCourses(courses.map((c) => c.id), locale);
     // #1140 etappe 2: et publisert kurs med et lagret utkast står som «Publisert» med «Nyere utkast», som en modul.
     const withDraft = await findCourseIdsWithDraft(prisma, courses.map((c) => c.id));
+    // #1169 skive 4c: «Døp om» i lista starter fra navnet som blir publisert (utkastets tittel når et utkast har en).
+    const draftTitles = withDraft.size > 0 ? await findCourseDraftTitles(prisma, [...withDraft]) : new Map<string, string>();
     const items: AdminCourseListItem[] = courses.map((c, i) => ({
       id: c.id,
       title: c.title,
+      ...(draftTitles.has(c.id) ? { draftTitle: draftTitles.get(c.id) } : {}),
       displayTitle: localizeContentText(locale, c.title) ?? c.title,
       description: c.description,
       certificationLevel: c.certificationLevel,
@@ -498,6 +525,34 @@ function courseFieldsFromBody(body: Partial<z.infer<typeof courseBodySchema>>) {
 // #934 skive 4a: kursskjemaet bruker ikke lenger denne for et eksisterende kurs (alt går til `…/content`). En fane
 // fra før utrullingen gjør det, og den sender ikke telleren: `409 course_form_outdated` før noe skrives — ellers
 // ville navnet stått lagret mens elementene ble avvist i neste kall, eller skrevet over en annens endring.
+// #1169 skive 4c (doc/design/PLAN_1169_4B_DUPLISER_KURS.md, § 6): «Døp om» i kurslista. `title` er HELE språkkartet (lista slår
+// sammen); `expectedTitle` er den lagrede teksten raden viste (utkastets tittel når et utkast har en). Et publisert kurs får navnet
+// i utkastet, et upublisert rett i kurset (`renameCourse`, courseDraft.ts).
+const renameCourseBodySchema = z.object({ title: localizedTextPatchSchema, expectedTitle: z.string() }).strict();
+
+adminCoursesRouter.patch("/:courseId/title", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = renameCourseBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  const courseId = request.params.courseId;
+  const actorId = request.context?.userId;
+  try {
+    const result = await renameCourse({
+      courseId,
+      title: parsed.data.title,
+      expectedTitle: parsed.data.expectedTitle,
+      actorId,
+      readItems: async (tx) => courseItemInputsFromRows(await createCourseRepository(tx).findAllCourseItems(courseId)),
+      writeCourse: (tx, title, expectedRevision) => updateCourse(courseId, { title }, actorId, { expectedRevision }, tx),
+    });
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = courseBodySchema.partial().extend({ expectedRevision: expectedRevisionSchema }).safeParse(request.body);
   if (!parsed.success) {
@@ -598,18 +653,25 @@ async function describeCourseDraftItems(
       archivedAt: row?.archivedAt?.toISOString() ?? null,
       // NYTT i utkastet og uten publisert versjon. Et element som bare står i utkastet, ses ikke av bruk-låsen (den leser
       // kursets liste), så det kan avpubliseres etter at utkastet ble lagret; og velgeren i kursbyggeren tilbyr seksjoner
-      // som aldri har vært publisert. I et levende kurs ville deltakerne da møtt noe NYTT som ikke kan åpnes.
+      // som aldri har vært publisert. I et levende kurs ville deltakerne da møtt noe NYTT som ikke kan åpnes. Bare en modul
+      // stopper publiseringen; en seksjon merkes, men er skjult for deltakerne til den er publisert (`draftItemProblem`).
       unpublished: row != null && row.activeVersionId == null && !alreadyInCourse.has(refId),
       missing: !row,
     };
   });
 }
 
-/** Hvorfor et element i utkastet ikke kan publiseres ut i kurset, eller `null` når det kan. */
-function draftItemProblem(item: { missing: boolean; archivedAt: string | null; unpublished: boolean }): "missing" | "archived" | "unpublished" | null {
+/**
+ * Hvorfor et element i utkastet ikke kan publiseres ut i kurset, eller `null` når det kan.
+ *
+ * En upublisert SEKSJON stopper ikke publiseringen (produkteier 2026-11-24, #1192 punkt 4): den er skjult for deltakerne til den
+ * er publisert (`isSectionAvailableToParticipant`, DECISIONS 2026-08-23), som når den legges inn i kurset på andre måter. En
+ * upublisert MODUL stopper den fortsatt: en modul vises for deltakerne som en rad, også uten publisert versjon.
+ */
+function draftItemProblem(item: { type: "MODULE" | "SECTION"; missing: boolean; archivedAt: string | null; unpublished: boolean }): "missing" | "archived" | "unpublished" | null {
   if (item.missing) return "missing";
   if (item.archivedAt != null) return "archived";
-  return item.unpublished ? "unpublished" : null;
+  return item.unpublished && item.type === "MODULE" ? "unpublished" : null;
 }
 
 /**
@@ -731,12 +793,16 @@ adminCoursesRouter.post("/:courseId/draft/publish", requireContentOwnership("COU
         const themeIds = payload.themeIds ? await findExistingThemeIds(tx, payload.themeIds) : undefined;
         // Ingen `expectedRevision`: mens utkastet finnes, stopper låsen alt annet som øker kursets teller, så kurset er
         // som da utkastet ble laget.
-        return updateCourse(courseId, { ...courseFieldsFromBody(payload), themeIds }, actorId, {
+        const published = await updateCourse(courseId, { ...courseFieldsFromBody(payload), themeIds }, actorId, {
           items: payload.items,
           version: parsed.data.version,
           confirmEmailRecipients: parsed.data.confirmEmailRecipients,
           publishingDraft: true,
         }, tx);
+        // #1178 skive 2: det som nå går ut (utkastet kan utelate navnet, «som publisert»), på alle tre språk. Avviser porten,
+        // rulles transaksjonen tilbake, og både kurset og utkastet står som før.
+        assertCourseTextComplete(published);
+        return published;
       },
     });
     response.json({ course });

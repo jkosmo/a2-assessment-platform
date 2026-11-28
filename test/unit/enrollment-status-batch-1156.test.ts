@@ -25,9 +25,14 @@ const learners = (n: number) => Array.from({ length: n }, (_, i) => `u${i}`);
 
 function installPrisma(input: { completed?: string[]; ownReads?: string[] }) {
   Object.assign(prismaHolder, {
-    course: { findUnique: async () => (count("course"), { id: "K", publishedAt: new Date(), archivedAt: null }) },
+    course: {
+      findUnique: async () => (count("course"), { id: "K", publishedAt: new Date(), archivedAt: null }),
+      // #1192 punkt 2: kursets nåværende hovedversjon (`findCurrentMajors`), én spørring uansett antall.
+      findMany: async () => (count("course"), [{ id: "K", versionMajor: 1 }]),
+    },
+    courseVersion: { findMany: async () => (count("courseVersion"), []) },
     courseCompletion: {
-      findMany: async () => (count("courseCompletion"), (input.completed ?? []).map((userId) => ({ userId, courseId: "K" }))),
+      findMany: async () => (count("courseCompletion"), (input.completed ?? []).map((userId) => ({ userId, courseId: "K", versionMajor: 1 }))),
     },
     courseSectionRead: {
       findMany: async () => (count("courseSectionRead"), (input.ownReads ?? []).map((userId) => ({ userId, courseId: "K" }))),

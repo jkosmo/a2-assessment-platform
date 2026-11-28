@@ -40,7 +40,10 @@ API:
 
 Et kurs er serielt, og oversikten viser det: du ser **ett steg av gangen** som det aktuelle.
 
-- **Det aktuelle steget** står som et kort med tittel og én knapp — «Les» eller «Gjennomfør».
+- **Det aktuelle steget** står som et kort med tittel og én knapp — «Les» eller «Ta testen».
+- **Et åpnet steg tar over kurset**, både lesestoff og test: hodet sier «Lesestoff» eller «Test», hvilket steg det er («Steg 2
+  av 4») og «← Tilbake til kurset». Nederst står én knapp videre. I en test står den først når testen er bestått: «Gå videre»,
+  eller «Avslutt kurset» på siste steg (fra 2.184.0).
 - **Fullførte steg** krymper til én linje med status. Trykk «Se igjen» for å åpne dem på nytt;
   innholdet forblir tilgjengelig så lenge du har kurset. En seksjon du alt har lest, har knappen «Gå videre» (eller «Gå til
   testen») i stedet for «Marker seksjon lest, og gå videre».

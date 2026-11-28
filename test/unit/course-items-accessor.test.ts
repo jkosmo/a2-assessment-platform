@@ -300,7 +300,8 @@ describe("#958 bevisporten og deltakersekvensen får radene fra samme dør", () 
   async function issue(items: ItemRow[], reads: string[]) {
     const created: Array<{ courseId: string }> = [];
     // #934: versjonen er påkrevd i utstedelsen; uten den sto `undefined` i oppslaget og testen ble grønn.
-    const courseRow = { id: COURSE_ID, publishedAt: new Date("2026-01-01"), archivedAt: null, versionMajor: 1, versionMinor: 0, items: [] };
+    // 28.11.2026: åpent kurs (et bestått teller bare i kurs deltakeren ser; her ser alle det).
+    const courseRow = { id: COURSE_ID, publishedAt: new Date("2026-01-01"), archivedAt: null, enrollmentPolicy: "OPEN", versionMajor: 1, versionMinor: 0, items: [] };
     const client = createClient(items, {
       $transaction: (cb: (tx: unknown) => unknown) => cb(client),
       course: {

@@ -460,6 +460,8 @@ export type CourseAssignmentDigestCourseInput = {
   classNames: string[];
   /** Den tidligste fristen blant klassene, eller null. */
   dueAt: Date | null;
+  /** #1192 punkt 2: personen har kursbevis for en eldre hovedversjon. E-posten sier «ny versjon», ikke «nytt kurs». */
+  newVersion?: boolean;
 };
 
 /**

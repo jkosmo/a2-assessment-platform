@@ -9,7 +9,7 @@ import { mockCommonApis } from "./admin-content-helpers.js";
 // venstre for kurs. Kurs tilordnes Tema inne i selve kurset.» Bare administrator endrer lista. Navnet
 // skrives på bokmål; nynorsk og engelsk fylles inn automatisk når de står tomme.
 
-type Theme = { id: string; name: string; courseCount: number; updatedAt: string };
+type Theme = { id: string; name: string; courseCount: number; updatedAt: string; archivedCourseCount?: number };
 const L = (nb: string, nn: string, en: string) => JSON.stringify({ nb, nn, "en-GB": en });
 
 async function mockThemes(page: Page, initial: Theme[], opts: { failTranslation?: boolean } = {}) {
@@ -19,6 +19,13 @@ async function mockThemes(page: Page, initial: Theme[], opts: { failTranslation?
   await page.route("**/api/admin/content/themes**", async (route: Route) => {
     const request = route.request();
     const method = request.method();
+    if (method === "GET" && request.url().includes("/delete-preview")) {
+      // #1168: som tjeneren: alle kurs (lista teller bare aktive), og de arkiverte for seg.
+      const id = decodeURIComponent(request.url().split("/").slice(-2)[0] ?? "");
+      const theme = themes.find((candidate) => candidate.id === id);
+      const archived = theme?.archivedCourseCount ?? 0;
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ themeId: id, courseCount: (theme?.courseCount ?? 0) + archived, archivedCourseCount: archived }) });
+    }
     if (method === "GET") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ themes }) });
     }
@@ -147,6 +154,48 @@ test.describe("2.102.0 Tema i innholdsforvaltningen", () => {
     await expect(page.locator("#themesTableBody tr")).toHaveCount(1);
   });
 
+  test("#1168: slett teller også de arkiverte kursene (lista teller bare aktive), og sier at de kommer tilbake uten temaet", async ({ page }) => {
+    await mockCommonApis(page, { meRoles: ["ADMINISTRATOR"] });
+    // Lista sier 0 aktive; tjeneren vet om ett arkivert kurs som mister temaet.
+    await mockThemes(page, [{ ...EXISTING[1], archivedCourseCount: 1 }]);
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+    await page.goto("/admin-content/themes");
+    await page.locator('#themesTableBody tr[data-row-id="t-pl"] [data-action="delete"]').click();
+    await expect(page.locator("#themeDeleteText")).toHaveText(
+      "1 kurs har dette temaet, 1 av dem arkivert. De mister bare temaet; kursene endres ikke ellers. Gjenopprettes et arkivert kurs, kommer det tilbake uten temaet.",
+    );
+    // KONTROLL: før sto det «Ingen kurs har dette temaet» her.
+    await expect(page.locator("#themeDeleteText")).not.toContainText("Ingen kurs");
+  });
+
+  test("#1168: «Slett» på et annet tema mens forhåndsvisningen hentes, gjør ingenting; dialogen og slettingen gjelder det første (QA 2.181.0)", async ({ page }) => {
+    await mockCommonApis(page, { meRoles: ["ADMINISTRATOR"] });
+    const mock = await mockThemes(page, EXISTING);
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+    // Forhåndsvisningen for KI holdes tilbake; den for Prosjektledelse telles.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const previews: string[] = [];
+    await page.route("**/api/admin/content/themes/*/delete-preview", async (route: Route) => {
+      const id = decodeURIComponent(route.request().url().split("/").slice(-2)[0] ?? "");
+      previews.push(id);
+      if (id === "t-ki") await gate;
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ themeId: id, courseCount: id === "t-ki" ? 2 : 0, archivedCourseCount: 0 }) });
+    });
+    await page.goto("/admin-content/themes");
+    await page.locator('#themesTableBody tr[data-row-id="t-ki"] [data-action="delete"]').click();
+    await expect.poll(() => previews).toEqual(["t-ki"]);
+    await page.locator('#themesTableBody tr[data-row-id="t-pl"] [data-action="delete"]').click();
+    release();
+
+    await expect(page.locator("#themeDeleteDialog")).toBeVisible();
+    await expect(page.locator("#themeDeleteTitle")).toHaveText("Slette «KI»?");
+    expect(previews).toEqual(["t-ki"]);
+    await page.locator("#themeDeleteConfirmBtn").click();
+    await expect.poll(() => mock.sent.length).toBe(1);
+    expect(mock.sent[0].url).toContain("/themes/t-ki");
+  });
+
   test("fagansvarlig ser lista, men ingen knapper for å endre den", async ({ page }) => {
     await mockCommonApis(page, { meRoles: ["SUBJECT_MATTER_OWNER"] });
     await mockThemes(page, EXISTING);
@@ -238,4 +287,16 @@ test.describe("2.102.0 Tema inne i kurset", () => {
     await expect.poll(() => sent.length).toBe(1);
     expect("themeIds" in sent[0]).toBe(false);
   });
+});
+
+// #1171 (2.193.0): tema-siden hadde ingen «?»-hjelp. Nå åpner «?» hjelpen for tema, ikke deltakerhjelpen.
+test("«?» på tema-siden åpner hjelpen for tema", async ({ page }) => {
+  await mockCommonApis(page, { meRoles: ["SUBJECT_MATTER_OWNER"] });
+  await mockThemes(page, EXISTING);
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* standardspråk */ } });
+  await page.goto("/admin-content/themes");
+  await page.locator(".workspace-help-trigger").click();
+  await expect(page.locator("#workspaceHelpTitle")).toHaveText("Tema");
+  await expect(page.locator("#workspaceHelpBody")).toContainText("Bare administrator kan endre listen.");
+  await expect(page.locator("#workspaceHelpBody")).toContainText("«Andre kurs»");
 });

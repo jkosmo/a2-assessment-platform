@@ -2,7 +2,7 @@ import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "./html-escape.js";
 import { createListPage } from "./list-page.js";
-import { lifecycleBadge, lifecycleOf, retentionLineHtml } from "./content-status-badge.js";
+import { lifecycleBadge, lifecycleOf, retentionLineHtml, versionChipHtml } from "./content-status-badge.js";
 import { moduleVersionLabel } from "./version-label.js";
 import {
   supportedLocales,
@@ -30,6 +30,7 @@ import { runWithBusyButton } from "/static/busy-button.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { confirmModuleArchive, confirmModuleDelete } from "./module-lifecycle-dialogs.js";
+import { duplicateModuleCopy } from "./content-duplicate.js";
 import {
   manglendeSpraak,
   medHullAv,
@@ -181,7 +182,7 @@ function resolveActiveWorkspaceRoles() {
 // #934 skive 5b: versjonen som er ute, i samme merke som i kurslista. En modul uten aktiv versjon har ikke noe å vise.
 function moduleVersionChipHtml(m) {
   const label = moduleVersionLabel({ versionMajor: m.activeVersionMajor, versionMinor: m.activeVersionMinor, versionNo: m.activeVersionNo });
-  return label ? ` <span class="status-chip module-version-chip" title="${escapeHtml(t("library.versionChipTitle"))}">${escapeHtml(label)}</span>` : "";
+  return versionChipHtml(label, { className: "module-version-chip", title: t("library.versionChipTitle") });
 }
 
 function getListPage() {
@@ -223,7 +224,7 @@ function getListPage() {
       // #894: hvilke språk tittelen MANGLER. Står ved siden av navnet fordi det er navnet det
       // gjelder — ikke modulens tilstand.
       { key: "lang", label: t("ui.lang.col"), className: "col-lang", sortValue: (m) => manglendeSpraak(m).length, render: (m) => spraakMerkeHtml(m, tf) },
-      { key: "status", label: t("ui.status"), className: "col-status", render: (m, ctx) => lifecycleBadge(m, t) + moduleVersionChipHtml(m) + (ctx.filter === "archived" ? retentionLineHtml(m, "module", t, currentLocale) : "") },
+      { key: "status", label: t("ui.status"), className: "col-status", render: (m, ctx) => lifecycleBadge(m, t, { versionChip: moduleVersionChipHtml(m) }) + (ctx.filter === "archived" ? retentionLineHtml(m, "module", t, currentLocale) : "") },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (m) => certBadge(m.certificationLevel) },
       { key: "courses", label: t("library.col.usedInCourses"), className: "col-courses", sortValue: (m) => m.courseCount ?? 0, render: (m) => (m.courseCount > 0
         ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${escapeHtml(tf("library.courseCountAria", { count: m.courseCount }))}">${m.courseCount}</button>`
@@ -244,10 +245,21 @@ function getListPage() {
       const title = escapeHtml(m.title ?? m.id);
       // #459: Avpubliser bare for moduler som er aktivt publisert.
       const isPublished = lifecycle === "published" || lifecycle === "published_with_draft";
-      return [
+      // #1169 skive 3 (doc/DECISIONS.md 28.11.2026): Åpne · hovedhandlingen (Gjenopprett for en arkivert modul) · «Mer» i fast
+      // rekkefølge (Døp om · Dupliser · Eksporter · Avpubliser · Arkiver / Slett). «Publiser» er en lenke til modulens hode, som
+      // spør (skive 4a).
+      const restoreBtn = canManage && isArchived ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.restore"))}</button>` : "";
+      // #1169 skive 4: Publiser (et lagret utkast som aldri er publisert) og Publiser utkastet (publisert, med en nyere lagring). Lenka
+      // åpner modulen med `?publish=1`, og hodets publisering kjøres der, med sine spørsmål. Et tomt modulgrunnlag har ingenting å
+      // publisere (ingen lagret versjon, `latestVersionNo` tomt). Tilstanden leses fra `lifecycle` (#1046 steg B).
+      const publishLabel = !canManage ? "" : lifecycle === "published_with_draft" ? t("courses.draft.publishAction")
+        : (lifecycle === "draft" && m.latestVersionNo != null ? t("ui.action.publish") : "");
+      const publishLink = publishLabel ? `<a href="${openConvUrl}?publish=1" class="row-action-btn" data-action-link="publish">${escapeHtml(publishLabel)}</a>` : "";
+      return {
         // #896 S3c: knappen sier hva den gjør — åpner modulen.
         // #1165 (produkteier 14.11.2026): også for den som ikke eier modulen. Modulsida viser den skrivebeskyttet.
-        `<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`,
+        primary: [`<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`, restoreBtn || publishLink],
+        more: [
         // #894: omdøping er en langt vanligere handling enn innholdsredigering, og krever ingen av
         // trinnene rundt. Egen knapp, ikke klikk på navnet — et klikk i raden åpner elementet.
         // #1151 skive 3c: ikke på en arkivert modul. Tjeneren avviser omdøpingen (`module_archived`), og «Dupliser» er
@@ -257,13 +269,12 @@ function getListPage() {
         isArchived ? "" : `<button class="row-action-btn" data-action="duplicate" data-module-id="${id}">${escapeHtml(t("ui.action.duplicate"))}</button>`,
         `<button class="row-action-btn" data-action="export" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.export"))}</button>`,
         canManage && isPublished ? `<button class="row-action-btn" data-action="unpublish" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.unpublish"))}</button>` : "",
+        canManage && !isArchived ? `<button class="row-action-btn" data-action="archive" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.archive"))}</button>` : "",
         // #705-UX: Slett vises kun for arkiverte moduler (terminal steg etter arkivering).
-        canManage ? (isArchived
-          ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.restore"))}</button>`
-          : `<button class="row-action-btn" data-action="archive" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.archive"))}</button>`) : "",
         canManage && isArchived ? `<button class="row-action-btn destructive" data-action="delete" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
-        canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("library.ownerOnlyHint"))}">${escapeHtml(t("ui.ownerOnly"))}</span>`,
-      ];
+        ],
+        after: [canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("library.ownerOnlyHint"))}">${escapeHtml(t("ui.ownerOnly"))}</span>`],
+      };
     },
     emptyHtml: () => `
       <div class="empty-state">
@@ -514,35 +525,9 @@ async function duplicateModule(moduleId, btn) {
   btn.disabled = true;
   const original = allModules.find(m => m.id === moduleId);
   const sourceTitle = original?.title ?? t("ui.kind.module");
-
   try {
-    // /export-package, ikke /export (live editing-bundle) — det er
-    // sistnevnte som returnerer a2-content-export/v1-envelope-en /import faktisk forventer.
-    const exportResult = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`, getHeaders);
-    const envelope = exportResult?.envelope ?? exportResult;
-    if (!envelope || envelope.exportFormat !== "a2-content-export/v1" || !envelope.module) {
-      throw new Error(t("library.exportUnexpected"));
-    }
-
-    // Suffiks " (kopi)" på tittelen i alle locales så listen viser kopien tydelig.
-    const srcTitle = envelope.module?.module?.title;
-    if (srcTitle && typeof srcTitle === "object") {
-      envelope.module.module.title = Object.fromEntries(
-        Object.entries(srcTitle).map(([l, v]) => [l, v ? `${v} (kopi)` : v])
-      );
-    } else if (typeof srcTitle === "string" && srcTitle) {
-      envelope.module.module.title = `${srcTitle} (kopi)`;
-    }
-
-    // #456: autoPublish=false så kopien lander som «Upublisert utkast» uansett
-    // om kilden var publisert. Forfatter skal eksplisitt publisere etter gjennomgang.
-    // 2.101.2: vis at det jobbes, og sperr siden imens (work-dialog.js).
-    const importResult = await runWithWorkDialog(t("adminContent.work.copying"), () => apiFetch("/api/admin/content/modules/import", getHeaders, {
-      method: "POST",
-      body: JSON.stringify({ payload: envelope, mode: "createNew", autoPublish: false }),
-    }));
-    if (!importResult?.moduleId) throw new Error(t("library.importNoId"));
-
+    // #1169 skive 4: samme kopi som fra modulens hode (content-duplicate.js).
+    await duplicateModuleCopy({ moduleId, apiFetch, getHeaders, t });
     showToast(tf("library.duplicatedToast", { title: sourceTitle }), "success");
     await loadModules();
   } catch (err) {

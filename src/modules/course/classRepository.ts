@@ -1,4 +1,5 @@
 import { prisma } from "../../db/prisma.js";
+import { dueAtDiffers } from "./effectiveDeadline.js";
 
 // #645/CL-1: persistence for classes (cohorts) — CRUD, membership, and course-to-class assignment.
 // Business rules (authz, dynamic membership evaluation, audit) live in the service layer (CL-2).
@@ -107,13 +108,21 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
     // Tildeler et kurs til en klasse. Finnes tildelingen, oppdateres bare fristen. To kall samtidig (dobbeltklikk) gir én
     // tildeling, fordi den unike nøkkelen avgjør, og ingen av dem feiler. #1142: om tildelingen var ny, leses ikke lenger
     // her (e-posten om nye kurs lages av jobben fra det som er lagret), så funksjonen gir ingenting tilbake.
+    //
+    // #1192 punkt 2: `dueSetAt` er når fristen sist ble satt eller endret. Den flyttes bare når datoen faktisk endres, i samme
+    // `UPDATE` som sammenligner (`dueAtDiffers`), så samme dato sendt på nytt ikke gjør en gammel frist ny, og to samtidige
+    // lagringer ikke kobler feil tidspunkt til fristen.
     async assignCourseToClass(courseId: string, classId: string, dueAt: Date | null, assignedById: string | null): Promise<void> {
+      const now = new Date();
       const { count } = await client.courseGroupAssignment.createMany({
-        data: [{ courseId, classId, dueAt, assignedById }],
+        data: [{ courseId, classId, dueAt, dueSetAt: dueAt ? now : null, assignedById }],
         skipDuplicates: true,
       });
       if (count === 1) return;
-      await client.courseGroupAssignment.updateMany({ where: { courseId, classId }, data: { dueAt } });
+      await client.courseGroupAssignment.updateMany({
+        where: { courseId, classId, ...dueAtDiffers(dueAt) },
+        data: { dueAt, dueSetAt: dueAt ? now : null },
+      });
     },
 
     unassignCourseFromClass(courseId: string, classId: string) {
@@ -133,7 +142,7 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
       return client.courseGroupAssignment.findMany({
         where: { classId },
         orderBy: { createdAt: "desc" },
-        include: { course: { select: { id: true, title: true, publishedAt: true, archivedAt: true } } },
+        include: { course: { select: { id: true, title: true, publishedAt: true, archivedAt: true, versionMajor: true } } },
       });
     },
 

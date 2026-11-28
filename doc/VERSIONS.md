@@ -2,6 +2,884 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.193.0 - 2026-11-28
+
+**#1169/#1171 skive 5: det mindre fra #1171** (doc/design/PLAN_1169_1171_HODER_OG_RADER.md, «Skiver», punkt 5). Bare klient.
+
+- **Meldingene (toast) står nederst til høyre,** ikke øverst. Øverst la de seg over handlingsknappene i sidehodet (Lagre, Publiser,
+  «Mer») på 1280 px, og en feilmelding, som ikke forsvinner av seg selv, dekket dem til den ble lukket. Ingenting på sidene står fast
+  nederst. På smal skjerm går meldingen fra kant til kant, også når regionen er åpen som popover (den nullstilte `inset`, så
+  meldingen krympet til teksten). Krysset har fått sin egen bredde: den felles knappestilen ga det en bred boks, og meldingen brøt
+  etter to ord (sett på skjermbildet, rettet samtidig).
+- **Kursbyggerens søk forklarer moduler som ikke er publisert.** De tilbys fortsatt ikke (#440), men matcher søket en modul uten
+  publisert versjon, står det under treffene: «Ikke publisert ennå, og kan ikke legges inn: «…». Publiser modulen først.» Linja er
+  ikke et valg. Arkiverte moduler nevnes ikke. At elementene i lista viser om de er publisert, fantes fra #1140 skive 2c
+  («Ikke publisert ennå» på en seksjon).
+- **«?»-hjelp på tema-siden** (`admin-content-themes` i workspace-help-content.js): hva tema er, at bare administrator endrer lista,
+  oversettingen, sletting og «Andre kurs».
+- **Ny modul åpner fortsatt på Innstillinger** (produkteier 26.11.2026, § 4 punkt 4, som anbefalt): ingen endring.
+- **Tester:** `test/e2e/toast-placement-1171.spec.ts` (6), `test/e2e/course-picker-unpublished-1171.spec.ts` (3), tema-hjelpen i
+  `admin-content-themes.spec.ts` og `workspace-help-contracts`. **Mutasjoner:** 7 av 7 røde (øverst igjen, smal skjerm uten popoveren,
+  krysset, forklaringen bare uten treff, arkiverte med, forklaringen uten søketekst, tema-siden uten hjelp).
+- **Gjennomgang (Claude-agent): GO.** Rettet: krysset har et treffområde på minst 24 × 24 px (det fikk 11 × 18 da bredden ble tatt
+  bort); «ennå» er ute av forklaringen i søket («draft» er også en modul som er avpublisert igjen); tema-hjelpen sier at lista ses av
+  innholdsforvaltningen, og at «Mine kurs» er som før (satt plassering, så alfabetisk) til et av deltakerens kurs har tema. Typesjekken
+  av testene stoppet på `import("/static/toast.js")` i en e2e; stien står nå i en variabel (`npm run build` alene før neste runde).
+- **Kjent, fra før:** `certificate.html` laster `toast.js` uten `toast.css`, så en melding der vises som nettleserens standardboks.
+  Forklaringen i søket leses ikke av skjermleser (som «ingen treff» før). På smal skjerm kan en feilmelding nederst ligge over de
+  siste knappene når siden er rullet helt ned, til den lukkes.
+- **Kjent, fra før:** en melding vises over en modal dialog (toppsjiktet, stage 14.09), men kan ikke klikkes mens dialogen er åpen —
+  dialogen gjør alt utenfor seg inert. En feilmelding lukkes derfor først når dialogen er lukket. På smal skjerm med en høy dialog kan
+  en melding nå ligge over dialogens knapper nederst (før lå den over tittelen); suksessmeldinger forsvinner av seg selv.
+
+## 2.192.0 - 2026-11-28
+
+**Bestått modul teller bare i kurs deltakeren ser** (produkteier 28.11.2026, doc/DECISIONS.md #1169 punkt 9;
+doc/design/PLAN_MODULER_TELLER_DER_DELTAKEREN_SER.md) **og #1169 skive 4c, «Døp om» for kurs** (punkt 8; PLAN_1169_4B_DUPLISER_KURS.md
+§ 6). Begge planlest av en uavhengig agent før bygging (Codex står på utgiftstaket).
+
+**Bestått modul, synligheten:**
+- **Regelen** står i `findModuleProgress` (moduleCredit.ts), den ene veien til fremdrift i kurs: et bestått teller i et kurs bare
+  når deltakeren ser kurset (åpent, eller begrenset og tildelt; samme regel som lesinger fra #1156, `findLearnersSeeingCourses`),
+  og i et arkivert kurs bare et bestått på en besvarelse **levert** fram til arkiveringen (`Submission.submittedAt`). Ikke
+  `passedAt` (planlesingen, blokker): en sak som ventet ved arkiveringen, kan bli bestått etterpå og skal holde kurset igjen.
+  Ståstedet er `null`, ikke «ta modulen på nytt». Synligheten slås opp i én omgang per kall, bare for begrensede kurs kalleren ikke
+  alt vet om (`knownVisibleCourseIds`/`visibilityComplete`, som for lesinger).
+- **Veiene inn:** kursbevisporten sender det den vet om synligheten til både moduler og seksjoner; workeren etter et bestått
+  (`checkAndIssueCourseCompletions`) hopper over kurs deltakeren ikke ser, som for lesinger; arkiveringens utstedelse regner
+  synligheten for alle kandidatene én gang under låsen; kursdetaljen og «Mine kurs» sier at deltakeren ser kursene. Kursrapporten,
+  «midt i kurset» og slettevakta slår opp. Modulrapportene med kurs valgt er **uendret med vilje** (`visibility: "ignore"`).
+- **Ikke bygget etter full runde:** en regel om at et kurs som aldri har vært publisert, ikke holdes igjen av «fullført uten
+  kursbevis». «Aldri publisert» leses av `publishedAt`/`slug`/kursbevis, og fiksturene uten slug viste at det ikke kan leses sikkert
+  for eldre kurs; en feil der lar et kurs slettes mens noen har fullført uten kursbevis, og det kan ikke rettes. Tvil gir «beholdes».
+  Følgen: en ÅPEN kopi som aldri ble publisert og så arkiveres, holdes igjen av dem som har bestått modulene (en begrenset kopi,
+  standarden, gjør det ikke lenger).
+- **Følgen:** en publisert, begrenset kopi med bare moduler gir ikke lenger kursbevis til alle som har bestått modulene. Mister en
+  deltaker tildelingen til et begrenset kurs, teller beståttene ikke der lenger; utstedte kursbevis står. Et åpent kurs er uendret.
+  Utrullingen utsteder ingen kursbevis.
+- **Før prod:** `npm run maint:count-module-credit-visibility` (bare lesing) teller per begrenset kurs hvor mange rader i
+  rapporten som får færre beståtte, og hvor mange uten kursbevis som har bestått alle modulene før og etter. I containeren:
+  `node dist/src/scripts/countModuleCreditVisibility.js` (flyttet til src/scripts i 2.193.0, så bygget tar den med).
+- **Ikke gjort, med vilje (fra planlesingen):** innleverne filtreres ikke på synlighet i kursrapportens deltakere og i «midt i
+  kurset». Rapporten tar dem med for å dekke Entra-klasser (#996, festet i `course-report-audience-969`), og «midt i» teller i den
+  trygge retningen. Følgen er en kjent mangel: i en begrenset kopi står de som har levert på de delte modulene et annet sted, som
+  rader «Pågår» i rapporten og som «midt i» i arkiveringsdialogen (de sto der før også, med en annen status).
+
+**«Døp om» for kurs:**
+- **Tjeneren:** `PATCH /api/admin/content/courses/:courseId/title` (eiervakta) → `renameCourse` (courseDraft.ts), alt under én
+  innholdslås. `{ title, expectedTitle }`: hele språkkartet og den lagrede teksten raden viste. Arbeidstittelen er utkastets når et
+  utkast finnes; er den en annen enn `expectedTitle` (`sameLocalizedText`), `409 course_changed`. Samme navn: ingenting skrives.
+  Publisert kurs → navnet i utkastet (et nytt utkast har bare tittelen og kursets elementer, med `discussionsEnabled`; publiseres
+  det, endres bare navnet, mindre versjon). Upublisert → rett i kurset (`updateCourse` med telleren, i samme transaksjon). Svar
+  `{ renamedIn: "draft" | "course" | "unchanged" }`. Kurslista får `draftTitle` (`findCourseDraftTitles`).
+- **Klienten:** «Døp om» først i «Mer» i kurslista for eieren, ikke for et arkivert kurs; redigering i raden som for modul og
+  seksjon (`list-rename.js`), fra utkastets tittel når et utkast har en. Meldingen sier når navnet ligger i utkastet.
+- **Felles:** `courseItemInputsFromRows` (courseCommands.ts) gjør kursets rader om til elementlista med `discussionsEnabled`, for
+  «Dupliser kurs» og «Døp om». Uten flagget ville en publisering skrevet `?? true` og slått diskusjonen på igjen.
+
+**Tester:** `test/unit/module-credit-visibility.test.ts` (9), `test/m2-module-credit-visibility.test.ts` (7),
+`test/m2-course-rename-1169.test.ts` (11, med trådene), `test/e2e/course-rename-1169.spec.ts` (4). Endret: fiksturene i
+`course-certificate-gate-invariant`, `course-items-accessor` og `module-pass-switch-934-5a3` sier nå kursets `enrollmentPolicy` og
+besvarelsens `submittedAt` (en fikstur som tier om et felt regelen leser, fester standardverdien); «Døp om» i `row-slots-1169`;
+ruta i `m2-content-read-by-producers-1165` og i agent-tokenets liste.
+**Mutasjoner:** 7 av 7 røde for synligheten (sjekken, `passedAt`, arkivgrensen, `REVISED`, modulrapporten, workeren, «aldri
+publisert», tatt ut igjen sammen med regelen); 7 av 7 for «Døp om» (forventet tittel, publisert rett i kurset, `discussionsEnabled`, uendret navn, `===`, og i
+klienten forventet tittel og starttittel). `===` overlevde først: testen sendte den lagrede teksten, så den målte ikke
+sammenligningen. Nå sender den samme tittel i en annen rekkefølge.
+**Kjente mangler:** se «Ikke gjort, med vilje» over. Raden viser kursets publiserte navn også etter en omdøping i utkastet (merket
+«Nyere utkast» sier at noe venter). Som for seksjoner endres bare språket lista viser.
+
+**Rettet (fantes fra før, funnet i planlesingen og QA-porten):** hver lagring av kursets elementer (kursskjemaet, «Publiser
+utkastet», importen) sletter elementene og lager dem på nytt, og en diskusjonstråd på en seksjon eller modul mistet elementet sitt
+(`DiscussionThread.courseItem` er `SetNull`) og havnet på kursets tavle. «Døp om» gjorde det til ett klikk. Nå noterer
+`writeCourseItems` trådene først og gir dem elementet med samme modul eller seksjon tilbake (`relinkItemThreads`), med sitt eget
+`updatedAt`, så rekkefølgen i trådlista står. En tråd på et element som er tatt ut, blir på kursets tavle, som før. Tråder som
+alt er flyttet i prod, flyttes ikke tilbake (de har ikke noe element å gå tilbake til). Det samme i `setCourseModules` (den gamle
+`PUT …/modules` og importens gren for bare moduler; QA-porten, runde 2). Mutasjoner: 3 av 3 røde.
+**Full runde:** grønn bortsett fra to e2e som feiler av og til under last: `participant-module-course-context-1140:233` (kjent) og
+`admin-content-course-draft-1140:612` (velgerens nedtrekk «not stable» under full runde). Den siste: 87/87 i fila ×3 både på
+committet kode og i arbeidstreet, 8/8 alene begge steder.
+**Endret i eldre tester (full runde):** fiksturene i `m2-course-archive-follow-1150`, `m2-course-delete-1152` og
+`m2-archived-retention-1152` lager nå åpne kurs (deltakerne der er ikke tildelt, og et nytt kurs er begrenset), og
+besvarelsene er levert før arkiveringen. Begge deler var stille antakelser fiksturene ikke sa noe om.
+
+## 2.191.0 - 2026-11-28
+
+**#1169 skive 4b · «Dupliser kurs»** (doc/design/PLAN_1169_4B_DUPLISER_KURS.md; produkteier 26.11.2026, doc/DECISIONS.md punkt 2).
+
+- **Tjeneren:** `POST /api/admin/content/courses/:courseId/duplicate` → `duplicateCourse` (courseCommands.ts). Et NYTT kurs med DE
+  SAMME modulene og seksjonene, i samme rekkefølge og med samme `discussionsEnabled`, i én transaksjon under innholdslåsen:
+  `createCourse` (den eneste opprettelsesveien: begrenset, den som kopierer blir eneste eier) og `setCourseItems` (elementvaktene,
+  modulkravene). « (kopi)» på navnet i hvert språk; beskrivelse, nivå, diskusjonsvalg og tema kopiert; upublisert, v1.0, ingen slug
+  og ingen fast plass. Ikke med: eiere, klasser og tildelinger, påmeldinger, kursbevis, et utkast som venter, versjonsrader. Ingen
+  eierskapsvakt (lesing er åpen for alle produsenter, #1165). Kilden arkivert → `400 course_archived`; et arkivert element →
+  `400 course_item_archived`; i begge tilfeller er ingenting laget. Idempotensnøkkelen har kildens id (#906). Revisjonslogg
+  `course_duplicated { courseId, sourceCourseId, itemCount }`. Agent-tokenet når ikke ruta.
+- **Klienten:** «Dupliser» først under «Mer» i kurslista og kursets hode (Dupliser · Eksporter · …), også for et kurs du ikke
+  eier; ikke for et arkivert. Sidas egen bekreftelse sier hva kopien er (de samme modulene og seksjonene, uten klasser, tildelinger,
+  kursbevis og utkast). Arbeidsdialogen mens ruta går, så åpnes kopien. Sperren står til den nye sida har tatt over;
+  `leaveAnswered()` før navigeringen (som modulens hode).
+- **Følger av delt innhold (produkteierens avgjørelse, sagt i veiledningen):** en lest seksjon teller i kopien når den er
+  publisert og deltakeren ser den (#1156). Et **bestått i en modul teller i kopien også når deltakeren ikke ser den** — regelen
+  fra #1156 gjelder bare seksjoner («Moduler er uendret», courseCompletionService.ts). En kopi med bare moduler gir derfor
+  kursbevis til alle som har bestått modulene, så snart den er publisert, også i et begrenset kurs de ikke er tildelt. Regelen
+  fantes fra før (et kurs bygget av de samme modulene for hånd), men duplisering gjør det til ett klikk. Lagt fram for
+  produkteier før prod. Så lenge kopien finnes, er modulene «i bruk» og kan ikke avpubliseres eller arkiveres; modulens versjoner
+  berører begge kursene.
+- **Planlest** av en uavhengig agent før bygging (Codex nådde utgiftstaket): ingen blokkere, ti rettelser lagt inn i planen (400,
+  ikke 409; nøkkelen med kursets id; temaene lest i låsen; `contentRevision` 1; `leaveAnswered`; fem eldre e2e).
+- **Endret i eldre tester:** «Dupliser» først i kursets «Mer» (`header-slots-1169`, `row-slots-1169`,
+  `admin-content-readonly-others-1165`, `admin-content-course-draft-1140`); `/duplicate` i agent-tokenets `FORBIDDEN`.
+- **Tester:** `test/m2-course-duplicate-1169.test.ts` (5), `test/e2e/header-duplicate-archive-1169.spec.ts` (+4).
+- **Mutasjoner:** 10 av 10 røde (elementene, « (kopi)», arkivert kilde, nøkkelen, temaene, begrenset; i klienten Dupliser for en
+  annens kurs, bekreftelsen, idempotensnøkkelen, arkivert kurs).
+- **Gjennomgang (Claude-agent): GO.** Rettet: tellingene i integrasjonstesten gjelder nå bare det fila lager (parallelle
+  kjøringer), og en e2e for kursets hode med ulagrede endringer (ett spørsmål fra nettleseren, ikke «forlate sida?» i tillegg).
+- **Kjente mangler:** «Påbegynt» i kurslista teller for en ny, upublisert kopi alle som har levert på de delte modulene (eksisterende
+  regel); kursets hode med ulagrede endringer spør først med nettleserens spørsmål, så med sidas dialog; feilmeldingene
+  (`course_item_archived` «gjenopprett dem først», `course_archived`) er skrevet for endring, ikke for kopi. «Døp om» for kurs
+  (planens § 6) gjenstår. Modulkravet i kopien er modulens nåværende hovedversjon, ikke
+  kildens (et eldre bestått kan telle i kilden, men ikke i kopien). Eldre data med samme element to ganger gir
+  `course_duplicate_item`.
+
+## 2.190.0 - 2026-11-28
+
+**#1169 skive 4a · Handlingene som manglet i hodene og listene** (doc/design/PLAN_1169_1171_HODER_OG_RADER.md § 2). Bare klienten.
+
+- **Modulens hode:** «Dupliser» og «Arkiver» under «Mer» (Dupliser · Eksporter · Erstatt fra fil · Avpubliser · Arkiver). Arkiver
+  bruker samme forhåndsvisning og dialog som lista (#1168) og viser den arkiverte modulen etterpå. Dupliser åpner kopien. Begge
+  spør først om ulagrede endringer (som Publiser, #1189). En annens modul har Dupliser · Eksporter; en arkivert har ikke Dupliser.
+- **Seksjonens hode:** «Dupliser» under «Mer»; kopien åpnes. Ikke for en arkivert seksjon.
+- **Én kopi:** `content-duplicate.js` lager kopien for lista og hodet (eksportpakken med « (kopi)», importert som nytt, modulen
+  upublisert). Før lå koden i hver liste.
+- **«Publiser» i modullista** (et lagret utkast som aldri er publisert) og **«Publiser utkastet»** i modullista og kurslista
+  (publisert, med et nyere utkast): lenker som åpner elementet med `?publish=1` / `?publishDraft=1`, og hodets publisering kjøres
+  der, med spørsmålene og porten der. Flagget fjernes fra adressen, så en omlasting ikke publiserer på nytt. Et tomt modulgrunnlag
+  har ingen Publiser.
+- **QA-porten (NO-GO, rettet):** «Dupliser» fra modulens hode kopierte den publiserte versjonen, ikke det nyere utkastet
+  skjermen viste (eksportpakken tar den publiserte uten `moduleVersionId`; eksporten i hodet sender den, dupliseringen gjorde ikke).
+  Nå sendes versjonen som vises. Og etter «ja» til de ulagrede endringene spurte nettleseren en gang til da kopien ble åpnet; «Bli»
+  lot kopien stå uten et ord. Nå regnes svaret (`formPage.leaveAnswered()`, samme regel som #1155). Rotårsak: den felles
+  kopifunksjonen ble laget av listas kode, og lista har ingen «versjon som vises»; at hodet viser noe annet enn lista, ble ikke
+  sjekket. Seksjonens eksport tar den nyeste versjonen som standard (#931), så seksjonen var riktig.
+- **Gjennomgang 2 (Claude-agent, Codex nådde utgiftstaket): GO**, med fire funn rettet. En adresse med `?publish=1` fra
+  nettleserens historikk eller et bokmerke publiserte modulen uten spørsmål når ingen hadde bestått, og ingenting skal publiseres
+  uten at et menneske klikker. Nå spør sida først i sin egen dialog («Publisere «{navn}»?»). Flagget uten noe å publisere ga stillhet;
+  nå sier sida «Ingenting å publisere» (modul og kurs). En Publiser-lenke for en annens modul er sperret og testet. Sperren mot et
+  nytt klikk på Dupliser står nå til den nye sida har tatt over (før kunne et klikk til lage en kopi til).
+- **Kjente mangler:** modullista kopierer den publiserte versjonen, modulens hode den som vises (lista kjenner ikke id-en til et
+  nyere utkast); seksjonen tar alltid den nyeste. Når et ulagret, generert utkast er åpent i modulen, står ikke Dupliser og Arkiver
+  i hodet (som Eksporter og Erstatt fra fil, eksisterende mønster).
+- **Tester:** `test/e2e/header-duplicate-archive-1169.spec.ts` (12), `admin-content-course-draft-1140.spec.ts` (+2: flagget, og
+  kontroll uten utkast); `header-slots-1169` følger den nye rekkefølgen.
+- **Mutasjoner:** 14 av 14 røde (seks for rettelsene fra de to gjennomgangene).
+- **Ikke i denne:** «Dupliser kurs» (ny rute på tjeneren) og «Døp om» for kurs — skive 4b.
+
+## 2.189.0 - 2026-11-28
+
+**#1169 skive 3 · Radene har hodets regel** (doc/DECISIONS.md, produkteier 26. og 28.11.2026; prototypen
+https://claude.ai/artifact/RuABRhvRBxfQwnzJ2jYMU8). Bare klienten.
+
+- **Regelen** (`list-page.js` tar `{ primary, more, after }`, `slotActionsHtml`): **Åpne** · hovedhandlingen for tilstanden
+  (Publiser, Publiser utkastet, Gjenopprett) · **Mer** i fast rekkefølge (Døp om · Dupliser · Eksporter · Avpubliser · Arkiver /
+  Slett) · «Kun for eier». Hovedhandlingen er ikke fylt i en rad (prototypen): en fylt knapp i hver rad ville ikke skilt noe ut.
+  Før viste raden de tre første handlingene og resten under «Mer» først når det var flere enn fire.
+- **Kurs, modul, seksjon og klasse.** En klasse leseren ikke eier, har ingen «Mer» (ingenting å vise der).
+- **«Slett» i seksjonslista** for en arkivert seksjon, som for kurs, moduler og klasser (før bare i den åpnede seksjonen, #1046
+  D3). Bekreftelsen nevner seksjonen ved radens navn. «Slett seksjon» heter «Slett», som ellers.
+- **Fokus etter en dialog:** ligger knappen som åpnet dialogen i en lukket «Mer», får «Mer» fokuset (kursets `returnFocusTo`,
+  som `focusBack` i modul- og seksjonsdialogene). Før gikk fokuset til en skjult knapp og forsvant.
+- **Flyttet til skive 4:** «Publiser» i modullista og «Publiser utkastet» i kurslista. Begge trenger publiseringsflyten fra
+  hodet (ulagrede endringer, bestått som erstattes, versjonsspørsmålet); publiser fra det åpnede elementet til da.
+- **Endret i eldre tester:** handlinger som nå ligger under «Mer», åpnes med `revealRowAction` eller telles
+  (`admin-content-list-rename-894`, `list-mobile-labels-1080`, `section-draft-1163`, `admin-content-workspaces`,
+  `content-owner-surfaces`, `form-page-asks-once-1155`); fokusen etter dialogen går til «Mer»
+  (`admin-content-course-archive-dialog-1150`); «lista har ingen Slett» er snudd (`section-editor`);
+  `list-fits-frame-1084` måler ikke lenger 1024 px som for bredt (raden er smalere nå; 800 px står) og teller to synlige knapper,
+  ikke fire.
+- **QA-porten (GO):** tre funn rettet, alle rundt den nye «Mer»-stien. Kursets slettedialog fikk ikke knappen som åpnet den, så
+  fokuset forsvant etter Avbryt/Escape (nå tilbake til «Mer»). Sletting fra seksjonslista la lista i historikken en gang til, så
+  første «Tilbake» gjorde ingenting (nå tegnes lista på nytt). Escape fra et valg i «Mer» lukket menyen, men lot fokuset stå i det
+  skjulte (nå får «Mer» det). Rotårsak: samme for alle tre — en handling flyttet inn i en lukket meny, og det som skjer ETTER
+  handlingen (fokus, historikk), ble ikke fulgt. Med i sjekken for skive 4.
+- **Tester:** `test/e2e/row-slots-1169.spec.ts` (9).
+- **Mutasjoner:** 11 av 11 røde (de tre QA-rettelsene, Publiser under «Mer» i kurslista, «Kun for eier» borte, ingen Slett i seksjonslista,
+  slettedialogen uten radens navn, «Mer» for en annens klasse, «Publiser utkastet» ikke ved Åpne, fokus til en skjult knapp,
+  `after` tegnes ikke).
+
+## 2.188.0 - 2026-11-28
+
+**#1169 skive 2 · Hodene har faste plasser** (doc/DECISIONS.md, produkteier 26. og 28.11.2026; prototypen
+https://claude.ai/artifact/RuABRhvRBxfQwnzJ2jYMU8). Bare klienten.
+
+- **Regelen** (`slotActionsHtml` i `row-actions.js`, brukt av `form-page.js`): Lagre/Avbryt · hovedhandlingen for tilstanden som
+  fylt knapp (`is-primary`: Publiser, Publiser utkastet, Gjenopprett) · modulens innholdsverktøy · «Mer», alltid når den har noe,
+  i fast rekkefølge: Eksporter · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver / Slett. Før viste hodet de tre første
+  handlingene og resten under «Mer» først når det var flere enn fire, så hva som havnet der, avhang av tilstanden.
+- **Alle fire hodene:** kurs (`courseDetailActions`), modul (`moduleHeaderSlots`), seksjon (`sectionActions`), klasse.
+  «Publiser nye versjoner (n)» i kurset står ved hovedhandlingen (fylt bare når den er alene).
+- **Smal skjerm (under 700 px):** modulens innholdsverktøy ligger først under «Mer»; hodet tegnes på nytt når bredden krysser
+  grensen.
+- **«Mer» åpner mot høyre** når menyen ellers ville gått ut av skjermen til venstre (`row-more-menu--start`). Gjelder også
+  listene.
+- **Navn:** «Publiser ny versjon» (seksjon) heter «Publiser utkastet», som kurset; modulen sier «Publiser utkastet» når den er
+  publisert og har et nyere utkast. Modulens «Importer» heter «Erstatt fra fil», som seksjonens.
+- **Merkene:** «Publisert · v2.1 · Nyere utkast» i alle lister og hoder (`lifecycleBadge(item, t, { versionChip })`). Skive 1
+  satte versjonen etter «Nyere utkast» i listene og i kursets og seksjonens hode.
+- **Endret i eldre tester:** handlinger som nå ligger under «Mer», åpnes med `revealRowAction` eller telles i stedet for å kreves
+  synlige (`admin-content-course-draft-1140`, `admin-content-course-publish-pending`, `section-publish-new-version-1095`,
+  `section-jobs-stay-in-their-section-1154`); rekkefølgen i hodet (`admin-content-archived-readonly-1151`, `…-course-draft-1140`);
+  de nye navnene (`admin-content-module-publish-unsaved-1189`, `admin-content-workspaces`, `section-publish-new-version-1095`);
+  «Nyere utkast» er ikke lenger første brikke.
+- **QA-porten (GO):** to funn rettet. Klassens hode bandt klikklytteren direkte på `.form-page-actions`; når hodet tegnes på nytt
+  (bredden krysser 700 px), fulgte lytteren med det gamle elementet, og «Arkiver» gjorde ingenting. Nå delegert fra `pageContent`,
+  bundet én gang, som kurset og seksjonen. Rotårsak: den nye grunnen til å tegne hodet på nytt (bredden) ble ikke sjekket mot
+  hvem som lytter på hodet; minnet «omtegnet hode dreper lyttere» gjaldt. «Mer» hadde `aria-label="… handlinger"` på bokmål
+  i alle språk («More handlinger»); nå er navnet knappens tekst.
+- **Kjent mangel (eksisterende):** `participant-module-course-context-1140.spec.ts:233` feiler to av seks ganger også på 2.187.1
+  (målt med endringene lagt til side); deltakersiden er ikke rørt.
+- **Tester:** `test/e2e/header-slots-1169.spec.ts` (15).
+- **Mutasjoner:** 9 av 9 røde (klassens lytter på det gamle hodet, verktøyene aldri under «Mer», «Mer» bare med to eller flere, Gjenopprett ikke fylt, menyen ut av
+  skjermen, versjonen etter «Nyere utkast», «Publiser» i stedet for «Publiser utkastet», ingen ny tegning ved bredde, «Mer» uten
+  fast rekkefølge). Menyen-ut-av-skjermen overlevde først: på 390 px står «Mer» aldri så langt til venstre; testen kjører nå på
+  320 px og krever at forutsetningen holder.
+- **Ikke i denne skiven:** radene (skive 3), Dupliser og Arkiver der de mangler (skive 4).
+
+## 2.187.1 - 2026-11-28
+
+**#1171 · Arkiverte kurs beholder versjonsbrikken.** Sjekket mot ekte stage-data etter 2.187.0: 20 av 51 arkiverte kurs står på
+v1.0 uten `publishedAt` og mistet brikken. Om de var publisert, kan klienten ikke vite (kurset har ikke noe «noen gang
+publisert»-felt; `CourseVersion` får rader bare ved en hovedversjon). Regelen er nå: ingen brikke bare for et kurs i utkast på v1.0
+uten `publishedAt`. Kjent mangel som står igjen: et kurs på v1.0 som er avpublisert, mister brikken (0 slike på stage). Seksjoner:
+210 på stage, 126 publiserte med brikke, 84 arkiverte uten (før viste kolonnen «v1» for dem uansett).
+
+- **Tester:** `test/e2e/state-words-1171.spec.ts` (kurslista: et arkivert v1.0-kurs har «v1.0»). Mutasjon: 1 av 1 rød (den gamle
+  regelen tilbake).
+
+## 2.187.0 - 2026-11-27
+
+**#1171 skive 1 · Ett ord per tilstand, versjonen som egen brikke, «Alt lagret» bare når noe er lagret**
+(doc/design/PLAN_1169_1171_HODER_OG_RADER.md, «Merkene»). Bare klienten.
+
+- **Ordene:** «Utkast», «Publisert» og «Nyere utkast» overalt. I modulen viker «Arbeidsutkast» (hodet for en ny modul,
+  «Forhåndsvisning viser»), «Live» og «Live + utkast» (forhåndsvisningens merke; «Live + utkast» sto også for et utkast som
+  aldri var publisert), «Modulgrunnlag», og «Live» / «Åpen nå» i versjonslista (nå «Publisert» / «Åpen»). Samtaleloggen sier
+  «Publisert v2.1» i stedet for «Live – Modul v2.1». To nøkler som ikke lenger brukes, er fjernet (`stateRail.editing.workingDraft`,
+  `stateRail.live.published`).
+- **Versjonen** står som egen brikke ved merket, likt for kurs, modul og seksjon, i lista og i hodet (`versionChipHtml` i
+  `content-status-badge.js`). Modulens hode sa «Publisert v2.1» i ett merke; seksjonslista hadde en egen versjonskolonne som viste
+  «v1» også for et utkast som aldri var publisert. **Ingen brikke før første publisering**: et nytt kurs viste «v1.0».
+- **Én form:** modullistas lokale pille (`admin-content-library.html`) er borte; merket er det i `shared.css`.
+- **«Alt lagret»** står ikke på en ny side før noe er lagret (`isNew` i `form-page.js`, satt på kurs, modul, seksjon og klasse).
+- **Ikke en feil likevel:** planen kalte «Ulagrede endringer» rett etter at en ny modul er lagret med bare navnet en feil. QA-porten
+  viste at det er sant: typen (fritekst/flervalg) lagres på modulversjonen, ikke med navnet (`POST /modules` tar den ikke), og
+  finnes bare i det beholdte utkastet til innholdet lagres. Den første rettelsen (merke utkastet som plassholder) ville vist «Alt
+  lagret» mens typen gikk tapt ved å gå bort, og er tatt ut. Testen fester nå at merket står. Skal merket bort, må typen lagres med
+  navnet (en tjenerendring), og det hører til en senere skive.
+- **Avpublisert modul:** hodet sa «Utkast v2.1» i ett merke; nå «Utkast» og versjonsbrikken (QA-porten).
+- **Én form også i forhåndsvisningen:** modulens forhåndsvisningsmerke brukte en egen pille (`admin-content.html`); nå
+  `.status-badge--*` som ellers (QA-porten).
+- **Kjente mangler:** brikken forsvinner når innholdet ikke er publisert NÅ. Kurset har ikke noe «noen gang publisert»-felt, så et
+  kurs på v1.0 som er avpublisert eller arkivert, mister brikken (regelen: publisert nå, eller versjon over 1.0). Modul- og
+  seksjonslista viser versjonen tjeneren kaller aktiv, og den er tom etter avpublisering. Modulens hode viser den (fra den åpnede
+  versjonen). Rettes eventuelt med et felt fra tjeneren; sjeldent, og ingen data går tapt.
+- **Endret i eldre tester:** fire e2e-er leste versjonen inne i «Publisert»-merket eller fant én `.status-chip` der det nå er to
+  (`admin-content-module-header-newer-draft`, `module-version-number-934-5b`, `section-draft-1163`,
+  `section-publish-new-version-1095`); `admin-content-state-rail.test.js` festet nøklene som er borte (også
+  `shell.header.draftVersion`).
+- **Tester:** `test/e2e/state-words-1171.spec.ts` (10).
+- **Mutasjoner:** 7 av 7 røde («Alt lagret» på ny side, kursbrikke før publisering, seksjonsbrikke for utkast, «Nyere utkast» for et
+  utkast uten publisert versjon, ingen versjonsbrikke i modulhodet, «Utkast v2.1» i ett merke, «Arbeidsutkast» tilbake).
+- **QA-porten:** NO-GO i første runde (plassholderen over, riktig funnet), rettet. Rotårsak: planen kalte merket en feil ut fra
+  koden (`sessionDraft` legges tilbake), uten å spørre hva utkastet bar. Sjekken som fanget det, var porten; pre-flight punkt 2
+  («hvem leser tilstanden jeg skriver») ville også gjort det — det var ikke kjørt for en endring som så ut som ren visning.
+
+## 2.186.1 - 2026-11-27
+
+**#1198 · «Alle deltakere» viste «Deltakere (0)»** (produkteier 27.11.2026, etter stage-sjekken av 2.186.0). Systemklassen har
+ingen medlemsrader: alle med deltakerrollen er med (`getUserClassIds`). Inne i klassen sto likevel «Deltakere (0)» og «Ingen
+deltakere ennå», som leste som en tom klasse. Nå står overskriften «Deltakere» uten tall og linja «Alle med deltakerrollen er med
+i denne klassen automatisk. De står ikke oppført her, fordi medlemskapet følger rollen.» (nb, nn, en-GB). Bare klienten.
+
+- **Fra QA-porten (GO):** klasselista viste «0» i Medlemmer-kolonnen for systemklassen; nå «Alle» (størst ved sortering).
+  Administrator fikk søkefeltet for å legge deltakere til systemklassen, som tjeneren alltid avviser; det er borte (kurs kan
+  fortsatt tildeles). Flatekartet §14 har fått systemklassens flater.
+- **Tester:** `test/e2e/class-read-by-producers-1198.spec.ts` (+2: linja og «Alle» i lista med produksjonsformen
+  `_count.members: 0`, ikke «0» og ikke «Ingen deltakere ennå»; administrator uten deltakersøk, med kurstildeling som kontroll).
+- **Mutasjoner:** 3 av 3 røde (linja aldri vist, lista viser tallet, søket vises for systemklassen).
+
+## 2.186.0 - 2026-11-26
+
+**#1198 · Produsenter kan lese alle klasser** (produkteier 26.11.2026, doc/DECISIONS.md). En produsent kan åpne enhver klasse,
+også andres og systemklassen «Alle deltakere», og se kursene med frister og deltakerne. Bare eierne og administrator kan endre.
+Samme regel som for innhold (#1165, #1180).
+
+- **Tjeneren:** de tre lesingene (`GET /classes/:id`, `…/members`, `…/courses`) er åpne for alle produsenter; detaljen bærer
+  `canManage` for den som leser. Alle skriveveiene (endre, arkivere, gjenopprette, slette, legge til og ta bort deltakere og kurs,
+  endre frist) står bak eierskapsvakta som før. En deltaker kommer fortsatt ikke inn. #943 hadde lukket lesingen fordi
+  `/members` gir navn og e-post; produkteier åpnet den med det i tankene (produsentene ser alt deltakerne i kursrapporten).
+- **Klienten:** en klasse leseren ikke eier, har «Åpne» i lista (før bare «Kun for eier»), og åpnes skrivebeskyttet: navn og
+  beskrivelse sperret, linja «Du kan lese, men bare eierne kan endre.», kursene med frist og deltakerne med e-post, men ingen
+  «Fjern», ingen fristfelt, ingen søk etter deltakere, ingen tildeling, ingen Lagre og ingen Arkiver. Hjelpeteksten «Bare en eier
+  … kan åpne» heter nå «… kan endre».
+- **Endret i eldre tester:** `m2-content-ownership-enforcement.test.ts` festet at lesingen var vaktet (#943); den måler nå at
+  den er åpen, og vakta for ueide klasser måles på en skrivevei.
+- **Tester:** `test/m2-class-read-by-producers-1198.test.ts` (7: lesing med `canManage: false`, eier og admin som kontroll,
+  ni skriveveier som alle gir 403 uten å endre noe, eieren kan endre, systemklassen, en deltaker utenfor, 404),
+  `test/e2e/class-read-by-producers-1198.spec.ts` (2: skrivebeskyttet med alt synlig og ingen skrivekall; eieren som kontroll).
+- **Mutasjoner:** 5 av 5 røde (vakta tilbake på medlemslista, `canManage` alltid sann, ingen «Åpne», aldri skrivebeskyttet,
+  Lagre alltid skjult).
+- **QA-porten (Claude, bare lesing): GO.** Ingen skrivevei er åpnet (alle åtte skriverutene og
+  `CLASS_OWNER_ASSIGNS_ANY_COURSE` krever eierskap; eierpanelets skriving vaktes for seg). Bare ADMINISTRATOR og
+  SUBJECT_MATTER_OWNER slipper inn i ruteren; agent-tokenet når ingen klasserute. To svakheter i e2e-testen er rettet: mocken
+  for eierpanelet sendte et felt panelet ikke leser (nå `canManage`, og testen sjekker at «Rediger» for eiere mangler, med eieren
+  som kontroll), og skrivinger mot deltakere og kurs ble ikke fanget. Kjent mangel: en arkivert klasse leseren ikke eier, viser
+  ikke arkivlinja i skjemaet (merket «Arkivert» står i hodet).
+- **Integrasjon:** 1548 av 1548.
+
+## 2.185.0 - 2026-11-26
+
+**#1197 · Skjermen sier forskjellen på «åpent for alle» og «påkrevd for alle».** En SME så flere kurs i «Mine kurs» enn klassene
+hans skulle gi. Det var ikke en feil: 14 av 16 publiserte kurs sto som «Åpen», og ett var tildelt «Alle deltakere» (data fra
+stage-kopien av prod, 22.11). Produkteier 26.11.2026: begge måtene beholdes, fordi de betyr ulike ting (doc/DECISIONS.md).
+«Åpen» gjør kurset tilgjengelig og frivillig; tildelt «Alle deltakere» gjør det påkrevd for alle, med frist, påminnelser, e-post
+og «utestående».
+
+- **Kursets Innstillinger:** feltet heter «Hvem ser kurset», valgene «Åpent for alle (frivillig)» og «Bare for de som er
+  tildelt», og en hjelpetekst under (knyttet til feltet med `aria-describedby`) sier at et påkrevd kurs for alle tildeles klassen
+  «Alle deltakere».
+- **Klassen «Alle deltakere»:** en linje om at kursene der er påkrevd for alle, og at et frivillig kurs heller settes til «Åpent
+  for alle».
+- **Publiseringsdialogen:** «Alle deltakere, som et frivillig kurs. … uten frist eller påminnelser.»
+- Tre språk. Brukerveiledningen (`doc/roles/admin-content.md`) har en tabell over de to.
+- **Tester:** `test/e2e/course-open-vs-required-1197.spec.ts` (3: Innstillinger på bokmål og engelsk, systemklassen med en vanlig
+  klasse som kontroll). Teksten i publiseringsdialogen er oppdatert i `admin-content-course-publish-dialog-1164.spec.ts` (tre
+  språk). Mutasjoner: 3 av 3 røde (hjelpeteksten borte, merknaden borte, merknaden i alle klasser).
+
+## 2.184.0 - 2026-11-25
+
+**#1162 skive 5 · Modulen åpnes som seksjonen** (produkteier 21.11.2026; prototypen godkjent 25.11.2026: «ja, bygg skive 5»).
+En åpnet modul tar over kurskortet i lesemodus, som en seksjon, og rammen er lik:
+
+- Merket i hodet bruker ordene fra lista: «Test» og «Lesestoff» (før «Arbeidsflate» og «Leser»). «Steg 2 av 3» står også for
+  modulen, og «← Tilbake til kurset» står til høyre.
+- Én knapp videre nederst, og bare når modulen er bestått (avgjørelse 3): «Gå videre», eller «Avslutt kurset» på siste steg.
+  «Avslutt kurset» sender ingenting: beståtten har alt fullført kurset. Den lukker modulen og henter kurslista, som viser kurset
+  som fullført og feirer. Gjenstår noe annet, står hva og en knapp dit, som i seksjonen. «Gå til neste element: …», som sto
+  alltid, også før modulen var bestått, er borte.
+- Knappen i kurslista heter «Ta testen» (før «Gjennomfør»; engelsk «Take the test»).
+- Modulens innhold (oppgave, innlevering, resultat) er urørt.
+- **Prototypen** var den ekte deltakersiden med testdata, med rammen endret i DOM-en, ikke en tegning. Den fant tre ting som er
+  med: tittelen må også stå på arket (lesemodus skjuler tittelen i hodet på telefon, og modulen hadde ingen), merket «Test» skal
+  stå på telefon (skive 2 skjulte det utenfor lesemodus), og «← Tilbake til kurset» sto midt i hodet uten seksjonens
+  breddevelger.
+- **Endret oppførsel:** mens en modul er åpen, er resten av kurset og «← Tilbake til Mine kurs» borte, som for en seksjon. Veien
+  ut er «← Tilbake til kurset». Kursbeviset i kurshodet nås derfor etter at modulen er lukket.
+- **Ryddet bort:** CSS-regelen som skjulte knappen på det aktuelle steget når steget før sto åpent uten lesemodus (2.101.0), og
+  testen av den. Uten åpne steg utenfor lesemodus kan den ikke slå til. Nøklene `courses.section.readerTag`,
+  `courses.module.workspaceTag` og `courses.item.next` er tatt bort (ubrukte).
+- **Tester:** `test/e2e/participant-module-reading-1162.spec.ts` (10): lesemodus og hodet, ingen knapp før bestått, «Gå
+  videre», «Avslutt kurset», noe igjen på siste steg, knappen kommer når kurset tegnes på nytt med modulen bestått (og
+  arbeidsflaten og et skrevet svar står), «Lesestoff» og «Ta testen», engelsk, telefon på 390 og 360 px med bredeste font,
+  og tilbake til høyre på desktop. Fem eldre tester gikk via «← Tilbake til Mine kurs» mens en modul var åpen; de lukker nå
+  modulen først (`participant-module-course-context-1140`, `-course-retake-934-5a3`), og to er skrevet om til den nye veien
+  (`participant-item-url-1158`: historikken som for seksjonen; `participant-flow-1162`: beviset etter at modulen er lukket,
+  og svaret står).
+- **Mutasjoner:** 8 av 8 røde på nøyaktig den testen som skal fange dem. Telefontesten var først ustabil (1 av 5): merket og
+  knappen ble målt i to kall mens siden ruller jevnt til raden; nå i én lesing, 50 av 50 grønne.
+- **QA-porten (Claude, bare lesing): GO.** To funn er rettet, med test og mutasjon:
+  - **Blindvei (innført av skiven):** ble kurset tegnet på nytt mens modulen ble hentet (kurslista svarer etter «Marker lest og
+    gå til testen»), og hentingen feilet, sto panelet i lesemodus med resten av kurset skjult, og verken «← Tilbake til
+    kurset» eller Escape virket. Nå lukkes elementet ordentlig (`collapseInlineOpen`) når hentingen feiler.
+  - **Fokus:** etter at kurset er tegnet på nytt (bestått, språkbytte) sto fokus på `<body>`; nå på modulens tittel, som for
+    seksjonen, når fokus alt var tapt.
+- **Kjente mangler (QA-porten):** fra en seksjon til en modul blinker kurset fram et øyeblikk før modulen får lesemodus (den
+  settes når modullista er hentet; å sette den før ville vist et tomt kurs). Ingen test går gjennom et ekte bestått (testen
+  tegner kurset på nytt med språkbyttet; at et avgjort bestått henter kurset på nytt, er målt i
+  `participant-course-retake-934-5a3`). Escape i KI-dialogen lukker også modulen (fra før).
+- **Full runde:** enhet 3528, DOM 108, integrasjon 1541, e2e 1299 + 1 ustabil under last (`admin-content-course-draft-1140`,
+  nedtrekkslista; 3 av 3 grønne alene, ikke rørt av denne endringen).
+
+## 2.183.0 - 2026-11-25
+
+**#1178 skive 2 · Publiseringen sjekker kursets navn og beskrivelse** (prinsipp 4 i «felles prinsipper»). Et kurs publiseres
+ikke før navnet finnes på nb, nn og en-GB, og beskrivelsen også, hvis den har tekst. Mangler noe, sier meldingen hva, og
+«Fyll inn det som mangler» oversetter bare hullene, lagrer og publiserer på nytt med de samme svarene. Som seksjonene (#1163).
+Plan, veiene inn og gjennomlesingen: `doc/design/PLAN_1178_KURS_PUBLISERINGSPORT.md`.
+
+- **Veiene:** «Publiser» og kaskaden (`publishCourse`, til slutt i kaskadens transaksjon, så elementene rulles tilbake);
+  «Publiser utkastet» (etter at utkastet er skrevet til kurset, i samme transaksjon; utkastet står); import av et publisert
+  kurs (holdes tilbake som upublisert, `heldBackByTranslationGate`). Ny kode: `422 course_translation_incomplete` med
+  `details.issues`. Én regel: `courseTextGateIssues` (src/modules/course/courseTextGate.ts).
+- **Hvorfor nå:** skive 1 lar et språk stå tomt når oversettingen feiler. Uten porten kunne kurset da publiseres med et hull.
+  Kommentaren i kurssiden sa at «publiseringsgaten krever alle tre»; det stemte ikke før nå.
+- **Tom beskrivelse:** `null`, blank, eller et språkkart med bare blanke verdier er tomt og dermed komplett (Codex-
+  gjennomlesingen av planen, punkt 4).
+- **Endret i en eldre test:** `m2-admin-courses.test.ts` oppdaterte kurset med navn og beskrivelse på bare engelsk og
+  publiserte det. Porten avviser det, med rette; fiksturen sender nå alle tre språk. Ingen andre av 1532 integrasjonstester
+  publiserte et kurs med et språk som manglet.
+- **Tester:** `test/m2-course-text-gate-1178.test.ts` (9: alle fire veier med kontroll, beskrivelse på bare bokmål, ingen
+  elementer publisert når kaskaden stopper, utkastet står), `test/unit/course-text-gate-1178.test.ts` (5),
+  `test/e2e/course-publish-text-gate-1178.spec.ts` (3: utfylling fra lista med hull i to felt, 409 under utfyllingen, og
+  «Publiser utkastet»).
+- **Mutasjoner:** 9 av 9 røde på riktig sted: porten borte i `publishCourse` (traff vei 1 og 2), i «Publiser utkastet» og i
+  importen; beskrivelsen aldri sjekket; et tomt kart regnet som tekst; nytt forsøk med andre svar; språk med tekst oversatt på
+  nytt; utkastlagringen oversetter videre; lagring uten telleren som ble hentet. Den første utgaven av e2e-testen kunne ikke se
+  at et språk med tekst ble oversatt på nytt (alle målene var hull i begge feltene); fiksturen har nå en beskrivelse med
+  nynorsk og uten engelsk.
+- **Kjente mangler** (fra gjennomlesingen):
+  - «Oppdater dette kurset» fra en kursfil skriver navnet rett i et publisert kurs, forbi porten. Sjelden, bare mennesker, og
+    følgen er at en deltaker ser navnet på et annet språk.
+  - En gammel fane (fra før #1140) kan lagre navnet direkte på et publisert kurs.
+  - «Fyll inn» er ikke bundet til revisjonen forfatteren bekreftet; publiseringsruta tar ingen teller (gjelder all
+    publisering).
+  - Vedlikeholdsskriptet for titler skriver uten innholdslås.
+  - (QA-porten, GO) Tømmer forfatteren beskrivelsen på ett språk for å fjerne den, oversettes ikke tømmingen videre; porten
+    sier da at bokmål mangler, og «Fyll inn» oversetter den gamle teksten tilbake. Å fjerne beskrivelsen helt (alle tre tømt)
+    lar den stå på tjeneren, som før pakken.
+  - (QA-porten) Import med `replaceExisting` (bare via API) mot et publisert kurs med ufullstendig navn avpubliserer det, som
+    når en modul mangler språk (#996).
+  - (QA-porten) «Fyll inn» fra «Publiser» på et avpublisert kurs med et utkast liggende igjen får `409 course_has_draft`;
+    forkast utkastet først, som ved vanlig lagring.
+  - (QA-porten) «Fyll inn» på et kurs som har vært ute, kan gi to versjonsøkninger (navnet gir en mindre, kaskaden forfatterens
+    svar). Bare nummeret; e-post går etter svaret.
+- **QA-porten (Claude, bare lesing) for 2.181.9–2.183.0:** GO. Fant ingen vei til publisering av kursets navn utenom planens.
+- **Mot ekte data (stage hjemme, 25.11.2026):** 67 kurs, 16 publisert. Ingen mangler bokmålsnavnet, og ingen har navn eller
+  beskrivelse med et språk som mangler. Porten stopper altså ingen eksisterende kurs, og et kurs uten bokmålsnavn (som skive 1
+  ikke lenger fyller inn av seg selv ved lagring) finnes ikke.
+- **Full runde:** enhet 3528, DOM 108, integrasjon 1541, e2e 1290 + 1. Den ene e2e-testen («Sist endret» i kurslista) hadde
+  et kurs med navn bare på engelsk; den gamle lagringen oversatte navnet til bokmål av seg selv når beskrivelsen ble endret.
+  Fiksturen har nå navn på alle tre språk, som alle kurs på stage.
+
+## 2.182.0 - 2026-11-25
+
+**#1178 skive 1 · Kurset oversetter bare det som er endret** (prinsipp 3 i «felles prinsipper», doc/DECISIONS.md, godtatt
+15.11.2026). Kursets navn og beskrivelse oversettes ved lagring bare når teksten er endret siden sist lagring, fra språket som
+ble endret, og bare feltet som ble endret. Samme regel som seksjonene (`changedFieldTranslations`, 2.167.0).
+
+- **Hva som var galt:** hver lagring oversatte navn og beskrivelse til de andre språkene, også når ingen tekst var endret (for
+  eksempel bare en ny rekkefølge eller et annet nivå). Det ga to KI-kall per lagring og skrev over rettelser gjort for hånd. Ble
+  bare navnet endret, ble beskrivelsen også oversatt på nytt.
+- **En oversettelse som ikke kom, står tom** og meldes, som i seksjonene. Før ble den gamle teksten beholdt (#1037,
+  `preserveExisting`); da ble alt oversatt ved hver lagring, og den gamle teksten var fortsatt en oversettelse av det samme.
+  Nå er den en oversettelse av noe som ikke står der lenger. Unntak: navnet på bokmål, som lagringen krever. Feiler
+  oversettingen til bokmål, står det lagrede navnet, så en nettverksfeil ikke stopper lagringen.
+- Meldingen ved en oversettelse som ikke kom, ba om å bruke «Oversett»; kurs har ingen slik knapp. Nå: «Når du publiserer,
+  kan du fylle inn det som mangler.» Det blir sant med skive 2 (publiseringsporten for navn og beskrivelse), som går til prod
+  i samme pakke. Planen: `doc/design/PLAN_1178_KURS_PUBLISERINGSPORT.md`.
+- Punkt 3 i saken (publisering uten dialog når alt innhold er publisert) var alt rettet i #1164.
+- **Tester:** `test/e2e/course-save-translation-1178.spec.ts` (5): ingen endret tekst gir ingen KI-kall og beholder rettelsen,
+  bare navnet oversettes når bare navnet er endret, to språk endret, en oversettelse som feiler (tom og meldt), og unntaket for
+  bokmålsnavnet. De to eldre e2e-testene for oversetting av kurs er grønne uendret. `test/dom/course-localization-failure-1037.dom.test.js`
+  leser den nye funksjonen; testen for `preserveExisting` er tatt bort med begrunnelse.
+- **Mutasjoner:** 5 av 5 røde på riktig sted (beskrivelsen regnet som endret, den gamle teksten blir stående, uten unntaket
+  for bokmål, språket forfatteren står i blir oversett, feilet språk meldes ikke). Den første utgaven av den første mutasjonen
+  overlevde: når alle språk regnes som endret, har regelen ingen mål å oversette til, så mutasjonen gjorde ingen forskjell. Den
+  ble byttet med en som ligner den gamle feilen (bokmål regnes som endret uten å være det).
+
+## 2.181.9 - 2026-11-25
+
+**#1192 · Klasseskjermen varsler før en frist krever en ny versjon** (produkteier 2026-11-25: «Det bør tydelig varsles om dette
+hvis kurset ikke er i versjon 1.x»). Når en ny dato skrives inn for et kurs i versjon 2 eller høyere, står det under raden:
+«Kurset er i versjon 2. Med denne fristen må de i klassen som har kursbevis for en eldre versjon, ta versjon 2.» Det samme
+vises under «Tildel kurs» når et slikt kurs er valgt og en dato er fylt ut. Varselet står i advarselsfarge og vises før lagring.
+
+- Ikke for kurs i versjon 1, ikke for en tom dato (den fjerner fristen og gjør versjonen frivillig igjen), og ikke når datoen er
+  den lagrede.
+- `GET /api/admin/content/classes/:id/courses` har et nytt felt, `courseVersionMajor`. Kurslista hadde alt `versionMajor`.
+- Varselet sier ikke hvor mange i klassen det gjelder. Det krever en telling per kurs og klasse; tas hvis det savnes.
+
+Tester: `test/e2e/admin-content-classes.spec.ts` (raden, tildelingen, kontroll for versjon 1 og tom dato, 360 px) og
+`test/m2-effective-deadline-1192.test.ts` (feltet i lista, og `dueAt: null` sendt eksplisitt). Tre mutasjoner, alle røde på
+riktig sted.
+
+## 2.181.8 - 2026-11-24
+
+**#1192 punkt 2 · En ny frist etter en ny hovedversjon gjør kurset uferdig igjen** (produkteier 2026-11-24). En ny hovedversjon
+av et kurs er frivillig til noen setter en ny frist. Har personen bare kursbevis for en eldre hovedversjon, og fristen som gjelder
+ble satt etter at den nye versjonen ble publisert, er kurset ikke lenger fullført. Uten ny frist står det fortsatt som fullført.
+Plan: `doc/design/PLAN_1192_BESTATT_OG_FRIST.md`, del 2.
+
+- **Én regel for hvilken frist som gjelder** (`src/modules/course/effectiveDeadline.ts`). Før slo fire steder sammen fristene
+  hver på sin måte, så samme person kunne ha ulik frist i Status, påminnelsene, mandagse-posten og `/api/courses/enrollments`.
+  Nå: en tildeling til personen vinner, også uten frist; en egen påmelding (SELF) skjuler ikke klassens frist; ellers den
+  tidligste fristen fra aktive klasser. Påminnelsene velger fristen før de ser på påminnelsesvinduet.
+- **Når fristen ble satt:** nytt felt `dueSetAt` på `CourseEnrollment` og `CourseGroupAssignment` (migrering
+  `20261124210000_course_deadline_set_at`, bare tillegg, ingen tilbakefylling). Det skrives bare når datoen endres. Eksisterende
+  frister har ikke feltet og regnes som satt før den nye versjonen (svar B), så utrullingen sender ingen påminnelser og endrer
+  ingen status i Status, «Mine kurs» eller påminnelsene. **Kursrapporten endres ved utrulling:** den som bare har kursbevis for en
+  eldre hovedversjon, går fra «Må ta ny versjon» til «Fullført (versjon 1)», og fullføringsandelen i sammendraget stiger. Det
+  følger av avgjørelsen, men tallene ser annerledes ut samme dag.
+- **Statusen** (`src/modules/course/newVersionDeadline.ts`): `/enrollments`, Status, påminnelsene, mandagse-posten og
+  kursrapporten (detalj og sammendrag) bruker samme regel. Kursrapporten viser versjonen ved «Fullført» når beviset gjelder en
+  eldre hovedversjon, også i CSV-fila.
+- **Tildelingse-posten** sier «Ny versjon av et kurs du har fullført» og går bare når en klassefrist er satt etter den nye
+  versjonen.
+- **Fristen endres i klassen** (produkteier 2026-11-25): hver kursrad i en aktiv klasse har et datofelt og «Lagre frist». Før var
+  eneste vei å fjerne kurset og legge det til igjen, som også sendte «Du har fått et nytt kurs» på nytt. Lagres med knappen, ikke
+  når datoen endres: et datofelt melder en endring for hver gyldig dato mens året skrives, og hver lagring flytter `dueSetAt`. En
+  tom dato fjerner fristen. Arkivert klasse eller kurs: bare tekst, som før. Ingen ny rute (`POST …/classes/:id/courses` på et
+  kurs klassen har, oppdaterer fristen). Brukerveiledning: `doc/COURSE_CERTIFICATES_GUIDE.md`, «Ny hovedversjon».
+- **Resertifiseringsrapporten:** `passedAt` følger statusen fra `ModulePass` (rest fra QA i 2.181.7).
+- **Opprydding:** `isCertificationPassed` og `CERTIFICATION_PASSED_STATUSES` er fjernet, og vakta lister ingen lesere av dem.
+
+**Valgt under byggingen** (`doc/DECISIONS.md`): SELF er ikke en tildeling. En tildeling vinner også uten frist. Ved lik dato
+gjelder den sist satte. «Påbegynt» etter en ny hovedversjon teller også lesinger fra den gamle versjonen, så en som må ta kurset
+på nytt, blir gjerne «I gang» eller «Forfalt», ikke «Tildelt». «Mine kurs» er ikke endret: den viser ingen frister, og et eldre
+kursbevis viser alt «Ny versjon».
+
+**Kjente mangler:** Tildelingse-posten ser bare klassefrister; har personen også en individuell tildeling eller en annen klasse
+med tidligere frist, kan e-posten og Status være uenige. En frist som endres mens gammel kode ennå kjører under utrullingen,
+beholder et eldre tidspunkt. `passedAt` i resertifiseringsrapporten er alltid tom når rapporten er filtrert på kurs (ingen flate
+bruker det). `selfEnroll` overskriver en eksisterende tildeling og fjerner fristen (fantes fra før, egen sak). Fra QA-porten (GO,
+Claude-agent): administratorens påmeldingsliste for et kurs bruker radens egen frist, ikke klassens, så en SELF-påmelding med
+klassefrist kan stå som «Fullført» der og «Forfalt» i Status. Regelen er «tidligste frist», så en gammel frist fra en annen klasse
+eller en individuell tildeling uten ny frist kan stoppe at en ny frist gjør kurset utestående (produkteier 2026-11-25: sjeldent,
+føres som kjent mangel). Fra QA av fristfeltet (GO): en halvskrevet dato (året slettet) gir tom verdi, så «Lagre frist» fjerner
+fristen; en dato skrevet men ikke lagret på en annen rad faller tilbake når en rad lagres og klassen lastes på nytt. En flyttet frist
+etter en ny hovedversjon krever den nye versjonen (svar C), og skjermen sier ikke det; veiledningen gjør.
+
+Tester: `test/m2-effective-deadline-1192.test.ts` (6), `test/m2-new-version-deadline-1192.test.ts` (5),
+`test/unit/effective-deadline-1192.test.ts` (6), og endrede tester som holdt fast ved den gamle regelen (kursversjoner,
+modulpass per kurs, tildelingse-posten og -regelen, ukeposten, og `m2-course-assignment-readded-1146`, som avleggeren ikke kjørte
+og den fulle runden fant). E2e: `admin-content-classes.spec.ts` (fristen på raden, arkivert klasse og kontroll, 390 px) og
+`course-versions-934.spec.ts` («Fullført (versjon 1)»). 23 mutasjoner, alle røde på riktig sted.
+
+## 2.181.7 - 2026-11-24
+
+**#1192 punkt 1 · En bestått modul står til modulen revideres, også i modulrapportene, profilen og resertifiseringen.** Før
+svarte fire steder hver sin regel (siste forsøk, siste vedtak, ethvert bestått), så samme person kunne være bestått i
+kursrapporten og `FAILED` i modulrapporten. Nå leser alle fra `moduleCredit.ts`: `findModuleStanding` på modulnivå (et pass
+gjelder på modulens nyeste hovedversjon, svar A), og kursets krav når rapporten er filtrert på ett kurs. Plan:
+`doc/design/PLAN_1192_BESTATT_OG_FRIST.md`, del 1.
+
+- **Modulrapportene** («Fullføring per modul», pass-rates, detaljene, CSV): et gjeldende pass er bestått uansett senere forsøk.
+  Bare pass på en eldre hovedversjon gir «må ta ny versjon», og det gamle vedtaket gir aldri bestått tilbake. Uten pass avgjør
+  siste forsøk som før. Pass-rates har et nytt felt `revisedCount` (ikke med i `decisionCount` eller andelen), detaljene
+  `totals.needsNewVersion`. Datofilteret velger personer med innlevering i perioden og viser ståstedet nå.
+- **Profilen** («Moduler bestått» og totalen): bare gjeldende pass. Ukestallene er hendelser og står som før.
+- **`/api/reports/recertification`**: statusen kommer fra `ModulePass` (ACTIVE, SUPERSEDED, NOT_CERTIFIED). Et bestått som er
+  omgjort i en anke, står ikke lenger som ACTIVE (DESIGN_934 mangel 41).
+- **Tallene i publiseringsdialogen** (`/modules/:id/passed-count`, `passedCount`): gjeldende pass.
+- `CertificationStatus` skrives fortsatt, men ingen flate leser statusen derfra.
+
+**Valgt under byggingen:** et pass på en versjon uten nummer regnes som hovedversjon 1 (som `currentModuleMajor`). Har en
+revidert modul et nyere forsøk som strøk, viser rapporten det forsøket, ikke «må ta ny versjon». Kursfilteret bruker kursets
+krav bare når ett kurs er valgt, ikke for en fagansvarligs tillatte kurs. Autostart av flervalgsmodul utenfor kurs og
+«Fullført» på modulkortet er ikke endret: begge nås bare utenfor kursmodus (`PARTICIPANT_COURSE_ONLY` er på), og «Fullført»
+der betyr at forsøket er ferdig, ikke bestått.
+
+**Kjente mangler:** Resultatsida viser ikke `revisedCount`, så bestått, ikke bestått og under vurdering summerer ikke til
+totalen når noen må ta ny versjon. Raden i detaljene kan vise poeng og dato fra siste forsøk når statusen er bestått på grunn
+av et tidligere pass. Ukestallet «bestått» i profilen teller pass som tilbakefyllingen har ugyldiggjort. Statusfilteret kan
+ikke velge «må ta ny versjon». Fra QA-porten (GO, Claude-agent): i resertifiseringsrapporten kommer `passedAt` fortsatt fra
+`CertificationStatus`, så en som besto og så strøk, står som ACTIVE uten dato; vakta i `content-lock-write-guard.test.js` lister
+fortsatt `reviewAppealReport.ts` som leser av `isCertificationPassed`, som ikke har kallere lenger; fiksturen i
+`completion-per-person.test.ts` lager bestått uten `ModulePass` og måler bare reserveveien; `hasValidModulePass` (spørsmålet i
+moduldialogen) teller også pass på eldre hovedversjoner. `revisedCount` står sist i pass-rates, så CSV-kolonnene før den ikke
+flyttes.
+
+Tester: `test/m2-module-standing-reports-1192.test.ts` (7, gjennom rutene), `test/unit/reporting-service.test.ts` og
+`test/unit/my-stats-1138.test.ts` (nye og endrede), og to fiksturer som lagde et bestått uten `ModulePass`
+(`m2-course-publish-pending-versions`, `m2-module-revision-supersedes-997`). Ni mutasjoner, alle røde på riktig sted.
+
+## 2.181.6 - 2026-11-24
+
+**Prod-planen går fra B1 til B2** (produkteier 2026-11-24). Utrullingen av 2.181.4 samme kveld ga 25 minutter nedetid i prod:
+web, worker og parser deler én B1 (1,75 GB), som ligger på 80 % minne i vanlig drift. Da de tre startet på nytt, steg minnet til
+97 %, Azure flyttet planen til en annen maskin, og alle tre kaldstartet der på 100 % CPU i 20 minutter. B2 har 3,5 GB, omtrent
+130 kr mer i måneden.
+
+- `infra/azure/main.bicep`: `B2` er tillatt, og nivået utledes som `Basic` for alle B-størrelser. Før ble alt som ikke var B1 eller
+  S1, `PremiumV3`, så B2 ville fått feil nivå.
+- GitHub-variabelen `AZURE_APP_SERVICE_SKU` for production settes til `B2`. Stage står på `B1` (Azure-stage er passiv).
+- Krever full infrastrukturutrulling (`deploy-azure`). Skaleringen skjer på stedet innen samme nivå; identiteter, Key Vault og
+  roller røres ikke.
+- **Tilbake:** sett variabelen til `B1` og kjør `deploy-azure` igjen.
+
+## 2.181.5 - 2026-11-24
+
+To av de fire avgjørelsene fra kompleksitetsskanningen (#1192, produkteier 2026-11-24). De to andre (bestått modul overalt, og
+ny hovedversjon med ny frist) bygges etter en egen plan.
+
+- **#1192 punkt 3 · En arkivert klasse gir ikke frist.** Arkiveringsdialogen lovet at påminnelsene stopper, men fristen fra en
+  arkivert klasse sto fortsatt i «Mine kurs» og `/enrollments`, og den ukentlige e-posten viste «Fristen har gått ut» hver
+  mandag. En tidlig frist fra en arkivert klasse slo også en senere fra en aktiv. Nå tar `getClassAssignedCourseDueDates`
+  fristen bare fra aktive klasser. Et påbegynt kurs som deltakeren bare har fra arkiverte klasser, vises som før, men uten frist.
+  Tildelingse-posten og påminnelsene hoppet allerede over arkiverte klasser.
+- **#1192 punkt 4 · En upublisert seksjon stopper ikke «Publiser utkastet».** Beslutningen fra 2026-08-23 gjelder også for
+  kursutkastet: seksjonen kommer inn i kurset og er skjult for deltakerne til den er publisert. Kursbyggeren merker den «Ikke
+  publisert ennå. Deltakerne ser den ikke før den er publisert.», uten rød sperre. En upublisert modul stopper fortsatt.
+  Kursbyggeren, lagringen og importen godtok slike seksjoner allerede; bare publiseringen av utkastet avviste dem.
+  Merknaden leses fra seksjonsbiblioteket kursbyggeren alt har (`activeVersionId`), så den står også på en seksjon som nettopp
+  er lagt til fra velgeren, før noe er lagret. Den står på egen linje i varselfarge, og lista tegnes på nytt når biblioteket
+  hentes på nytt (forfatteren kommer tilbake til fanen).
+  **Kjente mangler:** (1) Spørsmålet om mindre eller større versjon teller den skjulte seksjonen som «lagt til». Velger
+  forfatteren større versjon, får de med kursbevis e-post uten at de ser noe nytt. Forfatteren velger selv, og importen kunne
+  gjøre det samme fra før. (2) Et kurs deltakeren bare har fra arkiverte klasser og har deltatt i (diskusjon, innlevering på en
+  modul som senere er arkivert), kan stå under «Ikke påbegynt» i den ukentlige e-posten. Før 2.181.5 sto det under «Fristen
+  har gått ut».
+
+**Rotårsak etter QA-porten (NO-GO 2026-11-24) og en rød integrasjonstest:**
+1. *Merknaden manglet i den vanlige flyten* (legg til fra velgeren → «Publiser utkastet» med en gang). Jeg festet merknaden til
+   serverens flagg i utkastet, og testet bare et utkast som alt var lagret. Velgeren tar ikke med seksjonens tilstand. Før
+   2.181.5 var det ufarlig, fordi tjeneren stoppet publiseringen; da regelen ble løsnet, ble merknaden den eneste beskjeden.
+   Sjekken som skulle fanget det: «følg den dokumenterte brukerreisen, ikke kodestien du bygde» (CLAUDE.md). Den ble ikke kjørt
+   for denne endringen. Ny e2e følger reisen fra velgeren.
+2. *En test i `m2-section-draft-1163.test.ts` festet den gamle avvisningen* med bare statuskoden 400. Jeg søkte etter
+   feilkoden `course_draft_item_unusable` før endringen og fant den ikke der. Full runde fanget den. Ingen ny regel: søket etter
+   testene som fester en regel må også ta ruta (`draft/publish`), ikke bare feilkoden.
+
+Tester: `test/m2-classes-archived.test.ts` (2 nye: arkivert klasse alene, og arkivert pluss aktiv, med kontroll før arkiveringen
+og mot den ukentlige e-posten), `test/m2-course-draft-1140-e2.test.ts` (kontrollen som festet avvisningen, er byttet ut med en
+test som publiserer og sjekker at deltakeren ikke ser seksjonen), `test/e2e/admin-content-course-draft-1140.spec.ts` (merknaden
+for seksjonen, og en upublisert modul som kontroll). Hver fiks er mutasjonsverifisert.
+
+## 2.181.4 - 2026-11-24
+
+Fire feil til fra kompleksitetsskanningen 2026-11-23, alle uten behov for en avgjørelse fra produkteier.
+
+- **#1193 · Kriterieendringer i Innstillinger vises som ulagret.** «Fjern» og «Generer på nytt» sendte ingen input-hendelse, så
+  hodet sa «Alt lagret», Lagre var grå, og lukking av fanen varslet ikke. Fjerningen var tapt uten et ord. Nå regner hodet ut
+  «ulagret» på nytt etter hver endring i kriterielista. «Legg til» uten tekst er fortsatt ingen endring (et tomt kriterium
+  droppes ved lagring); teksten i det nye kriteriet er det.
+- **#1194 · `?locale=nb-NO` ga 500** i modulbiblioteket og modularkivet, fordi verdien ble sendt rått til tekstsamlingen. Nå
+  normaliseres den; et ukjent språk gir forespørselens språk. De sju rutestedene med egen reserve
+  (`normalizeLocale(request.context?.locale) ?? …`) bruker nå `requestLocale(request)`, og vakta fra #984 ser også den
+  skrivemåten og `|| …`. Reservene var døde (`authenticate` setter alltid språket), men vakta lovet at de ikke fantes.
+- **#1195 · Ankebehandleren på bokmål og nynorsk.** 64 nøkler fantes bare på engelsk (detaljpanelet, valideringen, filteret
+  for manuell vurdering). Nå finnes de på alle tre språk. Tabellen for manuell vurdering hadde 60 strenger der æ, ø og å var
+  byttet ut («bestatt», «koen», «pa», «fullfort») eller brukte «MCQ», «LLM» og «AI» der resten av appen sier «flervalg» og «KI»;
+  de er rettet, og undertittelen på review-sida også. Én paritetstest finner nå alle oversettelsestabellene selv og sjekker
+  den sammensatte tabellen sida bruker (før: 3 av 12 hadde test).
+- **#1196 · E-posten om ny hovedversjon går bare til den som ser kurset.** Den gikk til alle med kursbevis, også dem som var
+  fjernet fra klassen etter at de fullførte et begrenset kurs, og lenken ga 404. Nå avgjøres synligheten med samme regel som
+  «Mine kurs» og de andre e-postene (`findLearnersSeeingCourses`), både i jobben og rett før sendingen. Den som ikke ser
+  kurset, får raden `skipped` med grunnen `not_visible`.
+  **Kjent mangel:** tallet i dialogen for ny hovedversjon («så mange får e-post») kommer fra `findMajorVersionRecipients`, som
+  ikke ser på synligheten. Det kan derfor være høyere enn antallet som faktisk får e-posten.
+
+Tester: `test/e2e/admin-content-criteria-dirty-1193.spec.ts` (3), `test/m2-query-locale-1194.test.ts` (7),
+`test/unit/request-locale-984.test.ts` (utvidet mønster), `test/unit/i18n-parity-all-tables-1195.test.ts` (13),
+`test/m2-course-major-email-visibility-1196.test.ts` (4, med klassemedlemskap). Hver fiks er mutasjonsverifisert.
+
+## 2.181.3 - 2026-11-23
+
+Tre feil fra kompleksitetsskanningen 2026-11-23, alle verifisert i koden før de ble rettet.
+
+- **#1189 · Modulsida forkastet ulagrede endringer.** «Publiser», «Avpubliser» og «Importer» brukte det som var lagret og lastet
+  modulen på nytt, så en rettelse i Rediger eller Innstillinger forsvant uten et ord. Nå spør de først, som seksjon og klasse.
+  Nei rører ingenting, og skjemaet står. Importen spurte allerede ved et utkast eller ulagrede innstillinger, men ikke ved et
+  endret skjema i Rediger.
+- **#1190 · «Deltakere» i toppmenyen gav 403** for vurderer, ankebehandler og rapportleser. Lenken går til Klasser, som bare
+  fagansvarlig og administrator har tilgang til. Undermenyen sender dem nå videre til den første undersiden de har tilgang til
+  (rapportleser til Status, vurderer og ankebehandler til Manuell behandling).
+- **#1191 · Startspråket.** Nettlesere med «no», «da» eller «sv» fikk engelsk, og fordi klientens språk blir mottakerens språk
+  i e-postene, fikk de engelske påminnelser og ukentlig e-post. «no» betyr nå bokmål i klienten og i tjeneren
+  (`normalizeLocale`), og et ukjent språk gir organisasjonens standardspråk, som tjeneren alltid har gjort. Standardspråket
+  huskes i nettleseren (`org.defaultLocale`) fordi startspråket velges før konfigurasjonen er lest.
+  Sidene lagrer språket ved oppstart, også når det bare er gjettet, så et gjettet en-GB ble et fast valg. Nå merkes et språk
+  brukeren velger i språkvelgeren (`participant.localeChosen`, én lytter i `i18n-locale.js` for alle sidene). Et lagret en-GB som
+  ikke er valgt, i en nettleser som ikke er engelsk, regnes som den gamle reserven og gjettes på nytt. Det retter også brukerne som
+  alt er rammet. Annet lagret står, også valg fra før merket fantes. Unntak: den som før valgte engelsk i en dansk eller svensk
+  nettleser, får standardspråket én gang og må velge engelsk igjen.
+  Vurderingskvalitet hadde sin egen kopi av startspråk-regelen; den bruker nå den felles (`resolveInitialLocale`).
+  **Kjente mangler:** første besøk uten et husket standardspråk gir fortsatt en-GB til konfigurasjonen er lest, og blir rettet
+  ved neste sidelasting. Undermenyen under Deltakere sender `x-locale: undefined` på sitt `/api/me`-kall; tjeneren overser
+  verdien og bruker nettleserens språk, så det lagres ikke noe feil språk.
+
+Valgene står i `doc/DECISIONS.md` («Startspråk og ulagrede endringer på modulsida»).
+
+Tester: `test/e2e/admin-content-module-publish-unsaved-1189.spec.ts` (6), `test/e2e/deltakere-landing-1190.spec.ts` (5),
+`test/unit/i18n-locale.test.js` (+9), `test/unit/locale-no-1191.test.ts` (3), `test/e2e/start-locale-1191.spec.ts` (6, måler
+`x-locale` tjeneren får, med nettleserspråket satt). Hver fiks er mutasjonsverifisert: med fiksen tatt
+ut ble testene for den røde, og kontrollene sto.
+
+**Rotårsak, QA-porten NO-GO i første runde (tre funn):**
+1. Spørsmålet på modulsida så bare på «skjema» og «innstillinger». Rediger legger endringene i et utkast når forfatteren går til
+   Forhåndsvisning, og den veien inn var ikke talt. Sjekken som skulle fanget det (pre-flight 3, «tilfellene jeg ikke listet»),
+   ble ikke kjørt: jeg skrev en hviteliste over to tilstander i stedet for å spørre `moduleDirtyKind()` om alt. Nå spør den om
+   alt.
+2. Startspråket: jeg rettet den som gjetter, men ikke de 15 stedene som lagrer gjetningen (pre-flight 2, «hvem skriver tilstanden
+   jeg leser»). Et grep etter `participant.locale` ville vist det.
+3. Den positive e2e-testen talte forhåndsvisningen, ikke publiseringen. Mutasjonen tok bare ut spørsmålet, ikke publiseringen, så
+   den så aldri at telleren målte feil kall. Nå er det en egen mutasjon som tar ut publiseringskallet.
+Ingen ny regel: sjekkene finnes. Lærdommen er at mutasjoner også må ta ut det den positive testen påstår skjer.
+
+## 2.181.2 - 2026-11-23
+
+Pingtestene mot `/healthz` (web og worker, to steder hver) kjøres hvert **15. minutt** i stedet for hvert 5.
+(`infra/azure/main.bicep`, `Frequency: 900`). Varslene ser på et 15-minutters vindu (`windowSize: 'PT15M'`), så hvert vindu
+har et resultat. Ingen kodeendring.
+
+Hvorfor: de var den største posten i prod, 231 av ca. 694 kr de 30 dagene til 2026-11-22. Nå koster de ca. 77 kr. Produkteier
+valgte fast 15 minutter 2026-11-23, framfor 5 minutter i arbeidstid og 15 ellers (ca. 115 kr og en Logic App som bytter).
+Azure tillater ikke sjeldnere enn 15 minutter. Ulempen er at et utfall kan bli varslet opptil 10 minutter senere.
+
+Rulles ut med `deploy-azure.yml`, den første vellykkede siden 2026-07-25 (516dced3).
+
+**Tre innstillinger som var satt for hånd i prod, står nå i Bicep**, med prods verdier som standard. Uten dem ville den
+fulle utrullingen fjernet dem, fordi Bicep skriver hele lista med app-innstillinger:
+
+- `AZURE_OPENAI_ASSESSMENT_TEMPERATURE=0` (web og worker). Uten den bruker vurderingen den generelle temperaturen (1).
+- `AI_CONTENT_SIMILARITY_ENABLED=true` og `AI_CONTENT_SIMILARITY_SHADOW=true` (worker). Uten dem gjelder regelfila
+  (`enabled: false`), og likhetssignalet i skyggemodus (#475) slutter å bli regnet ut.
+
+Funnet ved å sammenligne hvert navn i prods app-innstillinger med `main.bicep`; etter endringen mangler ingen. Prod-what-if
+viser ikke dette: den sender bare noen av parameterne, så resten får standardverdier (`LLM_MODE=stub`, ingen Entra).
+Rotårsak: innstillinger satt med `az` i prod uten å legges i Bicep samtidig, slik `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` også ble
+(2026-10-11). Sjekken er mekanisk og bør kjøres før hver full utrulling.
+
+**I prod 2026-11-23 kl. 21:41** (`deploy-azure.yml`, 78f565e9, med 2.181.1). Web og worker 2.181.2, `/healthz` 200,
+pingtestene 900 s og varslene PT15M, de tre innstillingene beholdt. App-innstillingene før og etter er sammenlignet på alle tre
+appene. Én uønsket endring: `ASSESSMENT_JOB_MAX_ATTEMPTS` på web gikk 6 → 3, fordi GitHub-variabelen sto på 3. Produkteiers
+beslutning 2026-08-26 (2.33.0, «gjenforsøkene dekker nå en nedetid») er 6. Variabelen og begge appene er satt til 6 samme kveld.
+Workeren hadde stått på 3 hele tiden, så i prod har vurderingen trolig aldri prøvd mer enn 3 ganger før nå.
+
+## 2.181.1 - 2026-11-23
+
+Stage-testkontoen kan være **administrator** (produkteier 2026-11-23: «en testkonto i stage med app admin, vi trenger å kunne
+teste all funksjonalitet»). Ingen endring for brukerne, og ingen i prod: kontoen godtas bare der `DEPLOY_ENVIRONMENT` er `staging`.
+
+Med hodet `x-stage-test-role: ADMINISTRATOR` er tokenet til «A-2 stage-testkonto» en tredje, egen bruker med bare rollen
+administrator (`stage-test-service-admin:<appId>`, `stage-testkonto-admin@stage.invalid`), ved siden av fagansvarlig (uten hodet)
+og deltakeren (`PARTICIPANT`). Rollen lagres ikke. Det betyr at det bare administratoren når — temaene, plattformsida, andres
+klasser — nå kan prøves mot stage uten at et menneske logger inn. Først ut er de to sjekkene som holder #1168 åpen.
+
+**Tester:** `stage-test-service` (enhet: hvitelisten, tre ulike brukere, ingen hjelp utenfor stage eller fra en annen app) og
+`m2-stage-test-participant` (gjennom rutene: `/api/me` sier administrator, plattformruta slipper inn administratoren og stenger
+for fagansvarlig og deltaker, rollen er ikke lagret). Tre mutasjoner røde: uten grenen, med fagansvarligs rolle, og med
+fagansvarligs bruker.
+
+## 2.181.0 - 2026-11-22
+
+**Prod 22.11.2026, 22:45** (sammen med 2.178.1, 2.179.0 og 2.180.0; `git_ref` 0963881d, `skip_staging`). App og worker svarer
+2.181.0, workeren startet på nytt, `/healthz` ok, og prod viser «View certificate».
+
+#1168, fjerde og siste skive: klassen og temaet. Ingen migrering.
+
+**Hva brukerne merker:**
+- **Arkiver** på en klasse har sidas dialog i stedet for nettleserens spørreboks («Arkivere klassen …?»), og den sier hva som skjer
+  med medlemmenes kurs: kurs de bare har fått gjennom klassen og ikke har begynt på, forsvinner fra Mine kurs; påbegynte og
+  fullførte blir stående; påminnelsene stopper.
+- **Slett** på en arkivert klasse har sidas dialog med rød knapp (samme innhold som spørreboksen).
+- **Gjenopprett** på en klasse spør ikke lenger (kursets mønster), og meldingen sier hvilken klasse som kom tilbake.
+- **Slett** på et tema teller kursene på nytt når dialogen åpnes, også de arkiverte. Før viste dialogen listas tall (bare aktive
+  kurs, og så gammelt som lista), mens slettingen kobler fra alle: et tema som bare et arkivert kurs hadde, sto som «Ingen kurs
+  har dette temaet», og kurset kom tilbake uten temaet da det ble gjenopprettet. Nå sier dialogen hvor mange som er arkivert.
+
+**Tjeneren:** ny lesing `GET /api/admin/content/themes/:themeId/delete-preview` (`{ themeId, courseCount, archivedCourseCount }`),
+bare administrator, samme telling som slettingen (`detachedCourseCount`). Klassens ruter er uendret.
+
+**Klienten:** `confirmLifecycleStep` i `module-lifecycle-dialogs.js` (en enkel bekreftelse i den samme dialogen) brukes av
+klassesida. Nøklene `classes.archiveConfirm`, `classes.deleteConfirm`, `classes.restoreConfirm` og `classes.restored` er borte.
+
+**Tester:** `admin-content-classes` (arkiver og slett gjennom dialogen, Avbryt, rød knapp, gjenoppretting uten spørsmål),
+`language-accessibility-1173` (dialogens tittel på sidas språk), `admin-content-themes` (de arkiverte telles),
+`m2-archived-courses-not-in-use-1149` (forhåndsvisningen = slettingens tall, kontroll, bare administrator), `language-chrome-1173`
+(nøklene er oversatt). Seks mutasjoner, alle røde: spørreboksen tilbake ved arkiver og slett, sletteknappen ikke rød,
+gjenopprettingen spør igjen, tjeneren teller bare aktive, dialogen bruker listas tall.
+
+Full runde grønn: enhet 3489, DOM 109, e2e 1256, integrasjon 1497 (én e2e-fil, `form-page-asks-once-1155`, klikket fortsatt
+gjennom spørreboksen for klassens «Arkiver»; rettet).
+
+**QA 2.181.0** (Codex): GO. Rettet etterpå, med tester som er røde uten fiksen: et klikk på «Slett» for et annet tema mens
+forhåndsvisningen ble hentet, kunne bytte hvilket tema bekreftelsen slettet (nå én forhåndsvisning om gangen); og uten spørsmål
+kunne et dobbeltklikk på «Gjenopprett» sende to gjenopprettinger av en klasse (knappen er opptatt mens den første går).
+
+**Stage (hjemme, 22.11.2026):** `test/stage/release-2-181-klasse-tema.spec.ts` 3/3 mot ekte data: klassens «Arkiver» med sidas
+dialog (Avbryt arkiverer ikke, bekreft arkiverer), «Gjenopprett» uten spørsmål med klassens navn i meldingen, «Slett» i hodet med
+rød knapp; temaets forhåndsvisning gir 403 for en fagansvarlig. Ingen spørreboks. Temaets telling med ekte arkiverte kurs krever
+en administrator og står på den manuelle lista.
+
+**#1168:** med dette er alle flatene i saken gjort (modul, seksjon, kurs, klasse, tema).
+
+## 2.180.0 - 2026-11-22
+
+#1168, tredje skive: kurset. Ingen migrering, ingen ny rute.
+
+**Hva brukerne merker:**
+- **Avpubliser** på et kurs (lista og hodet) har sidas dialog i stedet for nettleserens spørreboks, i samme form som
+  «Publiser» (#1164): «Avpublisere «…»?», og **hvem som mister tilgangen** med de samme tallene som «Publiser» viser (alle
+  deltakere når kurset er åpent; klassene, de enkeltvis tildelte og tallet i alt når det er begrenset). Avbryt og Esc sender
+  ingenting.
+- **Slett** på et arkivert kurs sier at modulene **og seksjonene** blir stående i biblioteket som de er. Før nevnte teksten bare
+  modulene.
+
+**Klienten:** `unpublishCourseInAdmin` henter `GET …/publish-audience` (kursets egen synlighet) og åpner `openCoursePublishDialog`
+med egen tittel, tekst og knapp og `audienceKeys: "courses.unpublishDialog"`. `publishAudienceHtml` tar nøklene uttrykkelig;
+versjonsdialogen («Publiser utkastet») sender publiseringens.
+
+**Tester:** `admin-content-course-unpublish-dialog-1168` (e2e: åpent, begrenset, Avbryt, Esc, kontroll av at «Publiser» har sine
+egne ord, 390 px), `admin-content-workspaces` (avpublisering fra lista gjennom dialogen, slettedialogens tekst),
+`admin-content-course-publish-dialog-1164` (overskriften i versjonsdialogen), `language-chrome-1173` (de nye nøklene, og
+seksjonenes fra 2.179.0, er oversatt). Mutasjoner, alle røde: spørreboksen tilbake, publiseringens ord i avpubliseringen,
+den gamle slettedialogteksten, avpubliseringens ord i publiseringen og i versjonsdialogen. Én mutasjon overlevde først (en
+standardverdi bare versjonsdialogen brukte, og ingen test leste overskriften der): standardverdien er fjernet, og testen leser
+den nå. Full runde grønn: enhet 3484, DOM 109, e2e 1253, integrasjon 1495. **QA 2.180.0** (Codex): GO, ingen funn i skiven.
+
+**Stage (hjemme, 22.11.2026):** `test/stage/release-2-180-kurs-avpubliser.spec.ts` 3/3 mot ekte data: «Avpubliser» i kurssidas hode
+viser sidas dialog med «Hvem mister tilgangen» fra tjenerens tall (et begrenset kurs uten tildelinger: «Ingen»), Avbryt lar kurset
+stå publisert, bekreft avpubliserer; slettedialogen på det arkiverte kurset nevner modulene og seksjonene. Ingen spørreboks.
+
+**Gjenstår i #1168:** klasse og tema (spørreboks, temaets telling).
+
+## 2.179.0 - 2026-11-22
+
+#1168, andre skive: seksjonens «Arkiver», «Gjenopprett» og «Slett» følger modulen (2.178.0) og kurset (#1150). Ingen
+migrering.
+
+**Hva brukerne merker:**
+- **Arkiver** (seksjonslista og hodet i redigereren) spør tjeneren først. Holder et aktivt kurs eller et lagret kursutkast
+  seksjonen igjen, viser dialogen kursene med lenker og bare «Lukk». Før spurte nettleserens spørreboks «Arkivere denne
+  seksjonen?», og avslaget kom etter ja. Ellers sier dialogen hva som skjer, med «Arkiver seksjonen».
+- **Slett** (arkivert seksjon, i redigereren) har sidas dialog. Den gamle spørreboksen sa at seksjonen «forsvinner fra alle
+  kurs som bruker den», men tjeneren nekter å slette en seksjon som står i et kurs.
+- **Gjenopprett** sier hva som kom tilbake: «… er gjenopprettet som utkast. Publiser den når du er klar.» Før: «Seksjon
+  gjenopprettet.»
+
+**Tjeneren:** ny lesing `GET /api/admin/content/sections/:sectionId/archive-preview` (`{ sectionId, archived, published, uses }`),
+fra den samme regelen som sperren i `POST …/archive`, eierskapsvaktet. Dialogmodulen fra 2.178.0
+(`module-lifecycle-dialogs.js`) tar nå både moduler og seksjoner; modulens oppførsel er uendret.
+
+**Tester:** `m2-section-archive-preview-1168` (forhåndsvisningen = sperren, kontroll, språk, 404),
+`admin-content-section-lifecycle-dialogs-1168` (e2e, sju tilfeller i lista og redigereren), vaktlistene i
+`content-in-use-guard` og `m2-content-read-by-producers-1165`, og fire e2e-filer som klikket gjennom spørreboksen. Seks
+mutasjoner, alle røde: forhåndsvisningen alltid tom, uten språk, spørreboksen tilbake i lista, i redigereren og ved sletting,
+og den gamle gjenopprettingsmeldingen. Full runde grønn: enhet 3467, DOM 109, e2e 1248, integrasjon 1495.
+
+**QA 2.179.0** (Codex): GO. Rettet etterpå: meldingen etter gjenoppretting eller arkivering i redigereren tok tittelen fra
+seksjonen som vises nå, ikke den handlingen startet i (forfatteren byttet seksjon før svaret kom); og de to nye rutene sto ikke
+i `doc/route-map.md` (heller ikke modulens fra 2.178.0). Den første har fått en e2e-test (gjenoppretting holdt tilbake mens
+forfatteren åpner en annen seksjon), rød med den gamle linjen. De andre funnene er resten av #1168, under.
+
+**Stage (hjemme, 22.11.2026):** `test/stage/release-2-179-seksjon-dialoger.spec.ts` 4/4 mot ekte data: forhåndsvisningen og
+sperren navngir samme kurs, en annens seksjon gir 403 `content_ownership`, lista viser den sperrede dialogen med lenke,
+redigereren arkiverer (og avpubliserer), gjenoppretter som utkast og sletter. Ingen spørreboks fra nettleseren.
+
+**Gjenstår i #1168:** klasse og tema (spørreboks, temaets telling), kursets slettetekst, og «Avpubliser» på kurs.
+
+## 2.178.1 - 2026-11-22
+
+Engelsk lenke til kursbeviset heter **«View certificate»** (før «View course certificate»): på kursraden, ved en eldre
+versjon («View certificate for version {n}») og i profilen. Avgjort av produkteier (tillegg i `doc/DECISIONS.md`,
+«Deltakerflyten»). Bokmål og nynorsk er uendret; bevissiden heter fortsatt «Course certificate». Ingen migrering.
+
+**Hvorfor:** på en 360 px telefon på engelsk ga den lange lenketeksten tittelen rundt 80 px, så en kort tittel ble delt midt i
+ordet («Personve-rn»), på alle plattformer. CI har vært rød på `participant-flow-1162` (360 px, en-GB) siden 2.176.0.
+
+**Rotårsak — hvorfor det slapp gjennom:** testen målte bare radens høyde, og lokalt viser Windows Segoe UI, der raden ble 59 px
+(under grensen på 64). Mac, iPhone og Linux (CI) har Arial, som er bredere: 77,6 px. Ordbruddet var der i begge, men ingen sjekk
+så på tittelen. Sjekken som nå kjører: telefontesten tvinger Arial, og krever at en kort tittel står på én linje.
+Prøvd og forkastet: `overflow-wrap: break-word` (et langt sammensatt ord gikk inn under lenken og ble kuttet), og lenken over to
+linjer (ga «Vis / kursbevis» også på bokmål, der det ikke trengs).
+
+**Tester:** `participant-flow-1162` (Arial; tittelen på én linje), `profile-locale-switch`, `profile-stats-1138`. To mutasjoner,
+begge røde: den gamle engelske teksten (tekstsjekken), og en bredere lenke med riktig tekst (tittelen 34 px, to linjer).
+Full runde grønn: enhet 3467, DOM 109, e2e 1241, integrasjon 1490 (parallell, 5,5 min).
+
+**QA 2.178.1** (Codex): GO. Ett funn, rettet: designplanen for #1162 oppga fortsatt den gamle engelske teksten.
+
 ## 2.178.0 - 2026-11-22
 
 #1168, første skive: modulens «Arkiver», «Gjenopprett» og «Slett» følger kursets mønster (#1150): sjekk først, vis

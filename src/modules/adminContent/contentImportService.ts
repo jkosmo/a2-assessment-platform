@@ -29,6 +29,7 @@ import { prisma } from "../../db/prisma.js";
 import { courseRepository, createCourseRepository } from "../course/courseRepository.js";
 import { findSectionReadCredit } from "../course/sectionReadCredit.js";
 import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
+import { courseTextGateIssues } from "../course/courseTextGate.js";
 import { findActiveUsesOfItems } from "../course/contentLifecycle.js";
 import { applyCourseVersionChange, NO_SECTION_SNAPSHOT, renameSectionInVersionSnapshots, sameLocalizedText, type CourseVersionChoice, type CourseVersionRequest } from "../course/courseVersioning.js";
 import { randomUUID } from "node:crypto";
@@ -1250,6 +1251,14 @@ export async function importCourseFromEnvelope(
         // live course whose module has no active version — the participant hits "module not
         // available". The course waits with its modules; the author publishes both once the gaps
         // are filled.
+        // #1178 skive 2: kursets eget navn og beskrivelse gjennom samme port som «Publiser». Mangler et språk, holdes kurset
+        // tilbake som når en modul mangler et (#896 S4), og importen meldes som holdt tilbake. `publishCourse` ville avvist og
+        // stoppet hele importen. En oppdatering (`updatePlan`) rører ikke publiseringen og spørres ikke (kjent mangel, planen).
+        if (!updatePlan && payload.course.audit?.publishedAt && !anyContentHeldBack) {
+          const courseText = await tx.course.findUnique({ where: { id: courseId }, select: { title: true, description: true } });
+          if (courseTextGateIssues({ title: courseText?.title ?? null, description: courseText?.description ?? null }).length > 0) anyContentHeldBack = true;
+        }
+
         if (updatePlan) {
           // #1095: en oppdatering rører ikke publiseringstilstanden — verken kursets eller
           // elementenes. Produkteier: «det bør en bevisst handling til for å publisere dem».

@@ -1151,7 +1151,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     const chooser = page.waitForEvent("filechooser");
-    await clickEnabledButton(page, /^Importer$|^Import$/);
+    await clickEnabledButton(page, /^Erstatt fra fil$|^Replace from file$/);
     await (await chooser).setFiles({
       name: "module.json",
       mimeType: "application/json",
@@ -1195,7 +1195,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     const chooser = page.waitForEvent("filechooser");
-    await clickEnabledButton(page, /^Importer$|^Import$/);
+    await clickEnabledButton(page, /^Erstatt fra fil$|^Replace from file$/);
     await (await chooser).setFiles({
       name: "course.json",
       mimeType: "application/json",
@@ -3690,10 +3690,11 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/courses");
     const row = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
     await expect(row).toBeVisible();
-    await expect(row.locator('[data-action="archive"]')).toBeVisible();
+    // #1169 skive 3: Arkiver står under «Mer».
+    await expect(row.locator('[data-action="archive"]')).toHaveCount(1);
 
     page.once("dialog", (dialog) => dialog.accept());
-    await row.locator('[data-action="archive"]').click();
+    await (await revealRowAction(page, row.locator('[data-action="archive"]'))).click();
 
     // #673/#705-UX(A): after archiving the course is hidden from the default "Aktive" filter; the
     // "Arkiverte" filter pill reveals it.
@@ -3881,7 +3882,9 @@ test.describe("admin content browser coverage", () => {
       courses: [
         {
           id: "course-1",
-          title: { "en-GB": "Trade unions" },
+          // #1178: navnet på alle tre språk, som alle kurs på stage (67 av 67, 25.11.2026). Med bare engelsk oversatte den gamle
+          // lagringen navnet til bokmål av seg selv; nå oversettes bare det som er endret, og bokmålsnavnet kreves ved lagring.
+          title: { "en-GB": "Trade unions", nb: "Fagforeninger", nn: "Fagforeiningar" },
           description: { "en-GB": "Original description" },
           certificationLevel: "basic",
           moduleCount: 0,
@@ -3967,6 +3970,8 @@ test.describe("admin content browser coverage", () => {
 
     await expect(page.locator("#deleteDialog")).toHaveAttribute("open", "");
     await expect(page.locator("#deleteDialogText")).toContainText("Trade unions");
+    // #1168: teksten sier hva som skjer med både modulene og seksjonene, ikke bare modulene.
+    await expect(page.locator("#deleteDialogText")).toContainText("The modules and sections stay in the library as they are.");
   });
 
   // #705: enhetlig livssyklus — kurslista har nå Avpubliser (motstykke til Publiser) + status-merkelapp.
@@ -3997,10 +4002,12 @@ test.describe("admin content browser coverage", () => {
     const row = page.locator("#coursesTableBody tr").filter({ hasText: "Trade unions" });
     // #705: course badge is now shared-i18n; e2e boots on en-GB → English labels.
     await expect(row.locator(".status-badge")).toHaveText("Published");
-    await expect(row.locator('[data-action="unpublish"]')).toBeVisible();
+    await expect(row.locator('[data-action="unpublish"]')).toHaveCount(1);
 
-    page.once("dialog", (dialog) => dialog.accept());
-    await row.locator('[data-action="unpublish"]').click();
+    // #1168: sidas dialog (som «Publiser»), ikke nettleserens spørreboks.
+    await (await revealRowAction(page, row.locator('[data-action="unpublish"]'))).click();
+    await expect(page.locator("#cascadePublishTitle")).toHaveText("Unpublish «Trade unions»?");
+    await page.locator("#cascadePublishConfirmBtn").click();
 
     await expect.poll(() => state.mutableCourses[0]?.publishedAt ?? null).toBeNull();
     // Etter avpublisering: status → Utkast, og Publiser-knappen kommer tilbake.

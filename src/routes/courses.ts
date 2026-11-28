@@ -8,18 +8,17 @@ import { pairKey } from "../modules/course/learnerVisibility.js";
 import { runContentReadForLearner } from "../db/contentLock.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
-import { normalizeLocale } from "../i18n/locale.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 import { ConflictError, NotFoundError } from "../errors/AppError.js";
 import { sortCoursesForParticipant } from "../modules/course/courseOrdering.js";
 import {
-  listUserEnrollments,
   selfEnroll,
   // #959: deltakerrutene henter kurs GJENNOM denne. `findCourseById` er ufiltrert og hører til
   // forfatter-/systemflatene; `course-visibility-guard` nekter den i denne fila.
   findCourseForParticipant,
   getUserClassIds,
-  getClassAssignedCourseDueDates,
-  deriveStatuses,
+  getClassAssignedCourseDeadlines,
+  listParticipantEnrollments,
   sortThemesByName,
   getMyCoursesProgress,
 } from "../modules/course/index.js";
@@ -46,7 +45,7 @@ coursesRouter.get("/", async (request, response, next) => {
     return;
   }
 
-  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+  const locale = requestLocale(request);
 
   try {
     // #1139 skive 0: framdriften er flyttet uendret til `getMyCoursesProgress`, som den ukentlige e-posten også bruker.
@@ -78,29 +77,16 @@ coursesRouter.get("/enrollments", async (request, response, next) => {
   }
   try {
     const now = new Date();
-    const individual = await listUserEnrollments(userId, now);
-    const seen = new Set(individual.map((e) => e.courseId));
-
     // #645/CL-2: also surface courses assigned via a class the user belongs to (dynamic, not stored).
-    // Individual enrolments win on overlap (they carry the explicit assignedAt/source).
+    // #1192 punkt 2: fristen per kurs etter `effectiveDeadline` (en tildeling vinner; en SELF-påmelding skjuler ikke klassens
+    // frist), og statusene i ett kall (#1156).
     const classIds = await getUserClassIds({
       userId,
       roles: request.context?.roles ?? [],
       groupIds: request.context?.principal?.groupIds,
     });
-    const classCourseDue = await getClassAssignedCourseDueDates(classIds, userId);
-    // #1156: statusene i ett kall (`deriveStatuses`), ikke ett per kurs.
-    const fromClasses = [...classCourseDue.entries()].filter(([courseId]) => !seen.has(courseId));
-    const statuses = await deriveStatuses(fromClasses.map(([courseId, dueAt]) => ({ userId, courseId, dueAt })), now);
-    const classEntries = fromClasses.map(([courseId, dueAt]) => ({
-      courseId,
-      source: "CLASS" as const,
-      dueAt: dueAt ? dueAt.toISOString() : null,
-      assignedAt: null,
-      status: statuses.get(pairKey(userId, courseId))!,
-    }));
-
-    response.json({ enrollments: [...individual, ...classEntries] });
+    const classDeadlines = await getClassAssignedCourseDeadlines(classIds, userId);
+    response.json({ enrollments: await listParticipantEnrollments(userId, classDeadlines, now) });
   } catch (error) {
     next(error);
   }
@@ -113,7 +99,7 @@ coursesRouter.get("/completions", async (request, response, next) => {
     return;
   }
 
-  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+  const locale = requestLocale(request);
 
   try {
     // #580 follow-up: backfill any completion whose gates are met but whose certificate was never
@@ -153,7 +139,7 @@ coursesRouter.get("/completions/:certificateId", async (request, response, next)
     return;
   }
 
-  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+  const locale = requestLocale(request);
 
   try {
     const completion = await courseRepository.findCourseCompletionByCertificateId(
@@ -202,7 +188,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     return;
   }
 
-  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+  const locale = requestLocale(request);
 
   try {
     // #959: ÉN dør. Signaturen krever hvem som spør, så synligheten kan ikke bli glemt her —
@@ -225,7 +211,8 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     const moduleIds = course.modules.filter((cm) => cm.module?.archivedAt == null).map((cm) => cm.moduleId);
     const [moduleProgress, latestSubmissions] = await Promise.all([
       // #934 skive 5a-3: den ene veien til fremdrift i kurs, som porten for kursbevis. Teller og modulstatus leser det samme.
-      courseRepository.findModuleProgress({ userIds: [userId], courses: [{ courseId: course.id, moduleIds }] }),
+      // Ruta har slått fast at deltakeren ser kurset (med innloggingen), som for lesingene under.
+      courseRepository.findModuleProgress({ userIds: [userId], courses: [{ courseId: course.id, moduleIds }], knownVisibleCourseIds: [course.id] }),
       moduleIds.length > 0
         ? queryLatestSubmissionsForModules(userId, moduleIds)
         : Promise.resolve([]),
@@ -400,7 +387,7 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
     response.status(401).json({ error: "unauthorized" });
     return;
   }
-  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+  const locale = requestLocale(request);
   try {
     // #959: ÉN dør. Signaturen krever hvem som spør, så synligheten kan ikke bli glemt her —
     // og `null` dekker alle tre årsakene (finnes ikke / ikke publisert / ikke synlig for deg)

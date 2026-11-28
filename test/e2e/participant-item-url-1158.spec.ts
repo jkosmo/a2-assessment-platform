@@ -318,16 +318,25 @@ test.describe("#1158 kursnivået er som før", () => {
     await expect(readerBody(page)).toContainText("Tekst i s1");
   });
 
-  test("«← Tilbake til Mine kurs» mens modulen er åpen: lista; tilbake åpner modulen igjen i kurset", async ({ page }) => {
+  // #1162 skive 5: modulen står i lesemodus som seksjonen, så «← Tilbake til Mine kurs» vises ikke mens den er åpen (før gikk
+  // testen via den). Historikken er som for seksjonen over.
+  test("lista → kurs → modul: tilbake går til kurset, så til lista; fram åpner modulen igjen", async ({ page }) => {
     await mock(page);
     await openCourse(page);
     await moduleRow(page).click();
     await expect(workspace(page)).toBeVisible();
-    await page.locator("#courseBackBtn").click();
+    await expect(page).toHaveURL(/courseId=c1&moduleId=m1$/);
+    await expect(page.locator("#courseBackBtn")).toBeHidden();
+
+    await page.goBack();
+    await expectCourseView(page);
+    await page.goBack();
     await expect(course(page, "c2")).toBeVisible();
     await expect(page).toHaveURL(/\/participant$/);
 
-    await page.goBack();
+    await page.goForward();
+    await expectCourseView(page);
+    await page.goForward();
     await expect(workspace(page)).toBeVisible();
     await expect(page).toHaveURL(/courseId=c1&moduleId=m1$/);
   });

@@ -1,5 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import type { CourseEnrollmentSource } from "@prisma/client";
+import { dueAtDiffers } from "./effectiveDeadline.js";
 
 // #496/EN-1: persistence for course enrollments (assign / revoke / read). Status is NOT stored here
 // - it is derived (see enrollmentStatus.ts) by the service layer (EN-2) from CourseCompletion +
@@ -19,17 +20,28 @@ export function createEnrollmentRepository(client: EnrollmentRepositoryClient = 
   return {
     // Idempotent assign: re-assigning an existing (or previously revoked) enrollment updates the
     // due date / source and clears revokedAt, rather than failing on the @@unique(userId,courseId).
-    assignEnrollment(input: AssignEnrollmentInput) {
+    //
+    // #1192 punkt 2: `dueSetAt` er når fristen sist ble satt eller endret. Først én `UPDATE` som bare treffer en rad der fristen
+    // er en annen, eller som var trukket tilbake (en ny tildeling setter fristen på nytt), og skriver frist og tidspunkt
+    // sammen. Treffer den ikke (raden finnes ikke, eller har samme frist), går upserten som før, uten å røre tidspunktet. Samme
+    // dato sendt på nytt gjør altså ikke en gammel frist ny.
+    async assignEnrollment(input: AssignEnrollmentInput): Promise<void> {
+      const now = new Date();
       const data = {
         assignedById: input.assignedById,
         source: input.source,
         dueAt: input.dueAt,
         revokedAt: null,
       };
-      return client.courseEnrollment.upsert({
+      const { count } = await client.courseEnrollment.updateMany({
+        where: { userId: input.userId, courseId: input.courseId, OR: [dueAtDiffers(input.dueAt), { revokedAt: { not: null } }] },
+        data: { ...data, dueSetAt: input.dueAt ? now : null, assignedAt: now },
+      });
+      if (count > 0) return;
+      await client.courseEnrollment.upsert({
         where: { userId_courseId: { userId: input.userId, courseId: input.courseId } },
-        create: { userId: input.userId, courseId: input.courseId, ...data },
-        update: { ...data, assignedAt: new Date() },
+        create: { userId: input.userId, courseId: input.courseId, ...data, dueSetAt: input.dueAt ? now : null },
+        update: { ...data, assignedAt: now },
       });
     },
 
@@ -79,13 +91,25 @@ export function createEnrollmentRepository(client: EnrollmentRepositoryClient = 
     // ⚠️ Filteret ligger i TJENESTEN, ikke i spoerringen. Et spoerringsfilter ville skjult hvor
     // mange varsler som ble holdt tilbake; et stille undertrykt varsel er like vanskelig aa
     // oppdage som et feilsendt. Tjenesten teller dem i stedet (`skippedCourseUnavailable`).
+    // #1192 punkt 2: bare TILDELINGER (ikke SELF), som `effectiveDeadline` regner dem.
     findIndividualEnrollmentsWithDueDate(upperBound: Date) {
       return client.courseEnrollment.findMany({
-        where: { revokedAt: null, dueAt: { not: null, lte: upperBound } },
+        where: { revokedAt: null, source: { not: "SELF" }, dueAt: { not: null, lte: upperBound } },
         include: {
           user: { select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true, preferredLocale: true } },
           course: { select: { id: true, title: true, publishedAt: true, archivedAt: true } },
         },
+      });
+    },
+
+    // #1192 punkt 2: tildelingene (ikke SELF, ikke trukket tilbake) for parene påminnelsene fant gjennom klasser, uansett frist,
+    // så en tildeling med frist utenfor vinduet eller uten frist kan vinne over klassen (`effectiveDeadline`). Spørringen tar
+    // kryssproduktet av personer og kurs; tjenesten slår opp parene den har.
+    findAssignmentsForPairs(userIds: string[], courseIds: string[]) {
+      if (userIds.length === 0 || courseIds.length === 0) return Promise.resolve([]);
+      return client.courseEnrollment.findMany({
+        where: { userId: { in: userIds }, courseId: { in: courseIds }, revokedAt: null, source: { not: "SELF" } },
+        select: { userId: true, courseId: true, source: true, dueAt: true, dueSetAt: true },
       });
     },
   };

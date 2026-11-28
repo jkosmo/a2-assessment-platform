@@ -252,7 +252,7 @@ export function normalizeModuleTitlePatch(title) {
  *     ha tekst; et språk som er tømt, oversettes ikke fra.
  *   - Målene er de andre språkene som IKKE er endret. Har forfatteren selv skrevet på to språk i samme lagring, står begge.
  *
- * Felles for kurs, moduler og seksjoner: seksjonene bruker den fra 2.167.0; kurs og moduler skal over i #1177/#1178.
+ * Felles for kurs, moduler og seksjoner: seksjonene bruker den fra 2.167.0, kurs fra 2.182.0 (#1178); moduler skal over i #1177.
  * Ren funksjon, så regelen kan prøves uten nettverket.
  *
  * @param {Record<string, { current: Record<string,string>|null|undefined, saved: Record<string,string>|null|undefined }>} fields

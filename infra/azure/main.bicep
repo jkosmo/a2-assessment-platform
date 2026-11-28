@@ -7,9 +7,10 @@ param location string = resourceGroup().location
 @description('Global app name prefix. Must be lowercase alphanumeric and hyphen.')
 param appNamePrefix string = 'a2-assessment-platform'
 
-@description('App Service SKU name.')
+@description('App Service SKU name. Prod is B2 from 2026-11-24 (B1 ran out of memory during a normal deploy).')
 @allowed([
   'B1'
+  'B2'
   'S1'
   'P0v3'
 ])
@@ -145,6 +146,15 @@ param azureOpenAiAuthoringTokenLimitParameter string = ''
 
 @description('Azure OpenAI deployment for assessment (scoring). Empty = use azureOpenAiDeployment. Set in prod and stage since 2026-10-11 (gpt-5.4-mini); without it here, a full infra deploy would drop the app setting and move assessment back to the default deployment.')
 param azureOpenAiAssessmentDeployment string = ''
+
+@description('Temperature for assessment (scoring) only. Do not pass empty: the app reads an empty value as 0, not as a fallback to azureOpenAiTemperature. Not yet a GitHub variable; change the default here. Set by hand in prod (0) before it was in Bicep; the default keeps that value, so a full infra deploy does not move scoring to the general temperature (2.181.2).')
+param azureOpenAiAssessmentTemperature string = '0'
+
+@description('Worker override of config/assessment-rules.json aiInfluence.contentSimilarity.enabled (#475). Set by hand in prod (true) before it was in Bicep; the default keeps the shadow signal on there (2.181.2).')
+param aiContentSimilarityEnabled string = 'true'
+
+@description('Worker override of aiInfluence.contentSimilarity.shadowMode (#475). true = compute and store, route no one.')
+param aiContentSimilarityShadow string = 'true'
 
 @description('Azure OpenAI deployment for authoring (content generation). Empty = use azureOpenAiDeployment.')
 param azureOpenAiAuthoringDeployment string = ''
@@ -421,7 +431,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   kind: 'linux'
   sku: {
     name: appServiceSkuName
-    tier: appServiceSkuName == 'B1' ? 'Basic' : (appServiceSkuName == 'S1' ? 'Standard' : 'PremiumV3')
+    tier: startsWith(appServiceSkuName, 'B') ? 'Basic' : (appServiceSkuName == 'S1' ? 'Standard' : 'PremiumV3')
     capacity: 1
   }
   tags: {
@@ -857,6 +867,10 @@ resource webAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
           value: azureOpenAiAssessmentDeployment
         }
         {
+          name: 'AZURE_OPENAI_ASSESSMENT_TEMPERATURE'
+          value: azureOpenAiAssessmentTemperature
+        }
+        {
           name: 'AZURE_OPENAI_AUTHORING_DEPLOYMENT'
           value: azureOpenAiAuthoringDeployment
         }
@@ -1110,6 +1124,18 @@ resource workerAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         {
           name: 'AZURE_OPENAI_ASSESSMENT_DEPLOYMENT'
           value: azureOpenAiAssessmentDeployment
+        }
+        {
+          name: 'AZURE_OPENAI_ASSESSMENT_TEMPERATURE'
+          value: azureOpenAiAssessmentTemperature
+        }
+        {
+          name: 'AI_CONTENT_SIMILARITY_ENABLED'
+          value: aiContentSimilarityEnabled
+        }
+        {
+          name: 'AI_CONTENT_SIMILARITY_SHADOW'
+          value: aiContentSimilarityShadow
         }
         {
           name: 'AZURE_OPENAI_AUTHORING_DEPLOYMENT'
@@ -1765,6 +1791,9 @@ resource notificationFailureAlert 'Microsoft.Insights/scheduledQueryRules@2021-0
 // availability test runs from outside Azure and keeps reporting — so it fires even if the whole
 // App Service is deleted (the May 2026 incident scenario). Gated on createObservabilityActionGroup
 // so it lands in any environment that has an alert receiver wired (stage included → testable there).
+// Frequency 900 s (2.181.2, product owner 2026-11-23): at 300 s the two tests cost ~231 kr a month in prod, the
+// largest line in the resource group. 900 is Azure's maximum; the alerts' windowSize is PT15M to match, so every
+// window holds a result. Cost: an outage can be reported up to 10 minutes later.
 resource healthzAvailabilityTest 'Microsoft.Insights/webtests@2022-06-15' = if (createObservabilityActionGroup) {
   name: toLower('${appNamePrefix}-${envCode}-healthz-ping')
   location: location
@@ -1782,7 +1811,7 @@ resource healthzAvailabilityTest 'Microsoft.Insights/webtests@2022-06-15' = if (
     Name: '${appNamePrefix}-${envCode} /healthz availability'
     Description: 'External ping of /healthz from EMEA — fires even if the App Service is deleted (#405).'
     Enabled: true
-    Frequency: 300
+    Frequency: 900
     Timeout: 30
     Kind: 'standard'
     RetryEnabled: true
@@ -1821,7 +1850,7 @@ resource healthzAvailabilityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' =
       appInsights.id
     ]
     evaluationFrequency: 'PT5M'
-    windowSize: 'PT5M'
+    windowSize: 'PT15M'
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
       webTestId: healthzAvailabilityTest.id
@@ -1855,7 +1884,7 @@ resource workerHealthzAvailabilityTest 'Microsoft.Insights/webtests@2022-06-15' 
     Name: '${appNamePrefix}-${envCode} worker /healthz availability'
     Description: 'External ping of the WORKER role /healthz from EMEA — catches a worker-role outage that the web-app test cannot see (#497-incident).'
     Enabled: true
-    Frequency: 300
+    Frequency: 900
     Timeout: 30
     Kind: 'standard'
     RetryEnabled: true
@@ -1892,7 +1921,7 @@ resource workerHealthzAvailabilityAlert 'Microsoft.Insights/metricAlerts@2018-03
       appInsights.id
     ]
     evaluationFrequency: 'PT5M'
-    windowSize: 'PT5M'
+    windowSize: 'PT15M'
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
       webTestId: workerHealthzAvailabilityTest.id

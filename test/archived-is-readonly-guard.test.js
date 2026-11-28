@@ -145,7 +145,8 @@ const EXPECTED = new Map([
   ...each(unntak(NY), [`${CC}#createCourse course.create`, 1]),
   // Temaene: fra `updateCourse` (vakt i claimCourseRevision) og `createCourse` (nytt kurs).
   ...each(by(`${CV}#claimCourseRevision`), ["modules/course/courseThemeService.ts#setCourseThemes courseThemeAssignment.createMany", 1], ["modules/course/courseThemeService.ts#setCourseThemes courseThemeAssignment.deleteMany", 1]),
-  ...each(by(`${CD}#saveCourseDraft`), [`${CD}#saveCourseDraft courseDraft.create`, 1], [`${CD}#saveCourseDraft courseDraft.update`, 1]),
+  // 2.192.0: lagringen står i den låste varianten («Døp om» kaller den under sin egen lås); `saveCourseDraft` pakker den inn.
+  ...each(by(`${CD}#saveCourseDraftLocked`), [`${CD}#saveCourseDraftLocked courseDraft.create`, 1], [`${CD}#saveCourseDraftLocked courseDraft.update`, 1]),
   ...each(by(`${CD}#publishCourseDraft`), [`${CD}#publishCourseDraft courseDraft.delete`, 1]),
   ...each(unntak("«Forkast utkast»: veien ut for et utkast, også på et arkivert kurs (courseDraft.ts)"), [`${CD}#discardCourseDraft courseDraft.delete`, 1]),
   ...each(unntak(`${ARKIVERING}: kursets utkast forkastes når kurset arkiveres`), [`${CD}#discardCourseDraftOnArchive courseDraft.delete`, 1]),

@@ -20,7 +20,9 @@ import {
   listSectionAssets,
   MAX_ASSET_BYTES,
 } from "../modules/course/index.js";
-import { findActiveCoursesForSections } from "../modules/course/contentLifecycle.js";
+import { findActiveCoursesForSections, findActiveUsesOfItems } from "../modules/course/contentLifecycle.js";
+import { prisma } from "../db/prisma.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 import { sectionVersionTitle } from "../modules/course/sectionTitle.js";
 import { createRetentionContext, evaluateArchivedItems, retentionRequested, type ArchivedRetention } from "../modules/content/archivedRetention.js";
 import {
@@ -634,6 +636,23 @@ adminSectionsRouter.post("/:sectionId/unpublish", requireContentOwnership("SECTI
   try {
     const section = await unpublishSection(request.params.sectionId, request.context?.userId);
     response.json({ section: toDetail(section) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #1168: hva en arkivering av seksjonen ville møtt, så dialogen kan sjekke FØR forfatteren svarer (før: spørreboks, så avslag
+// etterpå). Kursene kommer fra den SAMME utregningen som sperren i `archiveSection` (`findActiveUsesOfItems`, «brukes andre
+// steder»), som modulens forhåndsvisning. Bare lesing; arkiveringen sjekker på nytt under innholdslåsen. Samme vakt som
+// `POST …/archive`.
+adminSectionsRouter.get("/:sectionId/archive-preview", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
+  try {
+    const sectionId = request.params.sectionId;
+    const section = await prisma.courseSection.findUnique({ where: { id: sectionId }, select: { archivedAt: true, activeVersionId: true } });
+    if (!section) throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+    const uses = (await findActiveUsesOfItems({ moduleIds: [], sectionIds: [sectionId] }, { locale: requestLocale(request) }))
+      .sections.get(sectionId) ?? [];
+    response.json({ sectionId, archived: section.archivedAt !== null, published: section.activeVersionId !== null, uses });
   } catch (error) {
     next(error);
   }

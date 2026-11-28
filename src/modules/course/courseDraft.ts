@@ -21,6 +21,8 @@ import { AppError, ConflictError, NotFoundError } from "../../errors/AppError.js
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { courseBodySchema, courseItemListSchema } from "./courseSchemas.js";
+import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
+import { sameLocalizedText } from "./courseVersioning.js";
 
 type DraftReader = Pick<DbTransactionClient, "courseDraft">;
 
@@ -178,14 +180,21 @@ function assertIsLoadedDraft(courseId: string, existing: CourseDraftRow | null, 
  * elementene og temaene finnes og kan brukes, i samme transaksjon, så en feil kommer ved lagring og ikke først ved
  * publisering. Tellerne sjekkes først, som ved direkte lagring: en utdatert fane får vite at den er utdatert.
  */
-export async function saveCourseDraft(input: {
+export async function saveCourseDraft(input: SaveCourseDraftInput): Promise<CourseDraftRow> {
+  return runContentWrite((tx) => saveCourseDraftLocked(tx, input));
+}
+
+type SaveCourseDraftInput = {
   courseId: string;
   payload: unknown;
   loaded: LoadedCourseEdition;
   actorId?: string;
   checkUsable?: (tx: ContentWriteTx) => Promise<void>;
-}): Promise<CourseDraftRow> {
-  return runContentWrite(async (tx) => {
+};
+
+/** Som `saveCourseDraft`, i en transaksjon som alt holder innholdslåsen («Døp om»: lesingen, valget og skrivingen under én lås). */
+async function saveCourseDraftLocked(tx: ContentWriteTx, input: SaveCourseDraftInput): Promise<CourseDraftRow> {
+  {
     const course = await tx.course.findUnique({ where: { id: input.courseId }, select: { publishedAt: true, contentRevision: true } });
     if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
     // #1151: et arkivert kurs er avpublisert (I3), og svaret skal si at det er arkivert, ikke be om å publisere.
@@ -236,6 +245,79 @@ export async function saveCourseDraft(input: {
       tx,
     );
     return saved;
+  }
+}
+
+/**
+ * #1169 skive 4c: utkastets tittel per kurs, som lagret tekst (`localizedTextCodec.serialize`), for kurslista. Bare kurs der
+ * utkastet har en tittel og kan leses; et utkast som ikke kan leses, gir ingen (omdøpingen svarer da `course_draft_unreadable`).
+ */
+export async function findCourseDraftTitles(client: DraftReader, courseIds: readonly string[]): Promise<Map<string, string>> {
+  const titles = new Map<string, string>();
+  if (courseIds.length === 0) return titles;
+  const rows = await client.courseDraft.findMany({ where: { courseId: { in: [...courseIds] } }, select: DRAFT_SELECT });
+  for (const row of rows) {
+    try {
+      const payload = readCourseDraftPayload(row);
+      if (payload.title) titles.set(row.courseId, localizedTextCodec.serialize(payload.title));
+    } catch {
+      // Kan ikke leses: ingen tittel i lista.
+    }
+  }
+  return titles;
+}
+
+export type RenameCourseResult = { renamedIn: "draft" | "course" | "unchanged" };
+
+/**
+ * #1169 skive 4c (doc/design/PLAN_1169_4B_DUPLISER_KURS.md, § 6; produkteier 28.11.2026, DECISIONS punkt 8): «Døp om» i kurslista.
+ * Alt under ÉN innholdslås: lesingen, valget og skrivingen.
+ *   - Arbeidstittelen er utkastets tittel når et utkast finnes, ellers kursets. Er den ikke den lista viste (`expectedTitle`), har
+ *     noen endret navnet siden: `409 course_changed`, ingenting skrevet. Samme navn som nå: ingenting skrives (`unchanged`).
+ *   - Publisert kurs: navnet skrives i utkastet. Finnes et, får det ny tittel og resten står; ellers lages et med bare tittelen og
+ *     kursets elementer (`readItems`). Publiseres det, endres bare navnet.
+ *   - Ikke publisert: rett i kurset (`writeCourse`, ruta sender `updateCourse` med transaksjonen og telleren).
+ * Elementene sjekkes ikke her (ingen `checkUsable`): omdøpingen endrer ikke lista, og publiseringen sjekker alt på nytt.
+ */
+export async function renameCourse(input: {
+  courseId: string;
+  title: LocalizedText;
+  expectedTitle: string;
+  actorId?: string;
+  readItems: (tx: ContentWriteTx) => Promise<CourseDraftPayload["items"]>;
+  writeCourse: (tx: ContentWriteTx, title: string, expectedRevision: number) => Promise<unknown>;
+}): Promise<RenameCourseResult> {
+  return runContentWrite(async (tx) => {
+    const course = await tx.course.findUnique({ where: { id: input.courseId }, select: { title: true, publishedAt: true, contentRevision: true } });
+    if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    await assertNotArchived(tx, { type: "COURSE", id: input.courseId });
+    const existing = await findCourseDraft(tx, input.courseId);
+    const draftPayload = existing ? readCourseDraftPayload(existing) : null;
+    const workingTitle = draftPayload?.title ? localizedTextCodec.serialize(draftPayload.title) : course.title;
+    if (!sameLocalizedText(input.expectedTitle, workingTitle)) {
+      throw new ConflictError(
+        "course_changed",
+        "Someone else changed this course's name after you opened the list. Reload the list to see it; nothing was saved.",
+        { courseId: input.courseId },
+      );
+    }
+    const title = localizedTextCodec.serialize(input.title);
+    if (sameLocalizedText(title, workingTitle)) return { renamedIn: "unchanged" };
+
+    if (course.publishedAt == null) {
+      await input.writeCourse(tx, title, course.contentRevision);
+      return { renamedIn: "course" };
+    }
+    const payload = courseDraftPayloadSchema.parse(
+      draftPayload ? { ...draftPayload, title: input.title } : { title: input.title, items: await input.readItems(tx) },
+    );
+    await saveCourseDraftLocked(tx, {
+      courseId: input.courseId,
+      payload,
+      loaded: existing ? { draftId: existing.id, revision: existing.revision } : { expectedRevision: course.contentRevision },
+      actorId: input.actorId,
+    });
+    return { renamedIn: "draft" };
   });
 }
 

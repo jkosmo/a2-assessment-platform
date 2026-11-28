@@ -85,7 +85,7 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
       const { calls } = await setup(page, { policy: "OPEN" });
       const button = await openFromList(page);
       await expect(page.locator("#cascadePublishTitle")).toHaveText("Publisere kurset?");
-      await expect(dialog(page).locator("[data-publish-audience='open']")).toContainText("Alle deltakere. Kurset er åpent");
+      await expect(dialog(page).locator("[data-publish-audience='open']")).toContainText("Alle deltakere, som et frivillig kurs. Kurset er åpent for alle");
       await expect(page.locator("#cascadePublishConfirmBtn")).toHaveText("Publiser");
       await expect(page.locator("#cascadePublishCancelBtn")).toBeFocused();
       await noHorizontalOverflow(page, dialog(page));
@@ -193,7 +193,7 @@ test.describe("#1164 publiseringsdialogen, de andre veiene", () => {
     expect(calls.publish).toEqual([]);
   });
 
-  for (const [loc, expected] of [["en-GB", "All participants."], ["nn", "Alle deltakarar."]] as const) {
+  for (const [loc, expected] of [["en-GB", "All participants, as an optional course."], ["nn", "Alle deltakarar, som eit frivillig kurs."]] as const) {
     test(`${loc}: dialogen er oversatt, uten rå nøkler`, async ({ page }) => {
       await setup(page, RESTRICTED, { loc });
       await openFromList(page);
@@ -263,6 +263,9 @@ test.describe("#1164 «Publiser utkastet»", () => {
     // Synlig, ikke bare i DOM-en (mutasjonsprøven: et skjult avsnitt besto `toContainText`).
     await expect(versionDialog.locator("[data-publish-audience='restricted']")).toBeVisible();
     await expect(versionDialog.locator("[data-publish-audience='restricted']")).toContainText("Prosjektledere Bergen");
+    // #1168: «Avpubliser» bruker de samme tallene med egne ord; her er det publiseringens.
+    await expect(versionDialog.locator("[data-publish-audience='restricted'] h3")).toHaveText("Hvem ser kurset etterpå");
+    await expect(versionDialog.locator("[data-publish-audience='restricted']")).toContainText("Bare de som er tildelt kurset:");
     await expect(dialog(page)).toBeHidden();
     await page.locator("#courseVersionSaveBtn").click();
     await expect.poll(() => draftPublish.length).toBe(1);

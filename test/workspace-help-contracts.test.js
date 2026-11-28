@@ -23,6 +23,8 @@ const pagesWithHelp = [
   // #896 S3c: public/admin-content-advanced.html er slettet. Sto her til 2026-08-18.
   "public/admin-content-courses.html",
   "public/admin-content-calibration.html",
+  // #1171 (2.193.0)
+  "public/admin-content-themes.html",
 ];
 
 describe("workspace help contracts", () => {

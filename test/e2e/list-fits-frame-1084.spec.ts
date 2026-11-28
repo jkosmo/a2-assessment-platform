@@ -70,7 +70,8 @@ test.describe("#1084 — lista får plass i ramma si, og «Mer» er synlig uten 
 
   // I et smalere vindu får ikke sju kolonner plass. Da skal resten av raden rulle inn under
   // handlingene, som står igjen innenfor ramma. Dette er garantien som ikke avhenger av innholdet.
-  for (const bredde of [1024, 800]) {
+  // #1169 skive 3: raden har Åpne · hovedhandling · «Mer», og tabellen får plass på 1024 px nå. 800 px er fortsatt for smalt.
+  for (const bredde of [800]) {
     test(`${bredde} px: tabellen er for bred, men handlingene står innenfor ramma — også etter rulling`, async ({ page }) => {
       await åpne(page, bredde);
       const før = await mål(page);
@@ -105,7 +106,8 @@ test.describe("#1084 — lista får plass i ramma si, og «Mer» er synlig uten 
     const knapper = page.locator('tr[data-row-id="m1"] td.col-actions').locator(".row-action-btn:visible, .row-more > summary");
     const topper = await knapper.evaluateAll((els) => [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().top)))]);
     expect(topper, "alle knappene i raden står på samme linje").toHaveLength(1);
-    expect(await knapper.count()).toBeGreaterThanOrEqual(4);
+    // #1169 skive 3: Åpne og «Mer» (og hovedhandlingen når tilstanden har en) — før fire synlige knapper.
+    expect(await knapper.count()).toBeGreaterThanOrEqual(2);
     // …og statusmerkene gir plassen: «Publisert» og «Nyere utkast» står under hverandre, så
     // statuskolonnen er ett merke bred og ikke to. Hvert merke er fortsatt hele på én linje.
     const merker = page.locator('tr[data-row-id="m1"] td.col-status > *');

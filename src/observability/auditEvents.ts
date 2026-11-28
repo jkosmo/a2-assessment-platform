@@ -103,6 +103,9 @@ export const auditActions = {
   },
   course: {
     created: "course_created",
+    // #1169 skive 4b: «Dupliser kurs» — et nytt kurs med de samme modulene og seksjonene. Opprettelsen og elementene spores som
+    // `created` og `itemsUpdated` (i samme transaksjon); denne sier hvilket kurs det er en kopi av.
+    duplicated: "course_duplicated",
     // #805: course metadata edits (title/description/level/policy/discussions) had no audit trail.
     updated: "course_updated",
     // AA-5 (#653): item-sekvensen er en write i agent-orkestreringen og må være sporbar.
@@ -410,6 +413,7 @@ export type AuditMetadataByAction = {
   [auditActions.agentAuthoring.tokenIssued]: EventMetadata<{ tokenId: string; expiresAt: string }>;
   [auditActions.agentAuthoring.tokenRevoked]: EventMetadata<{ tokenId: string }>;
   [auditActions.course.created]: EventMetadata<{ courseId: string }>;
+  [auditActions.course.duplicated]: EventMetadata<{ courseId: string; sourceCourseId: string; itemCount: number }>;
   [auditActions.course.updated]: EventMetadata<{ courseId: string; changedFields: string[] }>;
   [auditActions.course.itemsUpdated]: EventMetadata<{ courseId: string; itemCount: number }>;
   [auditActions.course.draftSaved]: EventMetadata<{ courseId: string; draftId: string; revision: number; created: boolean }>;

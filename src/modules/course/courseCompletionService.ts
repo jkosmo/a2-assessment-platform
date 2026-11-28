@@ -94,7 +94,8 @@ async function findCompletionToIssue(
 
   // #934 skive 5a-3: regelen velges der, ut fra bryteren. I den låste veien er bryteren og beståttene lest i samme transaksjon.
   if (moduleIds.length > 0) {
-    const progress = await repo.findModuleProgress({ userIds: [userId], courses: [{ courseId: course.id, moduleIds }] });
+    // 28.11.2026: et bestått teller bare i kurs deltakeren ser, med det samme kalleren vet om synligheten som lesingene under.
+    const progress = await repo.findModuleProgress({ userIds: [userId], courses: [{ courseId: course.id, moduleIds }], ...visibility });
     if (progress.passedModuleIds(userId, course.id).size < moduleIds.length) return null;
   }
 
@@ -193,9 +194,13 @@ async function evaluateCourseCompletionLocked(locked: LearnerContentTx, userId: 
 export async function issueMissingCompletionsBeforeArchive(locked: ContentWriteTx, courseId: string, userIds: readonly string[]): Promise<string[]> {
   if (userIds.length === 0) return [];
   const learners = await lockLearnersInContentWrite(locked, userIds);
+  // Synligheten for alle kandidatene i ÉN omgang, under den eksklusive låsen; målingen per deltaker slår da ikke opp noe.
+  const course = await learners.course.findUnique({ where: { id: courseId }, select: { id: true, enrollmentPolicy: true } });
+  const seeing = course ? (await findLearnersSeeingCourses(learners, [course], [...userIds])).get(courseId) ?? new Set<string>() : new Set<string>();
   const issued: string[] = [];
   for (const userId of [...new Set(userIds)].sort()) {
-    if (await evaluateCourseCompletionLocked(learners, userId, courseId)) issued.push(userId);
+    const visibility: KnownVisibility = { knownVisibleCourseIds: seeing.has(userId) ? [courseId] : [], visibilityComplete: true };
+    if (await evaluateCourseCompletionLocked(learners, userId, courseId, visibility)) issued.push(userId);
   }
   return issued;
 }
@@ -207,8 +212,16 @@ export async function issueMissingCompletionsBeforeArchive(locked: ContentWriteT
  */
 export async function checkAndIssueCourseCompletions(input: { userId: string; moduleId: string }) {
   const courses = await createCourseRepository(prisma).findPublishedCoursesContainingModule(input.moduleId);
+  if (courses.length === 0) return;
+  // 28.11.2026: et bestått teller bare i kurs deltakeren ser. Synligheten før låsene, for alle kursene i ett sett med spørringer,
+  // som for lesingene (`checkAndIssueCourseCompletionsForSection`). Regnet fra rollene i databasen; bevis som går tapt her
+  // (Entra-grupper), tas av avstemmingen når «Mine kurs» åpnes.
+  const seeing = await findLearnersSeeingCourses(prisma, courses.map((course) => ({ id: course.id, enrollmentPolicy: course.enrollmentPolicy })), [input.userId]);
   for (const course of courses) {
-    await runContentReadForLearner(input.userId, (tx) => evaluateCourseCompletionLocked(tx, input.userId, course.id));
+    if (!seeing.get(course.id)?.has(input.userId)) continue;
+    await runContentReadForLearner(input.userId, (tx) =>
+      evaluateCourseCompletionLocked(tx, input.userId, course.id, { knownVisibleCourseIds: [course.id] }),
+    );
   }
 }
 
@@ -267,7 +280,8 @@ export async function recordSectionRead(
  * have no certificate. This sweep, run when the user opens their certificates page, backfills any
  * completion whose gates (all modules passed + all sections read) are now satisfied.
  * #1156: lesinger gjort i et annet kurs teller bare i kurs deltakeren ser (`findSectionReadCredit`), så avstemmingen utsteder
- * ikke bevis i et begrenset kurs hen ikke er tildelt fordi hen har lest de samme seksjonene et annet sted. Moduler er uendret.
+ * ikke bevis i et begrenset kurs hen ikke er tildelt fordi hen har lest de samme seksjonene et annet sted. Fra 28.11.2026 det samme
+ * for beståtte moduler (moduleCredit.ts).
  * `viewer` er innloggingen, når ruta har den. Synligheten regnes én gang, før løkka og låsene, og er hele svaret for målingene.
  */
 export async function reconcileCourseCompletionsForUser(userId: string, viewer?: { roles: string[]; groupIds?: string[] }) {

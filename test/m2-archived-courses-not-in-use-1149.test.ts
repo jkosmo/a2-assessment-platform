@@ -368,6 +368,43 @@ describe("#1149: listene viser bare aktive kurs som bruk", () => {
     // Koblingen til det arkiverte kurset finnes fortsatt: bare tallet er endret.
     expect(await prisma.courseThemeAssignment.count({ where: { themeId: onlyArchived.id } })).toBe(1);
   });
+
+  // #1168: slettedialogen viste lista sitt tall (bare aktive), mens slettingen kobler fra alle. Forhåndsvisningen teller som
+  // slettingen, og sier hvor mange av dem som er arkivert.
+  it("#1168: temaets slette-forhåndsvisning teller alle kurs som slettingen, og de arkiverte for seg", async () => {
+    const archived = await createCourse("arkivert kurs", "archived", {});
+    const draft = await createCourse("utkast", "draft", {});
+    const published = await createCourse("publisert", "published", {});
+    const mixed = await prisma.courseTheme.create({ data: { name: JSON.stringify(L(tag("tema slett alle tre"))) }, select: { id: true } });
+    const unused = await prisma.courseTheme.create({ data: { name: JSON.stringify(L(tag("tema ubrukt"))) }, select: { id: true } });
+    await prisma.courseThemeAssignment.createMany({
+      data: [
+        { themeId: mixed.id, courseId: archived.id },
+        { themeId: mixed.id, courseId: draft.id },
+        { themeId: mixed.id, courseId: published.id },
+      ],
+    });
+
+    const preview = await request(app).get(`/api/admin/content/themes/${mixed.id}/delete-preview`).set(ADMIN);
+    expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+    expect(preview.body).toEqual({ themeId: mixed.id, courseCount: 3, archivedCourseCount: 1 });
+    // KONTROLL: et tema uten kurs.
+    expect((await request(app).get(`/api/admin/content/themes/${unused.id}/delete-preview`).set(ADMIN)).body)
+      .toEqual({ themeId: unused.id, courseCount: 0, archivedCourseCount: 0 });
+
+    // Slettingen kobler fra det samme tallet.
+    const deleted = await request(app).delete(`/api/admin/content/themes/${mixed.id}`).set(ADMIN);
+    expect(deleted.status).toBe(200);
+    expect(deleted.body.detachedCourseCount).toBe(preview.body.courseCount);
+    expect((await request(app).get(`/api/admin/content/themes/${mixed.id}/delete-preview`).set(ADMIN)).status).toBe(404);
+  });
+
+  it("#1168: bare administratoren får forhåndsvisningen, som slettingen", async () => {
+    const theme = await prisma.courseTheme.create({ data: { name: JSON.stringify(L(tag("tema vakt"))) }, select: { id: true } });
+    const smo = { ...ADMIN, "x-user-id": `smo-1168-${Date.now()}`, "x-user-email": `smo.1168.${Date.now()}@x.test`, "x-user-roles": "SUBJECT_MATTER_OWNER" };
+    expect((await request(app).get(`/api/admin/content/themes/${theme.id}/delete-preview`).set(smo)).status).toBe(403);
+    expect((await request(app).delete(`/api/admin/content/themes/${theme.id}`).set(smo)).status).toBe(403);
+  });
 });
 
 describe("#1149: et arkivert kurs gjenopprettes med et element som er arkivert i mellomtiden", () => {

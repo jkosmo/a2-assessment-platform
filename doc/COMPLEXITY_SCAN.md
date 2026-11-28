@@ -2,7 +2,7 @@
 
 Månedlig måling av om kodebasen samler opp slitasje. Mekanisme 4 i kompleksitetsbremsen.
 
-> **Sist kjørt: 2026-10-21** · neste forfaller **2026-11-21**
+> **Sist kjørt: 2026-11-23** · neste forfaller **2026-12-23**
 
 ⚠️ Datoen over er den eneste kilden. `AGENTS.md` og `CLAUDE.md` peker hit — de gjentar den ikke.
 To kopier av samme faktum som må oppdateres i takt er nøyaktig feilklassen skanningen leter etter.
@@ -20,22 +20,120 @@ En enkeltstående skanning forteller bare at kodebasen har slitasje. Det har all
 |---|---|---|---|---|
 | 2026-08-21 | 48 | 6 av 6 | Kursimport uten eierskapssjekk (#942) | Første kjøring. Utløst av #938, ikke av rutinen. 45 saker under #941 |
 | 2026-10-21 | 40 | 6 av 6 | Org-synken angrer pseudonymiseringen og kobler identitet på e-post | Andre kjøring (én måned forsinket). Fire tyngste verifisert for hånd. 4 trenger produkteiers avgjørelse. Første kjøring med steder per spørsmål (under) |
+| 2026-11-23 | 41 | 6 av 6 | Modulsida publiserer uten å spørre om ulagrede endringer; rettelsen forsvinner | Tredje kjøring (to dager forsinket). 17 fra oktober står, 7 rettet, 4 avklart som beslutning; 24 nye. Fire verifisert for hånd. 4 nye trenger produkteiers avgjørelse. Funnene holder seg flate, men **«kursinnhold» og «fullført» vokste igjen**: de nye stedene kom med kursversjoner, kursutkast, arkivering og ukentlig e-post |
 
 **Trenden** — steder som SELV avgjør svaret (et kall til den kanoniske funksjonen teller ikke):
 
-| Spørsmål | 2026-08-21 | 2026-10-21 | Kanonisk funksjon |
-|---|---|---|---|
-| Hva inneholder dette kurset? | 25 | **9** | `findCourseItemsForParticipant` / `findAllCourseItems` + `sectionAvailability.ts`; klient `participant-console-state.js` |
-| Er brukeren privilegert nok? | 12 | **14** (tjener 5, klient 9) | `roleSets.ts` `hasAnyRole`, `capabilities.ts` `rolesFor` |
-| Er dette forsøket bestått? | 8 | **3** | `submissionOutcome.ts` `isSettledSubmission` + siste vedtak; klient `outcome.js` |
-| Er kurset synlig for deltakeren? | 8 | **7** | `enrollmentService` `filterVisibleCourseIds` / `isCourseVisibleToUser` |
-| Er skjemaet endret? | 5 | **7** | `form-page.js` `state.dirty` / `markDirty` |
-| Er kurset fullført? | 5 | **3** | `CourseCompletion`-raden (`enrollmentService.deriveStatus`) |
-| Hvilken lokale gjelder nå? | 4 svar | **4 svar** (19 steder) | `requestLocale.ts`, `recipientLocale.ts`; klient `i18n-locale.js` |
+| Spørsmål | 2026-08-21 | 2026-10-21 | 2026-11-23 | Kanonisk funksjon |
+|---|---|---|---|---|
+| Hva inneholder dette kurset? | 25 | 9 | **14** ↑ | `findCourseItemsForParticipant` / `findAllCourseItems` + `sectionAvailability.ts`; klient `participant-console-state.js` |
+| Er brukeren privilegert nok? | 12 | 14 (tjener 5, klient 9) | **16** ↑ (tjener 5, klient 11) | `roleSets.ts` `hasAnyRole`, `capabilities.ts` `rolesFor` |
+| Er dette forsøket bestått? | 8 | 3 | **2** ↓ | `submissionOutcome.ts` `isSettledSubmission` + siste vedtak; klient `outcome.js` |
+| Er kurset synlig for deltakeren? | 8 | 7 | **7** (9 med to steder oktober ikke talte) | `enrollmentService` `filterVisibleCourseIds` / `isCourseVisibleToUser` |
+| Er skjemaet endret? | 5 | 7 | **7** (12 med alle steder) | `form-page.js` `state.dirty` / `markDirty` |
+| Er kurset fullført? | 5 | 3 | **8** ↑ | `CourseCompletion`-raden (`enrollmentService.deriveStatus`) |
+| Hvilken lokale gjelder nå? | 4 svar | 4 svar (19 steder) | **4 svar (22 steder)** ↑; utvidet telling 5 svar / 51 | `requestLocale.ts`, `recipientLocale.ts`; klient `i18n-locale.js` |
+
+Nytt spørsmål fra 2026-11-23, ikke talt før: **«Har deltakeren bestått modulen?» — 4 regler** (kurs/kursbevis: en bestått står til
+modulen revideres, svar f; modulrapportene: siste forsøk; `CertificationStatus`: siste vedtak med vakt; profilen: ethvert bestått).
 
 ⚠️ Nullpunktet listet ikke stedene, så august-tallene er talt på en ukjent måte. «Privilegert» er trolig
 talt bare på tjeneren i august (da: 12 → 5). «Lokale» i august var antall ulike *svar* (reserver), ikke
 steder. Fra 2026-10-21 står hvert sted under, så neste måned kan telle likt.
+
+### Steder 2026-11-23
+
+- **Kursinnhold (14):**
+  - Alle ni fra oktober står fortsatt: `myCoursesProgress.ts:82` (flyttet fra `courses.ts:85`), `routes/courses.ts:225`,
+    `courseCompletionService.ts:70`, `courseReport.ts:172`, `:273-275`, `courseRepository.ts:221-227`, `courseCommands.ts:49-100`,
+    `admin-content-courses.js:371-373`, `:1096`.
+  - Nye: `admin-content-courses.js:2445`/`:2468` (tredje kopi av `moduleCount > 0`), `adminCourses.ts:574-613` (#1140),
+    `courseDeleteGuard.ts:81-117` (#1152), `courseRepository.ts:115-121` `findLiveModuleIds` (#934),
+    `courseRepository.ts:106-112` `findModuleItemsForCourses` (#1156, tar med arkiverte moduler for «påbegynt»).
+- **Privilegert (16):**
+  - Tjener (5): `appeals.ts:72`, `:94`, `reviews.ts:71`, `:93`, `reporting/scope.ts:33`.
+  - Klient (11): `deltakere-subnav.js:10`, `results.js:312`, `review.js:360`, `:364`, `profile.js:503`,
+    `admin-content-courses.js:90-91`, `admin-content-classes.js:657-660`, `admin-content-library.js:784`, `admin-content-shell.js:5011`.
+  - Nye: `admin-content-themes.js:39` og `api-client.js:175`.
+- **Bestått (2):**
+  - Står: `calibrationWorkspaceService.ts:275` og `result-summary.js:59`.
+  - Borte: `courseReport.ts` leser nå `moduleProgress` og `isSettledSubmission`.
+- **Synlig (7 likt talt, 9 i alt):**
+  - Står: `discussionService.ts:111-128`, `enrollmentService.ts:442-448`, `:526-532`, `courseReminderService.ts:229-235`,
+    `routes/courses.ts:536`.
+  - Nye: `learnerVisibility.ts:120-194` `findLearnersSeeingCourses` (andre utgave av regelen, ingen test mot
+    `filterVisibleCourseIds`) og `courseAssignmentNotice.ts:169-199` (SQL, med vilje strengere, testet).
+  - Ikke talt i oktober: `myCoursesProgress.ts:44-46` og `routes/courses.ts:86-94` `/enrollments`.
+  - Borte: `courseCompletionService.ts:46`, `:140`.
+- **Skjema endret (7 / 12):**
+  - `admin-content-shell.js:3484`, `:2827`, `:3892`, `:4123-4128`, `admin-content-settings-tab.js:1131`, `:1075`.
+  - Ny: `shell.js:3068-3077` `editFormSnapshot().changed` (andre definisjon ved siden av `hasOpenEditForm` `:4040`).
+  - Med alle steder også: `:4040`, `:865`, `:5088`, `:3770`, `:4578`.
+- **Fullført (8):**
+  - Står: `courseQueries.ts:3-9`, `courseReport.ts:455-459`, `participant.js:4795-4796`.
+  - Nye: `courseReport.ts:183` (bare bevis), `weeklyDigestContent.ts:94`/`:97` (#1139), `contentLifecycle.ts:635`/`:657-660` (#1150),
+    `courseDeleteGuard.ts:205-213` (#1152), `courseAssignmentNotice.ts:179-180` (#1146).
+- **Lokale (4 svar / 22 steder):**
+  - De 19 fra oktober står, på nye linjer.
+  - Nye: `courseArchive.ts:104`, `:168` (døde) og `api-error.js:123`.
+  - Utvidet telling (5 svar / 51 steder) i rapporten fra område 6: blant annet `i18n-locale.js:22`, ti `setLocale`-vakter med `"en-GB"`,
+    `contentValidationService.ts` (fire `sourceLocale = "nb"`) og `schema.prisma:347`.
+
+### Funn 2026-11-23
+
+**Rettet siden oktober (7):**
+- org-synken (#1114);
+- utboksen som merket feilet e-post som levert (#1115);
+- kursrapportens egen bestått-regel (#1116);
+- eksport/duplisering for ikke-eiere (#1165, #1180);
+- I3 i `publishCourse` og i seksjonslagringen (#1151);
+- benchmark-ruta uten eierskap (#1151).
+
+**Avklart som beslutning (4):**
+- arkivert klasse (DECISIONS 2026-11-08);
+- klasse tildeler uten kurseierskap (#1166);
+- G3 teller andre kurs (dokumentert, nå en bekreftelse);
+- `CertificationStatus` uten versjon (kjente mangler #48/#49 i DESIGN_934).
+
+**Nye (24).** ✔ = verifisert for hånd. ❓ = trenger produkteiers avgjørelse.
+
+| Risiko | Område | Funn |
+|---|---|---|
+| middels ✔ | 5 | Modulsida: «Publiser»/«Avpubliser»/«Importer» spør ikke om ulagrede endringer (`admin-content-shell.js:3790-3801`, `admin-content-publish.js:599`). Den lagrede versjonen publiseres, og rettelsen i skjemaet er borte etter omtegning. Kurs lagrer først, seksjon og klasse spør. |
+| middels ✔ | 3 | «Deltakere» i toppmenyen er synlig for vurderer, ankebehandler og rapportleser, men lander på `/deltakere/klasser` (`capabilities.ts:194-205`). Klasse-API-et gir 403, og undermenyen fjerner bare lenken. |
+| middels ✔ | 6 | Klientens startspråk er en-GB for «no», «da» og «sv» (`i18n-locale.js:22`). Det lagres som `preferredLocale`, og den ukentlige e-posten går ut på engelsk hver uke (oktober-funn, nå tyngre). |
+| middels ✔❓ | 4 | Arkivert klasse: dialogen lover at «påminnelsene stopper», men den ukentlige e-posten tar fristen fra alle klasser, også arkiverte (`classService.ts:420-427`, `weeklyDigestContent.ts:99`, `:109`). Det gir «Fristen har gått ut» hver mandag, og en tidligere frist fra den arkiverte klassen slår en senere aktiv. |
+| middels ❓ | 1 | «Har deltakeren bestått modulen?» har fire regler etter svar f (se trenden). Kursrapporten sier bestått, modulrapportene sier `FAILED`, `/recertification` sier `NOT_CERTIFIED`, og profilen viser modulen som bestått, alt for samme person. |
+| middels ❓ | 4 | Ny hovedversjon pluss ny frist: «frivillig til noen setter en ny frist» (DESIGN_934) er ikke bygget. Ethvert bevis gir COMPLETED for alltid. Tildelings-e-posten sier «nytt kurs», Status sier «Fullført», og Resultater sier «Må ta ny versjon». |
+| middels ❓ | 2 | Kursbyggeren tilbyr upubliserte seksjoner til et publisert kurs, og lagringen godtar dem, men «Publiser utkastet» avviser dem (`adminCourses.ts:599-602`). Valgt under #1140, mot PO-beslutningen 2026-08-23. Importen (`updateExisting`) legger dem rett inn. |
+| middels | 5 | Kriterier som legges til, fjernes eller genereres på nytt i Innstillinger, vises ikke som ulagret. Lukkes fanen, kommer ingen advarsel (`admin-content-criteria.js:111-150`, `form-page.js:233`). |
+| lav–middels | 4 | E-posten om ny hovedversjon sjekker ikke om deltakeren fortsatt ser kurset (`courseMajorVersionEmail.ts:63-73`). Lenken gir 404. |
+| lav–middels | 6 | Vakta fra #984 ser bare én skrivemåte. 8 rutesteder har egen reserve (`courses.ts:49` m.fl.), og `?locale=nb-NO` gir fortsatt 500. |
+| lav–middels | 6 | Paritetstest finnes for 3 av 12 oversettelsestabeller. Ankebehandlerens tabell mangler fortsatt 64 nøkler på nb og nn. |
+| lav–middels | 2 | Klienten skjuler «Publiser» for kurs uten moduler; tjeneren og #1001 tillater rene lesekurs (tre klientkopier). |
+| lav | 1–6 | 12 til: Kalibreringens roller hardkodet to steder; `MODULE_ADMIN_READERS` lover mer enn brukerne får; rollevakta ser ikke `(roles ?? []).includes(`; org-synk-dokumentasjonen beskriver `merge_by_email`; dokumentasjon om `SUPERSEDED`-regelen som ble fjernet i 2.146.0; vakta mot nedgradering stanser alltid et stryk på samme innlevering; datakvalitetsrapporten flagger flervalgsvedtak; `completedSubmissionStatuses` uten leser; «fullført uten bevis» regnes ulikt ved arkivering og sletting; rå ACS-tekst ved «Send til meg»; to definisjoner av «skjemaet er endret»; utdaterte kommentarer (`participant.js:5615`, `courseArchive.ts:172`, `unsavedTabSwitchKind`) |
+
+**Fra oktober, fortsatt åpne (17):**
+- **Middels:**
+  - «Rydd upubliserte» (delvis; fortsatt på tvers av eiere);
+  - terskelkalibreringen over et ulagret utkast;
+  - importerte brukere uten lagret rolle;
+  - fristen i påminnelsene mot Status-siden (nå tre regler med den ukentlige e-posten);
+  - datofilteret som viser sertifiserte som «Ikke startet»;
+  - rå servertekst i deltakerflaten (2 steder);
+  - modulredigereren lagrer reservespråket;
+  - seksjonsredigereren og rene strenger (fem klientkopier, én svarer feil).
+- **❓:**
+  - Status mot Resultater;
+  - forfalt-e-posten én gang for alltid;
+  - publisert kurs med upublisert seksjon (se N1 over).
+- **Lav:**
+  - vurderingsvinduet tre steder;
+  - agent-token ved rolleendring;
+  - Resultater leser rolle fra et felt;
+  - død «utilgjengelig»-gren;
+  - startspråket (over);
+  - `nb-NO` (over).
 
 ### Steder 2026-10-21
 

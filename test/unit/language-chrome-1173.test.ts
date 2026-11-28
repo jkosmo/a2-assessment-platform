@@ -93,7 +93,10 @@ describe("#1173 nye nøkler finnes på alle tre språk, og bokmål er ikke engel
     "library.courseCountAria", "library.coursesPopoverAria", "library.unpublishedToast", "library.duplicatedToast",
     "shell.preview.paneAria",
     // #1173 (rest)
-    "classes.archiveConfirm", "classes.deleteConfirm", "classes.restoreConfirm",
+    // #1168: klassens spørrebokser er erstattet av sidas dialog.
+    "classes.archiveDialog.title", "classes.archiveDialog.text", "classes.archiveDialog.confirm",
+    "classes.deleteDialog.title", "classes.deleteDialog.text", "classes.deleteDialog.confirm", "classes.restoredNamed",
+    "themes.delete.textWithArchived",
     // #1168: «library.deleteConfirm» (nettleserens spørreboks) er erstattet av dialogens tekster.
     "library.deleteDialog.title", "library.deleteDialog.text", "library.deleteDialog.confirm",
     "library.archiveDialog.title", "library.archiveDialog.intro", "library.archiveDialog.published",
@@ -102,7 +105,15 @@ describe("#1173 nye nøkler finnes på alle tre språk, og bokmål er ikke engel
     "library.purge.loading", "library.purge.willDelete", "library.purge.skipped", "library.purge.typeBefore",
     "library.purge.typeAfter", "library.purge.confirm", "library.purge.previewFailed", "library.purge.failed",
     "library.purge.doneWithFailures", "library.purge.done",
-    "courses.unpublishConfirm", "courses.deleteDialog.title", "courses.deleteDialog.text", "courses.deleteDialog.confirm",
+    // #1168: «courses.unpublishConfirm» (spørreboksen) er erstattet av dialogens tekster.
+    "courses.unpublishDialog.title", "courses.unpublishDialog.text", "courses.unpublishDialog.confirm",
+    "courses.unpublishDialog.audienceHeading", "courses.unpublishDialog.audienceOpen", "courses.unpublishDialog.audienceRestricted",
+    "courses.unpublishDialog.audienceNone",
+    "courses.deleteDialog.title", "courses.deleteDialog.text", "courses.deleteDialog.confirm",
+    // #1168 (2.179.0): seksjonens dialoger.
+    "sections.archiveDialog.title", "sections.archiveDialog.intro", "sections.archiveDialog.published", "sections.archiveDialog.confirm",
+    "sections.archiveDialog.blockedOne", "sections.archiveDialog.blockedMany", "sections.archiveDialog.viaDraft",
+    "sections.deleteDialog.title", "sections.deleteDialog.text", "sections.deleteDialog.confirm", "sections.restoredAsDraft",
     "courses.delete.cascadeTitle", "courses.delete.summary", "courses.delete.cascadeDone",
     "area.contentNavAria", "area.participantsNavAria",
     "quality.aria.ownerFilter", "quality.aria.declarationTable", "quality.aria.answersTable",

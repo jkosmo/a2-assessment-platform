@@ -194,6 +194,12 @@ trenger begge identitetene, leser `readServiceAuth()` (`test/stage/stageAuth.ts`
 og setter hodet selv — se `test/stage/release-2-154-1-deltakerkonto.spec.ts`. Deltakerbrukeren må godta
 personvernerklæringen første gang (testen gjør det).
 
+**Som administrator** (2.181.1). Med `x-stage-test-role: ADMINISTRATOR` er samme token en tredje, egen
+bruker med bare rollen administrator («Stage-testkonto (administrator)»,
+`stage-testkonto-admin@stage.invalid`). Den når det fagansvarlig ikke når: temaene, plattformsida,
+andres klasser. Rollen lagres ikke; den gjelder bare forespørsler som har hodet. I en nettlesertest
+settes hodet i `page.route` sammen med tokenet, slik at sidas egne kall også får det.
+
 ---
 
 ## 8 · Parallelle agenter — og fella som rammet alle tre

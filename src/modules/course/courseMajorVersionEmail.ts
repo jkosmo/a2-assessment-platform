@@ -7,6 +7,7 @@
 //      COURSE_MAJOR_EMAIL_ENABLED=true. Den går gjennom radene som venter:
 //        - kurset har fått en nyere hovedversjon → `skipped` (e-posten om den nyeste gjelder);
 //        - personen er inaktiv eller anonymisert nå → `skipped`;
+//        - personen ser ikke kurset lenger (fjernet fra klassen, #1196) → `skipped` med «not_visible»: lenken ville gitt 404;
 //        - kurset er avpublisert (eller arkivert) → raden venter, og sendes når kurset er publisert igjen;
 //        - ellers → `queued`, og én hendelse i outboxen i SAMME transaksjon, med `availableAt` spredt utover
 //          (høyst 20 per runde, tre sekunder imellom: om lag 20 i minuttet, så Azure ikke struper, #900).
@@ -28,6 +29,7 @@ import { runInTransaction } from "../../db/transaction.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { recipientLocale } from "../../i18n/recipientLocale.js";
 import { isReachableParticipant } from "../user/participantReach.js";
+import { findLearnersSeeingCourses } from "./learnerVisibility.js";
 import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 import { sendCourseMajorVersionNotification, type NotificationResult } from "../certification/participantNotificationService.js";
 import { EmailContainsLinkError } from "../certification/illustratedEmail.js";
@@ -54,7 +56,7 @@ const SCAN_LIMIT = 500;
  */
 export const COURSE_MAJOR_EMAIL_STUCK_SENDING_MS = 30 * 60_000;
 
-type NoticeVerdict = { kind: "send" } | { kind: "wait" } | { kind: "skip"; reason: "newer_version" | "recipient_unreachable" | "course_gone" };
+type NoticeVerdict = { kind: "send" } | { kind: "wait" } | { kind: "skip"; reason: "newer_version" | "recipient_unreachable" | "course_gone" | "not_visible" };
 
 /**
  * ⚠️ DEN ENE REGELEN for om en rad skal sendes nå. Jobben og behandleren bruker begge denne, så det som ble sjekket
@@ -64,11 +66,16 @@ function judgeNotice(
   notice: { versionMajor: number },
   course: { publishedAt: Date | null; archivedAt: Date | null; versionMajor: number } | null,
   user: { activeStatus: boolean; isAnonymized: boolean } | null,
+  // #1196: om personen ser kurset nå, med samme regel som «Mine kurs» og de andre e-postene. Regnes ut av kalleren, fordi
+  // jobben gjør det for mange rader i én omgang.
+  seesCourse: boolean,
 ): NoticeVerdict {
   if (!course) return { kind: "skip", reason: "course_gone" };
   if (course.versionMajor > notice.versionMajor) return { kind: "skip", reason: "newer_version" };
   if (!user || !isReachableParticipant(user)) return { kind: "skip", reason: "recipient_unreachable" };
   if (course.publishedAt === null || course.archivedAt !== null) return { kind: "wait" };
+  // Etter ventingen: et avpublisert kurs vises ikke for noen, og synligheten avgjøres først når det er publisert igjen.
+  if (!seesCourse) return { kind: "skip", reason: "not_visible" };
   return { kind: "send" };
 }
 
@@ -113,13 +120,21 @@ export async function runCourseMajorEmailSchedule(input?: { now?: Date; onlyCour
     select: {
       id: true,
       versionMajor: true,
-      course: { select: { publishedAt: true, archivedAt: true, versionMajor: true } },
+      userId: true,
+      course: { select: { id: true, enrollmentPolicy: true, publishedAt: true, archivedAt: true, versionMajor: true } },
       user: { select: { activeStatus: true, isAnonymized: true } },
     },
   });
 
+  const seeing = await findLearnersSeeingCourses(
+    prisma,
+    [...new Map(candidates.filter((n) => n.course).map((n) => [n.course!.id, n.course!])).values()],
+    candidates.map((n) => n.userId),
+    now,
+  );
   for (const notice of candidates) {
-    const verdict = judgeNotice(notice, notice.course, notice.user);
+    const sees = notice.course ? (seeing.get(notice.course.id)?.has(notice.userId) ?? false) : false;
+    const verdict = judgeNotice(notice, notice.course, notice.user, sees);
     if (verdict.kind === "wait") continue;
     if (verdict.kind === "skip") {
       const updated = await prisma.courseVersionNotice.updateMany({
@@ -202,8 +217,8 @@ export async function deliverCourseMajorVersionNotice(
     }
     throw error;
   }
-  const { course, user, version } = lookedUp;
-  const verdict = judgeNotice(notice, course, user);
+  const { course, user, version, seesCourse } = lookedUp;
+  const verdict = judgeNotice(notice, course, user, seesCourse);
   if (verdict.kind === "wait") {
     await setStatus(notice.id, COURSE_NOTICE_STATUS.queued, { status: COURSE_NOTICE_STATUS.waiting, queuedAt: null });
     return;
@@ -276,7 +291,7 @@ export async function deliverCourseMajorVersionNotice(
 
 async function lookUpNotice(notice: { courseId: string; userId: string; versionMajor: number }) {
   const [course, user, version] = await Promise.all([
-    prisma.course.findUnique({ where: { id: notice.courseId }, select: { title: true, publishedAt: true, archivedAt: true, versionMajor: true } }),
+    prisma.course.findUnique({ where: { id: notice.courseId }, select: { id: true, enrollmentPolicy: true, title: true, publishedAt: true, archivedAt: true, versionMajor: true } }),
     prisma.user.findUnique({
       where: { id: notice.userId },
       select: { email: true, name: true, preferredLocale: true, activeStatus: true, isAnonymized: true },
@@ -286,7 +301,8 @@ async function lookUpNotice(notice: { courseId: string; userId: string; versionM
       select: { changedItemCount: true },
     }),
   ]);
-  return { course, user, version };
+  const seesCourse = course ? ((await findLearnersSeeingCourses(prisma, [course], [notice.userId])).get(course.id)?.has(notice.userId) ?? false) : false;
+  return { course, user, version, seesCourse };
 }
 
 /** Betinget: endrer bare en rad som fortsatt står i `from`. */

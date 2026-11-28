@@ -50,6 +50,7 @@ import { issueAgentAuthoringToken } from "../src/auth/agentAuthoringTokenService
 
 const FAGANSVARLIG_ID = `stage-test-service:${h.APP}`;
 const DELTAKER_ID = `stage-test-service-participant:${h.APP}`;
+const ADMIN_ID = `stage-test-service-admin:${h.APP}`;
 const BRUKER_ID = `bruker-${h.RUN}`;
 const AGENT_EIER_ID = `agent-eier-${h.RUN}`;
 
@@ -59,6 +60,7 @@ const som = (token: string, rolle?: string) => ({
 });
 const FAGANSVARLIG = som("app-token");
 const DELTAKER = som("app-token", "PARTICIPANT");
+const ADMIN = som("app-token", "ADMINISTRATOR");
 
 const originalCourseOnly = env.PARTICIPANT_COURSE_ONLY;
 const originalDeploy = env.DEPLOY_ENVIRONMENT;
@@ -92,7 +94,7 @@ describe("stage-testkontoen som deltaker, gjennom rutene (2.154.1)", () => {
     await prisma.courseItem.deleteMany({ where: { courseId: { in: opprettet.kurs } } });
     await prisma.course.deleteMany({ where: { id: { in: opprettet.kurs } } });
     await prisma.module.deleteMany({ where: { id: { in: opprettet.moduler } } });
-    const brukere = [FAGANSVARLIG_ID, DELTAKER_ID, BRUKER_ID, AGENT_EIER_ID];
+    const brukere = [FAGANSVARLIG_ID, DELTAKER_ID, ADMIN_ID, BRUKER_ID, AGENT_EIER_ID];
     await prisma.agentAuthoringToken.deleteMany({ where: { user: { externalId: { in: brukere } } } });
     await prisma.user.deleteMany({ where: { externalId: { in: brukere } } });
     await prisma.$disconnect();
@@ -134,8 +136,33 @@ describe("stage-testkontoen som deltaker, gjennom rutene (2.154.1)", () => {
     expect(fagansvarlig.status, fagansvarlig.text).toBe(200);
   });
 
+  it("med ADMINISTRATOR (2.181.1): en tredje, egen bruker med bare administratorrollen, som når det fagansvarlig ikke når", async () => {
+    for (const gang of [1, 2]) {
+      const admin = await request(app).get("/api/me").set(ADMIN);
+      expect(admin.status, `gang ${gang}: ${admin.text}`).toBe(200);
+      expect(admin.body.user.externalId).toBe(ADMIN_ID);
+      expect(admin.body.user.email).toBe("stage-testkonto-admin@stage.invalid");
+      expect(admin.body.user.roles, `gang ${gang}`).toEqual(["ADMINISTRATOR"]);
+    }
+    const lagret = await prisma.user.findUniqueOrThrow({
+      where: { externalId: ADMIN_ID },
+      select: { roleAssignments: { select: { appRole: true } } },
+    });
+    expect(lagret.roleAssignments, "rollen kommer bare fra innloggingen, den lagres ikke").toEqual([]);
+
+    // Plattformsida er administratorens alene: administratoren kommer inn, fagansvarlig og deltaker får 403.
+    const plattform = await request(app).get("/api/admin/platform/archived-content-purge").set(ADMIN);
+    expect(plattform.status, plattform.text).toBe(200);
+    expect((await request(app).get("/api/admin/platform/archived-content-purge").set(FAGANSVARLIG)).status).toBe(403);
+    expect((await request(app).get("/api/admin/platform/archived-content-purge").set(DELTAKER)).status).toBe(403);
+
+    // Og administratoren er ikke fagansvarlig under et annet navn: uten hodet er det fortsatt fagansvarlig.
+    const fagansvarlig = await request(app).get("/api/me").set(FAGANSVARLIG);
+    expect(fagansvarlig.body.user.roles).toEqual(["SUBJECT_MATTER_OWNER"]);
+  });
+
   it("enhver annen verdi i hodet avvises med 401 — ingen stille tilbakefall til fagansvarlig", async () => {
-    for (const verdi of ["participant", "ADMINISTRATOR", "SUBJECT_MATTER_OWNER", "PARTICIPANT,ADMINISTRATOR", ""]) {
+    for (const verdi of ["participant", "administrator", "SUBJECT_MATTER_OWNER", "PARTICIPANT,ADMINISTRATOR", "REVIEWER", ""]) {
       const svar = await request(app).get("/api/me").set(som("app-token", verdi));
       expect(svar.status, `verdi «${verdi}»`).toBe(401);
     }
@@ -144,12 +171,15 @@ describe("stage-testkontoen som deltaker, gjennom rutene (2.154.1)", () => {
   it("hodet hjelper ikke utenfor stage, og ikke fra en annen app", async () => {
     env.DEPLOY_ENVIRONMENT = "production";
     expect((await request(app).get("/api/me").set(DELTAKER)).status).toBe(401);
+    expect((await request(app).get("/api/me").set(ADMIN)).status).toBe(401);
     expect((await request(app).get("/api/me").set(FAGANSVARLIG)).status).toBe(401);
     env.DEPLOY_ENVIRONMENT = undefined;
     expect((await request(app).get("/api/me").set(DELTAKER)).status).toBe(401);
+    expect((await request(app).get("/api/me").set(ADMIN)).status).toBe(401);
     env.DEPLOY_ENVIRONMENT = originalDeploy;
 
     expect((await request(app).get("/api/me").set(som("annen-app-token", "PARTICIPANT"))).status).toBe(401);
+    expect((await request(app).get("/api/me").set(som("annen-app-token", "ADMINISTRATOR"))).status).toBe(401);
     expect((await request(app).get("/api/me").set(som("annen-app-token"))).status).toBe(401);
     // Kontroll: med stage-innstillingen tilbake slipper deltakeren inn igjen.
     expect((await request(app).get("/api/me").set(DELTAKER)).status).toBe(200);

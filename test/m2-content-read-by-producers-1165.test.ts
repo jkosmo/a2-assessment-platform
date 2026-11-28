@@ -181,6 +181,7 @@ describe("#1165: en annen produsent kan lese kurs og moduler hen ikke eier", () 
       M(moduleId, "/passed-count"),
       M(moduleId, "/archive-preview"),
       M(moduleId, `/module-versions/${moduleVersionId}/publish-preview-versioned`),
+      S(sectionId, "/archive-preview"),
     ];
     for (const path of guarded) {
       const refused = await other.get(path);
@@ -201,6 +202,8 @@ type Row = { route: string; call: () => Promise<request.Response> };
 const courseRows: Row[] = [
   { route: "PUT /:courseId", call: async () => other.put(K(courseId), await withRevision(courseId, { title: L("Nytt navn") })) },
   { route: "PUT /:courseId/content", call: async () => other.put(K(courseId, "/content"), await withRevision(courseId, { title: L("Nytt"), items: [] })) },
+  // #1169 skive 4c: «Døp om» i kurslista.
+  { route: "PATCH /:courseId/title", call: () => other.patch(K(courseId, "/title"), { title: L("Nytt navn"), expectedTitle: "" }) },
   { route: "PUT /:courseId/draft", call: () => other.put(K(courseId, "/draft"), { items: [], loaded: { expectedRevision: 0 } }) },
   { route: "DELETE /:courseId/draft", call: () => other.del(K(courseId, "/draft?draftId=x&revision=0")) },
   { route: "POST /:courseId/draft/publish", call: () => other.post(K(courseId, "/draft/publish"), { loaded: { draftId: "x", revision: 0 } }) },
@@ -217,6 +220,13 @@ const courseRows: Row[] = [
   { route: "POST /:courseId/cascade-delete", call: () => other.post(K(courseId, "/cascade-delete")) },
   { route: "POST /:courseId/enrollments", call: () => other.post(K(courseId, "/enrollments"), { userIds: [participantId] }) },
   { route: "DELETE /:courseId/enrollments/:userId", call: () => other.del(K(courseId, `/enrollments/${participantId}`)) },
+];
+
+// Skriveruter på et kurs som med vilje er ÅPNE for alle produsenter. De endrer ikke kurset i stien, men lager noe nytt av det som
+// alle kan lese (#1165). Hver har en kontroll under: en annen produsent slipper inn, og kurset i stien er urørt.
+// #1169 skive 4b: «Dupliser kurs» lager et nytt kurs med de samme elementene, eid av den som kopierer.
+const openCourseWrites: Row[] = [
+  { route: "POST /:courseId/duplicate", call: () => other.post(K(courseId, "/duplicate")) },
 ];
 
 const moduleRows: Row[] = [
@@ -305,7 +315,7 @@ describe("#1165: skrivingen er fortsatt eiernes", () => {
     expect(courseRoutes.length).toBeGreaterThan(10);
     expect(moduleRoutes.length).toBeGreaterThan(10);
     expect(sectionRoutes.length).toBeGreaterThan(5);
-    expect(courseRoutes, "ny skriverute på kurset uten rad i tabellen").toEqual(courseRows.map((row) => row.route).sort());
+    expect(courseRoutes, "ny skriverute på kurset uten rad i tabellen").toEqual([...courseRows, ...openCourseWrites].map((row) => row.route).sort());
     expect(moduleRoutes, "ny skriverute på modulen uten rad i tabellen").toEqual(moduleRows.map((row) => row.route).sort());
     expect(sectionRoutes, "ny skriverute på seksjonen uten rad i tabellen").toEqual(sectionRows.map((row) => row.route).sort());
   });
@@ -317,6 +327,15 @@ describe("#1165: skrivingen er fortsatt eiernes", () => {
       expect(refused.status, `${row.route}: ${show(refused)}`).toBe(403);
       expect(["content_ownership", "forbidden"]).toContain(refused.body.error);
       expect(await fingerprint(), `${row.route} endret noe`).toBe(before);
+    });
+  }
+
+  for (const row of openCourseWrites) {
+    it(`åpen med vilje: ${row.route} slipper en annen produsent inn, og kurset i stien er urørt`, async () => {
+      const before = await fingerprint();
+      const res = await row.call();
+      expect(res.status, `${row.route}: ${show(res)}`).toBeLessThan(300);
+      expect(await fingerprint(), `${row.route} endret kurset i stien`).toBe(before);
     });
   }
 

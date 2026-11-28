@@ -19,11 +19,13 @@ import { showToast } from "/static/toast.js";
 import { runWithBusyButton } from "/static/busy-button.js";
 import { describeAltWarnings } from "/static/mcq-cue-warnings.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
-import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf, retentionLineHtml } from "/static/content-status-badge.js";
+import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf, retentionLineHtml, versionChipHtml } from "/static/content-status-badge.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { createListPage } from "/static/list-page.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { confirmSectionArchive, confirmSectionDelete } from "/static/module-lifecycle-dialogs.js";
+import { duplicateSectionCopy } from "/static/content-duplicate.js";
 import {
   lagretTittelkart,
   manglendeSpraak,
@@ -242,8 +244,9 @@ function getListPage() {
       // #894: hvilke språk tittelen MANGLER. Ved siden av navnet, fordi det er navnet det gjelder.
       { key: "lang", label: t("ui.lang.col"), className: "col-lang", sortValue: (s) => manglendeSpraak(s).length, render: (s) => spraakMerkeHtml(s, tf) },
       // #1046 steg B/C8: «Nyere utkast»-brikken følger med når tjeneren sier published_with_draft.
-      { key: "status", label: L("colStatus"), className: "col-status", render: (s, ctx) => lifecycleBadge(s, tNav) + (ctx.filter === "archived" ? retentionLineHtml(s, "section", tNav, currentLocale) : "") },
-      { key: "version", label: L("colVersion"), className: "col-version", render: (s) => `v${escapeHtml(s.versionNo ?? "1")}` },
+      // #1171: versjonen som brikke ved merket, som for kurs og modul (før egen kolonne, og «v1» også for et utkast som aldri er
+      // publisert). `versionNo` er den publiserte versjonen fra tjeneren; uten den er det ingen brikke.
+      { key: "status", label: L("colStatus"), className: "col-status", render: (s, ctx) => lifecycleBadge(s, tNav, { versionChip: sectionVersionChipHtml(s.versionNo) }) + (ctx.filter === "archived" ? retentionLineHtml(s, "section", tNav, currentLocale) : "") },
       { key: "courses", label: L("colCourses"), className: "col-courses", sortValue: (s) => Number(s.courseCount ?? 0), render: (s) => {
         const courseCount = Number(s.courseCount ?? 0);
         return courseCount > 0
@@ -279,20 +282,28 @@ function getListPage() {
       // #1151 skive 3c: en arkivert seksjon kan ikke endres (`section_archived`), og «Dupliser» er ikke lov på et arkivert
       // element (produkteier 13.11). «Åpne» (`sections.edit`) står: redigereren viser den skrivebeskyttet.
       const archived = lifecycle === "archived";
-      return [
-        // Først, så den står synlig og ikke under «Mer»: det er det forfatteren kom for.
-        canManage ? publishNew : "",
-        // #1180: «Åpne» også for den som ikke eier seksjonen, som for kurs og moduler (#1165). Redigereren viser den
-        // skrivebeskyttet; skriverutene er vaktet på tjeneren.
-        `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>`,
-        // #894: å døpe om er ikke å redigere innholdet, og skal ikke koste en tur gjennom editoren.
-        canManage && !archived ? `<button class="row-action-btn" data-action="rename" data-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
-        archived ? "" : `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
-        `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
-        canManage ? publishToggle : "",
-        canManage ? archiveToggle : "",
-        canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`,
-      ];
+      // #1169 skive 3 (doc/DECISIONS.md 28.11.2026): Åpne · hovedhandlingen (Publiser, Publiser utkastet, Gjenopprett) · «Mer» i fast
+      // rekkefølge (Døp om · Dupliser · Eksporter · Avpubliser · Arkiver / Slett). «Slett» står nå også i lista for en arkivert
+      // seksjon, som for kurs, moduler og klasser (før bare i den åpnede seksjonen, #1046 D3).
+      const primaryAction = !canManage ? "" : archived ? archiveToggle : isLive ? publishNew : publishToggle;
+      return {
+        primary: [
+          // #1180: «Åpne» også for den som ikke eier seksjonen, som for kurs og moduler (#1165). Redigereren viser den
+          // skrivebeskyttet; skriverutene er vaktet på tjeneren.
+          `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>`,
+          primaryAction,
+        ],
+        more: [
+          // #894: å døpe om er ikke å redigere innholdet, og skal ikke koste en tur gjennom editoren.
+          canManage && !archived ? `<button class="row-action-btn" data-action="rename" data-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
+          archived ? "" : `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
+          `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
+          canManage && isLive ? publishToggle : "",
+          canManage && !archived ? archiveToggle : "",
+          canManage && archived ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}">${escapeHtml(L("del"))}</button>` : "",
+        ],
+        after: [canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`],
+      };
     },
     load: async () => {
       const data = await apiFetch("/api/admin/content/sections", getHeaders);
@@ -316,8 +327,9 @@ function getListPage() {
       else if (action === "publish") publishFromList(item, "published");
       else if (action === "publish-new") publishFromList(item, "newVersionPublished");
       else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
-      else if (action === "archive") { if (window.confirm(L("confirmArchive"))) sectionLifecycle(id, "archive", "archived"); }
-      else if (action === "restore") sectionLifecycle(id, "restore", "restored");
+      else if (action === "archive") archiveSectionFromList(id, btn, item);
+      else if (action === "restore") sectionLifecycle(id, "restore", "restoredAsDraft", displayTitle(item?.title));
+      else if (action === "delete") deleteSection(id, btn, displayTitle(item?.title));
     },
     afterRender: () => {
       document.getElementById("newSectionBtn")?.addEventListener("click", () => goTo("editor", null));
@@ -596,11 +608,20 @@ async function publishFromList(item, toastKey) {
   }
 }
 
-// #705: én felles handler for de fire livssyklus-overgangene (POST .../{action}).
-async function sectionLifecycle(sectionId, action, toastKey) {
+// #1168: «Arkiver» spør tjeneren først (module-lifecycle-dialogs.js), som modulen og kurset. Før: spørreboks, og så et avslag
+// etterpå hvis et kurs holdt seksjonen igjen.
+async function archiveSectionFromList(sectionId, btn, item) {
+  const result = await confirmSectionArchive({ sectionId, title: displayTitle(item?.title), t, tf, apiFetch, getHeaders, returnFocusTo: btn });
+  if (result.error) { apiErrorToast(result.error); return; }
+  if (result.confirmed) await sectionLifecycle(sectionId, "archive", "archived");
+}
+
+// #705: én felles handler for de fire livssyklus-overgangene (POST .../{action}). `title` fyller `{title}` i meldingen
+// (#1168: «… er gjenopprettet som utkast»).
+async function sectionLifecycle(sectionId, action, toastKey, title = "") {
   try {
     await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}/${action}`, getHeaders, { method: "POST" });
-    showToast(L(toastKey));
+    showToast(tf(`sections.${toastKey}`, { title }));
     renderListView();
   } catch (err) {
     // #916: a publish blocked by the translation gate gets the field × language message, not the
@@ -829,25 +850,15 @@ async function importSectionPackage(input) {
 // #1046 D3: Dupliser på seksjoner, på samme måte som på moduler (#348): eksportpakke → import som
 // ny. Kopien får « (kopi)» på tittelen i alle språk og lander alltid som utkast — importen
 // publiserer aldri ved ankomst (#916), så forfatteren må publisere selv etter gjennomgang.
-async function duplicateSection(sectionId, btn) {
+// #1169 skive 4: fra lista tegnes lista på nytt; fra redigereren (`openCopy`) åpnes kopien. Samme kopi begge steder
+// (content-duplicate.js).
+async function duplicateSection(sectionId, btn, { openCopy = false } = {}) {
   if (btn) btn.disabled = true;
   try {
-    const body = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}/export-package`, getHeaders);
-    const envelope = body?.envelope ?? null;
-    if (!envelope?.section) throw new Error("Eksport returnerte tom envelope.");
-    const srcTitle = envelope.section.title;
-    if (srcTitle && typeof srcTitle === "object") {
-      envelope.section.title = Object.fromEntries(Object.entries(srcTitle).map(([l, v]) => [l, v ? `${v} (kopi)` : v]));
-    } else if (typeof srcTitle === "string" && srcTitle) {
-      envelope.section.title = `${srcTitle} (kopi)`;
-    }
-    const result = await runWithWorkDialog(t("adminContent.work.copying"), () => apiFetch("/api/admin/content/sections/import", getHeaders, {
-      method: "POST",
-      body: JSON.stringify({ payload: envelope, mode: "createNew" }),
-    }));
-    if (!result?.sectionId) throw new Error("Import-respons mangler sectionId.");
+    const copyId = await duplicateSectionCopy({ sectionId, apiFetch, getHeaders, t });
     showToast(L("duplicated"));
-    await renderListView();
+    if (openCopy) goTo("editor", copyId);
+    else await renderListView();
   } catch (err) {
     apiErrorToast(err);
   } finally {
@@ -855,12 +866,18 @@ async function duplicateSection(sectionId, btn) {
   }
 }
 
-async function deleteSection(sectionId) {
-  if (!window.confirm(L("confirmDelete"))) return;
+// #1168: sidas egen dialog, ikke nettleserens spørreboks. Den gamle teksten sa at seksjonen «forsvinner fra alle kurs som
+// bruker den»; tjeneren nekter å slette en seksjon som står i et kurs, så den gjør ikke det.
+// #1169 skive 3: også fra lista; da kommer navnet fra raden (`title`), ellers fra redigereren.
+async function deleteSection(sectionId, btn = null, title = null) {
+  if (!await confirmSectionDelete({ title: title ?? editorTitle(), t, tf, returnFocusTo: btn })) return;
   try {
     await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}`, getHeaders, { method: "DELETE" });
     showToast(L("deleted"));
-    goTo("list");
+    // QA-porten 2.189.0: fra lista står vi alt på lista — tegn den på nytt uten å legge adressen i historikken en gang til
+    // (ellers gjorde første «Tilbake» ingenting).
+    if (detectRoute().view === "list") renderRoute();
+    else goTo("list");
   } catch (err) {
     apiErrorToast(err);
   }
@@ -919,10 +936,11 @@ function getFormPage() {
     onBack: goBackFromEditor,
     title: () => (editing?.title?.[editing.editLocale] ?? "").trim() || pickLocalizedText(editing?.title ?? {}, currentLocale),
     item: () => sectionHeaderItem(),
+    isNew: () => !editing?.id,
     // #1151 skive 3c: merket som før, og for en arkivert seksjon linja om hvorfor den ikke kan endres (som kurset og modulen).
     statusHtml: () => {
       const item = sectionHeaderItem();
-      return item ? lifecycleBadge(item, tNav) + sectionArchivedNoticeHtml() + sectionDraftLineHtml() : "";
+      return item ? lifecycleBadge(item, tNav, { versionChip: sectionVersionChipHtml(editing?.activeVersionId ? editing.publishedVersionNo : null) }) + sectionArchivedNoticeHtml() + sectionDraftLineHtml() : "";
     },
     t: tNav,
     actions: () => sectionActions(),
@@ -965,6 +983,11 @@ function sectionCanManage() {
 
 function sectionCanEdit() {
   return sectionCanManage() && !editing?.archivedAt;
+}
+
+/** #1171: «v5» ved merket, bare for en publisert versjon. */
+function sectionVersionChipHtml(versionNo) {
+  return Number.isInteger(versionNo) ? versionChipHtml(`v${versionNo}`, { className: "section-version-chip" }) : "";
 }
 
 function sectionHeaderItem() {
@@ -1015,29 +1038,33 @@ function sectionActions() {
   const edit = sectionCanEdit();
   const status = editorSectionStatus();
   const id = editing.id ? escapeHtml(editing.id) : "";
-  // Rekkefølge som i lista (D2): det man gjør ofte først, det farlige sist — tre vises, resten under «Mer».
-  return [
-    // #1163 skive 2 (prinsipp 3): ingen «Oversett»-knapp. Tittelen, teksten og figurene oversettes når seksjonen lagres.
-    id ? `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>` : "",
-    // #1095: den nye versjonen redigereren viser, er ikke den deltakerne ser — publiser den.
-    // Livssyklus og «Erstatt fra fil» bare for den som kan styre seksjonen (eier eller administrator) —
-    // en ikke-eier fikk 403 (QA-porten 2.88.3). Eksporter er en lese-/kopihandling.
-    id && manage && status === "published" && editing.hasUnpublishedChanges
-      ? `<button type="button" class="row-action-btn" id="sectionPublishNewBtn" data-editor-action="publish">${escapeHtml(L("publishNewVersion"))}</button>`
-      : "",
-    id && manage && status && status !== "archived"
-      ? (status === "published"
-        ? `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="unpublish">${escapeHtml(L("unpublish"))}</button>`
-        : `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="publish">${escapeHtml(L("publish"))}</button>`)
-      : "",
-    id && edit ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
-    id && manage && status ? (status === "archived"
-      ? `<button type="button" class="row-action-btn" data-editor-action="restore">${escapeHtml(L("restore"))}</button>`
-      : `<button type="button" class="row-action-btn" data-editor-action="archive">${escapeHtml(L("archive"))}</button>`) : "",
+  if (!id) return [];
+  // #1169 skive 2 (doc/DECISIONS.md 28.11.2026): hovedhandlingen for tilstanden som fylt knapp, resten under «Mer» i fast
+  // rekkefølge (Eksporter · Erstatt fra fil · Avpubliser · Arkiver / Slett). Livssyklus og «Erstatt fra fil» bare for den som kan
+  // styre seksjonen (eier eller administrator) — en ikke-eier fikk 403 (QA-porten 2.88.3). Eksporter er en lese-/kopihandling.
+  // #1163 skive 2 (prinsipp 3): ingen «Oversett»-knapp. Tittelen, teksten og figurene oversettes når seksjonen lagres.
+  const archived = status === "archived";
+  const published = status === "published";
+  const primary = !manage || !status ? [] : archived
+    ? [`<button type="button" class="row-action-btn is-primary" data-editor-action="restore">${escapeHtml(L("restore"))}</button>`]
+    : published
+      // #1095: den nye versjonen redigereren viser, er ikke den deltakerne ser — publiser den.
+      ? [editing.hasUnpublishedChanges ? `<button type="button" class="row-action-btn is-primary" id="sectionPublishNewBtn" data-editor-action="publish">${escapeHtml(L("publishNewVersion"))}</button>` : ""]
+      : [`<button type="button" class="row-action-btn is-primary" id="sectionLifecycleBtn" data-editor-action="publish">${escapeHtml(L("publish"))}</button>`];
+  const more = [
+    // #1169 skive 4: Dupliser også i hodet, som i lista — ikke for en arkivert seksjon (produkteier 13.11). Også for en som ikke
+    // eier seksjonen: kopien er hens egen.
+    archived ? "" : `<button type="button" class="row-action-btn" data-editor-action="duplicate">${escapeHtml(L("duplicate"))}</button>`,
+    `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>`,
+    edit ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
+    manage && published ? `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="unpublish">${escapeHtml(L("unpublish"))}</button>` : "",
+    manage && status && !archived ? `<button type="button" class="row-action-btn" data-editor-action="archive">${escapeHtml(L("archive"))}</button>` : "",
     // #1046 D3: sletting bor her, ikke i lista — og bare for en arkivert seksjon.
-    id && manage && status === "archived" ? `<button type="button" class="row-action-btn destructive" id="sectionDeleteBtn" data-editor-action="delete">${escapeHtml(L("del"))}</button>` : "",
+    manage && archived ? `<button type="button" class="row-action-btn destructive" id="sectionDeleteBtn" data-editor-action="delete">${escapeHtml(L("del"))}</button>` : "",
   ];
+  return { primary, more };
 }
+
 
 // Tre faner (produkteier 13.09): Rediger i full bredde — spaltene side om side ble for smale —
 // Forhåndsvisning for seg, og Innstillinger med eierne.
@@ -1096,11 +1123,27 @@ function bindHeaderActions() {
     if (action === "replace") return document.getElementById("replaceFromFileInput")?.click();
     if (!getFormPage().confirmLeave()) return;
     if (action === "export") return exportSectionPackage(editing.id, btn);
+    // Kopien lages av det som er lagret; spørsmålet over har tatt seg av det ulagrede. Etterpå åpnes kopien.
+    if (action === "duplicate") return duplicateSection(editing.id, btn, { openCopy: true });
     if (action === "publish" || action === "unpublish") return toggleSectionLifecycle(action, btn);
-    if (action === "archive") { if (window.confirm(L("confirmArchive"))) await lifecycleInEditor("archive", "archived"); return; }
-    if (action === "restore") return lifecycleInEditor("restore", "restored");
-    if (action === "delete") return deleteSection(editing.id);
+    if (action === "archive") return archiveSectionInEditor(btn);
+    if (action === "restore") return lifecycleInEditor("restore", "restoredAsDraft");
+    if (action === "delete") return deleteSection(editing.id, btn);
   });
+}
+
+// Tittelen slik den er lagret, på sidas språk (dialogene og meldingene sier hvilken seksjon det gjelder). `session`: seksjonen
+// handlingen ble startet i — svaret kan komme etter at forfatteren har åpnet en annen (QA 2.179.0).
+function editorTitle(session = editing) {
+  return pickLocalizedText(session?.savedTitle ?? session?.title ?? {}, currentLocale) || pickLocalizedText(session?.title ?? {}, currentLocale) || "(uten tittel)";
+}
+
+async function archiveSectionInEditor(btn) {
+  const session = editing;
+  const result = await confirmSectionArchive({ sectionId: session.id, title: editorTitle(), t, tf, apiFetch, getHeaders, returnFocusTo: btn });
+  if (result.error) { apiErrorToast(result.error); return; }
+  // Forfatteren åpnet en annen seksjon mens dialogen sto: ikke arkiver den som vises nå.
+  if (result.confirmed && editing === session) await lifecycleInEditor("archive", "archived");
 }
 
 function bindEditorHandlers() {
@@ -1133,7 +1176,7 @@ async function lifecycleInEditor(action, toastKey) {
     session.archivedAt = data.section?.archivedAt ?? (action === "archive" ? new Date().toISOString() : null);
     session.activeVersionId = data.section?.activeVersionId ?? session.activeVersionId;
     session.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
-    showToast(L(toastKey));
+    showToast(tf(`sections.${toastKey}`, { title: editorTitle(session) }));
     // #1151 skive 3c: arkivering og gjenoppretting endrer hele skjemaet (sperren, Lagre, Oversett, bildeknappen), ikke
     // bare hodet. Seksjonen hentes på nytt: forfatteren har alt svart på «forlate uten å lagre?» (bindHeaderActions), så
     // skjemaet viser det som er lagret, og «Alt lagret».

@@ -227,7 +227,9 @@ test.describe("#934 5a-3: modulen åpnet fra kurset", () => {
     await expect(page.locator("#resultSummary .result-headline")).toContainText("Bestått");
     await expect.poll(() => calls.details.c1).toBe(2);
 
-    // Tilbake til lista og inn i det andre kurset. Modulen står valgt, og der er kravet dekket.
+    // Tilbake til lista og inn i det andre kurset. Modulen står valgt, og der er kravet dekket. #1162 skive 5: modulen står i
+    // lesemodus, så den lukkes først med «← Tilbake til kurset», som en seksjon.
+    await page.locator(".course-item.open .course-inline-panel [data-role='close']").click();
     await page.locator("#courseBackBar button, #courseBackBar a").first().click();
     await page.locator('.course-accordion-item[data-course-id="c2"] .course-accordion-header').click();
     await expect.poll(() => calls.details.c2).toBe(1);

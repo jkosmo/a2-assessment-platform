@@ -10,6 +10,7 @@ import { classRepository, createClassRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_I
 import { isClassEntraLinkingEnabled } from "./classConfig.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import { findStartedOrCompletedPairs, pairKey } from "./learnerVisibility.js";
+import { effectiveDeadline, type ClassDeadlineRow, type EffectiveDeadline } from "./effectiveDeadline.js";
 
 // #645/CL-2: class (cohort) business logic — CRUD + membership + course assignment + dynamic
 // membership evaluation. Course→class assignment is dynamic: a participant is assigned a course if
@@ -307,6 +308,9 @@ export async function listClassCourseAssignments(classId: string, locale: Suppor
     // forklarer hvorfor ingen i klassen beveger seg, og det skal ikke kreve detektivarbeid.
     coursePublished: r.course.publishedAt !== null,
     courseArchived: r.course.archivedAt !== null,
+    // #1192: klasseskjermen varsler at en ny frist på et kurs i versjon 2 eller høyere krever den nye versjonen av den som har
+    // kursbevis for en eldre.
+    courseVersionMajor: r.course.versionMajor,
   }));
 }
 
@@ -402,31 +406,39 @@ export async function getUserClassIds(ctx: UserMembershipContext): Promise<Set<s
  *   - Et kurs deltakeren BARE har fra arkiverte klasser, er med bare når det er påbegynt eller fullført
  *     (`findStartedOrCompletedCourseIds`, under). Ellers er det borte, som om tildelingen ikke fantes.
  *   - OPEN-kurs og individuell tildeling avgjøres ikke her (`filterVisibleCourseIds`), og vises som før.
- * Fristen regnes som før: den tidligste over alle klassene som gir kurset, også arkiverte.
+ * Fristen er den tidligste over de AKTIVE klassene som gir kurset. En arkivert klasse gir ikke frist (produkteier 2026-11-24,
+ * #1192 punkt 3): arkiveringsdialogen lover at påminnelsene stopper, og fristen herfra står i «Mine kurs», `/enrollments` og den
+ * ukentlige e-posten. Et påbegynt kurs bare fra arkiverte klasser er fortsatt med, men uten frist (`null`).
  *
  * Påminnelsene, kullstatus og kursrapporten hopper alt over arkiverte klasser (`classRepository`, `class: { archivedAt: null }`).
  * Kursrapporten tar i tillegg med alle som har levert, lest eller fullført, og det er den samme regelen som her.
  */
 export async function getClassAssignedCourseDueDates(classIds: Set<string>, userId: string): Promise<Map<string, Date | null>> {
+  const deadlines = await getClassAssignedCourseDeadlines(classIds, userId);
+  return new Map([...deadlines].map(([courseId, deadline]) => [courseId, deadline.dueAt]));
+}
+
+/**
+ * Som `getClassAssignedCourseDueDates`, med `dueSetAt` for fristen (#1192 punkt 2): kursene fra klasser, og fristen fra klassene
+ * etter `effectiveDeadline` (tidligste fra aktive klasser; ved lik dato følger det seneste tidspunktet med).
+ */
+export async function getClassAssignedCourseDeadlines(classIds: Set<string>, userId: string): Promise<Map<string, EffectiveDeadline>> {
   if (classIds.size === 0) return new Map();
   const rows = await prisma.courseGroupAssignment.findMany({
     where: { classId: { in: [...classIds] } },
-    select: { courseId: true, dueAt: true, class: { select: { archivedAt: true } } },
+    select: { courseId: true, dueAt: true, dueSetAt: true, class: { select: { archivedAt: true } } },
   });
   const fromActiveClass = new Set(rows.filter((r) => r.class.archivedAt === null).map((r) => r.courseId));
   const onlyFromArchived = [...new Set(rows.map((r) => r.courseId))].filter((courseId) => !fromActiveClass.has(courseId));
   const keptFromArchived = await findStartedOrCompletedCourseIds(userId, onlyFromArchived);
-  const map = new Map<string, Date | null>();
+  const byCourse = new Map<string, ClassDeadlineRow[]>();
   for (const r of rows) {
     if (!fromActiveClass.has(r.courseId) && !keptFromArchived.has(r.courseId)) continue;
-    if (!map.has(r.courseId)) {
-      map.set(r.courseId, r.dueAt);
-    } else {
-      const existing = map.get(r.courseId) ?? null;
-      if (r.dueAt && (!existing || r.dueAt < existing)) map.set(r.courseId, r.dueAt);
-    }
+    const list = byCourse.get(r.courseId) ?? [];
+    list.push({ dueAt: r.dueAt, dueSetAt: r.dueSetAt, archived: r.class.archivedAt !== null });
+    byCourse.set(r.courseId, list);
   }
-  return map;
+  return new Map([...byCourse].map(([courseId, classes]) => [courseId, effectiveDeadline({ classes })]));
 }
 
 /**

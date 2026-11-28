@@ -47,6 +47,8 @@ const ALLOWED: Array<[string, string]> = [
 const FORBIDDEN: Array<[string, string]> = [
   ["POST", "/api/admin/content/courses/course_abc/publish"],
   ["POST", "/api/admin/content/courses/course_abc/archive"],
+  // #1169 skive 4b: «Dupliser kurs» er en menneskes handling; agenten lager kurs med POST /courses + PUT /items.
+  ["POST", "/api/admin/content/courses/course_abc/duplicate"],
   ["DELETE", "/api/admin/content/courses/course_abc"],
   ["DELETE", "/api/admin/content/modules/mod_abc"],
   ["POST", "/api/admin/content/modules/mod_abc/publish"],
@@ -61,6 +63,8 @@ const FORBIDDEN: Array<[string, string]> = [
   ["PUT", "/api/admin/content/courses/course_abc/draft"],
   ["DELETE", "/api/admin/content/courses/course_abc/draft"],
   ["POST", "/api/admin/content/courses/course_abc/draft/publish"],
+  // #1169 skive 4c: «Døp om» i kurslista.
+  ["PATCH", "/api/admin/content/courses/course_abc/title"],
   ["POST", "/api/submissions"],
   ["GET", "/api/admin/platform/config"],
 ];

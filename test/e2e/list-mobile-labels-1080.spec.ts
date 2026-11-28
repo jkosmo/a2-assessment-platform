@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mockCommonApis } from "./admin-content-helpers.js";
+import { mockCommonApis, revealRowAction } from "./admin-content-helpers.js";
 
 // #1080: telefonvisningen av den felles listesida. Under 600 px blir hver rad et kort, og hver verdi
 // skal stå ved siden av kolonnenavnet sitt, innenfor kortet.
@@ -85,7 +85,7 @@ test.describe("#1080 — listene på telefon", () => {
   test("«Døp om» (#894) får plass i kortet: feltet ligger i navnecellen, og Escape avbryter", async ({ page }) => {
     await åpneLista(page, 390);
     const rad = page.locator('tr[data-row-id="mod-ett"]');
-    await rad.getByRole("button", { name: "Døp om" }).click();
+    await (await revealRowAction(page, rad.locator('[data-action="rename"]'))).click();
 
     const felt = rad.locator(".row-rename input");
     await expect(felt).toBeFocused();

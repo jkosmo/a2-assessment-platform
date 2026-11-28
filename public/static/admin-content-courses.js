@@ -3,7 +3,7 @@ const formatDate = createDateFormatter(() => currentLocale);
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "");
 import { pickLocalizedText, resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
 import { escapeHtml } from "./html-escape.js";
-import { lifecycleBadge, lifecycleOf, retentionLineHtml } from "./content-status-badge.js";
+import { lifecycleBadge, lifecycleOf, retentionLineHtml, versionChipHtml } from "./content-status-badge.js";
 import {
   supportedLocales,
   localeLabels,
@@ -19,6 +19,7 @@ import {
 import { initConsentGuard } from "/static/consent-guard.js";
 import { setHidden } from "/static/dom-visibility.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
+import { confirmLifecycleStep } from "/static/module-lifecycle-dialogs.js";
 import { runWithBusyButton } from "/static/busy-button.js";
 import {
   resolveWorkspaceNavigationItems,
@@ -39,7 +40,9 @@ import {
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { createListPage } from "/static/list-page.js";
+import { lagretTittelkart, startOmdoping } from "/static/list-rename.js";
 import { createFormPage, formPageTexts } from "/static/form-page.js";
+import { changedFieldTranslations } from "/static/admin-content-localized-copy.js";
 
 // #1046 C2: bokmål først, som i alle språkvelgere. Bokmål er det påkrevde språket (produkteier 12.09); publiseringsgaten krever fortsatt alle tre.
 const DETAIL_LOCALES = ["nb", "nn", "en-GB"];
@@ -188,31 +191,6 @@ function hasAnyLocalizedValue(valueMap) {
   return supportedLocales.some((locale) => typeof valueMap?.[locale] === "string" && valueMap[locale].trim().length > 0);
 }
 
-function firstNonEmptyLocale(valueMap, preferredLocales = supportedLocales) {
-  const orderedLocales = [...new Set([...preferredLocales, ...supportedLocales])];
-  for (const locale of orderedLocales) {
-    const value = valueMap?.[locale];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return locale;
-    }
-  }
-  return null;
-}
-
-function getChangedCourseLocales(currentValues, initialValues) {
-  const changed = new Set();
-  for (const locale of supportedLocales) {
-    const currentTitle = currentValues?.title?.[locale] ?? "";
-    const initialTitle = initialValues?.title?.[locale] ?? "";
-    const currentDescription = currentValues?.description?.[locale] ?? "";
-    const initialDescription = initialValues?.description?.[locale] ?? "";
-    if (currentTitle !== initialTitle || currentDescription !== initialDescription) {
-      changed.add(locale);
-    }
-  }
-  return changed;
-}
-
 function applyCourseLocaleValuesToForm(values) {
   for (const locale of supportedLocales) {
     const titleInput = document.getElementById(`title-${locale}`);
@@ -229,100 +207,52 @@ function applyCourseLocaleValuesToForm(values) {
   courseFormPage?.refreshTitle();
 }
 
-function resolveCourseLocalizationSourceLocale(currentValues, initialValues) {
-  const changedLocales = getChangedCourseLocales(currentValues, initialValues);
-  if (changedLocales.size === 1) {
-    return [...changedLocales][0];
-  }
-  if (changedLocales.size === 0) {
-    return firstNonEmptyLocale(currentValues?.title, [activeDetailLocale, currentLocale, "en-GB"]) ??
-      firstNonEmptyLocale(currentValues?.description, [activeDetailLocale, currentLocale, "en-GB"]);
-  }
-  return null;
-}
-
 /**
- * #1037: en oversettelse som ikke kom, skal se ut som en oversettelse som ikke kom.
+ * #1178 (prinsipp 3, doc/DECISIONS.md «felles prinsipper»): oversettingen ved lagring. `plan` er `changedFieldTranslations`
+ * (admin-content-localized-copy.js), som seksjonene bruker: bare felt som er endret siden sist lagring, fra språket som ble
+ * endret, til språkene som IKKE ble endret. Ingen endret tekst gir ingen KI-kall. Før oversatte hver lagring navn og
+ * beskrivelse fra «det første språket med tekst», også når bare rekkefølgen var endret, og skrev over manuelle rettelser.
  *
- * ⚠️ SKREV TIDLIGERE KILDETEKSTEN INN I MÅLLOKALET. To steder gjorde det: `|| sourceTitle` når
- * svaret manglet feltet, og `catch`-blokka ved nettverksfeil. Resultatet var et fullt trespråkskart
- * som PÅSTO at kurset var oversatt — og løgnen ble fortalt nettopp når noe allerede hadde gått galt,
- * mens forfatteren så en feilmelding om noe annet.
+ * Ett kall til /courses/localize-copy per kilde- og målspråk, med feltene det paret har.
  *
- * Nedstrøms trodde publiseringsgaten at kurset var ferdig, oversettelsesstatusen i lista viste det
- * som komplett, og en nynorskdeltaker fikk bokmål servert som nynorsk. Det er #892-invarianten
- * brutt stille.
+ * #1037: en oversettelse som ikke kom, skal se ut som en oversettelse som ikke kom. Målspråket fylles ALDRI med kildeteksten
+ * (det påsto at kurset var oversatt, og en nynorskdeltaker fikk bokmål). Målet står TOMT og føres opp i `failedLocales`, så
+ * lagringen sier fra og publiseringsporten fanger det. Den gamle teksten beholdes ikke lenger (som seksjonene, #1163): den er
+ * en oversettelse av noe som ikke står der lenger. Før #1178 ble alt oversatt ved hver lagring, og da var den gamle teksten
+ * fortsatt en oversettelse av det samme.
  *
- * ⚠️ #930 DEKKET IKKE DETTE. Den sørget for at innhold skrevet i ETT språk bærer hvilket. Denne
- * stien skriver TRE, og ligger derfor utenfor.
- *
- * Retter etter #982/#905-mønsteret: lokalen SLIPPES, og føres opp i `failedLocales` slik at kalleren
- * kan si fra. Stillhet her var halve #892 — derfor returnerer funksjonen listen, og begge kallerne
- * viser den.
- *
- * `preserveExisting` er urørt: redigerer man et kurs som allerede har en oversettelse, beholdes den
- * når en ny ikke kom. Det er ikke en løgn — teksten ER oversatt, bare ikke på nytt.
+ * Ett unntak: navnet på bokmål. Lagringen krever det (produkteier 12.09). Feiler oversettingen TIL bokmål, står det lagrede
+ * bokmålsnavnet, så en nettverksfeil ikke stopper lagringen med «navnet må finnes på bokmål». Språket meldes likevel.
  */
-async function localizeCourseCopyAcrossLocales({ titleValues, descriptionValues, sourceLocale, preserveExisting = false }) {
-  const localized = {
-    title: cloneLocalizedFieldValues(titleValues),
-    description: cloneLocalizedFieldValues(descriptionValues),
-    failedLocales: [],
-  };
-
-  const sourceTitle = localized.title[sourceLocale]?.trim() ?? "";
-  const sourceDescription = localized.description[sourceLocale]?.trim() ?? "";
-  const hasSourceTitle = sourceTitle.length > 0;
-  const hasSourceDescription = sourceDescription.length > 0;
-
-  if (!hasSourceTitle && !hasSourceDescription) {
-    return localized;
-  }
-
-  for (const targetLocale of supportedLocales) {
-    if (targetLocale === sourceLocale) continue;
-
-    try {
-      const result = await apiFetch("/api/admin/content/courses/localize-copy", getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          ...(hasSourceTitle ? { title: sourceTitle } : {}),
-          ...(hasSourceDescription ? { description: sourceDescription } : {}),
-          sourceLocale,
-          targetLocale,
-        }),
-      });
-
-      // ⚠️ INGEN `|| sourceTitle` HER. Kom det ingen oversettelse, blir lokalen stående tom — med
-      // mindre det ALLEREDE fantes en, og vi er i redigeringsmodus.
-      let feilet = false;
-      if (hasSourceTitle) {
-        const oversatt = result?.title?.trim?.() || "";
-        const beholdt = preserveExisting ? localized.title[targetLocale] : "";
-        localized.title[targetLocale] = oversatt || beholdt || "";
-        if (!oversatt && !beholdt) feilet = true;
-      }
-      if (hasSourceDescription) {
-        const oversatt = result?.description?.trim?.() || "";
-        const beholdt = preserveExisting ? localized.description[targetLocale] : "";
-        localized.description[targetLocale] = oversatt || beholdt || "";
-        if (!oversatt && !beholdt) feilet = true;
-      }
-      if (feilet) localized.failedLocales.push(targetLocale);
-    } catch {
-      // ⚠️ NETTVERKSFEILEN VAR DEN VERSTE VARIANTEN: den fylte tre språk med kildeteksten mens
-      // forfatteren så en feilmelding om noe helt annet. Nå slippes lokalen, og kalleren sier fra.
-      const beholdtTittel = preserveExisting ? localized.title[targetLocale] : "";
-      const beholdtBeskrivelse = preserveExisting ? localized.description[targetLocale] : "";
-      if (hasSourceTitle) localized.title[targetLocale] = beholdtTittel || "";
-      if (hasSourceDescription) localized.description[targetLocale] = beholdtBeskrivelse || "";
-      if ((hasSourceTitle && !beholdtTittel) || (hasSourceDescription && !beholdtBeskrivelse)) {
-        localized.failedLocales.push(targetLocale);
-      }
+async function translateCourseCopyForSave(plan, current, saved) {
+  const values = cloneCourseLocaleValues(current);
+  const failedLocales = [];
+  const pairs = new Map();
+  for (const [field, { sourceLocale, targetLocales }] of Object.entries(plan)) {
+    for (const target of targetLocales) {
+      const key = `${sourceLocale}>${target}`;
+      if (!pairs.has(key)) pairs.set(key, { sourceLocale, target, fields: [] });
+      pairs.get(key).fields.push(field);
     }
   }
-
-  return localized;
+  for (const { sourceLocale, target, fields } of pairs.values()) {
+    let result = null;
+    try {
+      result = await apiFetch("/api/admin/content/courses/localize-copy", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ ...Object.fromEntries(fields.map((field) => [field, values[field][sourceLocale].trim()])), sourceLocale, targetLocale: target }),
+      });
+    } catch {
+      // Nettverksfeil og avvist kall: målet står tomt under, og meldes.
+    }
+    for (const field of fields) {
+      const translated = typeof result?.[field] === "string" ? result[field].trim() : "";
+      const keepSavedNbName = !translated && field === "title" && target === "nb" ? String(saved?.title?.nb ?? "").trim() : "";
+      values[field][target] = translated || keepSavedNbName;
+      if (!translated && !failedLocales.includes(target)) failedLocales.push(target);
+    }
+  }
+  return { ...values, failedLocales };
 }
 
 /**
@@ -440,18 +370,20 @@ async function loadPublishAudience(courseId, { fromDraft = false } = {}) {
 /**
  * #1164: avsnittet «Hvem ser kurset etterpå». Et åpent kurs: alle deltakere. Et begrenset: klassene med antall, de enkeltvis
  * tildelte og tallet i alt (en person i flere klasser telles én gang, på tjeneren). Ingen tildelt: at ingen ser det ennå.
+ * #1168: «Avpubliser» viser de samme menneskene som «Hvem mister tilgangen» (`keys` = `courses.unpublishDialog`): overskriften
+ * og de tre setningene byttes, tellingene er de samme.
  */
-function publishAudienceHtml(audience) {
+function publishAudienceHtml(audience, keys) {
   if (!audience) return "";
-  const heading = `<h3 class="cascade-delete-heading">${escapeHtml(t("courses.publishDialog.audienceHeading"))}</h3>`;
+  const heading = `<h3 class="cascade-delete-heading">${escapeHtml(t(`${keys}.audienceHeading`))}</h3>`;
   if (audience.policy === "OPEN") {
-    return `<section data-publish-audience="open">${heading}<p class="dialog-text">${escapeHtml(t("courses.publishDialog.audienceOpen"))}</p></section>`;
+    return `<section data-publish-audience="open">${heading}<p class="dialog-text">${escapeHtml(t(`${keys}.audienceOpen`))}</p></section>`;
   }
   const classes = Array.isArray(audience.classes) ? audience.classes : [];
   const individuals = Number(audience.individualCount) || 0;
   const total = Number(audience.totalCount) || 0;
   if (classes.length === 0 && individuals === 0) {
-    return `<section data-publish-audience="none">${heading}<p class="dialog-text">${escapeHtml(t("courses.publishDialog.audienceNone"))}</p></section>`;
+    return `<section data-publish-audience="none">${heading}<p class="dialog-text">${escapeHtml(t(`${keys}.audienceNone`))}</p></section>`;
   }
   const count = (n) => tf(n === 1 ? "courses.publishDialog.participantsOne" : "courses.publishDialog.participantsMany", { n });
   const rows = [
@@ -459,7 +391,7 @@ function publishAudienceHtml(audience) {
     individuals > 0 ? `<li class="cascade-publish-item" data-audience-individuals><span class="cascade-publish-item-title">${escapeHtml(tf("courses.publishDialog.individuals", { n: individuals }))}</span></li>` : "",
   ].join("");
   return `<section data-publish-audience="restricted">${heading}
-    <p class="dialog-text">${escapeHtml(t("courses.publishDialog.audienceRestricted"))}</p>
+    <p class="dialog-text">${escapeHtml(t(`${keys}.audienceRestricted`))}</p>
     <ul class="cascade-publish-list">${rows}</ul>
     <p class="dialog-text" data-audience-total>${escapeHtml(tf(total === 1 ? "courses.publishDialog.totalOne" : "courses.publishDialog.totalMany", { n: total }))}</p>
   </section>`;
@@ -467,7 +399,7 @@ function publishAudienceHtml(audience) {
 
 // POST the publish. `publishItems` cascades the unpublished modules/sections; false is the plain
 // publish (used when everything is already live).
-async function commitCoursePublish(courseId, publishItems, triggerButton = null, versionAnswer = undefined) {
+async function commitCoursePublish(courseId, publishItems, triggerButton = null, versionAnswer = undefined, successText = null) {
   try {
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/publish`, getHeaders, {
       method: "POST",
@@ -475,7 +407,7 @@ async function commitCoursePublish(courseId, publishItems, triggerButton = null,
       // bekreftet når hovedversjonen sender e-post.
       body: JSON.stringify({ publishItems, ...versionRequestBody(versionAnswer, "courseVersion") }),
     });
-    showToast(t("adminContent.courses.message.published") || t("courses.published"), "success");
+    showToast(successText || t("adminContent.courses.message.published") || t("courses.published"), "success");
 
     const route = detectRoute();
     if (route.view === "list") {
@@ -494,9 +426,125 @@ async function commitCoursePublish(courseId, publishItems, triggerButton = null,
       await openPendingPublishDialog(courseId);
       return;
     }
+    // #1178 skive 2: navnet eller beskrivelsen mangler et språk. Meldingen sier hva, og «Fyll inn det som mangler» fyller
+    // hullene, lagrer kurset og publiserer på nytt med de samme svarene.
+    const gateIssues = courseTextGateIssuesFrom(err);
+    if (gateIssues) {
+      if (triggerButton) triggerButton.disabled = false;
+      showCourseTextGateToast(gateIssues, () => fillCourseTextThenPublish({ courseId, issues: gateIssues, publishItems, triggerButton, versionAnswer }));
+      return;
+    }
     apiErrorToast(err);
     returnFocusTo(triggerButton);
   }
+}
+
+// ---------------------------------------------------------------------------
+// #1178 skive 2: publiseringsporten for kursets navn og beskrivelse (doc/design/PLAN_1178_KURS_PUBLISERINGSPORT.md)
+// ---------------------------------------------------------------------------
+
+/** Feltene og språkene porten fant (`422 course_translation_incomplete`), eller `null` når feilen er en annen. */
+function courseTextGateIssuesFrom(err) {
+  if (apiErrorCode(err) !== "course_translation_incomplete") return null;
+  const issues = apiErrorBody(err)?.details?.issues;
+  const usable = Array.isArray(issues)
+    ? issues.filter((issue) => (issue?.field === "title" || issue?.field === "description") && Array.isArray(issue.missingLocales) && issue.missingLocales.length > 0)
+    : [];
+  return usable.length > 0 ? usable : null;
+}
+
+/** «Kan ikke publisere — kurset mangler navnet (nynorsk, engelsk). Bruk «Fyll inn …»», med knappen. Som seksjonene. */
+function showCourseTextGateToast(issues, fill) {
+  const parts = issues.map((issue) => {
+    const field = t(issue.field === "title" ? "courses.textGate.fieldTitle" : "courses.textGate.fieldDescription");
+    return `${field} (${issue.missingLocales.map((code) => localeLabels[code] ?? code).join(", ")})`;
+  });
+  const text = `${t("courses.textGate.blocked")} ${parts.join("; ")}. ${t("courses.textGate.hint")}`;
+  showToast(text, "error", "", { actionLabel: t("courses.textGate.fill"), onAction: fill });
+}
+
+/**
+ * Hullene porten fant, fylt inn i en kopi av `values` (`{ title, description }`, kart per språk) med oversettelser fra ett språk
+ * som har tekst i alle feltene som mangler noe: bokmål først, så grensesnittspråket. Bare hullene: et språk med tekst beholder
+ * den. Svarer `{ values, filled, stillMissing }`, eller `null` når ingen språk har teksten å oversette fra.
+ */
+async function translateCourseTextGaps(issues, values) {
+  const out = cloneCourseLocaleValues(values);
+  const fields = [...new Set(issues.map((issue) => issue.field))];
+  const has = (field, locale) => String(out[field]?.[locale] ?? "").trim().length > 0;
+  const sourceLocale = [...new Set(["nb", currentLocale, "en-GB", "nn"])].find((locale) => fields.every((field) => has(field, locale)));
+  if (!sourceLocale) return null;
+  const targets = [...new Set(issues.flatMap((issue) => issue.missingLocales))].filter((locale) => locale !== sourceLocale);
+  let filled = 0;
+  for (const target of targets) {
+    const holes = fields.filter((field) => !has(field, target));
+    if (holes.length === 0) continue;
+    try {
+      const result = await apiFetch("/api/admin/content/courses/localize-copy", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ ...Object.fromEntries(holes.map((field) => [field, out[field][sourceLocale].trim()])), sourceLocale, targetLocale: target }),
+      });
+      for (const field of holes) {
+        const translated = typeof result?.[field] === "string" ? result[field].trim() : "";
+        if (translated) { out[field][target] = translated; filled += 1; }
+      }
+    } catch {
+      // Avgjøres under, av hullene som står igjen.
+    }
+  }
+  const stillMissing = fields.some((field) => targets.some((locale) => !has(field, locale)));
+  return { values: out, filled, stillMissing };
+}
+
+/** Meldingen etter en utfylling som ikke endte i en publisering. */
+function reportCourseTextFill(outcome) {
+  if (outcome === "partial") showToast(t("courses.textGate.fillPartial"), "warning");
+  else if (outcome === "noSource") showToast(t("courses.textGate.fillNoSource"), "error");
+  else showToast(t("courses.textGate.fillFailed"), "error");
+}
+
+/**
+ * Vei 1 og 2 («Publiser», fra lista eller skjemaet): kurset er ikke publisert, så navn og beskrivelse lagres rett på kurset
+ * (`PUT …/:courseId`) med telleren som ble hentet. Har noen andre lagret kurset siden, avviser tjeneren (409), og ingenting
+ * endres. Så publiseres kurset på nytt med de samme svarene (versjon, e-posttall).
+ */
+async function fillCourseTextThenPublish({ courseId, issues, publishItems, triggerButton, versionAnswer }) {
+  let outcome;
+  try {
+    outcome = await runWithWorkDialog(t("courses.textGate.filling"), async () => {
+      const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, getHeaders);
+      const course = body?.course ?? null;
+      if (!course) return "failed";
+      const gaps = await translateCourseTextGaps(issues, {
+        title: parseLocalizedFieldValues(course.title),
+        description: parseLocalizedFieldValues(course.description),
+      });
+      if (!gaps) return "noSource";
+      if (gaps.filled === 0) return "failed";
+      await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, getHeaders, {
+        method: "PUT",
+        body: JSON.stringify({
+          title: normalizeLocalizedRequestValue(gaps.values.title),
+          description: normalizeLocalizedRequestValue(gaps.values.description),
+          expectedRevision: Number.isInteger(course.contentRevision) ? course.contentRevision : 0,
+        }),
+      });
+      return gaps.stillMissing ? "partial" : "saved";
+    });
+  } catch (err) {
+    apiErrorToast(err);
+    return;
+  }
+  if (outcome !== "saved") {
+    reportCourseTextFill(outcome);
+    if (outcome === "partial") {
+      const route = detectRoute();
+      if (route.view === "list") await renderListView();
+      else await renderDetailView(courseId);
+    }
+    return;
+  }
+  await commitCoursePublish(courseId, publishItems, triggerButton, versionAnswer, t("courses.textGate.filled"));
 }
 
 // ---------------------------------------------------------------------------
@@ -580,7 +628,7 @@ function renderCascadeItemList(items, { showBlockers }) {
  *     kurset har kursbevis (`versionCourse`).
  *   - `blocked` (#734): noe kan ikke publiseres. Lista med grunnene, og bare «Lukk» (I1).
  */
-function openCoursePublishDialog({ mode, items = [], audience = null, versionCourse = null, title = "", confirmLabel = "" }) {
+function openCoursePublishDialog({ mode, items = [], audience = null, versionCourse = null, title = "", confirmLabel = "", text: plainText = "", audienceKeys = "courses.publishDialog" }) {
   const dialog = cascadePublishDialog;
   const titleEl = document.getElementById("cascadePublishTitle");
   const textEl = document.getElementById("cascadePublishText");
@@ -608,14 +656,14 @@ function openCoursePublishDialog({ mode, items = [], audience = null, versionCou
       ? (t("adminContent.courses.cascadePublish.blockedText") || t("courses.publish.blockedBody"))
       : mode === "cascade"
         ? (t("adminContent.courses.cascadePublish.confirmText") || t("courses.publish.cascadeBody"))
-        : "";
+        : plainText;
     textEl.textContent = text;
     setHidden(textEl, !text);
   }
   if (listEl) listEl.innerHTML = mode === "plain" ? "" : renderCascadeItemList(items, { showBlockers: blocked });
   // Hvem som ser kurset, står ikke i den sperrede utgaven: der publiseres ingenting.
   if (audienceEl) {
-    audienceEl.innerHTML = blocked ? "" : publishAudienceHtml(audience);
+    audienceEl.innerHTML = blocked ? "" : publishAudienceHtml(audience, audienceKeys);
     setHidden(audienceEl, blocked || !audience);
   }
   const asksVersion = !blocked && versionCourse != null;
@@ -900,9 +948,19 @@ function initPendingPublishDialog() {
 // kursets nåværende hovedversjon, stilles ikke spørsmålet. Tjeneren eier reglene (og gjør en hovedversjon
 // uten kursbevis til mindre); dialogen viser konsekvensen.
 
+// #1171: ingen brikke før første publisering. Kurset har ikke noe «noen gang publisert»-felt (`CourseVersion` får rader bare ved en
+// hovedversjon); et kurs som aldri er publisert, står i utkast på v1.0 uten publishedAt. Et ARKIVERT kurs beholder brikken som før:
+// på stage 28.11.2026 var 20 av 51 arkiverte kurs v1.0 uten publishedAt, og om de var publisert, kan ikke klienten vite.
+// Kjent mangel: et kurs på v1.0 som er avpublisert (utkast igjen), mister brikken.
+function courseEverPublished(course) {
+  const life = lifecycleOf(course);
+  return Boolean(course?.publishedAt) || life !== "draft"
+    || (Number(course?.versionMajor) || 1) > 1 || (Number(course?.versionMinor) || 0) > 0;
+}
+
 function courseVersionChipHtml(course) {
-  const label = courseVersionLabel(course);
-  return label ? ` <span class="status-chip course-version-chip" title="${escapeHtml(t("courses.version.chipTitle"))}">${escapeHtml(label)}</span>` : "";
+  if (!courseEverPublished(course)) return "";
+  return versionChipHtml(courseVersionLabel(course), { className: "course-version-chip", title: t("courses.version.chipTitle") });
 }
 
 /** Kursets innhold er rekkefølgen av moduler og seksjoner (diskusjonsbryteren er ikke innhold). */
@@ -961,7 +1019,7 @@ function askCourseVersion(course, changes, { saveKey = "courses.version.save", a
   // to ganger om én handling). Lagringen sender ingen `audience`, og da står avsnittet skjult.
   const audienceEl = document.getElementById("courseVersionAudience");
   if (audienceEl) {
-    audienceEl.innerHTML = publishAudienceHtml(audience);
+    audienceEl.innerHTML = publishAudienceHtml(audience, "courses.publishDialog");
     setHidden(audienceEl, !audience);
   }
   cancelBtn.textContent = t("courses.version.cancel");
@@ -1062,7 +1120,7 @@ function getListPage() {
         // Alfabetisk står temaene under navnet; etter tema sier overskriften det.
         + (view === "alphabetical" && (c.themes ?? []).length > 0 ? `<span class="list-group-themes">${escapeHtml(c.themes.map((theme) => theme.name).join(" · "))}</span>` : "") },
       // #934 skive 3: versjonen ved statusen («v3.2») — et merke, ikke en kolonne (#1084).
-      { key: "status", label: t("ui.status"), className: "col-status", render: (c, ctx) => lifecycleBadge(c, t) + courseVersionChipHtml(c) + (ctx.filter === "archived" ? retentionLineHtml(c, "course", t, currentLocale) : "") },
+      { key: "status", label: t("ui.status"), className: "col-status", render: (c, ctx) => lifecycleBadge(c, t, { versionChip: courseVersionChipHtml(c) }) + (ctx.filter === "archived" ? retentionLineHtml(c, "course", t, currentLocale) : "") },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (c) => certBadge(c.certificationLevel) },
       { key: "moduleCount", label: t("courses.col.moduleCount"), className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
       { key: "inProgress", label: t("courses.col.inProgress"), className: "col-inprogress", title: t("courses.col.inProgressHint"), sortValue: (c) => c.inProgressCount ?? 0, render: (c) => (c.inProgressCount > 0 ? String(c.inProgressCount) : "–") },
@@ -1079,12 +1137,18 @@ function getListPage() {
       // #1165 (produkteier 14.11.2026, «Produsenter bør kunne se hverandres innhold»): den som ikke eier kurset, kan åpne det for å
       // lese (skjemaet er skrivebeskyttet) og eksportere det (lesing, #1031). Bare det hen kan gjøre, står i raden; merket sier
       // at endringene er eiernes.
+      const openLink = `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`;
+      const exportBtn = `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`;
+      // #1169 skive 4b: «Dupliser» — et nytt kurs med de samme modulene og seksjonene. Også for den som ikke eier kurset (kopien er
+      // hens egen), ikke for et arkivert (tjeneren nekter også).
+      const duplicateBtn = lifecycle === "archived" ? "" : `<button class="row-action-btn" data-action="duplicate" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.duplicate"))}</button>`;
+      // #1169 skive 3 (doc/DECISIONS.md 28.11.2026): raden har hodets regel — Åpne · hovedhandlingen · «Mer» i fast rekkefølge.
       if (!canManage) {
-        return [
-          `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`,
-          `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`,
-          `<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`,
-        ];
+        return {
+          primary: [openLink],
+          more: [duplicateBtn, exportBtn],
+          after: [`<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`],
+        };
       }
       // #705: samme handlings-rekkefølge som modul/seksjon — Publiser⇄Avpubliser, Arkiver⇄Gjenopprett.
       // Publiser vises bare for et utkast som har innhold (samme krav som canPublishCourse i detaljvisningen).
@@ -1105,14 +1169,19 @@ function getListPage() {
       const cascadeDeleteBtn = isAdministrator() && lifecycle === "archived"
         ? `<button class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>`
         : "";
-      return [
-        `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`,
-        `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`,
-        publishToggle,
-        archiveToggle,
-        deleteBtn,
-        cascadeDeleteBtn,
-      ];
+      // Hovedhandlingen: Publiser (et utkast med innhold) eller Gjenopprett (arkivert). Avpubliser og Arkiver står under «Mer».
+      // «Publiser utkastet» er en lenke til kursets hode, som spør om versjonen (skive 4a).
+      const live = isLiveLifecycle(lifecycle);
+      // #1169 skive 4: et publisert kurs med et utkast får «Publiser utkastet» her også. Lenka åpner kurset og kjører hodets knapp.
+      const publishDraftLink = lifecycle === "published_with_draft"
+        ? `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}?publishDraft=1" class="row-action-btn" data-action-link="publish-draft">${escapeHtml(t("courses.draft.publishAction"))}</a>`
+        : "";
+      // #1169 skive 4c: «Døp om» først i «Mer», som modul og seksjon. Ikke for et arkivert kurs.
+      const renameBtn = lifecycle === "archived" ? "" : `<button class="row-action-btn" data-action="rename" data-course-id="${cid}">${escapeHtml(t("ui.action.rename"))}</button>`;
+      return {
+        primary: [openLink, lifecycle === "archived" ? archiveToggle : (live ? publishDraftLink : publishToggle)],
+        more: [renameBtn, duplicateBtn, exportBtn, live ? publishToggle : "", lifecycle === "archived" ? "" : archiveToggle, deleteBtn, cascadeDeleteBtn],
+      };
     },
     emptyHtml: () => `
       <div class="empty-state">
@@ -1124,7 +1193,7 @@ function getListPage() {
     // #1152 skive 4b-2: slettedatoen regnes bare når «Arkiverte» er valgt (produkteier 14.11.2026, etter stage 2.162.0).
     lazyFields: { filter: "archived", fields: ["retention"], load: async () => (await apiFetch("/api/admin/content/courses?includeRetention=1", getHeaders)).courses ?? [] },
     describeError: (err) => apiErrorText(err),
-    onAction: (_action, _id, btn, _item, event) => handleListTableClick(event, btn),
+    onAction: (action, id, btn, item, event) => (action === "rename" ? omdopKursIRad(id, btn, item) : handleListTableClick(event, btn)),
     afterRender: () => {
       document.getElementById("importCoursePackageFile")?.addEventListener("change", handleImportCoursePackageFile);
       document.getElementById("importCoursePackageBtn")?.addEventListener("click", () => {
@@ -1133,6 +1202,41 @@ function getListPage() {
     },
   });
   return listPage;
+}
+
+/**
+ * #1169 skive 4c (doc/design/PLAN_1169_4B_DUPLISER_KURS.md, § 6): døp om kurset i raden, på språket lista viser. Redigeringen
+ * starter fra navnet som blir publisert: utkastets tittel når et utkast har en (`draftTitle`), ellers kursets. HELE språkkartet
+ * sendes, med den lagrede teksten raden viste (`expectedTitle`). Et publisert kurs får navnet i utkastet (tjeneren avgjør).
+ */
+function omdopKursIRad(courseId, btn, item) {
+  const rad = btn?.closest("tr");
+  if (!rad || !item) return;
+  const lagret = typeof item.draftTitle === "string" ? item.draftTitle : item.title;
+  const kart = lagretTittelkart(lagret);
+  startOmdoping({
+    rad,
+    gjeldendeTittel: kart[currentLocale] ?? "",
+    visningsspraak: currentLocale,
+    spraakNavn: localeLabels[currentLocale] ?? currentLocale,
+    tf,
+    onCancel: () => getListPage().renderTable(),
+    onSave: async (nyTittel, spraak) => {
+      try {
+        const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/title`, getHeaders, {
+          method: "PATCH",
+          body: JSON.stringify({ title: { ...kart, [spraak]: nyTittel }, expectedTitle: lagret }),
+        });
+        if (body?.renamedIn === "draft") showToast(t("courses.renameSavedDraft"), "success");
+        else if (body?.renamedIn === "course") showToast(t("ui.rename.saved"), "success");
+        renderListView();
+      } catch (err) {
+        apiErrorToast(err);
+        if (["course_changed", "course_draft_changed", "course_draft_unreadable", "course_has_draft"].includes(apiErrorCode(err))) renderListView();
+        else getListPage().renderTable();
+      }
+    },
+  });
 }
 
 async function renderListView() {
@@ -1379,6 +1483,10 @@ function handleListTableClick(event, btn = event.target.closest("[data-action]")
     exportCoursePackage(btn.dataset.courseId, btn.dataset.courseTitle, btn);
     return;
   }
+  if (btn.dataset.action === "duplicate") {
+    duplicateCourseInAdmin(btn.dataset.courseId, btn.dataset.courseTitle, btn);
+    return;
+  }
   if (btn.dataset.action === "publish-pending") {
     openPendingPublishDialog(btn.dataset.courseId);
     return;
@@ -1396,7 +1504,7 @@ function handleListTableClick(event, btn = event.target.closest("[data-action]")
     return;
   }
   if (btn.dataset.action === "delete") {
-    openDeleteDialog(btn.dataset.courseId, btn.dataset.courseTitle);
+    openDeleteDialog(btn.dataset.courseId, btn.dataset.courseTitle, btn);
     return;
   }
   if (btn.dataset.action === "cascade-delete") {
@@ -1564,10 +1672,15 @@ async function archiveCourseInAdmin(courseId, courseTitle, triggerButton = null)
 }
 
 /** Etter at en dialog er lukket: knappen som åpnet den, virker igjen og får fokuset tilbake (den var slått av da dialogen åpnet). */
+// #1169 skive 3: knappen kan ligge i en lukket «Mer»-meny (raden og hodet); da får «Mer» fokuset, som i modul- og seksjonsdialogene
+// (`focusBack` i module-lifecycle-dialogs.js). Før gikk fokuset til en skjult knapp og forsvant.
 function returnFocusTo(triggerButton) {
   if (!triggerButton) return;
   triggerButton.disabled = false;
-  if (triggerButton.isConnected) triggerButton.focus();
+  if (!triggerButton.isConnected) return;
+  const menu = triggerButton.closest("details.row-more");
+  if (menu && !menu.open) menu.querySelector("summary")?.focus();
+  else triggerButton.focus();
 }
 
 // En tjener uten forhåndsvisning (eldre enn 2.159.0): den enkle bekreftelsen og arkiveringen uten kropp, som før.
@@ -1648,10 +1761,36 @@ function initCourseArchiveDialog() {
   });
 }
 
-// #705: avpubliser et kurs (motstykke til Publiser). G3-vakta (påbegynt deltaker) i backend gir
-// en forklarende feilmelding hvis det ikke er lov.
+// #705: avpubliser et kurs (motstykke til Publiser). Ingen sperre på tjeneren: avpublisering kan alltid gjøres om med en ny
+// publisering (courseCommands.ts, `unpublishCourse`).
+// #1168: i publiseringsdialogens form (#1164), ikke nettleserens spørreboks: den sier hvem som mister tilgangen, med de samme
+// tallene som «Publiser» viser (`GET …/publish-audience`, kursets egen synlighet, ikke utkastets).
 async function unpublishCourseInAdmin(courseId, courseTitle, triggerButton = null) {
-  if (!window.confirm(tf("courses.unpublishConfirm", { title: courseTitle }))) {
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.setAttribute("aria-busy", "true");
+  }
+  let audience;
+  try {
+    audience = await loadPublishAudience(courseId);
+  } catch (err) {
+    apiErrorToast(err);
+    triggerButton?.removeAttribute("aria-busy");
+    if (triggerButton) triggerButton.disabled = false;
+    return;
+  }
+  triggerButton?.removeAttribute("aria-busy");
+  if (triggerButton) triggerButton.disabled = false;
+  const answer = await openCoursePublishDialog({
+    mode: "plain",
+    audience,
+    title: tf("courses.unpublishDialog.title", { title: courseTitle }),
+    text: t("courses.unpublishDialog.text"),
+    confirmLabel: t("courses.unpublishDialog.confirm"),
+    audienceKeys: "courses.unpublishDialog",
+  });
+  if (!answer) {
+    returnFocusTo(triggerButton);
     return;
   }
   if (triggerButton) triggerButton.disabled = true;
@@ -1817,13 +1956,59 @@ function initCourseRestoreDialog() {
 }
 
 // ---------------------------------------------------------------------------
+// #1169 skive 4b: «Dupliser kurs» (doc/design/PLAN_1169_4B_DUPLISER_KURS.md)
+// ---------------------------------------------------------------------------
+
+let courseDuplicateBusy = false;
+
+/**
+ * Sidas egen bekreftelse (#1168) sier hva kopien er: de SAMME modulene og seksjonene (en endring gjelder begge kursene), uten klasser,
+ * tildelinger, kursbevis eller utkast, og upublisert. Tjeneren lager kopien i én transaksjon; så åpnes den. Ulagrede endringer i
+ * hodet er spurt om før dette (`confirmLeave`), så nettleseren skal ikke spørre en gang til (`leaveAnswered`, som modulens hode).
+ * Sperren står til den nye sida har tatt over, så et klikk til ikke lager en kopi til.
+ */
+async function duplicateCourseInAdmin(courseId, courseTitle, triggerButton) {
+  if (!courseId || courseDuplicateBusy) return;
+  const confirmed = await confirmLifecycleStep({
+    kind: "duplicate",
+    title: tf("courses.duplicateDialog.title", { title: courseTitle || courseId }),
+    text: t("courses.duplicateDialog.text"),
+    confirmLabel: t("ui.action.duplicate"),
+    t,
+    returnFocusTo: triggerButton,
+  });
+  if (!confirmed) return;
+  courseDuplicateBusy = true;
+  try {
+    const body = await runWithWorkDialog(t("adminContent.work.copying"), () => apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/duplicate`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify({}),
+      headers: { "Idempotency-Key": `duplicate-${courseId}-${Date.now()}` },
+    }));
+    const copyId = body?.course?.id;
+    if (!copyId) throw new Error(t("courses.noIdReturned"));
+    queueToast(tf("courses.duplicated", { title: courseTitle || courseId }), "success");
+    courseFormPage?.leaveAnswered?.();
+    window.location.href = `/admin-content/courses/${encodeURIComponent(copyId)}`;
+  } catch (err) {
+    courseDuplicateBusy = false;
+    apiErrorToast(err);
+    returnFocusTo(triggerButton);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Delete dialog
 // ---------------------------------------------------------------------------
 
 let pendingDeleteId = null;
+// QA-porten 2.189.0: knappen som åpnet dialogen, får fokuset tilbake når dialogen lukkes uten sletting (Avbryt eller Escape).
+// Den ligger under «Mer» nå, så det er «Mer» som får det (`returnFocusTo`).
+let pendingDeleteTrigger = null;
 
-function openDeleteDialog(courseId, courseTitle) {
+function openDeleteDialog(courseId, courseTitle, trigger = null) {
   pendingDeleteId = courseId;
+  pendingDeleteTrigger = trigger;
   deleteDialogText.textContent = buildCourseDeleteDialogText(courseTitle, tf);
   deleteDialog.showModal();
 }
@@ -2008,6 +2193,9 @@ let courseModules = [];
 
 // All available library modules (for the combobox)
 let allLibraryModules = [];
+// #1171 (2.193.0): moduler uten publisert versjon. De tilbys ikke i søket (#440), men søket sier fra når de matcher, i stedet
+// for at modulen bare ikke dukker opp.
+let unpublishedLibraryModules = [];
 
 // All available library sections (for the section picker, #490)
 let allLibrarySections = [];
@@ -2053,7 +2241,7 @@ async function renderDetailView(courseId) {
   }
 
   // Det søket i kursbyggeren kan tilby. Feiler hentingen ved åpning, står lista tom.
-  try { allLibraryModules = await loadPickerModules(); } catch { allLibraryModules = []; }
+  try { ({ live: allLibraryModules, unpublished: unpublishedLibraryModules } = await loadPickerModules()); } catch { allLibraryModules = []; unpublishedLibraryModules = []; }
   try { allLibrarySections = await loadPickerSections(); } catch { allLibrarySections = []; }
   bindPickerRefresh();
 
@@ -2169,6 +2357,17 @@ async function renderDetailView(courseId) {
     window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
     if ((pendingVersions?.items?.length ?? 0) > 0) await openPendingPublishDialog(courseId);
   }
+  // #1169 skive 4: «Publiser utkastet» i kurslista åpner kurset med `?publishDraft=1`, og hodets knapp kjøres — med versjonsspørsmålet
+  // og porten der. Bare når knappen faktisk står (et publisert kurs med et lesbart utkast). Flagget fjernes, som over.
+  if (courseId && params.has("publishDraft")) {
+    params.delete("publishDraft");
+    const query = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    // Kurset spør alltid i sin dialog før noe publiseres. QA 2.190.0: er det ikke noe utkast å publisere (lista var gammel, eller
+    // utkastet kan ikke leses), sier sida det i stedet for å gjøre ingenting.
+    if (document.getElementById("publishCourseDraftBtn")) await publishCourseDraftFromForm();
+    else showToast(t("courses.draft.publishNothing"), "info");
+  }
 }
 
 // Kroppen i skjemasida: kursdetaljer + innhold. Feltene beholder id-ene sine (title-nb, certLevel …).
@@ -2247,10 +2446,12 @@ function courseDetailBodyHtml() {
         <h2 class="detail-section-title">${escapeHtml(t("ui.tab.settings"))}</h2>
         <div class="form-field">
           <label for="enrollmentPolicy">${escapeHtml(t("courses.visibility"))}</label>
-          <select id="enrollmentPolicy">
+          <select id="enrollmentPolicy" aria-describedby="enrollmentPolicyHelp">
             <option value="OPEN"${enrollmentPolicy !== "RESTRICTED" ? " selected" : ""}>${escapeHtml(t("courses.visibility.open"))}</option>
             <option value="RESTRICTED"${enrollmentPolicy === "RESTRICTED" ? " selected" : ""}>${escapeHtml(t("courses.visibility.restricted"))}</option>
           </select>
+          <!-- #1197: «Åpent» er frivillig; påkrevd for alle er klassen «Alle deltakere» (doc/DECISIONS.md 2026-11-26). -->
+          <p class="small" id="enrollmentPolicyHelp" style="margin: 4px 0 0">${escapeHtml(t("courses.visibilityHelp"))}</p>
         </div>
         <div class="form-field" style="margin-top: var(--space-2)">
           <label for="sortOrder">${escapeHtml(t("courses.sortOrder"))}</label>
@@ -2384,11 +2585,12 @@ function getCourseFormPage() {
       return courseDetail?.course ? (localizedText(courseDetail.course.title) || "") : "";
     },
     item: () => courseDetail?.course ?? null,
+    isNew: () => !courseDetail?.courseId,
     // #934 skive 3: versjonen («v3.2») ved statusmerket. Et nytt kurs har ingen ennå.
     // #1140 etappe 2: med utkast «Publisert» + «Nyere utkast» (det felles merket), og linja om hvem som lagret det.
     statusHtml: () => {
       const course = courseDetail?.course ?? null;
-      return course ? lifecycleBadge(course, t) + courseVersionChipHtml(course) + courseDraftStateHtml(course) + courseArchivedNoticeHtml() : "";
+      return course ? lifecycleBadge(course, t, { versionChip: courseVersionChipHtml(course) }) + courseDraftStateHtml(course) + courseArchivedNoticeHtml() : "";
     },
     t,
     actions: () => courseDetailActions(),
@@ -2419,32 +2621,45 @@ function courseDetailActions() {
   // #1140 etappe 2: rett etter Lagre og Avbryt, og bare når kurset har et lagret utkast. «Publiser utkastet» bare for et
   // publisert kurs (serveren avviser ellers); «Forkast utkast» alltid, så et utkast aldri står uten en vei ut.
   const draftLoaded = courseDraft != null && courseHasDraft(c);
-  // #1165: en annens kurs leses og eksporteres; resten er eiernes (tjeneren avviser det med 403).
-  if (courseIsReadOnly()) {
-    return [`<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`];
-  }
-  return [
-    draftLoaded && isLiveLifecycle(lifecycle) && !courseDraft.unreadable
-      ? `<button type="button" id="publishCourseDraftBtn" class="row-action-btn" data-action="publish-draft" data-course-id="${cid}">${escapeHtml(t("courses.draft.publishAction"))}</button>`
-      : "",
+  const exportBtn = `<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`;
+  const archived = lifecycle === "archived";
+  // #1169 skive 4b: «Dupliser» først under «Mer», også for den som ikke eier kurset; ikke for et arkivert.
+  const duplicateBtn = archived ? "" : `<button type="button" class="row-action-btn" data-action="duplicate" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.duplicate"))}</button>`;
+  // #1165: en annens kurs leses, kopieres og eksporteres; resten er eiernes (tjeneren avviser det med 403).
+  if (courseIsReadOnly()) return { more: [duplicateBtn, exportBtn] };
+  const live = isLiveLifecycle(lifecycle);
+  // #1169 skive 2 (doc/DECISIONS.md 28.11.2026): hovedhandlingen for tilstanden som fylt knapp, resten under «Mer» i fast
+  // rekkefølge (Eksporter · Forkast utkast · Avpubliser · Arkiver / Slett). «Publiser nye versjoner (n)» fører også arbeidet
+  // videre og står ved hovedhandlingen, uten fyll når kurset har et utkast å publisere.
+  const publishDraft = draftLoaded && live && !courseDraft.unreadable;
+  const primary = archived
+    ? [`<button type="button" class="row-action-btn is-primary" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.restore"))}</button>`]
+    : [
+      publishDraft
+        ? `<button type="button" id="publishCourseDraftBtn" class="row-action-btn is-primary" data-action="publish-draft" data-course-id="${cid}">${escapeHtml(t("courses.draft.publishAction"))}</button>`
+        : "",
+      !live && moduleCount > 0
+        ? `<button type="button" id="publishCourseBtn" class="row-action-btn is-primary" data-action="publish" data-course-id="${cid}">${escapeHtml(t("ui.action.publish"))}</button>`
+        : "",
+      pendingCount > 0
+        ? `<button type="button" class="row-action-btn${publishDraft || (!live && moduleCount > 0) ? "" : " is-primary"}" data-action="publish-pending" data-course-id="${cid}">${escapeHtml(tf("adminContent.courses.pendingPublish.action", { count: pendingCount }))}</button>`
+        : "",
+    ];
+  const more = [
+    duplicateBtn,
+    exportBtn,
     draftLoaded
       ? `<button type="button" id="discardCourseDraftBtn" class="row-action-btn" data-action="discard-draft" data-course-id="${cid}">${escapeHtml(t("courses.draft.discardAction"))}</button>`
       : "",
-    pendingCount > 0
-      ? `<button type="button" class="row-action-btn" data-action="publish-pending" data-course-id="${cid}">${escapeHtml(tf("adminContent.courses.pendingPublish.action", { count: pendingCount }))}</button>`
+    !archived && live
+      ? `<button type="button" class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.unpublish"))}</button>`
       : "",
-    `<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`,
-    lifecycle === "archived" ? ""
-      : isLiveLifecycle(lifecycle)
-        ? `<button type="button" class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.unpublish"))}</button>`
-        : (moduleCount > 0 ? `<button type="button" id="publishCourseBtn" class="row-action-btn" data-action="publish" data-course-id="${cid}">${escapeHtml(t("ui.action.publish"))}</button>` : ""),
-    lifecycle === "archived"
-      ? `<button type="button" class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.restore"))}</button>`
-      : `<button type="button" class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.archive"))}</button>`,
-    lifecycle === "archived" ? `<button type="button" class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
+    archived ? "" : `<button type="button" class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.archive"))}</button>`,
+    archived ? `<button type="button" class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
     // #1151 skive 3b/3c: «Slett med innhold» bare for et arkivert kurs, som i lista (tjeneren: `delete_requires_archived`).
-    isAdministrator() && lifecycle === "archived" ? `<button type="button" class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>` : "",
+    isAdministrator() && archived ? `<button type="button" class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>` : "",
   ];
+  return { primary, more };
 }
 
 /**
@@ -2504,8 +2719,28 @@ function courseVersionNumber(course) {
 function courseDraftItemProblem(item) {
   if (item?.missing) return "missing";
   if (item?.archivedAt) return "archived";
-  if (item?.unpublished) return "unpublished";
+  // #1192 punkt 4: en upublisert seksjon stopper ikke publiseringen; den er skjult for deltakerne (`courseDraftItemNote`).
+  if (item?.unpublished && item.type === "MODULE") return "unpublished";
   return null;
+}
+
+/** En merknad som ikke stopper publiseringen: en ny seksjon uten publisert versjon, som deltakerne ikke ser ennå. */
+function courseDraftItemNote(item) {
+  return item?.unpublished && item.type === "SECTION" && !courseDraftItemProblem(item) ? "sectionHidden" : null;
+}
+
+/**
+ * Merknaden for en rad i lista. Seksjonsbiblioteket er kilden (`activeVersionId`), så raden får merknaden uansett hvordan den kom
+ * inn: lagt til fra velgeren, lest fra utkastet, eller fra det publiserte kurset (QA-porten 2026-11-24: velgeren mistet
+ * tilstanden, og «Publiser utkastet» rett etter «Legg til» ga ingen merknad). Mangler biblioteket, står serverens flagg.
+ */
+function courseItemNote(m) {
+  if (m.problem) return null;
+  if (m.type === "SECTION") {
+    const lib = allLibrarySections.find((s) => s.id === m.refId);
+    if (lib) return lib.activeVersionId == null ? "sectionHidden" : null;
+  }
+  return m.note ?? null;
 }
 
 function courseDraftItemToFormItem(item) {
@@ -2516,6 +2751,7 @@ function courseDraftItemToFormItem(item) {
     title: localizedText(item.title) || refId,
     discussionsEnabled: item.discussionsEnabled !== false,
     problem: courseDraftItemProblem(item),
+    note: courseDraftItemNote(item),
   };
 }
 
@@ -2640,7 +2876,47 @@ async function commitCourseDraftPublish(courseId, course, answer, changes, retri
       await commitCourseDraftPublish(courseId, asked, again, changes, true, audience);
       return;
     }
+    // #1178 skive 2: navnet eller beskrivelsen i det som skulle ut, mangler et språk. Utkastet står (transaksjonen er rullet
+    // tilbake), og «Fyll inn det som mangler» fyller hullene i skjemaet, lagrer utkastet og publiserer det på nytt.
+    const gateIssues = courseTextGateIssuesFrom(err);
+    if (gateIssues) {
+      showCourseTextGateToast(gateIssues, () => fillCourseDraftTextThenPublish({ courseId, course, issues: gateIssues, answer, changes, audience }));
+      return;
+    }
     showCourseDraftError(err);
+  }
+}
+
+/**
+ * #1178 skive 2, vei 3 («Publiser utkastet», bare i skjemaet): skjemaet viser utkastet slik det er lagret («Publiser utkastet»
+ * lagret ulagrede endringer først), med det utkastet lot stå «som publisert» fylt inn. Hullene fylles inn i feltene, utkastet
+ * lagres uten ny oversetting (ellers ville de utfylte språkene sett «endret» ut og blitt oversatt videre), og publiseres på nytt
+ * med de samme svarene. Utkastets id og teller følger lagringen: har noen andre lagret det siden, avviser tjeneren (409).
+ */
+async function fillCourseDraftTextThenPublish({ courseId, course, issues, answer, changes, audience }) {
+  const page = getCourseFormPage();
+  if (courseDraftActionRunning || page.state.saving || courseDetail?.courseId !== courseId) return;
+  courseDraftActionRunning = true;
+  try {
+    const outcome = await runWithWorkDialog(t("courses.textGate.filling"), async () => {
+      const gaps = await translateCourseTextGaps(issues, collectLocaleValues());
+      if (!gaps) return "noSource";
+      if (gaps.filled === 0) return "failed";
+      applyCourseLocaleValuesToForm(gaps.values);
+      const saved = await saveCourse(courseId, { beforePublish: true, skipTranslation: true });
+      if (!saved) return "notSaved";
+      page.markClean();
+      return gaps.stillMissing ? "partial" : "saved";
+    });
+    // Lagringen viste selv hvorfor den stoppet (feilbanneret).
+    if (outcome === "notSaved") return;
+    if (outcome !== "saved") {
+      reportCourseTextFill(outcome);
+      return;
+    }
+    await commitCourseDraftPublish(courseId, course, answer, changes, false, audience);
+  } finally {
+    courseDraftActionRunning = false;
   }
 }
 
@@ -2700,11 +2976,15 @@ function renderModuleList() {
       const openHref = buildCourseItemHref(m, aktivtKursId);
       // #1140 etappe 2: et element i utkastet som er arkivert, avpublisert eller slettet siden utkastet ble lagret, merkes med
       // grunnen. Publiseringen avvises av serveren til det er tatt ut.
+      // #1192 punkt 4: en upublisert seksjon får en merknad som ikke stopper publiseringen.
+      const note = courseItemNote(m);
       const problemNote = m.problem
         ? `<span class="form-row-note" data-item-problem="${escapeHtml(m.problem)}">${escapeHtml(t(`courses.draft.item.${m.problem}`))}</span>`
-        : "";
+        : note
+          ? `<span class="form-row-note" data-item-note="${escapeHtml(note)}">${escapeHtml(t(`courses.draft.item.${note}`))}</span>`
+          : "";
       return `
-      <li class="form-row${m.problem ? " is-blocked" : ""}" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
+      <li class="form-row${m.problem ? " is-blocked" : note ? " has-note" : ""}" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
         <span class="form-row-order">${i + 1}.</span>
         <span class="form-row-badge">${courseItemTypeBadge(m.type)}</span>
         <span class="form-row-title">${escapeHtml(m.title)}</span>
@@ -2760,9 +3040,35 @@ function moveModule(idx, dir) {
 // ⚠️ «Publisert» = har en live versjon, også når det ligger en nyere, upublisert lagring oppå
 // (`published_with_draft`). Sjekken var `status === "published"`, og en live modul forsvant fra søket i
 // det øyeblikket forfatteren lagret en endring i den (prod 13.11.2026).
+//
+// #1171: det som ikke tilbys, men som søket forklarer: moduler som aldri er publisert (`draft`). Arkiverte nevnes ikke.
 async function loadPickerModules() {
   const libData = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
-  return (libData.modules ?? []).filter(m => isLiveLifecycle(m.lifecycle));
+  const modules = libData.modules ?? [];
+  return {
+    live: modules.filter(m => isLiveLifecycle(m.lifecycle)),
+    unpublished: modules.filter(m => m.lifecycle === "draft"),
+  };
+}
+
+/** #1171: moduler uten publisert versjon som matcher søket (ikke de som alt ligger i kurset). Tom uten søketekst. */
+function unpublishedModuleMatches() {
+  const q = comboboxQuery.trim().toLowerCase();
+  if (!q) return [];
+  const added = new Set(courseModules.filter(m => m.type === "MODULE").map(m => m.refId));
+  return unpublishedLibraryModules
+    .filter(m => !added.has(m.id))
+    .map(m => localizedText(m.title) || m.id)
+    .filter(title => title.toLowerCase().includes(q))
+    .sort((a, b) => a.localeCompare(b, "nb"));
+}
+
+/** #1171: linja under treffene. Ikke et valg (ingen `combobox-option`), så pilene og klikk hopper over den. */
+function unpublishedModulesHintHtml() {
+  const names = unpublishedModuleMatches();
+  if (names.length === 0) return "";
+  const shown = names.slice(0, 3).map(n => `«${n}»`).join(", ") + (names.length > 3 ? " …" : "");
+  return `<div class="combobox-hint" data-unpublished-modules="${names.length}">${escapeHtml(tf("courses.pickerUnpublishedModules", { names: shown }))}</div>`;
 }
 
 // #490/#992: arkiverte seksjoner filtreres bort — samme grep som modul-søsteren over gjør med
@@ -2796,8 +3102,13 @@ async function refreshPickerLibrary() {
   pickerRefreshRunning = true;
   try {
     const [modules, sections] = await Promise.allSettled([loadPickerModules(), loadPickerSections()]);
-    if (modules.status === "fulfilled") allLibraryModules = modules.value;
-    if (sections.status === "fulfilled") allLibrarySections = sections.value;
+    if (modules.status === "fulfilled") ({ live: allLibraryModules, unpublished: unpublishedLibraryModules } = modules.value);
+    if (sections.status === "fulfilled") {
+      allLibrarySections = sections.value;
+      // QA 2026-11-24: merknaden «Ikke publisert ennå» leses fra biblioteket; tegn lista på nytt så den følger en seksjon som er
+      // publisert eller avpublisert i en annen fane. Lytteren bindes på nytt i `renderModuleList`.
+      if (document.getElementById("moduleList")) renderModuleList();
+    }
     updateComboboxDropdown();
   } finally {
     pickerRefreshRunning = false;
@@ -2843,7 +3154,7 @@ function updateComboboxDropdown() {
   input.setAttribute("aria-expanded", "true");
 
   if (options.length === 0) {
-    dropdown.innerHTML = `<div class="combobox-empty">${escapeHtml(t(comboboxQuery.trim() ? "courses.noItemsMatch" : "courses.noItemsAvailable"))}</div>`;
+    dropdown.innerHTML = `<div class="combobox-empty">${escapeHtml(t(comboboxQuery.trim() ? "courses.noItemsMatch" : "courses.noItemsAvailable"))}</div>` + unpublishedModulesHintHtml();
     comboboxSelected = null;
     if (addBtn) addBtn.disabled = true;
     return;
@@ -2858,7 +3169,7 @@ function updateComboboxDropdown() {
       <span class="form-row-badge">${courseItemTypeBadge(item.type)}</span>
       ${escapeHtml(item.title)}
       <span class="combobox-option-id">${escapeHtml(item.id)}</span>
-    </div>`).join("");
+    </div>`).join("") + unpublishedModulesHintHtml();
   // #977: skjermleseren følger markeringen via aria-activedescendant; fokus blir i feltet.
   if (comboboxHighlightedIndex >= 0) {
     input.setAttribute("aria-activedescendant", `comboboxOption-${comboboxHighlightedIndex}`);
@@ -3119,7 +3430,7 @@ function resolveActiveWorkspaceRoles() {
  * `beforePublish`: kalt av «Publiser utkastet». Da vises ingen melding, og visningen lastes ikke på nytt (publiseringen gjør det);
  * id-en og telleren til det lagrede utkastet huskes, så publiseringen sender dem.
  */
-async function saveCourse(courseId, { beforePublish = false } = {}) {
+async function saveCourse(courseId, { beforePublish = false, skipTranslation = false } = {}) {
   const saveBtn = document.getElementById("formSaveBtn");
   const errorBanner = document.getElementById("formErrorBanner");
 
@@ -3152,15 +3463,16 @@ async function saveCourse(courseId, { beforePublish = false } = {}) {
   }
   const sortOrder = sortOrderRaw === "" ? null : Number.parseInt(sortOrderRaw, 10);
   const themeIds = collectCourseThemeIds();
-  const sourceLocale = resolveCourseLocalizationSourceLocale(collectedValues, initialDetailLocaleValues);
-  const effectiveValues = sourceLocale
-    ? await localizeCourseCopyAcrossLocales({
-        titleValues: collectedValues.title,
-        descriptionValues: collectedValues.description,
-        sourceLocale,
-        preserveExisting: true,
-      })
-    : cloneCourseLocaleValues(collectedValues);
+  // #1178: bare det som er endret siden sist lagring, oversettes, fra språket forfatteren står i hvis det er endret.
+  // `skipTranslation`: «Fyll inn det som mangler» har alt oversatt hullene; de skal ikke oversettes videre til de andre språkene.
+  const translationPlan = skipTranslation ? {} : changedFieldTranslations(
+    {
+      title: { current: collectedValues.title, saved: initialDetailLocaleValues.title },
+      description: { current: collectedValues.description, saved: initialDetailLocaleValues.description },
+    },
+    { editLocale: activeDetailLocale, locales: DETAIL_LOCALES },
+  );
+  const effectiveValues = await translateCourseCopyForSave(translationPlan, collectedValues, initialDetailLocaleValues);
   meldFeiledeLokaler(effectiveValues.failedLocales);
   const normalizedTitle = normalizeLocalizedRequestValue(effectiveValues.title);
   const normalizedDescription = normalizeLocalizedRequestValue(effectiveValues.description);
@@ -3403,6 +3715,12 @@ function initDeleteDialog() {
   deleteCancelBtn?.addEventListener("click", () => {
     deleteDialog.close();
     pendingDeleteId = null;
+  });
+  // `close` kommer både for Avbryt, Escape og etter en sletting; etter slettingen er raden borte, og returnFocusTo gjør ingenting.
+  deleteDialog?.addEventListener("close", () => {
+    const trigger = pendingDeleteTrigger;
+    pendingDeleteTrigger = null;
+    returnFocusTo(trigger);
   });
 }
 

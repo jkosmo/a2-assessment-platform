@@ -35,12 +35,35 @@ Har du lagt til, tatt ut eller flyttet innhold, og noen har kursbevis, spør «P
 eller en hovedversjon. Det er samme spørsmål som før, bare flyttet fra «Lagre» til publiseringen. Ellers publiseres utkastet
 med en gang.
 
+## Navn og beskrivelse på tre språk
+
+Fra 2.182.0 (#1178) oversettes kursets navn og beskrivelse slik seksjonene gjør det:
+
+- Bare det du har endret siden sist du lagret, oversettes, fra språket du endret det på, til de andre språkene.
+- Har du bare endret navnet, oversettes bare navnet. Lagrer du uten å endre tekst, for eksempel bare rekkefølgen, oversettes
+  ingenting. En rettelse du har gjort for hånd i et annet språk, blir stående.
+- Har du selv skrevet på to språk i samme lagring, står begge, og det tredje oversettes fra språket du står i.
+- Kommer ikke en oversettelse, står det språket tomt, og lagringen sier fra. Den gamle teksten blir ikke stående: den var en
+  oversettelse av noe som ikke står der lenger. Unntaket er navnet på bokmål, som må finnes for å lagre; der står det forrige.
+- Det finnes ingen egen «Oversett»-knapp. Se over de andre språkene etter lagring.
+
+**Ved publisering** (fra 2.183.0): kurset publiseres ikke før navnet finnes på bokmål, nynorsk og engelsk. Det samme gjelder
+beskrivelsen hvis den har tekst; en tom beskrivelse er i orden. Det gjelder både «Publiser» og «Publiser utkastet». Mangler noe,
+sier meldingen hva, og har knappen **«Fyll inn det som mangler»**. Den oversetter bare det som mangler, fra bokmål, lagrer og
+publiserer på nytt. Tekst du har skrevet på et språk, blir stående. Har noen andre lagret kurset i mellomtiden, publiseres
+ingenting; last siden på nytt.
+
+En kursfil som importeres som nytt kurs og var publisert, blir importert upublisert hvis navnet mangler et språk. Publiser det
+etterpå, så får du tilbud om å fylle inn.
+
 ## Når noe stopper deg
 
 - **«Noen andre har endret utkastet …»** To forfattere har hatt kurset åpent samtidig, og den andre lagret, publiserte eller
   forkastet først. Ingenting av ditt er lagret. Kopier det du skrev, last siden på nytt og gjør endringen igjen.
-- **En rad i innholdslista er merket rødt.** Modulen eller seksjonen er arkivert eller slettet, eller den er ny i utkastet og
-  ikke publisert. Publiser den, eller ta den ut av utkastet. Utkastet kan ikke publiseres før det er gjort.
+- **En rad i innholdslista er merket rødt.** Modulen eller seksjonen er arkivert eller slettet, eller det er en modul som er
+  ny i utkastet og ikke publisert. Publiser den, eller ta den ut av utkastet. Utkastet kan ikke publiseres før det er gjort.
+- **En seksjon er merket «Ikke publisert ennå».** Den stopper ikke publiseringen. Seksjonen kommer inn i kurset, men
+  deltakerne ser den ikke før du publiserer seksjonen (fra 2.181.5).
 - **«Kurset har et utkast …» når du laster opp en kursfil.** «Oppdater dette kurset» skriver rett i det publiserte kurset,
   og stoppes når kurset har et utkast. Publiser eller forkast utkastet først.
 - **Kurset er avpublisert, og det ligger et utkast igjen.** Publiser kurset igjen for å fortsette på utkastet, eller forkast

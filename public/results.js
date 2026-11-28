@@ -677,10 +677,15 @@ function exportCourseLearners() {
 }
 
 // #1145: et kursbevis registrert av administrator for et kurs tatt utenfor plattformen merkes ved statusen (ingen dato,
-// ingen aktivitet).
+// ingen aktivitet). #1192 punkt 2: «Fullført» på et kursbevis for en eldre hovedversjon (den nye er frivillig uten ny frist) får
+// versjonen, så raden ikke ser ut til å motsi fremdriften i den nye versjonen.
 function learnerStatusText(row) {
   const status = formatStatus(row.status);
-  return row.completionSource === "external" ? `${status} (${t("results.courses.detail.takenOutside")})` : status;
+  if (row.completionSource === "external") return `${status} (${t("results.courses.detail.takenOutside")})`;
+  if (row.status === "COMPLETED" && row.earlierCertificateVersion) {
+    return `${status} (${tf("results.courses.detail.earlierVersion", { version: row.earlierCertificateVersion })})`;
+  }
+  return status;
 }
 
 function renderCourseLearners(rows, courseTitle = "") {

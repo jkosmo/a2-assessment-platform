@@ -1626,7 +1626,13 @@ dialog::backdrop {
   background: var(--color-surface); border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-card); box-shadow: 0 6px 20px rgba(0,0,0,0.12);
 }
+/* #1169: «Mer» langt til venstre (telefon) — menyen åpner mot høyre i stedet for ut av skjermen (row-actions.js måler). */
+.row-more-menu.row-more-menu--start { right: auto; left: 0; }
 .row-more-menu .row-action-btn { justify-content: flex-start; width: 100%; border-color: transparent; }
+/* #1169 (produkteier 28.11.2026): hovedhandlingen for tilstanden er en fylt knapp, så neste steg synes. */
+.row-action-btn.is-primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.row-action-btn.is-primary:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
+.row-action-btn.is-primary:disabled { opacity: .55; cursor: default; }
 .row-more-menu .row-action-btn:hover { border-color: var(--color-link-hover-border); }
 /* #787 slice 5: nøytral «Skrivebeskyttet»-markør når brukeren verken eier innholdet eller er admin —
    samme høyde som knappene så radene ikke hopper, men tydelig ikke-interaktiv (dempet, hjelpe-markør). */

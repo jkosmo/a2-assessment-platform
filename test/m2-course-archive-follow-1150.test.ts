@@ -114,7 +114,9 @@ function itemList(items: Items) {
 async function apiCourse(name: string, items: Items, options: { headers?: Record<string, string>; publish?: boolean } = {}) {
   const headers = options.headers ?? ADMIN;
   const title = tag(name);
-  const created = await post("/api/admin/content/courses", { title: L(title) }, headers);
+  // 2.192.0: et bestått teller bare i kurs deltakeren ser. Deltakerne i denne fila er ikke tildelt, så kurset er åpent; et nytt
+  // kurs er ellers begrenset (`NEW_COURSE_ENROLLMENT_POLICY`).
+  const created = await post("/api/admin/content/courses", { title: L(title), enrollmentPolicy: "OPEN" }, headers);
   expect(created.status, show(created)).toBe(201);
   const courseId = created.body.course.id as string;
   const put = await request(app).put(coursePath(courseId, "/items")).set(headers).send(await withRevision(courseId, { items: itemList(items) }));

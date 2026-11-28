@@ -159,6 +159,8 @@
       .combobox-option .form-row-badge { margin-right: 6px; vertical-align: 1px; }
       .combobox-option[data-item-type="SECTION"] .form-row-badge { background: #d6e4ff; color: #1d4ed8; }
       .combobox-empty { padding: 8px 12px; font-size: 13px; color: var(--color-meta); font-style: italic; }
+      /* #1171: moduler som matcher søket, men ikke er publisert. Ikke et valg. */
+      .combobox-hint { padding: 8px 12px; font-size: 13px; color: var(--color-meta); border-top: 1px solid var(--color-border-soft); }
 
       /* ── Form actions ────────────────────────────────────────────────────── */
       .form-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -214,6 +216,9 @@
       /* Et element i utkastet som ikke kan publiseres: grunnen på egen linje i raden. */
       .form-row.is-blocked { flex-wrap: wrap; border-color: #f5c0bb; background: #fdf0ef; }
       .form-row-note { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--color-error); }
+      /* #1192 punkt 4: en merknad som ikke stopper publiseringen (upublisert seksjon): egen linje, varselfarge, ingen rød ramme. */
+      .form-row.has-note { flex-wrap: wrap; }
+      .form-row.has-note .form-row-note { font-weight: 400; color: var(--color-warning); }
       /* #1150 skive 2b: det åpnede, arkiverte kurset — linja (`.course-archived-notice`) og sperren (`.course-archived-lock`)
          står i shared.css, felles med modul og seksjon (#1151 skive 3c). */
       /* #1150 skive 2b: dialogene for «Arkiver» og «Gjenopprett». Dialogen er aldri høyere enn skjermen (nettleserens egen

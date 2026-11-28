@@ -17,6 +17,7 @@ import {
 } from "/static/api-client.js";
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
+import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { OUTCOME_FAILED, OUTCOME_PASSED, rawPassFailState } from "/static/outcome.js";
@@ -29,14 +30,8 @@ import { OUTCOME_FAILED, OUTCOME_PASSED, rawPassFailState } from "/static/outcom
 // i18n
 // ---------------------------------------------------------------------------
 
-let currentLocale = (() => {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const b = navigator.language?.toLowerCase() ?? "";
-  if (b.startsWith("nb")) return "nb";
-  if (b.startsWith("nn")) return "nn";
-  return "en-GB";
-})();
+// #1191: den felles regelen (i18n-locale.js), ikke en egen kopi: kopien ga engelsk for «no» og for et ukjent nettleserspråk.
+let currentLocale = resolveInitialLocale(supportedLocales);
 
 function t(key) {
   const cal = calibrationTranslations[currentLocale]?.[key] ?? calibrationTranslations["en-GB"]?.[key];

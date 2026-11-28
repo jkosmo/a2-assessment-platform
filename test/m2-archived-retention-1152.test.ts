@@ -112,9 +112,11 @@ async function apiModule(name: string) {
 
 type Item = { type: "MODULE"; moduleId: string } | { type: "SECTION"; sectionId: string };
 
+// 2.192.0: et bestått teller bare i kurs deltakeren ser. Deltakerne i denne fila er ikke tildelt, så kurset er åpent; et nytt
+// kurs er ellers begrenset (`NEW_COURSE_ENROLLMENT_POLICY`).
 async function apiCourse(name: string, items: Item[]) {
   nextAdmin();
-  const created = await ok(post(`${C}/courses`, { title: L(tag(name)) }), "kurs");
+  const created = await ok(post(`${C}/courses`, { title: L(tag(name)), enrollmentPolicy: "OPEN" }), "kurs");
   const id = created.course.id as string;
   const r = await request(app).put(K(id, "/items")).set(ADMIN).send(await withRevision(id, { items }));
   expect(r.status, show(r)).toBe(204);
@@ -149,9 +151,13 @@ const publishedVersion = (moduleId: string) =>
   prisma.moduleVersion.findFirstOrThrow({ where: { moduleId, publishedAt: { not: null } }, orderBy: { createdAt: "desc" }, select: { id: true } });
 
 /** En besvarelse med status. Direkte: vurderingen i køen. En levert besvarelse med status SUBMITTED har en vurderingsjobb. */
+// 2.192.0: i et arkivert kurs teller et bestått bare når besvarelsen er LEVERT fram til arkiveringen. Fiksturene beskriver det som
+// skjedde før kurset ble arkivert (modulene fulgte kurset inn i arkivet, så ingen kunne levere etterpå): levert for en time siden.
+const BEFORE_ARCHIVE = () => new Date(Date.now() - 60 * 60 * 1000);
+
 async function submission(userId: string, moduleId: string, status: "SUBMITTED" | "COMPLETED") {
   const version = await publishedVersion(moduleId);
-  const created = await prisma.submission.create({ data: { userId, moduleId, moduleVersionId: version.id, deliveryType: "text", submissionStatus: status }, select: { id: true, moduleVersionId: true } });
+  const created = await prisma.submission.create({ data: { userId, moduleId, moduleVersionId: version.id, deliveryType: "text", submissionStatus: status, submittedAt: BEFORE_ARCHIVE() }, select: { id: true, moduleVersionId: true } });
   if (status === "SUBMITTED") await prisma.assessmentJob.create({ data: { submissionId: created.id, status: "PENDING" } });
   return created;
 }
@@ -302,7 +308,7 @@ describe("#1152 4b: lista over arkiverte og «Slett» sier det samme", () => {
     add("S6: i C1 (slettes) og C2 (beholdes)", "section", s6, { kept: "content_in_archived_course" });
     add("S2: i et utstedt kursbevis", "section", s2, { kept: "content_in_issued_certificate" }, { count: 1 });
 
-    // C3: en deltaker har fullført kravet uten kursbevis (etter arkiveringen).
+    // C3: en deltaker har fullført kravet uten kursbevis (skrevet etter arkiveringen, levert før den: `BEFORE_ARCHIVE`).
     const mc3 = await apiModule("C3 modul");
     const s4 = await apiSection("C3 seksjon");
     const c3 = await apiCourse("C3 fullført", [{ type: "MODULE", moduleId: mc3 }, { type: "SECTION", sectionId: s4 }]);

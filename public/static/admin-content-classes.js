@@ -10,6 +10,7 @@ import { renderOwnerPanel } from "/static/owner-panel.js";
 import { createListPage } from "/static/list-page.js";
 import { createFormPage, formPageTexts } from "/static/form-page.js";
 import { lifecycleOf } from "/static/content-status-badge.js";
+import { confirmLifecycleStep } from "/static/module-lifecycle-dialogs.js";
 
 // #645/CL-3: admin UI for classes (cohorts) — list, create, manage members, assign courses.
 
@@ -108,7 +109,8 @@ function getListPage() {
       { key: "name", label: tNav("ui.name"), className: "col-name", sortValue: (c) => c.name ?? "", render: (c) =>
         `${escapeHtml(c.name)}${c.isSystem ? `<span class="system-badge">${escapeHtml(tNav("classes.type.system"))}</span>` : ""}${lifecycleOf(c) === "archived" ? ` <span class="status-badge status-badge--archived">${escapeHtml(tNav("ui.status.archived"))}</span>` : ""}` },
       { key: "type", label: tNav("ui.type"), render: (c) => escapeHtml(classTypeLabel(c)) },
-      { key: "members", label: tNav("classes.col.members"), sortValue: (c) => c._count?.members ?? 0, render: (c) => String(c._count?.members ?? 0) },
+      // 2.186.1: systemklassen har ingen medlemsrader (alle med deltakerrollen er med), så «0» her var feil. «Alle», og størst ved sortering.
+      { key: "members", label: tNav("classes.col.members"), sortValue: (c) => c.isSystem ? Number.MAX_SAFE_INTEGER : c._count?.members ?? 0, render: (c) => c.isSystem ? escapeHtml(tNav("classes.systemMembersCount")) : String(c._count?.members ?? 0) },
       { key: "courses", label: tNav("classes.col.assignedCourses"), sortValue: (c) => c._count?.courseAssignments ?? 0, render: (c) => String(c._count?.courseAssignments ?? 0) },
     ],
     rowId: (c) => c.id,
@@ -116,26 +118,35 @@ function getListPage() {
       // #787 slice 5: eier/admin styrer om handlingene vises (speiler eierskaps-vakta). Systemklasser
       // er ueide → bare admin forvalter dem, som før.
       const canManage = c.canManage !== false;
-      if (!canManage) return [`<span class="row-readonly-note" title="${escapeHtml(tNav("classes.ownerOnlyHint"))}">${escapeHtml(tNav("ui.ownerOnly"))}</span>`];
-      const archived = lifecycleOf(c) === "archived";
       const id = escapeHtml(c.id);
+      // #1198: alle produsenter kan lese alle klasser, så «Åpne» står også for en klasse leseren ikke eier (den åpnes
+      // skrivebeskyttet). Før sto bare «Kun for eier», uten vei inn.
+      const openBtn = `<button class="row-action-btn" data-action="open" data-id="${id}">${escapeHtml(tNav("ui.action.open"))}</button>`;
+      // #1169 skive 3 (doc/DECISIONS.md 28.11.2026): Åpne · Gjenopprett (arkivert) · «Mer» med Arkiver / Slett. En klasse leseren
+      // ikke eier, har ingenting under «Mer» (ingen kopi eller eksport av klasser), så der står ingen «Mer» (punkt 5).
+      if (!canManage) {
+        return {
+          primary: [openBtn],
+          after: [`<span class="row-readonly-note" title="${escapeHtml(tNav("classes.ownerOnlyHint"))}">${escapeHtml(tNav("ui.ownerOnly"))}</span>`],
+        };
+      }
+      const archived = lifecycleOf(c) === "archived";
       const name = escapeHtml(c.name);
-      // #1046 D3: Åpne · Arkiver, og på arkiverte rader Gjenopprett · Slett.
-      return [
-        `<button class="row-action-btn" data-action="open" data-id="${id}">${escapeHtml(tNav("ui.action.open"))}</button>`,
-        c.isSystem ? "" : archived
-          ? `<button class="row-action-btn" data-action="restore" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.restore"))}</button>`
-          : `<button class="row-action-btn" data-action="archive" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.archive"))}</button>`,
-        !c.isSystem && archived ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.delete"))}</button>` : "",
-      ];
+      return {
+        primary: [openBtn, !c.isSystem && archived ? `<button class="row-action-btn" data-action="restore" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.restore"))}</button>` : ""],
+        more: [
+          !c.isSystem && !archived ? `<button class="row-action-btn" data-action="archive" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.archive"))}</button>` : "",
+          !c.isSystem && archived ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.delete"))}</button>` : "",
+        ],
+      };
     },
     load: async () => (await apiFetch("/api/admin/content/classes", getHeaders)).classes ?? [],
     describeError: (err) => apiErrorText(err),
     onAction: (action, id, btn) => {
       if (action === "open") goToClass(id);
-      if (action === "archive") archiveClass(id, btn.dataset.name);
-      if (action === "restore") restoreClassInAdmin(id, btn.dataset.name);
-      if (action === "delete") deleteClassInAdmin(id, btn.dataset.name);
+      if (action === "archive") archiveClass(id, btn.dataset.name, { button: btn });
+      if (action === "restore") restoreClassInAdmin(id, btn.dataset.name, { button: btn });
+      if (action === "delete") deleteClassInAdmin(id, btn.dataset.name, { button: btn });
     },
     afterRender: () => {
       document.getElementById("newClassBtn")?.addEventListener("click", createClassFlow);
@@ -225,8 +236,19 @@ function createClassFlow() {
   return goToClass(null);
 }
 
-async function archiveClass(id, name, { stay = false } = {}) {
-  if (!window.confirm(tf("classes.archiveConfirm", { name }))) return;
+// #1168: sidas dialog, som modulene og seksjonene, i stedet for nettleserens spørreboks («Arkivere klassen …?»). Den sier hva
+// arkiveringen gjør med medlemmenes kurs (classService.ts, `getClassAssignedCourseDueDates`): kurs de bare har fått gjennom
+// klassen og ikke har begynt på, forsvinner fra Mine kurs; påbegynte og fullførte blir stående; påminnelsene stopper.
+async function archiveClass(id, name, { stay = false, button = null } = {}) {
+  const confirmed = await confirmLifecycleStep({
+    kind: "archive",
+    title: tf("classes.archiveDialog.title", { name }),
+    text: tNav("classes.archiveDialog.text"),
+    confirmLabel: tNav("classes.archiveDialog.confirm"),
+    t: tNav,
+    returnFocusTo: button,
+  });
+  if (!confirmed) return;
   try {
     // #1046 D3: POST /archive, som kurs og seksjoner. DELETE sletter nå for godt.
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/archive`, getHeaders, { method: "POST" });
@@ -239,8 +261,18 @@ async function archiveClass(id, name, { stay = false } = {}) {
 }
 
 // #1046 D3: sletting for godt, bare fra en arkivert rad. Produkteier ba om «er du helt sikker».
-async function deleteClassInAdmin(id, name) {
-  if (!window.confirm(tf("classes.deleteConfirm", { name }))) return;
+// #1168: sidas dialog med rød knapp; teksten er den samme som spørreboksen hadde.
+async function deleteClassInAdmin(id, name, { button = null } = {}) {
+  const confirmed = await confirmLifecycleStep({
+    kind: "delete",
+    title: tf("classes.deleteDialog.title", { name }),
+    text: tNav("classes.deleteDialog.text"),
+    confirmLabel: tNav("classes.deleteDialog.confirm"),
+    danger: true,
+    t: tNav,
+    returnFocusTo: button,
+  });
+  if (!confirmed) return;
   try {
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}`, getHeaders, { method: "DELETE" });
     showToast(tNav("classes.deleted"), "success");
@@ -253,15 +285,20 @@ async function deleteClassInAdmin(id, name) {
 }
 
 // #705-family: reverse of archiveClass — restore an archived class so it is active again.
-async function restoreClassInAdmin(id, name, { stay = false } = {}) {
-  if (!window.confirm(tf("classes.restoreConfirm", { name }))) return;
+// #1168: gjenoppretting spør ikke (kursets mønster: den kan gjøres om med «Arkiver»), men meldingen sier hvilken klasse som kom
+// tilbake.
+// Uten spørsmål kunne et dobbeltklikk sende to gjenopprettinger (QA 2.181.0): knappen er opptatt mens den første går.
+async function restoreClassInAdmin(id, name, { stay = false, button = null } = {}) {
+  if (button?.disabled) return;
+  if (button) button.disabled = true;
   try {
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/restore`, getHeaders, { method: "POST" });
-    showToast(tNav("classes.restored"), "success");
+    showToast(tf("classes.restoredNamed", { name }), "success");
     if (stay) { await openClass(id); return; }
     await renderListView();
   } catch (err) {
     apiErrorToast(err);
+    if (button) button.disabled = false;
   }
 }
 
@@ -341,21 +378,23 @@ function getFormPage() {
     onBack: () => goToList(),
     title: () => (document.getElementById("className")?.value ?? openClassState?.klass?.name ?? "").trim(),
     item: () => openClassState?.klass ?? null,
+    isNew: () => !openClassState?.id,
     t: tNav,
     actions: () => {
       const k = openClassState?.klass;
       if (!k?.id || k.isSystem || k.canManage === false) return [];
       const archived = Boolean(k.archivedAt);
-      return [
-        archived
-          ? `<button class="row-action-btn" data-action="restore">${escapeHtml(tNav("ui.action.restore"))}</button>`
-          : `<button class="row-action-btn" data-action="archive">${escapeHtml(tNav("ui.action.archive"))}</button>`,
-        archived ? `<button class="row-action-btn destructive" data-action="delete">${escapeHtml(tNav("ui.action.delete"))}</button>` : "",
-      ];
+      // #1169 skive 2 (doc/DECISIONS.md 28.11.2026): Gjenopprett er hovedhandlingen for en arkivert klasse; Arkiver og Slett står
+      // under «Mer», som i de andre hodene.
+      return archived
+        ? { primary: [`<button class="row-action-btn is-primary" data-action="restore">${escapeHtml(tNav("ui.action.restore"))}</button>`],
+          more: [`<button class="row-action-btn destructive" data-action="delete">${escapeHtml(tNav("ui.action.delete"))}</button>`] }
+        : { more: [`<button class="row-action-btn" data-action="archive">${escapeHtml(tNav("ui.action.archive"))}</button>`] };
     },
     tabs: { items: () => [{ id: "rediger", label: tNav("ui.tab.edit") }, { id: "innstillinger", label: tNav("ui.tab.settings") }], initial: "rediger" },
     body: () => classFormBodyHtml(),
-    save: { onSave: () => saveClassForm() },
+    // #1198: Lagre er skjult for en klasse leseren ikke kan endre (som `courseIsLocked` for kurs).
+    save: { onSave: () => saveClassForm(), get hidden() { return classIsLocked(); } },
     afterRender: () => bindClassFormHandlers(),
   });
   formPage.installGuards();
@@ -375,8 +414,9 @@ async function openClass(id) {
         apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/courses`, getHeaders).then((r) => r.courses ?? []),
         apiFetch("/api/admin/content/courses", getHeaders).then((r) => r.courses ?? []),
       ]);
-      // canManage kommer fra lista; enkeltoppslaget går gjennom eierskapsvakta, så den som kom hit kan forvalte.
-      if (klass) klass.canManage = true;
+      // #1198: lesingen er åpen for alle produsenter, og tjeneren sier `canManage` for den som leser. En eldre tjener sender
+      // ikke feltet; der gikk enkeltoppslaget gjennom eierskapsvakta, så den som kom hit, kunne forvalte.
+      if (klass) klass.canManage = klass.canManage !== false;
     }
   } catch (err) {
     if (token !== viewToken) return;
@@ -392,15 +432,28 @@ async function openClass(id) {
   if (!id) document.getElementById("className")?.focus();
 }
 
+/** #1198: den åpne klassen er lagret, og leseren kan ikke endre den (ikke eier; systemklassen for en produsent). */
+function classIsLocked() {
+  const st = openClassState;
+  return Boolean(st?.id) && st?.klass?.canManage === false;
+}
+
 function classFormBodyHtml() {
   const st = openClassState ?? { klass: null, members: [], courses: [], allCourses: [] };
   const k = st.klass;
   const isNew = !st.id;
+  // Produkteier 2026-11-08: ingen nye deltakere eller kurs i en arkivert klasse. Serveren nekter (`class_archived`); her vises ikke
+  // feltene i det hele tatt, bare hvorfor. Å fjerne en deltaker eller et kurs går fortsatt. Etter «Gjenopprett» er feltene tilbake.
+  const archived = Boolean(k?.archivedAt);
+  // #1198: en klasse leseren ikke kan endre (ikke eier, eller systemklassen for en produsent), vises skrivebeskyttet: ingen «Fjern»,
+  // ingen fristfelt, ingen søk etter deltakere eller tildeling av kurs, og Lagre er skjult (`classIsLocked`). Tjeneren nekter
+  // skrivingene uansett (eierskapsvakta); dette er for at skjermen ikke skal tilby noe som gir 403.
+  const locked = classIsLocked();
   // #1046 G1: den delte «rad i skjema» (shared.css .form-row) — samme rad som kursets innhold.
   const memberRows = st.members.map((m) => `<li class="form-row">
       <span class="form-row-title">${escapeHtml(m.name)}</span>
       ${m.email ? `<span class="form-row-meta">${escapeHtml(m.email)}</span>` : ""}
-      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-member="${escapeHtml(m.userId)}" aria-label="${escapeHtml(tNav("ui.action.remove"))} ${escapeHtml(m.name)}">${escapeHtml(tNav("ui.action.remove"))}</button></span>
+      ${locked ? "" : `<span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-member="${escapeHtml(m.userId)}" aria-label="${escapeHtml(tNav("ui.action.remove"))} ${escapeHtml(m.name)}">${escapeHtml(tNav("ui.action.remove"))}</button></span>`}
     </li>`).join("");
   const courseRows = st.courses.map((c) => {
     const due = formatDueDate(c.dueAt);
@@ -411,25 +464,37 @@ function classFormBodyHtml() {
       : c.coursePublished === false
         ? tNav("classes.course.unpublishedNote")
         : "";
-    return `<li class="form-row">
+    // #1192: fristen endres på raden. Før var eneste vei å fjerne kurset og legge det til igjen, som også sendte «nytt kurs» på
+    // nytt. Lagres med knappen, ikke ved `change`: et datofelt sender `change` for hver gyldig dato mens året skrives, og hver
+    // lagring flytter `dueSetAt` (som avgjør om en ny hovedversjon kreves). Arkivert klasse eller kurs: serveren nekter, så bare tekst.
+    const editable = !archived && !c.courseArchived && !locked;
+    const savedDue = c.dueAt ? String(c.dueAt).slice(0, 10) : "";
+    const dueHtml = editable
+      ? `<label class="form-row-due"><span class="form-row-meta">${escapeHtml(tNav("classes.course.deadline"))}</span>
+          <input type="date" data-course-due="${escapeHtml(c.courseId)}" data-saved="${escapeHtml(savedDue)}" value="${escapeHtml(savedDue)}"
+            aria-label="${escapeHtml(tf("classes.course.deadlineFor", { title: courseTitle(c.title) }))}" /></label>
+         <button type="button" class="row-action-btn" data-save-due="${escapeHtml(c.courseId)}" disabled>${escapeHtml(tNav("classes.course.saveDeadline"))}</button>`
+      : `<span class="form-row-meta">${due ? `${escapeHtml(tNav("classes.course.deadline"))}: ${escapeHtml(due)}` : escapeHtml(tNav("classes.course.noDeadline"))}</span>`;
+    return `<li class="form-row form-row--course">
       <span class="form-row-title">${escapeHtml(courseTitle(c.title))}</span>
       ${unreachable ? `<span class="form-row-meta form-row-meta--warn">${escapeHtml(unreachable)}</span>` : ""}
-      <span class="form-row-meta">${due ? `${escapeHtml(tNav("classes.course.deadline"))}: ${escapeHtml(due)}` : escapeHtml(tNav("classes.course.noDeadline"))}</span>
-      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="${escapeHtml(tNav("classes.course.remove"))}">${escapeHtml(tNav("ui.action.remove"))}</button></span>
+      ${dueHtml}
+      ${locked ? "" : `<span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="${escapeHtml(tNav("classes.course.remove"))}">${escapeHtml(tNav("ui.action.remove"))}</button></span>`}
+      ${editable && Number(c.courseVersionMajor) > 1 ? `<p class="form-row-note" data-due-note hidden>${escapeHtml(tf("classes.course.newVersionDeadlineNote", { major: c.courseVersionMajor }))}</p>` : ""}
     </li>`;
   }).join("");
   const assignedIds = new Set(st.courses.map((c) => c.courseId));
   // #688: don't offer archived courses for assignment — they are retired and shouldn't be assigned.
-  const courseOptions = st.allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.displayTitle))}</option>`).join("");
-  const readOnly = Boolean(k?.isSystem);
-  // Produkteier 2026-11-08: ingen nye deltakere eller kurs i en arkivert klasse. Serveren nekter (`class_archived`); her vises ikke
-  // feltene i det hele tatt, bare hvorfor. Å fjerne en deltaker eller et kurs går fortsatt. Etter «Gjenopprett» er feltene tilbake.
-  const archived = Boolean(k?.archivedAt);
+  const courseOptions = st.allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}" data-major="${escapeHtml(String(c.versionMajor ?? 1))}">${escapeHtml(courseTitle(c.displayTitle))}</option>`).join("");
+  const readOnly = Boolean(k?.isSystem) || locked;
   const archivedNote = `<p class="small" data-class-archived-note style="margin:6px 0 0">${escapeHtml(tNav("classes.archivedReadonly"))}</p>`;
+  // #1198: i stedet for søk og tildeling, for den som bare kan lese. Systemklassen har sin egen linje (under).
+  const lockedNote = locked && !k?.isSystem ? `<p class="small" data-class-readonly-note>${escapeHtml(tNav("adminContent.readOnlyNotice"))}</p>` : "";
   return `
     <div data-form-tab="rediger">
     <div class="detail-section">
       <h2>${escapeHtml(tNav("ui.kind.class"))}</h2>
+      ${lockedNote}
       <div class="form-field">
         <label for="className">${escapeHtml(tNav("ui.name"))} <span class="required-note">${escapeHtml(tNav("ui.required"))}</span></label>
         <input type="text" id="className" data-form-title value="${escapeHtml(k?.name ?? "")}" ${readOnly ? "disabled" : ""} autocomplete="off" />
@@ -438,13 +503,19 @@ function classFormBodyHtml() {
         <label for="classDescription">${escapeHtml(tNav("ui.description"))}</label>
         <textarea id="classDescription" rows="3" ${readOnly ? "disabled" : ""}>${escapeHtml(k?.description ?? "")}</textarea>
       </div>
-      ${readOnly ? `<p class="small">${escapeHtml(tNav("classes.systemReadonly"))}</p>` : ""}
+      ${k?.isSystem ? `<p class="small">${escapeHtml(tNav("classes.systemReadonly"))}</p>` : ""}
+      ${k?.isSystem ? `<p class="small" data-system-required-note>${escapeHtml(tNav("classes.systemRequiredNote"))}</p>` : ""}
     </div>
     ${isNew ? `<div class="detail-section" data-form-untracked><p class="small" style="margin:0">${escapeHtml(tNav("classes.saveFirstMembers"))}</p></div>` : `
     <div class="detail-section" data-form-untracked>
-      <h2>${escapeHtml(tf("classes.membersHeading", { count: st.members.length }))}</h2>
-      <ul class="form-rows" id="memberChips">${memberRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noMembers"))}</li>`}</ul>
-      ${archived ? archivedNote : `<div class="form-add-row">
+      ${k?.isSystem
+        // Produkteier 27.11.2026: systemklassen har ingen medlemsrader — alle med deltakerrollen er med (getUserClassIds). «Deltakere (0)»
+        // og «Ingen deltakere ennå» leste som at klassen var tom, så her står hvem som er med i stedet.
+        ? `<h2>${escapeHtml(tNav("classes.systemMembersHeading"))}</h2>
+      <p class="small" id="memberChips" data-system-members-note>${escapeHtml(tNav("classes.systemMembersNote"))}</p>`
+        : `<h2>${escapeHtml(tf("classes.membersHeading", { count: st.members.length }))}</h2>
+      <ul class="form-rows" id="memberChips">${memberRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noMembers"))}</li>`}</ul>`}
+      ${locked || k?.isSystem ? "" : archived ? archivedNote : `<div class="form-add-row">
         <label for="studentSearch" class="sr-only">${escapeHtml(tNav("classes.memberSearchLabel"))}</label>
         <input type="text" id="studentSearch" placeholder="${escapeHtml(tNav("classes.memberSearchPlaceholder"))}" autocomplete="off" />
       </div>
@@ -453,7 +524,7 @@ function classFormBodyHtml() {
     <div class="detail-section" data-form-untracked>
       <h2>${escapeHtml(tf("classes.coursesHeading", { count: st.courses.length }))}</h2>
       <ul class="form-rows" id="courseChips">${courseRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noCourses"))}</li>`}</ul>
-      ${archived ? archivedNote : `<div class="form-add-row">
+      ${locked ? "" : archived ? archivedNote : `<div class="form-add-row">
         <label for="courseSelect" class="sr-only">${escapeHtml(tNav("classes.courseSelectLabel"))}</label>
         <select id="courseSelect"><option value="">${escapeHtml(tNav("classes.pickCourse"))}</option>${courseOptions}</select>
         <label for="dueAtInput" style="font-size:13px;color:var(--color-meta);display:inline-flex;align-items:center;gap:6px">
@@ -462,6 +533,7 @@ function classFormBodyHtml() {
         </label>
         <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(tNav("classes.assignCourse"))}</button>
       </div>
+      <p class="form-row-note" id="assignVersionNote" hidden></p>
       <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">${escapeHtml(tNav("classes.deadlineHint"))}</p>`}
     </div>`}
     </div>
@@ -501,21 +573,31 @@ async function saveClassForm() {
   }
 }
 
+// Handlingsraden i hodet. ⚠️ Delegert fra `pageContent`, bundet ÉN gang, og klassen leses når det klikkes: hodet tegnes på nytt
+// (`refreshHeader`, f.eks. når bredden krysser grensen for smal skjerm, #1169), og en lytter på `.form-page-actions` fulgte med det
+// gamle elementet ut — «Arkiver» lukket menyen og gjorde ingenting (QA-porten 2.188.0; samme feil som kurset i 2.89.1 og
+// seksjonen i 2.88.3). Lista har ingen `.form-page-actions`, så radhandlingene røres ikke.
+let classHeaderActionsBound = false;
+function bindClassHeaderActions() {
+  if (classHeaderActionsBound) return;
+  classHeaderActionsBound = true;
+  pageContent.addEventListener("click", async (e) => {
+    const btn = e.target instanceof Element ? e.target.closest(".form-page-actions [data-action]") : null;
+    const k = openClassState?.klass;
+    if (!btn || !k) return;
+    if (!getFormPage().confirmLeave()) return;
+    if (btn.dataset.action === "archive") { await archiveClass(k.id, k.name, { stay: true, button: btn }); return; }
+    if (btn.dataset.action === "restore") { await restoreClassInAdmin(k.id, k.name, { stay: true, button: btn }); return; }
+    if (btn.dataset.action === "delete") { await deleteClassInAdmin(k.id, k.name, { button: btn }); }
+  });
+}
+
 function bindClassFormHandlers() {
   const st = openClassState;
   if (!st) return;
   const id = st.id;
 
-  // Handlingsraden i hodet.
-  pageContent.querySelector(".form-page-actions")?.addEventListener("click", async (e) => {
-    const btn = e.target.closest("[data-action]");
-    if (!btn || !st.klass) return;
-    if (!getFormPage().confirmLeave()) return;
-    const k = st.klass;
-    if (btn.dataset.action === "archive") { await archiveClass(k.id, k.name, { stay: true }); return; }
-    if (btn.dataset.action === "restore") { await restoreClassInAdmin(k.id, k.name, { stay: true }); return; }
-    if (btn.dataset.action === "delete") { await deleteClassInAdmin(k.id, k.name); }
-  });
+  bindClassHeaderActions();
 
   if (!id) return;
 
@@ -569,7 +651,46 @@ function bindClassFormHandlers() {
       reloadOpenClass(id);
     } catch (err) { apiErrorToast(err); }
   });
+  // #1192: «Lagre frist» er aktiv bare når datoen er en annen enn den lagrede. En tom dato fjerner fristen.
+  document.getElementById("courseChips")?.addEventListener("input", (e) => {
+    const input = e.target.closest("[data-course-due]");
+    if (!input) return;
+    const save = input.closest("li")?.querySelector("[data-save-due]");
+    if (save) save.disabled = input.value === input.dataset.saved;
+    // Kurs i versjon 2 eller høyere: en ny dato krever den nye versjonen av den som har et eldre kursbevis. Si det før lagring.
+    // En tom dato fjerner fristen og gjør den nye versjonen frivillig igjen, så da vises ingen merknad.
+    const note = input.closest("li")?.querySelector("[data-due-note]");
+    if (note) note.hidden = !input.value || input.value === input.dataset.saved;
+  });
+  // Samme varsel når et kurs i versjon 2 eller høyere tildeles med frist.
+  const updateAssignNote = () => {
+    const note = document.getElementById("assignVersionNote");
+    const select = document.getElementById("courseSelect");
+    if (!note || !select) return;
+    const major = Number(select.selectedOptions[0]?.dataset.major ?? 1);
+    const show = Boolean(select.value) && Boolean(document.getElementById("dueAtInput")?.value) && major > 1;
+    note.textContent = show ? tf("classes.course.newVersionDeadlineNote", { major }) : "";
+    note.hidden = !show;
+  };
+  document.getElementById("courseSelect")?.addEventListener("change", updateAssignNote);
+  document.getElementById("dueAtInput")?.addEventListener("input", updateAssignNote);
   document.getElementById("courseChips")?.addEventListener("click", async (e) => {
+    const saveBtn = e.target.closest("[data-save-due]");
+    if (saveBtn) {
+      const input = saveBtn.closest("li")?.querySelector("[data-course-due]");
+      if (!input) return;
+      const body = { courseId: saveBtn.dataset.saveDue, dueAt: input.value ? new Date(input.value + "T00:00:00.000Z").toISOString() : null };
+      saveBtn.disabled = true;
+      try {
+        await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/courses`, getHeaders, { method: "POST", body: JSON.stringify(body) });
+        showToast(tNav("classes.course.deadlineSaved"), "success");
+        reloadOpenClass(id);
+      } catch (err) {
+        saveBtn.disabled = false;
+        apiErrorToast(err);
+      }
+      return;
+    }
     const btn = e.target.closest("[data-remove-course]");
     if (!btn) return;
     try {

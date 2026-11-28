@@ -22,6 +22,8 @@ export function createReportingRepository(client: ReportingRepositoryClient = pr
           userId: true,
           submissionStatus: true,
           module: { select: { id: true, title: true } },
+          // #1192 punkt 1: skiller et gammelt bestått (må ta ny versjon) fra et forsøk som strøk.
+          decisions: { orderBy: { finalisedAt: "desc" }, take: 1, select: { passFailTotal: true } },
         },
       });
     },

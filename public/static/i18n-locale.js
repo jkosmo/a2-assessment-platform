@@ -7,19 +7,46 @@ import { getDefaultLocale } from "/static/api-client.js";
 // translations module.
 //
 // Behaviour matches the dominant 8 copies: a valid stored "participant.locale" wins, otherwise the
-// browser language prefix maps nb/nn/en → nb/nn/en-GB, otherwise "en-GB". (certificate.js omitted
+// browser language prefix maps nb/no/nn/en → nb/nb/nn/en-GB, otherwise the organisation default (#1191; was "en-GB"). (certificate.js omitted
 // the `en` branch, but since the default is also "en-GB" its output was identical.) results.js
 // previously matched via `supportedLocales.find(l => browser.startsWith(l))` WITHOUT a null guard —
 // folding it in here removes that latent throw on a null `navigator.language`; the output is the
 // same for every real browser string.
+// #1191: sidene lagrer språket ved oppstart, også når det bare er gjettet ut fra nettleseren. Et gjettet en-GB (den gamle reserven
+// for «no», «da», «sv» …) ble dermed et fast valg som slo alt annet. Et språk brukeren velger i språkvelgeren (#localeSelect, likt
+// på alle sidene) merkes derfor her, ett sted for alle sidene.
+const CHOSEN_LOCALE_KEY = "participant.localeChosen";
+if (typeof document !== "undefined") {
+  document.addEventListener("change", (event) => {
+    const el = event.target;
+    if (!el || el.id !== "localeSelect" || typeof el.value !== "string") return;
+    try {
+      localStorage.setItem(CHOSEN_LOCALE_KEY, el.value);
+    } catch {
+      // Blokkert lagring: valget huskes ikke som valgt, og et lagret en-GB kan bli gjettet på nytt neste gang.
+    }
+  });
+}
+
 export function resolveInitialLocale(supportedLocales) {
   const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
   const normalized = (navigator.language ?? "").toLowerCase();
-  if (normalized.startsWith("nb")) return "nb";
+  if (stored && supportedLocales.includes(stored)) {
+    // #1191: et lagret en-GB i en nettleser som ikke er engelsk, og som brukeren ikke har valgt selv, er den gamle reserven.
+    // Da gjettes språket på nytt. Alt annet lagret står, også valg gjort før merket fantes.
+    let chosen = null;
+    try { chosen = localStorage.getItem(CHOSEN_LOCALE_KEY); } catch { /* blokkert lagring */ }
+    const oldEnglishFallback = stored === "en-GB" && !normalized.startsWith("en") && chosen !== stored;
+    if (!oldEnglishFallback) return stored;
+  }
+  // #1191: «no» er norsk uten målform (enkelte nettlesere oppgir det); bokmål, som tjeneren (src/i18n/locale.ts).
+  if (normalized.startsWith("nb") || normalized === "no" || normalized.startsWith("no-")) return "nb";
   if (normalized.startsWith("nn")) return "nn";
   if (normalized.startsWith("en")) return "en-GB";
-  return "en-GB";
+  // #1191: ukjent nettleserspråk («da», «sv», …) gir organisasjonens standardspråk, slik tjeneren gjør (DEFAULT_LOCALE), ikke
+  // engelsk. Språket sendes som x-locale og blir mottakerens språk i e-postene, så engelsk her ga engelske e-poster.
+  const orgDefault = getDefaultLocale();
+  return supportedLocales.includes(orgDefault) ? orgDefault : "en-GB";
 }
 
 // #1046 punkt 3: ÉN oversetter for forfattersidene — fem sider hadde hver sin `t`/`tf` over det

@@ -10,6 +10,7 @@ import { addContentOwner, deleteContentOwnersOf } from "../content/contentOwners
 import { checkCourseDelete, lockCourseDeleteLearners } from "./courseDeleteGuard.js";
 import { setCourseThemes } from "./courseThemeService.js";
 import { assignCourseSlugIfMissing } from "./courseSlug.js";
+import { assertCourseTextComplete } from "./courseTextGate.js";
 import { applyCourseVersionChange, claimCourseRevision, isCourseEverPublished, NO_SECTION_SNAPSHOT, sameLocalizedText, type CourseVersionBump, type CourseVersionChoice, type CourseVersionRequest } from "./courseVersioning.js";
 
 /**
@@ -284,6 +285,11 @@ export async function publishCourse(courseId: string, actorId: string | undefine
       "Cannot publish a course with no items. Add at least one module or section first.",
     );
   }
+  // #1178 skive 2: navnet og beskrivelsen går ut til deltakerne nå, og må finnes på alle tre språk. Gjelder «Publiser» og
+  // kaskaden: kaskaden kaller hit til slutt i SAMME transaksjon som publiserte elementene, så en avvisning her ruller dem
+  // tilbake (målt: test/m2-course-text-gate-1178.test.ts, vei 2). Importen spør porten før den kaller hit, og holder kurset
+  // tilbake i stedet (contentImportService.ts); «Publiser utkastet» spør etter at utkastet er skrevet (adminCourses.ts).
+  assertCourseTextComplete(course);
 
   // #803: publish + audit commit atomically.
   await tx.course.update({
@@ -407,6 +413,80 @@ export async function deleteCourse(courseId: string, actorId?: string) {
   if (!result.deleted) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 }
 
+/** « (kopi)» på hvert språk som har tekst, som for modul og seksjon (public/static/content-duplicate.js). Tittelen er lagret JSON. */
+function withCopySuffix(storedTitle: string): string {
+  try {
+    const parsed: unknown = JSON.parse(storedTitle);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: Record<string, unknown> = {};
+      for (const [locale, value] of Object.entries(parsed as Record<string, unknown>)) {
+        out[locale] = typeof value === "string" && value.trim() ? `${value} (kopi)` : value;
+      }
+      return JSON.stringify(out);
+    }
+  } catch {
+    // En ren streng (eldre rader): én « (kopi)».
+  }
+  return storedTitle.trim() ? `${storedTitle} (kopi)` : storedTitle;
+}
+
+/**
+ * Kursets rader som elementliste (`CourseItemInput`), i samme rekkefølge og MED `discussionsEnabled`. «Dupliser kurs» og «Døp om»
+ * (et nytt utkast med kursets elementer) bruker den. Uten flagget ville en lagring eller publisering skrevet `?? true`, og
+ * diskusjonen ville blitt slått på igjen der den var av, uten at noe sa fra.
+ */
+export function courseItemInputsFromRows(
+  rows: ReadonlyArray<{ itemType: string; moduleId: string | null; sectionId: string | null; discussionsEnabled: boolean }>,
+): CourseItemInput[] {
+  return rows.map((item) => item.itemType === "MODULE"
+    ? { type: "MODULE", moduleId: item.moduleId as string, discussionsEnabled: item.discussionsEnabled }
+    : { type: "SECTION", sectionId: item.sectionId as string, discussionsEnabled: item.discussionsEnabled });
+}
+
+/**
+ * #1169 skive 4b (doc/design/PLAN_1169_4B_DUPLISER_KURS.md; produkteier 26.11.2026, doc/DECISIONS.md punkt 2): «Dupliser kurs» er
+ * et NYTT kurs med DE SAMME modulene og seksjonene — ikke kopier av dem. Klasser, tildelinger, påmeldinger, kursbevis, utkast,
+ * versjoner og eiere blir ikke med; den som kopierer, blir eneste eier. Kopien er upublisert, v1.0, begrenset (#1164), uten slug og
+ * fast plass. Kopien lages av kursets LAGREDE elementer (`CourseItem`), ikke av et utkast som venter.
+ *
+ * Én transaksjon under innholdslåsen: `createCourse` (den eneste opprettelsesveien) og `setCourseItems` (elementvaktene,
+ * modulkravene, revisjonsloggen). Feiler et element (arkivert, eller to like i eldre data), er ingenting laget.
+ */
+export async function duplicateCourse(sourceCourseId: string, actorId: string) {
+  return runContentWrite(async (tx) => {
+    const source = await tx.course.findUnique({ where: { id: sourceCourseId } });
+    if (!source) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    // Vakta i `setCourseItems` ser bare det nye kurset; kilden sjekkes her.
+    await assertNotArchived(tx, { type: "COURSE", id: sourceCourseId });
+    const sourceItems = await createCourseRepository(tx).findAllCourseItems(sourceCourseId);
+    // Temaene leses inne i låsen (ikke `findThemeIdsForCourse`, som leser utenfor).
+    const themeIds = (await tx.courseThemeAssignment.findMany({ where: { courseId: sourceCourseId }, select: { themeId: true } })).map((row) => row.themeId);
+    const items = courseItemInputsFromRows(sourceItems);
+    const copy = await createCourse({
+      title: withCopySuffix(source.title),
+      description: source.description,
+      certificationLevel: source.certificationLevel,
+      discussionsEnabled: source.discussionsEnabled,
+      discussionOwnerNotifications: source.discussionOwnerNotifications,
+      themeIds,
+      actorId,
+    }, tx);
+    await setCourseItems(copy.id, items, { actorId, revision: { expected: copy.contentRevision } }, tx);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: copy.id,
+        action: auditActions.course.duplicated,
+        actorId,
+        metadata: { courseId: copy.id, sourceCourseId, itemCount: items.length },
+      },
+      tx,
+    );
+    // Telleren er økt av elementene; svaret er kurset slik det står nå.
+    return tx.course.findUniqueOrThrow({ where: { id: copy.id } });
+  });
+}
+
 export type CourseItemInput =
   | { type: "MODULE"; moduleId: string; discussionsEnabled?: boolean }
   | { type: "SECTION"; sectionId: string; discussionsEnabled?: boolean };
@@ -467,6 +547,26 @@ export async function assertCourseItemsUsable(reader: DbTransactionClient | type
   await assertContentUsableInCourse(reader, assertNoDuplicateCourseItems(items));
 }
 
+/** Trådene får elementet med samme modul eller seksjon tilbake etter at elementene er skrevet på nytt (`writeCourseItems`). */
+async function relinkItemThreads(
+  client: ContentWriteTx,
+  courseId: string,
+  previous: ReadonlyArray<{ id: string; itemType: string; moduleId: string | null; sectionId: string | null }>,
+  threads: ReadonlyArray<{ id: string; courseItemId: string | null; updatedAt: Date }>,
+) {
+  const keyOf = (row: { itemType: string; moduleId: string | null; sectionId: string | null }) =>
+    `${row.itemType}:${row.itemType === "MODULE" ? row.moduleId : row.sectionId}`;
+  const oldKey = new Map(previous.map((row) => [row.id, keyOf(row)]));
+  const fresh = await client.courseItem.findMany({ where: { courseId }, select: { id: true, itemType: true, moduleId: true, sectionId: true } });
+  const newId = new Map(fresh.map((row) => [keyOf(row), row.id]));
+  for (const thread of threads) {
+    const key = thread.courseItemId ? oldKey.get(thread.courseItemId) : undefined;
+    const target = key ? newId.get(key) : undefined;
+    if (!target) continue;
+    await client.discussionThread.update({ where: { id: thread.id }, data: { courseItemId: target, updatedAt: thread.updatedAt } });
+  }
+}
+
 /**
  * Skriver kursets elementer og avgjør versjonen. Kalles bare med låst klient, etter at telleren er tatt
  * (`setCourseItems`, og `updateCourse` som tar telleren selv).
@@ -487,6 +587,14 @@ async function writeCourseItems(
     const repo = createCourseRepository(client);
     const previous = await repo.findAllCourseItems(courseId);
     const snapshot = await repo.snapshotContent(courseId);
+    // 2.192.0 (QA-porten): elementene slettes og lages på nytt, og en tråd på en seksjon eller modul mistet elementet sitt
+    // (`DiscussionThread.courseItem` er `SetNull`) og havnet på kursets tavle — ved hver lagring av kurset og hver publisering av
+    // et utkast. Trådene noteres her og får elementet med samme modul eller seksjon tilbake under, med sitt eget `updatedAt` (ellers
+    // ville rekkefølgen i trådlista endret seg). En tråd på et element som er tatt ut av kurset, blir på kursets tavle, som før.
+    const linkedThreads = await client.discussionThread.findMany({
+      where: { courseId, courseItemId: { not: null } },
+      select: { id: true, courseItemId: true, updatedAt: true },
+    });
     await client.courseItem.deleteMany({ where: { courseId } });
     if (items.length > 0) {
       await client.courseItem.createMany({
@@ -502,6 +610,7 @@ async function writeCourseItems(
         })),
       });
     }
+    if (linkedThreads.length > 0) await relinkItemThreads(client, courseId, previous, linkedThreads);
     // #934 skive 5a-2: krav for nye moduler, sletting for dem som er tatt ut, i samme transaksjon som elementene.
     await syncModuleRequirements(client, courseId);
     await client.course.update({ where: { id: courseId }, data: { updatedAt: new Date() } });
@@ -560,6 +669,11 @@ export async function setCourseModules(
       orderBy: { sortOrder: "asc" },
       select: { sectionId: true, discussionsEnabled: true },
     });
+    // 2.192.0: som i `writeCourseItems` — trådene på elementene får elementet med samme modul eller seksjon tilbake.
+    const linkedThreads = await client.discussionThread.findMany({
+      where: { courseId, courseItemId: { not: null } },
+      select: { id: true, courseItemId: true, updatedAt: true },
+    });
     await client.courseItem.deleteMany({ where: { courseId } });
     // Bevar den passerte sortOrder for moduler (uendret kontrakt fra før #502); seksjoner legges
     // etter høyeste modul-sortOrder så de overlever en modul-re-set.
@@ -580,6 +694,7 @@ export async function setCourseModules(
     if (moduleRows.length + sectionRows.length > 0) {
       await client.courseItem.createMany({ data: [...moduleRows, ...sectionRows] });
     }
+    if (linkedThreads.length > 0) await relinkItemThreads(client, courseId, previous, linkedThreads);
     // #934 skive 5a-2: samme som i `writeCourseItems`.
     await syncModuleRequirements(client, courseId);
     await client.course.update({

@@ -63,17 +63,36 @@ describe("stage-testkontoen som deltaker (2.154.1)", () => {
 
   it("enhver annen verdi avvises — ingen stille tilbakefall til fagansvarlig", () => {
     for (const verdi of ["", " ", "participant", "Participant", " PARTICIPANT", "PARTICIPANT ", "PARTICIPANT, PARTICIPANT",
-      "SUBJECT_MATTER_OWNER", "ADMINISTRATOR", "PARTICIPANT,ADMINISTRATOR", "REVIEWER"]) {
+      "SUBJECT_MATTER_OWNER", "administrator", "Administrator", " ADMINISTRATOR", "ADMINISTRATOR ", "PARTICIPANT,ADMINISTRATOR",
+      "ADMINISTRATOR,PARTICIPANT", "ADMIN", "REVIEWER", "APPEAL_HANDLER", "REPORT_READER"]) {
       expect(() => stageTestServicePrincipal(appToken(), STAGE, verdi), `verdi «${verdi}»`).toThrow();
     }
   });
 
   it("hodet hjelper ikke utenfor stage eller fra en annen app", () => {
-    for (const deployEnvironment of [undefined, "", "production", "Staging", "staging "]) {
-      expect(() => stageTestServicePrincipal(appToken(), { deployEnvironment, appId: APP }, "PARTICIPANT")).toThrow();
+    for (const rolle of ["PARTICIPANT", "ADMINISTRATOR"]) {
+      for (const deployEnvironment of [undefined, "", "production", "Staging", "staging "]) {
+        expect(() => stageTestServicePrincipal(appToken(), { deployEnvironment, appId: APP }, rolle), `${rolle} i «${deployEnvironment}»`).toThrow();
+      }
+      expect(() => stageTestServicePrincipal(appToken({ azp: "annen-app" }), STAGE, rolle)).toThrow();
+      expect(() => stageTestServicePrincipal(appToken(), { deployEnvironment: "staging", appId: undefined }, rolle)).toThrow();
+      expect(() => stageTestServicePrincipal({ oid: "sp-oid" }, { deployEnvironment: "staging", appId: "" }, rolle)).toThrow();
     }
-    expect(() => stageTestServicePrincipal(appToken({ azp: "annen-app" }), STAGE, "PARTICIPANT")).toThrow();
-    expect(() => stageTestServicePrincipal(appToken(), { deployEnvironment: "staging", appId: undefined }, "PARTICIPANT")).toThrow();
-    expect(() => stageTestServicePrincipal({ oid: "sp-oid" }, { deployEnvironment: "staging", appId: "" }, "PARTICIPANT")).toThrow();
+  });
+});
+
+describe("stage-testkontoen som administrator (2.181.1)", () => {
+  it("nøyaktig ADMINISTRATOR gir en tredje, EGEN bruker med bare administratorrollen", () => {
+    // Tokenet her sier PARTICIPANT: rollen kommer fra hodet, ikke fra tokenet.
+    expect(stageTestServicePrincipal(appToken({ roles: ["PARTICIPANT"] }), STAGE, "ADMINISTRATOR")).toEqual({
+      externalId: `stage-test-service-admin:${APP}`,
+      email: "stage-testkonto-admin@stage.invalid",
+      name: "Stage-testkonto (administrator)",
+      tokenRoles: ["ADMINISTRATOR"],
+      groupIds: [],
+    });
+    const brukere = [UTELATT, "PARTICIPANT", "ADMINISTRATOR"].map((rolle) => stageTestServicePrincipal(appToken(), STAGE, rolle));
+    expect(new Set(brukere.map((b) => b.externalId)).size).toBe(3);
+    expect(new Set(brukere.map((b) => b.email)).size).toBe(3);
   });
 });

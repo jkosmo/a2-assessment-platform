@@ -110,9 +110,13 @@ change to issuance, fetch-wiring, or rendering must be verified on all three:
 | Printable `/certificate?id=…` | `public/certificate.js` | fetches `/api/courses/completions/:id` |
 
 **One name (#1162, 2026-11-21):** the certificate is «Kursbevis» («Course certificate»), and every link to it says
-**«Vis kursbevis»** («View course certificate»), also on a phone: the course row (`courses.certificate.view`), the older-version
+**«Vis kursbevis»** («View certificate» — shortened 2026-11-22, see below), also on a phone: the course row (`courses.certificate.view`), the older-version
 note (`courses.certificate.earlier`, «Vis kursbevis for versjon {n}») and the profile (`profile.courses.view`). «Sertifikat» is
-not used for it. Guard: `test/e2e/participant-flow-1162.spec.ts` (three languages, 390 and 360 px).
+not used for it. Guard: `test/e2e/participant-flow-1162.spec.ts` (three languages, 390 and 360 px, in Arial — the widest
+font we measured; Windows' Segoe UI hid the problem locally).
+
+English link text shortened in 2.178.1: «View course certificate» left a 360 px course row about 80 px for the title, so a
+short title broke mid-word («Personve-rn»). The guard now also asserts that a short title stays on one line.
 
 **Same tab (#1162):** none of the three links has `target="_blank"`, so the browser's Back returns to where the participant was:
 the course with the open item (#1158 keeps both in the address), the list, or the profile on the tab «Beståtte kurs» (the profile
@@ -148,10 +152,10 @@ are two distinct code paths + a relocated singleton to keep in sync when touchin
 | Re-render safety | `restoreModuleWorkspaceHomeIfInside(container)` before every `innerHTML=""` in `renderCourseDetailModules` **and** `renderParticipantCourseAccordion`; `reopenInlineAfterRender` after | The accordion rebuilds via `innerHTML=""` frequently — the workspace MUST be moved back to `#moduleWorkspaceHome` first or it is destroyed. **Was documented but not enforced** — `renderParticipantCourseAccordion` lacked the call, and v2.11.5 routed the language switch through it, turning a hard-to-reach path into a one-click one. Now guarded: `participant-course-sequence.spec.ts` → "switching language while a module is open does not destroy the module workspace". |
 | Standalone module path | `renderModules` card click | Non-course-only (dev/test) flow uses the workspace at home; the click first `collapseInlineOpen()` + `restoreModuleWorkspaceHome()`. |
 | Home visibility | CSS `body.participant-course-only #moduleWorkspaceHome { display:none }`; set in `applyCourseOnlyMode` | Course-only shows the workspace ONLY inline; standalone keeps the home location. |
-| Shared state | `inlineOpen`, `courseSequences`, `collapseInlineOpen`, `nextEntryAfter` | One-open-at-a-time + «Gå til neste element» nav (module panel only — the section reader’s nav is the #924 combined button). |
+| Shared state | `inlineOpen`, `courseSequences`, `collapseInlineOpen`, `nextEntryAfter` | One-open-at-a-time. Since #1162 slice 5 (2.184.0) the module panel has the section reader’s frame: one primary button at the bottom, only when the module is PASSED — «Gå videre», «Avslutt kurset» on the last step (no server call: the pass already completed the course), or what is outstanding (`buildModuleAdvance`). «Gå til neste element» is gone. |
 | List vs. course state | `focusedCourseId`, `applyCourseFocusState`, `focusCourse`, `unfocusCourse` (#921/#922) | Opening a course hides every OTHER `.course-accordion-item` and reveals `#courseBackBar`. An inline-open item MUST be collapsed before the course is hidden (`unfocusCourse` → `collapseInlineOpen`) or the singleton workspace ends up inside a `display:none` subtree. |
 
-| Reading mode (#1079) | `openInlineItemByEntry` adds `course-reading` on the `.course-accordion-item` when a SECTION opens; `collapseInlineOpen` removes it. CSS in `participant.html` («Lesemodus») hides everything in the course that is not the open section (`:has()`, never `.hidden`), restyles the panel as a sheet, and shows the width switch (`.course-reading-width`, `data-reader-width` on the panel, remembered in `localStorage` `participant.readerWidth`). Modules are NOT in reading mode. | Guard: `test/e2e/reading-mode-1079.spec.ts`. A test that expects the course header, other steps or the discussion toggle to be visible while a section is open must close the reader first (`participant-section-advance.spec.ts` was changed for this). |
+| Reading mode (#1079) | `openInlineItemByEntry` adds `course-reading` on the `.course-accordion-item` when a SECTION opens, and `reopenInlineAfterRender` for both types (a MODULE since #1162 slice 5, 2.184.0); `collapseInlineOpen` removes it. CSS in `participant.html` («Lesemodus») hides everything in the course that is not the open section (`:has()`, never `.hidden`), restyles the panel as a sheet, and shows the width switch (`.course-reading-width`, `data-reader-width` on the panel, remembered in `localStorage` `participant.readerWidth`). Modules are in reading mode too since 2.184.0, without the width switch (they hold a form, not reading text): header «Test», «Steg n av N», «← Tilbake til kurset» on the right, and the title on the sheet (`.course-reading-title`, shown ≤ 600 px where the header title is hidden). Guard for modules: `test/e2e/participant-module-reading-1162.spec.ts`. | Guard: `test/e2e/reading-mode-1079.spec.ts`. A test that expects the course header, other steps or the discussion toggle to be visible while a section is open must close the reader first (`participant-section-advance.spec.ts` was changed for this). |
 
 **Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts test/e2e/participant-course-sequence.spec.ts test/e2e/participant-course-focus.spec.ts test/e2e/participant-section-advance.spec.ts` (~10s, no Docker/Postgres). `participant-inline-open` is the consistency guard (section + module both inline, one open, workspace relocated); `participant-course-sequence` guards the serial presentation; `participant-course-focus` guards list-vs-course state (#921/#922); `participant-section-advance` guards the combined advance button and the absent item-level discussion (#923/#924), and since the 2026-11 test review also the section reader (image hydrated to `blob:`, «Avslutt kurset», reader closes) that `participant-section-reader.spec.ts` covered.
 
@@ -189,7 +193,8 @@ A major version with nobody holding a certificate for the current major version 
 per recipient inside `applyCourseVersionChange` (so every way in above that can give a major version — the form,
 `PUT …/items`, «Publiser nye versjoner», «Publiser kurs», import `replaceExisting` — creates them; the guard test
 forbids creating them anywhere else). Recipients: `findMajorVersionRecipients` (certificate for the course, active,
-not anonymized, one per person); the three dialogs show the same count as `majorEmailRecipients` and, over 200,
+not anonymized, one per person; #1196: the job and the outbox handler also require that the person still sees the course,
+with `findLearnersSeeingCourses` — otherwise `skipped`/`not_visible`, so the dialog count can exceed the e-mails sent); the three dialogs show the same count as `majorEmailRecipients` and, over 200,
 require a tick (`courseVersionAnswer`) and send `confirmEmailRecipients` — the server recounts and answers `409
 major_email_confirm_required` without it. Sending: `CourseMajorEmailMonitor` → `runCourseMajorEmailSchedule` →
 outbox `course_major_version_notification` → `deliverCourseMajorVersionNotice` (`courseMajorVersionEmail.ts`), only
@@ -236,7 +241,13 @@ lock, with history lacking numbers numbered first (`numberModuleHistory`). `Cour
 module_version_number_fixed` and `409 module_version_outdated`: texts in `participant-translations.js`. Guards:
 `test/content-lock-write-guard.test.js` (placement of these writes), `test/m2-module-credit-934-5a2.test.ts`.
 
-**The switch and passes per course (#934 slice 5a-3, 2.135.0).** `module_pass_per_course` in `PlatformConfig` (`modulePassSwitch.ts`), off everywhere, read on the client of the decision, never cached; with it off everything is as in 2.134.0. **Every reader of progress in a course goes through `findModuleProgress`** (`moduleCredit.ts`), which picks the rule: the certificate gate (`courseCompletionService.ts`, all three ways in), «Mine kurs» and the course detail (`routes/courses.ts`), the course report and its CSV (`courseReport.ts`). `CertificationStatus` is still written and is still what the module status report reads (`reviewAppealReport.ts`). With the switch on: `SUPERSEDED` is not written and the #997 e-mail is not sent (`publishModuleVersion`: `409 client_outdated`); `POST …/publish-versioned` and `POST …/publish-pending-versioned` (`versionedPublishService.ts`) take an answer per course, and `applyCourseVersionChange` raises the requirement (`raiseModules`) in the same call that makes the major version; `publish-pending` keeps working for an old tab, with modules as minor; «Publiser kurs» refuses a module that has been published before (`409 course_publish_has_republished_modules`). The participant page opens a module from the course with the course's status: `retakeRequired` on the course detail, only with the switch on, read by `courseRetakeApplies` (`participant-console-state.js`) and `openCourseModule`/`activateParticipantModule` (`participant.js`). The dialogs are 5b. Guards: `test/content-lock-write-guard.test.js` (readers, relations, `SUPERSEDED`, the switch), `test/m2-module-pass-per-course-934-5a3.test.ts`, `test/e2e/participant-course-retake-934-5a3.spec.ts`.
+**The switch and passes per course (#934 slice 5a-3, 2.135.0).** `module_pass_per_course` in `PlatformConfig` (`modulePassSwitch.ts`), off everywhere, read on the client of the decision, never cached; with it off everything is as in 2.134.0. **Every reader of progress in a course goes through `findModuleProgress`** (`moduleCredit.ts`), which picks the rule: the certificate gate (`courseCompletionService.ts`, all three ways in), «Mine kurs» and the course detail (`routes/courses.ts`), the course report and its CSV (`courseReport.ts`). `CertificationStatus` is still written; from 2.181.7 (#1192) no surface reads its status (the module status report reads `ModulePass`, see below). With the switch on: `SUPERSEDED` is not written and the #997 e-mail is not sent (`publishModuleVersion`: `409 client_outdated`); `POST …/publish-versioned` and `POST …/publish-pending-versioned` (`versionedPublishService.ts`) take an answer per course, and `applyCourseVersionChange` raises the requirement (`raiseModules`) in the same call that makes the major version; `publish-pending` keeps working for an old tab, with modules as minor; «Publiser kurs» refuses a module that has been published before (`409 course_publish_has_republished_modules`). The participant page opens a module from the course with the course's status: `retakeRequired` on the course detail, only with the switch on, read by `courseRetakeApplies` (`participant-console-state.js`) and `openCourseModule`/`activateParticipantModule` (`participant.js`). The dialogs are 5b. Guards: `test/content-lock-write-guard.test.js` (readers, relations, `SUPERSEDED`, the switch), `test/m2-module-pass-per-course-934-5a3.test.ts`, `test/e2e/participant-course-retake-934-5a3.spec.ts`.
+
+**Only in courses the participant sees (2.192.0; product owner 2026-11-28).** `findModuleProgress` counts a pass in a course only when the participant sees it (open, or restricted and assigned — `findLearnersSeeingCourses`, as section reads since #1156), and in an archived course only a pass on a submission **submitted** up to `archivedAt`. Callers that know the visibility pass `knownVisibleCourseIds` (course detail, «Mine kurs», the gate from reading/reconciliation, the worker after a pass, the archive's issuance); the course report, «midt i kurset» and the delete guard look it up once per call. The module reports with a course selected do NOT apply it (`visibility: "ignore"`). Known gap: the course report's participants and «midt i» still include submitters who do not see a restricted course (Entra classes, #996; safe direction). Guard: `test/unit/module-credit-visibility.test.ts`, `test/m2-module-credit-visibility.test.ts`.
+
+**Passed without a course (#1192 point 1, 2.181.7).** The surfaces that have no course ask **`findModuleStanding`** (`moduleCredit.ts`, same file and rule as `findModuleProgress`): module reports (`completionReport.ts`: `completion`, `pass-rates`, `completion/details`, `module-learners` and their CSV), the recertification report (`reviewAppealReport.ts`, status from `ModulePass`; `CertificationStatus` is only the population), the profile (`myStats.ts`, `passedModules` and totals) and the counts before a publish (`countCurrentModulePasses`: `modules/:id/passed-count`, `passedCount` in `pending-versions`). «Revised» there means a newer major version of the MODULE (product owner, answer A); with `courseId` the course requirement applies. The person outcome is `personModuleOutcome` (`completionReport.ts`). Not changed: the delete guard on `CertificationStatus` rows (foreign key `Restrict`), the activity log and MCQ analytics (events/attempts), and the participant module card/auto-start (course-only mode; the course context gives `retakeRequired`). Guard: `test/m2-module-standing-reports-1192.test.ts`.
+
+**The deadline and a new major version (#1192 point 2, 2.181.8).** One rule for which deadline applies to a person in a course, **`effectiveDeadline`** (`src/modules/course/effectiveDeadline.ts`): an assignment (`CourseEnrollment` INDIVIDUAL/DEPARTMENT) wins even without a deadline; a SELF enrolment is not an assignment; otherwise the earliest deadline from active classes, and on an equal date the latest `dueSetAt`. Used by `getClassAssignedCourseDeadlines` (classService), Status (`resolveCourseAudience`), the reminders (`gatherCandidates`: the deadline is chosen BEFORE the reminder window, `findAssignmentsForPairs`), the weekly e-mail, `/api/courses/enrollments` (`listParticipantEnrollments`) and the class deadline in the assignment e-mail. Before, these four merges disagreed. **`dueSetAt`** on `CourseEnrollment` and `CourseGroupAssignment` (migration `20261124210000_course_deadline_set_at`) is when the deadline was last set or changed; written only by `enrollmentRepository.assignEnrollment` and `classRepository.assignCourseToClass`, and only when the date changes (`dueAtDiffers`); NULL = before the field existed = old (answer B). **`newVersionDeadline.ts`**: a certificate for an OLDER major version counts as completed unless the effective deadline was set after the course's current major version (`CourseVersion.publishedAt`) — `isCertifiedForDeadline` for `deriveStatuses` (/enrollments, admin list, Status, reminders) and the weekly e-mail, `deadlineReopensCourse` for the course report (detail `NEEDS_NEW_VERSION` and the summary's completed count). The assignment e-mail has the same rule in SQL (`courseAssignmentNotice.ts` condition 8: a path opened after the version AND a class deadline set after it) and says «ny versjon av et kurs du har fullført» (`newVersion`). «Mine kurs» is unchanged: it shows no deadlines, and an older certificate already shows «Ny versjon». Guards: `test/m2-effective-deadline-1192.test.ts`, `test/m2-new-version-deadline-1192.test.ts`, `test/unit/effective-deadline-1192.test.ts`, `test/m2-course-assignment-email-1142.test.ts` (#1192 cases).
 
 **The dialogs and the version number (#934 slice 5b, 2.136.0).** One choice, shared: `public/static/course-version-choice.js` (`mountCourseVersionChoice`, and `mountAffectedCourses` for one choice per course). **The server decides which dialog is shown:** with the switch off, or against an old server, every dialog below is the old one, unchanged. **Only a course's owners or an administrator choose a major version for it (2.137.0):** `canChooseVersion` per course gives a row without choices, and the server enforces it with `403 course_version_not_owner`.
 
@@ -596,7 +607,7 @@ cascade policy (wording, an escape-hatch option, which items count as publishabl
 | Course commands | `src/modules/course/courseCommands.ts` (`unpublishCourse`, `archiveCourse`) | G3 on both; archive auto-unpublishes (I3); delete blocked by completions (G4) |
 | Section commands | `src/modules/course/sectionCommands.ts` (`publishSection`/`unpublishSection`/`archiveSection`/`restoreSection`/`deleteSection`) | G2 on unpublish/archive/delete; archive auto-unpublishes |
 | Routes | `adminContent.ts` (modules), `adminCourses.ts` (`/unpublish`), `adminSections.ts` (`/publish,/unpublish,/archive,/restore`) | `ValidationError` → 400 with named courses; module-delete keeps 409/`module_in_use` but reuses the named-courses message (#705); module publish rejects an unknown version 404 (no unguarded fallthrough) |
-| Shared status badge | `public/static/content-status-badge.js` (`lifecycleStatusBadge`, `moduleLibraryStatusBadge`) + i18n `adminContent.lifecycle.status.*` | **#705: single source for all three lists.** Course/section/library rows all render it (Utkast/Publisert/Arkivert). The module library's 5-state (`deriveLibraryStatus`) is collapsed to 3 + a «nyere utkast» `.status-chip`. Change the badge in ONE place. |
+| Shared status badge | `public/static/content-status-badge.js` (`lifecycleStatusBadge`, `moduleLibraryStatusBadge`) + i18n `adminContent.lifecycle.status.*` | **#705: single source for all three lists.** Course/section/library rows all render it (Utkast/Publisert/Arkivert). The module library's 5-state (`deriveLibraryStatus`) is collapsed to 3 + a «nyere utkast» `.status-chip`. Change the badge in ONE place. **#1171 (2.187.0):** the version is its own chip beside the badge, `versionChipHtml` (same file), for course (`.course-version-chip`), module (`.module-version-chip`, list and header) and section (`.section-version-chip`, list and header; the list's own Versjon column is gone), and no chip before the first publication. One word per state everywhere, also in the module's preview badge and version list: Utkast / Publisert / Nyere utkast / Åpen. The module library's local pill CSS is gone. Guard: `test/e2e/state-words-1171.spec.ts`. |
 | Module list UI | `public/static/admin-content-library.js` (`statusBadge` → `moduleLibraryStatusBadge`, row actions) | publish/unpublish/archive/restore + status column; badge now the shared 3-state |
 | Course list UI | `public/static/admin-content-courses.js` (`courseStatus`/`courseStatusBadge` → shared, `unpublishCourseInAdmin`, Status column) | Avpubliser + status column; badge was hardcoded Norwegian, now shared i18n |
 | Section list UI | `public/static/admin-content-sections.js` (`sectionStatus`/`statusBadge` → shared/`sectionLifecycle`, archived toggle) | status column + all lifecycle actions; badge now shared i18n |
@@ -639,6 +650,8 @@ pages — they are separate static JS/HTML files, so consistency is by conventio
 
 **Guards:** `test/e2e/admin-content-classes.spec.ts` "admin buttons + top nav render in prod-shaped config" (asserts a REAL i18n key resolves, not raw); `test/e2e/admin-content-workspaces.spec.ts` course archive (filter pill), unpublish, sections lifecycle; `test/e2e/admin-content-course-links-library-filter.spec.ts` course filter (modules + sections). When adding a column/filter to one list, mirror it where it applies and update this entry.
 
+**The system class «Alle deltakere» has no member rows (2.186.1).** Membership follows the participant role (`getUserClassIds` adds `cls_all_participants`; `courseReminderService` expands it), so `_count.members` and `/members` are always 0/empty, and the server refuses adding members (`classService`). Every surface that shows class members must special-case `isSystem`: the list's Medlemmer column («Alle», sorted largest), the detail's members section (heading without count + `data-system-members-note`, no member search, also for administrator). Guard: `test/e2e/class-read-by-producers-1198.spec.ts` (system class tests).
+
 ### Liste og skjema i samme element (2.157.2)
 
 På **Seksjoner** og **Klasser** tegner lista (`list-page.js`) og skjemaet (`form-page.js`) i samme `pageContent`, og
@@ -674,6 +687,11 @@ rette på én liste og glemme på de andre:
 |---|---|---|
 | **Kort under 600 px:** kolonnenavn foran hver verdi, ingenting utenfor kortet | `data-label` settes i `list-page.js`; telefonregelen for `.list-table` i `shared.css` | Navnekolonnen heter `col-name` i Moduler og Klasser, `col-title` i Kurs og Seksjoner — **to velgere**, og en regel som bare nevner den ene lar to lister stå igjen |
 | **«Mer»-menyen klippes ikke** av tabellrammen | `fitOpenMenus` i `row-actions.js` låner luft i bunnen av nærmeste ramme som klipper | Alle som bruker `rowActionsHtml`: de fire listene, `form-page.js`, `admin-content-shell.js`, `results.js` |
+| **«Mer» åpner innenfor skjermen** (#1169, 2.188.0) | `fitOpenMenus` gir menyen `row-more-menu--start` (åpner mot høyre) når den ellers går ut til venstre | Samme flater; telefon når raden brekker |
+| **Hodets faste plasser** (#1169 skive 2, 2.188.0) | `slotActionsHtml` i `row-actions.js`; `form-page.js` tar `{ primary, tools, more }` og legger `tools` under «Mer» under 700 px | Kurs `courseDetailActions`, modul `moduleHeaderSlots`, seksjon `sectionActions`, klasse (`actions` i `admin-content-classes.js`). Hovedknappen har `is-primary`. Rekkefølgen i «Mer» er sidens: Eksporter · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver / Slett. Guard: `test/e2e/header-slots-1169.spec.ts` |
+| **Radenes faste plasser** (#1169 skive 3, 2.189.0) | `slotActionsHtml` (`after` = «Kun for eier»); `list-page.js` tar `{ primary, more, after }` | Kurs, modul, seksjon, klasse (`actions` i hver side). Åpne · hovedhandlingen (uten fyll) · «Mer» (Døp om · Dupliser · Eksporter · Avpubliser · Arkiver / Slett). En annens klasse har ingen «Mer». Fokus etter en dialog går til «Mer» når knappen ligger i menyen (`returnFocusTo` i kurset, `focusBack` i module-lifecycle-dialogs.js). Guard: `test/e2e/row-slots-1169.spec.ts` |
+| **Dupliser modul/seksjon — én kopi** (#1169 skive 4a, 2.190.0) | `public/static/content-duplicate.js` (`duplicateModuleCopy`, `duplicateSectionCopy`: eksportpakken med « (kopi)», importert som nytt) | Modullista (`duplicateModule`), modulens hode (`duplicateModuleFromHeader`, åpner kopien), seksjonslista og seksjonens hode (`duplicateSection(…, { openCopy })`). Ikke for et arkivert element (#1151). Guard: `test/e2e/header-duplicate-archive-1169.spec.ts` |
+| **Publiser fra lista = hodets publisering** (#1169 skive 4a) | Lenke med flagg: modul `?publish=1` (`admin-content-shell.js` init), kurs `?publishDraft=1` (`loadCourseDetail`, som `?publishPending=1`). Flagget fjernes med `replaceState` | Modullista (`unpublished_draft` → Publiser, `published_with_draft` → Publiser utkastet), kurslista (`published_with_draft`). Guard: `header-duplicate-archive-1169.spec.ts`, `admin-content-course-draft-1140.spec.ts` (publishDraft) |
 
 **Guards:** `test/e2e/list-mobile-labels-1080.spec.ts` (modullista for `col-name`, kurslista for
 `col-title`, omdøpingsfeltet på 390 px, kontroll for skrivebord) og
@@ -1056,6 +1074,24 @@ section is published or its content saved.
 `test/e2e/section-portability-916.spec.ts` for the client half — the gate messages must be rendered
 from `field` + `missingLocales` in the author's language, never from the server's English `message`,
 and a held-back save must not show a plain "Seksjon lagret."
+
+### 24b. Kursets navn og beskrivelse gjennom samme port (#1178, 2.183.0)
+
+Én regel (`courseTextGateIssues`, `src/modules/course/courseTextGate.ts`): navnet på nb, nn og en-GB; beskrivelsen bare når den
+har tekst (et kart med bare blanke verdier er tomt). Plan og veiene: `doc/design/PLAN_1178_KURS_PUBLISERINGSPORT.md`.
+
+| Dør | Hvor | Hva porten gjør |
+|-----|------|-----------------|
+| «Publiser» og kaskaden | `publishCourse` (courseCommands.ts), kalt til slutt i kaskadens transaksjon | `422 course_translation_incomplete` med `details.issues`; i kaskaden rulles elementene tilbake |
+| «Publiser utkastet» | `POST …/draft/publish` (adminCourses.ts), etter `updateCourse` i samme transaksjon | `422`; utkastet og kurset står som før |
+| Import av et publisert kurs | `contentImportService.ts`, før `publishCourse` | Holder tilbake: kurset importeres upublisert, `heldBackByTranslationGate: true` |
+| Import som oppdaterer (`updatePlan`) | rører ikke publiseringen | **Ikke vaktet (kjent mangel):** skriver navnet rett i et publisert kurs |
+| Direkte lagring av et publisert kurs (`PUT /courses/:id`, `…/content`, gammel fane) | lagring, ikke publisering | **Ikke vaktet (kjent mangel)** |
+
+Klienten: «Fyll inn det som mangler» i meldingen fra begge publiseringsflytene (`fillCourseTextThenPublish`,
+`fillCourseDraftTextThenPublish` i admin-content-courses.js) oversetter bare hullene og publiserer på nytt med de samme svarene.
+**Guards:** `test/m2-course-text-gate-1178.test.ts` (alle fire dører med kontroll), `test/unit/course-text-gate-1178.test.ts`,
+`test/e2e/course-publish-text-gate-1178.spec.ts`.
 
 ## 25. «Hva inneholder dette kurset?» — to navngitte dører, ikke åtte kallere (#958)
 
@@ -1465,8 +1501,9 @@ behandler tilstanden som publisert i knappene (`content-status-badge.js`, kursli
 
 **Publiserer utkastet:** `publishCourseDraft` (courseDraft.ts) sjekker at utkastet er det fana lastet, og at kurset er
 publisert. Så skriver ruta utkastet med `updateCourse` (samme vei som `PUT …/content`: versjon, krav og e-post avgjøres
-der), og raden slettes, alt i én transaksjon. Et element som er arkivert, avpublisert eller slettet siden utkastet ble
-lagret, stopper publiseringen med navn. Unntaket fra låsen (`publishingDraft: true`) gis ett sted, i den ruta.
+der), og raden slettes, alt i én transaksjon. Et element som er arkivert eller slettet siden utkastet ble lagret, og en
+modul som er ny i utkastet og ikke publisert, stopper publiseringen med navn. En upublisert seksjon stopper den ikke fra
+2.181.5 (#1192 punkt 4): den kommer inn skjult for deltakerne, og kursbyggeren merker den. Unntaket fra låsen (`publishingDraft: true`) gis ett sted, i den ruta.
 
 **Skriver kursets felt eller liste, og stoppes derfor av låsen** (utkast finnes → `409 course_has_draft`). Låsen sitter ETT
 sted, i `claimCourseRevision` (courseVersioning.ts), som alle disse går gjennom:
@@ -1713,7 +1750,41 @@ bibliotekets dialoger 48 px over på en 390 px-skjerm.
 kontroll uten bruk), `test/m2-content-read-by-producers-1165.test.ts` (eierskapsvakta),
 `test/e2e/admin-content-module-lifecycle-dialogs-1168.spec.ts` (sperret, bekreftet, Avbryt, upublisert kontroll,
 gjenoppretting, sletting, fokus, 390 px), og `admin-content-archived-readonly-1151.spec.ts` (modulsida). Seks mutasjoner,
-alle røde. **Ikke gjort i #1168 ennå:** seksjon, klasse, tema og kursets «Avpubliser» (se saken).
+alle røde.
+
+**Seksjonen (2.179.0)** bruker den samme dialogen (`confirmSectionArchive`, `confirmSectionDelete`; tekstene
+`sections.archiveDialog.*`, `sections.deleteDialog.*`, `sections.restoredAsDraft`):
+
+| Handling | Flate | Hvor | Hva |
+|---|---|---|---|
+| Arkiver | Seksjonslista, raden (eller «Mer») | `archiveSectionFromList` i `admin-content-sections.js` | Henter `GET …/sections/:id/archive-preview`, som modulen. Før: `window.confirm`, og avslaget kom etter ja |
+| Arkiver | Seksjonsredigereren, hodet | `archiveSectionInEditor` | Samme dialog. Byttet forfatteren seksjon mens dialogen sto, arkiveres ikke den som vises |
+| Gjenopprett | Lista og redigereren | ingen dialog | `sections.restoredAsDraft`: «… er gjenopprettet som utkast» |
+| Slett | Redigereren (bare arkivert) | `deleteSection` → `confirmSectionDelete` | Sidas dialog. Den gamle teksten lovte at seksjonen «forsvinner fra alle kurs som bruker den»; tjeneren nekter å slette en seksjon som står i et kurs |
+
+**Vakter (seksjonen):** `test/m2-section-archive-preview-1168.test.ts`, `m2-content-read-by-producers-1165` (eierskapsvakta),
+`content-in-use-guard` (ruta står blant brukerne av regelen), `test/e2e/admin-content-section-lifecycle-dialogs-1168.spec.ts`
+(lista og redigereren: sperret, bekreftet, Avbryt, upublisert kontroll, gjenoppretting, fokus, 390 px), `section-editor.spec.ts`
+(sletting), og kappløpene i `admin-content-archive-in-course-draft-1150`, `admin-content-delete-archived-course-1149` og
+`section-jobs-stay-in-their-section-1154`. Seks mutasjoner, alle røde.
+
+**Kurset (2.180.0):** «Avpubliser» og slettedialogens tekst, se §36 («Avpubliseringen»).
+
+**Klassen og temaet (2.181.0):**
+
+| Handling | Flate | Hvor | Hva |
+|---|---|---|---|
+| Arkiver klasse | Klasselista og hodet | `archiveClass` i `admin-content-classes.js` → `confirmLifecycleStep` | Sidas dialog (`classes.archiveDialog.*`): kurs medlemmene bare har fått gjennom klassen og ikke har begynt på, forsvinner fra Mine kurs; påbegynte og fullførte blir stående; påminnelsene stopper. Før: `window.confirm` |
+| Slett klasse | Lista og hodet (arkivert) | `deleteClassInAdmin` → `confirmLifecycleStep` (`danger`) | Sidas dialog, rød knapp, samme innhold som spørreboksen hadde |
+| Gjenopprett klasse | Lista og hodet | ingen dialog | `classes.restoredNamed`: «Klassen «…» er gjenopprettet.» Før: spørreboks og «Klasse gjenopprettet.» |
+| Slett tema | Temalista (administrator) | `openDeleteDialog` i `admin-content-themes.js` | Henter `GET …/themes/:id/delete-preview` når dialogen åpnes: alle kurs som mister temaet (som slettingen), de arkiverte for seg (`themes.delete.textWithArchived`). Før: listas tall, bare aktive kurs og så gammelt som lista |
+
+**Vakter (klasse og tema):** `admin-content-classes.spec.ts` (arkiver og slett gjennom dialogen, Avbryt, rød knapp, gjenoppretting
+uten spørsmål), `language-accessibility-1173.spec.ts` (dialogens tittel på sidas språk), `admin-content-themes.spec.ts` (de arkiverte
+telles), `m2-archived-courses-not-in-use-1149.test.ts` (forhåndsvisningen = slettingens tall, kontroll uten kurs, bare
+administrator). Seks mutasjoner, alle røde.
+
+Med dette er alle flatene i #1168 gjort.
 
 ### 33e. Arkivert er urørlig, og slett krever arkivert (#1151 skive 3a, 3b og 3c)
 
@@ -1893,8 +1964,9 @@ Kursbeviset (`/certificate`) er en egen side, men åpnes i samme fane (#1162): n
 eget navn, ett navn per sted. Fra seksjonen og modulen «← Tilbake til kurset» (`courses.item.backToCourse`, én nøkkel for
 begge), fra kurset og kursbeviset «← Tilbake til Mine kurs» (`courses.backToList`, `certificate.back`), og i en
 diskusjonstråd «← Tilbake til innleggene» (`discussion.action.back`; pila står i `discussion-panel.js`). «Mine data» i profilen
-(«← Tilbake til profil», `dataview.back`) er ikke endret. Produsentsidenes tre tilbake-tekster tas i #1170. På telefon viker
-merket «Arbeidsflate» i modulens hode (≤ 600 px), ellers ble «← Tilbake til kurset» kuttet i panelets høyre kant på 360 px.
+(«← Tilbake til profil», `dataview.back`) er ikke endret. Produsentsidenes tre tilbake-tekster tas i #1170. Skive 2 lot merket
+«Arbeidsflate» vike i modulens hode på telefon; fra skive 5 (2.184.0) står modulen i lesemodus med tittelen på arket, og merket
+«Test» står.
 Vakt: `test/e2e/participant-flow-1162.spec.ts` (tre språk; bredden på 390 og 360 px).
 
 **Vakter:** `test/e2e/participant-item-url-1158.spec.ts` (tilbake, fram, oppfriskning, bokmerke, «Lukk» mot nettleserens
@@ -1917,15 +1989,24 @@ er latt stå og gjelder bare rader opprettet utenom (testfiksturer).
 | Agent-API-et (skillen, agent-token) | `POST /courses` (`agentTokenScope.ts`) | utelatt → `createCourse` → begrenset |
 | «Importer som nytt kurs» | `POST /courses/import` `createNew` → `importCourseFromEnvelope` → `createCourse` | eksporten bærer ingen synlighet → begrenset |
 | «Oppdater dette kurset» / `replaceExisting` | samme rute | eksisterende kurs, synligheten røres ikke |
-| Dupliser kurs | finnes ikke | — (kommer den, må den gå gjennom `createCourse`) |
+| Døp om kurs | `PATCH /courses/:courseId/title` → `renameCourse` (courseDraft.ts; #1169 skive 4c, 2.192.0): publisert → utkastet, ellers kurset, under én lås | Bare kurslista («Mer» → Døp om, `omdopKursIRad`); i kursets hode endres navnet i skjemaet. Lista bærer `draftTitle`. Guard: `test/m2-course-rename-1169.test.ts`, `test/e2e/course-rename-1169.spec.ts` |
+| Dupliser kurs | `POST /courses/:courseId/duplicate` → `duplicateCourse` (courseCommands.ts): `createCourse` + `setCourseItems` i én transaksjon (#1169, 2.191.0) | Kurslista og kursets hode («Mer» → Dupliser, `duplicateCourseInAdmin`); de samme modulene og seksjonene, ikke kopier. Guard: `test/m2-course-duplicate-1169.test.ts`, `test/e2e/header-duplicate-archive-1169.spec.ts` |
 
 **Publiseringen** («Publiser» i lista og i hodet, «Publiser utkastet»): dialogen spør alltid, og sier hvem som ser kurset etterpå
 (`GET …/publish-audience`, `coursePublishAudience.ts`, regnet på tjeneren). Én dialog: `openCoursePublishDialog` (lista over
 upublisert innhold og versjonsspørsmålet står i den samme), og ved «Publiser utkastet» med versjonsspørsmål står hvem som ser
 kurset i versjonsdialogen (`askCourseVersion` med `audience`).
 
+**Avpubliseringen** (#1168, 2.180.0, «Avpubliser» i lista og i hodet; `unpublishCourseInAdmin`): den samme dialogen
+(`openCoursePublishDialog`, `mode: "plain"`) med egne ord, og de samme tallene: «Hvem mister tilgangen» (`courses.unpublishDialog.*`,
+`publishAudienceHtml(audience, keys)` tar nøklene uttrykkelig, ingen standard). Kursets egen synlighet, ikke utkastets. Før:
+`window.confirm`. Tjeneren har ingen sperre her (avpublisering kan gjøres om med en ny publisering). Kursets slettedialog
+(`courses.deleteDialog.text`) sier nå at både modulene og seksjonene blir stående; før nevnte den bare modulene.
+
 **Vakter:** `test/unit/new-course-default-guard-1164.test.ts` (dekningsvakt: ingen kode i `src/` oppretter en kursrad utenom
-`createCourse`), `test/m2-course-publish-1164.test.ts` (hver vei, kontrollene, publikummet), `test/e2e/admin-content-course-publish-dialog-1164.spec.ts`.
+`createCourse`), `test/m2-course-publish-1164.test.ts` (hver vei, kontrollene, publikummet), `test/e2e/admin-content-course-publish-dialog-1164.spec.ts`
+(også overskriften i versjonsdialogen), `test/e2e/admin-content-course-unpublish-dialog-1168.spec.ts` (åpent, begrenset, Avbryt, Esc,
+kontroll av publiseringens ord, 390 px), `admin-content-workspaces.spec.ts` (avpublisering fra lista, slettedialogens tekst).
 
 ## 37. Andres kurs, moduler og seksjoner — skrivebeskyttet lesing (#1165, #1180)
 

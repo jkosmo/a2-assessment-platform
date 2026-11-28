@@ -32,7 +32,7 @@ const pageTranslations = {
   },
   nb: {
     "reviewPage.title": "Manuell behandling",
-    "reviewPage.subtitle": "Handter fagvurderinger og anker pa ett sted.",
+    "reviewPage.subtitle": "Håndter fagvurderinger og anker på ett sted.",
     "review.section.manualReview": "Fagvurdering",
     "review.section.appeal": "Ankebehandling",
     "review.tab.manualReview": "Manuell vurdering",
@@ -57,7 +57,7 @@ const pageTranslations = {
   },
   nn: {
     "reviewPage.title": "Manuell handsaming",
-    "reviewPage.subtitle": "Handter fagvurderingar og ankar pa eitt stad.",
+    "reviewPage.subtitle": "Handter fagvurderingar og ankar på éin stad.",
     "review.section.manualReview": "Fagvurdering",
     "review.section.appeal": "Ankebehandling",
     "review.tab.manualReview": "Manuell vurdering",

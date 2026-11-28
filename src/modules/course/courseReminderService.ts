@@ -14,6 +14,7 @@ import { EMAIL_ILLUSTRATIONS } from "../certification/illustratedEmail.js";
 import { deriveStatuses } from "./enrollmentService.js";
 import { pairKey } from "./learnerVisibility.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
+import { effectiveDeadline } from "./effectiveDeadline.js";
 import { classRepository } from "./classRepository.js";
 import { findActiveParticipants } from "../../repositories/userRepository.js";
 import { recipientLocale } from "../../i18n/recipientLocale.js";
@@ -79,6 +80,8 @@ type ReminderCandidate = {
   userId: string;
   courseId: string;
   dueAt: Date;
+  /** Når fristen ble satt (#1192 punkt 2); `deriveStatuses` trenger den for kurs med ny hovedversjon. */
+  dueSetAt: Date | null;
   recipientEmail: string;
   recipientName: string | null;
   courseTitle: string; // lokalisert for mottakeren
@@ -190,6 +193,7 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
       userId: enrollment.userId,
       courseId: enrollment.courseId,
       dueAt: enrollment.dueAt,
+      dueSetAt: enrollment.dueSetAt,
       recipientEmail: enrollment.user.email,
       recipientName: enrollment.user.name,
       courseTitle: localizeTitle(recipientLocale(enrollment.user), enrollment.course.title),
@@ -238,9 +242,12 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
       const key = keyOf(user.id, assignment.courseId);
       const existing = map.get(key);
       if (existing) {
-        // Individuell frist vinner; ellers behold tidligste klasse-frist.
-        if (existing.source === "class" && assignment.dueAt < existing.dueAt) {
-          existing.dueAt = assignment.dueAt;
+        // Individuell frist vinner; ellers den tidligste klassefristen, og ved lik dato det seneste tidspunktet
+        // (`effectiveDeadline`).
+        if (existing.source === "class") {
+          const merged = effectiveDeadline({ classes: [{ dueAt: existing.dueAt, dueSetAt: existing.dueSetAt }, { dueAt: assignment.dueAt, dueSetAt: assignment.dueSetAt }] });
+          existing.dueAt = merged.dueAt!;
+          existing.dueSetAt = merged.dueSetAt;
         }
         continue;
       }
@@ -248,6 +255,7 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
         userId: user.id,
         courseId: assignment.courseId,
         dueAt: assignment.dueAt,
+        dueSetAt: assignment.dueSetAt,
         recipientEmail: user.email,
         recipientName: user.name,
         courseTitle: localizeTitle(recipientLocale(user), assignment.course.title),
@@ -256,6 +264,32 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
         isAnonymized: user.isAnonymized,
         source: "class",
       });
+    }
+  }
+
+  // #1192 punkt 2 (planlesingen, Codex HØY 1): en TILDELING til personen vinner over klassen også når fristen ligger utenfor
+  // vinduet eller mangler. Spørringen over (`findIndividualEnrollmentsWithDueDate`) ser bare frister innen vinduet, så en
+  // individuell frist langt fram tapte mot en tidligere klassefrist, og Status (som ser alle) sa noe annet enn påminnelsen. Nå
+  // slås tildelingene for parene som kom fra klasser, opp uten vindu, og regelen (`effectiveDeadline`) avgjør før vinduet.
+  const fromClass = Array.from(map.values()).filter((candidate) => candidate.source === "class");
+  if (fromClass.length > 0) {
+    const assigned = await enrollmentRepository.findAssignmentsForPairs(
+      [...new Set(fromClass.map((c) => c.userId))],
+      [...new Set(fromClass.map((c) => c.courseId))],
+    );
+    const assignedByKey = new Map(assigned.map((row) => [keyOf(row.userId, row.courseId), row]));
+    for (const candidate of fromClass) {
+      const individual = assignedByKey.get(keyOf(candidate.userId, candidate.courseId));
+      if (!individual) continue;
+      const deadline = effectiveDeadline({ individual, classes: [{ dueAt: candidate.dueAt, dueSetAt: candidate.dueSetAt }] });
+      if (!deadline.dueAt || deadline.dueAt > upperBound) {
+        // Tildelingen sier ingen frist, eller en frist utenfor vinduet: ingen påminnelse nå.
+        map.delete(keyOf(candidate.userId, candidate.courseId));
+        continue;
+      }
+      candidate.dueAt = deadline.dueAt;
+      candidate.dueSetAt = deadline.dueSetAt;
+      candidate.source = "individual";
     }
   }
 
@@ -296,7 +330,7 @@ export async function runCourseReminderSchedule(input?: {
   const candidates = await gatherCandidates(summary, upperBound);
   // #1156 (QA-porten): statusene for alle kandidatene i ett kall (`deriveStatuses`, et fast antall spørringer), ikke én om gangen.
   const statuses = await deriveStatuses(
-    candidates.filter((candidate) => isReachableParticipant(candidate)).map((c) => ({ userId: c.userId, courseId: c.courseId, dueAt: c.dueAt })),
+    candidates.filter((candidate) => isReachableParticipant(candidate)).map((c) => ({ userId: c.userId, courseId: c.courseId, dueAt: c.dueAt, dueSetAt: c.dueSetAt })),
     asOf,
   );
 

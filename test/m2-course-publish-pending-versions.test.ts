@@ -69,6 +69,8 @@ async function moduleWithPendingVersion(stamp: string, opts: { passed?: boolean 
       data: { userId: user.id, moduleId: module.id, latestDecisionId: decision.id, status: "ACTIVE", passedAt: new Date() },
       select: { id: true },
     });
+    // Som `recordModulePassFromDecision` gjør ved et bestått. Fra #1192 punkt 1 leses tallet «har bestått» herfra.
+    await prisma.modulePass.create({ data: { userId: user.id, moduleId: module.id, submissionId: submission.id, decisionId: decision.id, moduleVersionId: v1.id, passedAt: new Date() } });
     certificationId = cert.id;
   }
   return { moduleId: module.id, v1Id: v1.id, v2Id: v2.id, certificationId };

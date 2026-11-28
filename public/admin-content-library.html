@@ -34,22 +34,7 @@
 
       /* #1046: sidehode, søk, filtre, kursfilter, sortering og tabell er den felles listesida (list-page.js + shared.css). */
 
-      /* ── Status badges ───────────────────────────────────────────────────── */
-      .status-badge {
-        display: inline-flex;
-        align-items: center;
-        border-radius: 999px;
-        padding: 3px 10px;
-        font-size: 12px;
-        font-weight: 700;
-        white-space: nowrap;
-      }
-      .status-badge.archived { background: #f5f5f5; color: #666; }
-      .status-badge.unpublished_draft { background: #fff3db; color: #7a4b00; }
-      .status-badge.published { background: #e6f4ea; color: #12613a; }
-      .status-badge.ready { background: #edf1f7; color: #42526b; }
-      /* v1.2.20 (#460): Live + draft — grønn bakgrunn (publisert) + gul outline (har upublisert draft). */
-      .status-badge.published_with_draft { background: #e6f4ea; color: #12613a; outline: 2px solid #f5d57c; outline-offset: -2px; }
+      /* #1171: statusmerket har én form, den i shared.css (.status-badge--*). Den lokale pillen og de gamle femverdi-klassene er borte. */
 
       /* ── Cert level ──────────────────────────────────────────────────────── */
       .cert-badge {

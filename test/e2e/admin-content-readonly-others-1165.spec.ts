@@ -87,7 +87,8 @@ for (const viewport of VIEWPORTS) {
       await expect(page.locator("[data-course-archived-notice]")).toHaveCount(0);
       await expect(page.locator("#formSaveBtn")).toHaveCount(0);
       await expect(page.locator("#formCancelLink")).toHaveCount(0);
-      await expect.poll(() => headerActions(page)).toEqual(["export"]);
+      // #1169 skive 4b: Dupliser også (kopien er hens egen).
+      await expect.poll(() => headerActions(page)).toEqual(["duplicate", "export"]);
       await expect(page.locator("#title-nb")).toBeDisabled();
       await expect(page.locator("#certLevel")).toBeDisabled();
       await expect(page.locator("#comboboxInput")).toBeDisabled();
@@ -187,7 +188,7 @@ for (const viewport of VIEWPORTS) {
   test.describe(`#1165 modulen, en annens (${viewport.width} px)`, () => {
     test.use({ viewport });
 
-    test("skrivebeskyttet: linja, ingen Lagre/Avbryt, bare Eksporter, sperrede felt i Rediger og Innstillinger", async ({ page }) => {
+    test("skrivebeskyttet: linja, ingen Lagre/Avbryt, bare Dupliser og Eksporter, sperrede felt i Rediger og Innstillinger", async ({ page }) => {
       await moduleSetup(page, false);
       const writes = recordWrites(page);
       await page.goto(`/admin-content/module/${MODULE_ID}/conversation`);
@@ -196,7 +197,8 @@ for (const viewport of VIEWPORTS) {
       await expect(page.locator("[data-module-archived-notice]")).toHaveCount(0);
       await expect(page.locator("#formSaveBtn")).toHaveCount(0);
       await expect(page.locator("#formCancelLink")).toHaveCount(0);
-      await expect.poll(() => wsKeys(page)).toEqual(["export"]);
+      // #1169 skive 4: Dupliser også (lesing og kopi), som i lista; kopien er hens egen.
+      await expect.poll(() => wsKeys(page)).toEqual(["duplicate", "export"]);
       await expect(page.locator("#previewEditTitle")).toBeDisabled();
       await expect(page.locator("#previewEditTaskText")).toBeDisabled();
       await noHorizontalScroll(page);
@@ -297,7 +299,7 @@ for (const viewport of VIEWPORTS) {
   test.describe(`#1180 seksjonen, en annens (${viewport.width} px)`, () => {
     test.use({ viewport });
 
-    test("skrivebeskyttet: linja, ingen Lagre/Avbryt, bare Eksporter, sperrede felt, Forhåndsvisning og eierpanelet leses", async ({ page }) => {
+    test("skrivebeskyttet: linja, ingen Lagre/Avbryt, bare Dupliser og Eksporter, sperrede felt, Forhåndsvisning og eierpanelet leses", async ({ page }) => {
       await sectionSetup(page, [sectionFixture("sec-1", "Annens seksjon", false)], false);
       const writes = recordWrites(page);
       await page.goto("/admin-content/sections?id=sec-1");
@@ -306,7 +308,8 @@ for (const viewport of VIEWPORTS) {
       await expect(page.locator("[data-section-archived-notice]")).toHaveCount(0);
       await expect(page.locator("#formSaveBtn")).toHaveCount(0);
       await expect(page.locator("#formCancelLink")).toHaveCount(0);
-      await expect.poll(() => sectionHeaderActions(page)).toEqual(["export"]);
+      // #1169 skive 4: Dupliser også, som i lista.
+      await expect.poll(() => sectionHeaderActions(page)).toEqual(["duplicate", "export"]);
       await expect(page.locator("#titleInput")).toBeDisabled();
       await expect(page.locator("#markdownInput")).toBeDisabled();
       await expect(page.locator("#titleInput")).toHaveValue("Annens seksjon");

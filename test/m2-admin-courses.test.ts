@@ -86,11 +86,17 @@ describe("Admin course management", () => {
       .put(`/api/admin/content/courses/${courseId}`)
       .set(adminHeaders)
       .send(await withRevision(courseId, {
+        // #1178 skive 2: publiseringen under krever navn og beskrivelse på alle tre språk, så oppdateringen sender alle tre,
+        // som skjemaet gjør. Med bare engelsk ville kurset blitt avvist ved publisering (det porten skal).
         title: {
           "en-GB": "Updated managed course",
+          nb: "Oppdatert administrert kurs",
+          nn: "Oppdatert administrert kurs",
         },
         description: {
           "en-GB": "Updated description from the admin UI.",
+          nb: "Oppdatert beskrivelse fra admin-grensesnittet.",
+          nn: "Oppdatert skildring frå admin-grensesnittet.",
         },
       }));
     expect(updateCourseResponse.status).toBe(200);

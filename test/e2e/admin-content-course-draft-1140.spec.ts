@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
 
-import { mockCommonApis } from "./admin-content-helpers.js";
+import { mockCommonApis, revealRowAction } from "./admin-content-helpers.js";
 
 // #1140 etappe 2, skive 2c: kursbyggeren lagrer et publisert kurs til utkastet (doc/design/PLAN_1140_E2.md, tabellen under
 // «Skive 2c: kursbyggeren»; doc/DECISIONS.md, «Ingen bryter, og mest mulig likt moduler»). Én test (minst) per rad i tabellen.
@@ -125,6 +125,8 @@ type Setup = {
   draft?: ServerState["draft"];
   locale?: string;
   failNext?: ServerState["failNext"];
+  /** #1169 skive 4: flagg i adressen, f.eks. `?publishDraft=1` fra kurslista. */
+  query?: string;
 };
 
 async function openBuilder(page: Page, setup: Setup = {}) {
@@ -257,7 +259,7 @@ async function openBuilder(page: Page, setup: Setup = {}) {
     return json(route, 200, { course: courseRow(state) });
   });
 
-  await page.goto(COURSE_URL);
+  await page.goto(`${COURSE_URL}${setup.query ?? ""}`);
   // Ikke `#title-nb`: med engelsk meny står det engelske språkpanelet åpent.
   await expect(page.locator("#comboboxInput")).toBeVisible();
   return state;
@@ -293,7 +295,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
   test("«Lagre» på et publisert kurs: PUT …/draft med feltene og loaded, ingen versjonsspørsmål, melding, og merket etter lagring", async ({ page }) => {
     // Med kursbevis og endret liste: før kom «Hva slags endring er dette?» her. Nå avgjøres versjonen når utkastet publiseres.
     const state = await openBuilder(page, { course: { certificateHolders: 42, majorEmailRecipients: 42 } });
-    await expect(page.locator(".form-page-state .status-chip").first()).not.toHaveText("Nyere utkast");
+    await expect(page.locator(".form-page-state .status-chip", { hasText: "Nyere utkast" })).toHaveCount(0);
     await expect(actions(page).locator('[data-action="publish-draft"]')).toHaveCount(0);
 
     await page.locator("#title-nb").fill("Generativ KI 2027");
@@ -320,7 +322,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     // Visningen er lastet på nytt: «Publisert» + «Nyere utkast», linja, og utkastets knapper.
     const status = page.locator(".form-page-state");
     await expect(status.locator(".status-badge")).toHaveText("Publisert");
-    await expect(status.locator(".status-chip").first()).toHaveText("Nyere utkast");
+    await expect(status.locator(".status-chip:not(.version-chip)").first()).toHaveText("Nyere utkast");
     await expect(page.locator("[data-course-draft-line]")).toContainText("Utkast lagret av Content Owner");
     await expect(page.locator("[data-course-draft-line]")).toContainText("Deltakerne ser versjon 3.1 til utkastet er publisert.");
     await expect(page.locator("#formPageDirty")).toHaveText("Alt lagret");
@@ -356,7 +358,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     await expect(page.locator("#formPageDirty")).toHaveText("Alt lagret");
     await expect(page.locator("#formSaveBtn")).toBeDisabled();
     await expect(page.locator(".form-page-state .status-badge")).toHaveText("Publisert");
-    await expect(page.locator(".form-page-state .status-chip").first()).toHaveText("Nyere utkast");
+    await expect(page.locator(".form-page-state .status-chip:not(.version-chip)").first()).toHaveText("Nyere utkast");
     await expect(page.locator("[data-course-draft-line]")).toContainText("Utkast lagret av Kari Nordmann");
     await expect(page.locator("[data-course-draft-line]")).toContainText("Deltakerne ser versjon 3.1 til utkastet er publisert.");
 
@@ -378,6 +380,25 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     await expect(line).toContainText("Deltakerne ser versjon 3.1 til utkastet er publisert.");
   });
 
+  // #1169 skive 4: «Publiser utkastet» i kurslista åpner kurset med `?publishDraft=1`, og hodets knapp kjøres med samme dialog.
+  test("?publishDraft=1 fra kurslista: hodets «Publiser utkastet» kjøres, og flagget forsvinner fra adressen", async ({ page }) => {
+    const state = await openBuilder(page, { draft: draftWith(PUBLISHED_ITEMS), query: "?publishDraft=1" });
+    await expect(page.locator("#cascadePublishDialog")).toBeVisible();
+    expect(new URL(page.url()).search).toBe("");
+    await page.locator("#cascadePublishConfirmBtn").click();
+    await expect.poll(() => writes(state).length).toBe(1);
+    expect(writes(state)[0].path).toBe(`${API}/draft/publish`);
+  });
+
+  test("kontroll: ?publishDraft=1 uten utkast publiserer ingenting, og sida sier det", async ({ page }) => {
+    const state = await openBuilder(page, { query: "?publishDraft=1" });
+    // QA 2.190.0: ikke stille — lista kan ha vært gammel.
+    await expect(page.getByText("Ingenting å publisere: kurset har ikke noe utkast som kan publiseres.")).toBeVisible();
+    await expect(page.locator("#cascadePublishDialog")).toBeHidden();
+    expect(writes(state)).toEqual([]);
+    expect(new URL(page.url()).search).toBe("");
+  });
+
   test("«Publiser utkastet» uten spørsmål: lista er som publisert (bare navnet endret), selv med kursbevis", async ({ page }) => {
     const state = await openBuilder(page, { course: { certificateHolders: 42, majorEmailRecipients: 42 }, draft: draftWith(PUBLISHED_ITEMS) });
     await publishDraftAndConfirm(page);
@@ -388,7 +409,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     await expect(page.locator(".toast__message").first()).toHaveText("Utkastet er publisert.");
     await expect(page.locator(".toast__detail").first()).toHaveText("Deltakerne ser nå versjon 3.2.");
     // Lastet på nytt: ikke noe utkast lenger.
-    await expect(page.locator(".form-page-state .status-chip").first()).not.toHaveText("Nyere utkast");
+    await expect(page.locator(".form-page-state .status-chip", { hasText: "Nyere utkast" })).toHaveCount(0);
     await expect(page.locator("[data-course-draft-line]")).toHaveCount(0);
     await expect(actions(page).locator('[data-action="publish-draft"]')).toHaveCount(0);
     await expect(page.locator("#title-nb")).toHaveValue("Generativ KI 2027");
@@ -481,14 +502,14 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     const state = await openBuilder(page, { draft: draftWith(PUBLISHED_ITEMS) });
     const messages: string[] = [];
     page.once("dialog", async (dialog) => { messages.push(dialog.message()); await dialog.dismiss(); });
-    await actions(page).locator('[data-action="discard-draft"]').click();
+    await (await revealRowAction(page, actions(page).locator('[data-action="discard-draft"]'))).click();
     await expect.poll(() => messages.length).toBe(1);
     expect(messages[0]).toBe("Forkaste utkastet? Endringene som ikke er publisert, går tapt. Kurset deltakerne ser (versjon 3.1), endres ikke.");
     await page.waitForTimeout(200);
     expect(writes(state)).toHaveLength(0);
 
     page.once("dialog", (dialog) => dialog.accept());
-    await actions(page).locator('[data-action="discard-draft"]').click();
+    await (await revealRowAction(page, actions(page).locator('[data-action="discard-draft"]'))).click();
     await expect.poll(() => writes(state).length).toBe(1);
     expect(writes(state)[0].method).toBe("DELETE");
     expect(writes(state)[0].path).toBe(`${API}/draft`);
@@ -545,22 +566,25 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
 
     state.failNext.discard = { status: 409, body: { error: "course_draft_changed", message: "x", details: { courseId: "course-1" } } };
     page.once("dialog", (dialog) => dialog.accept());
-    await actions(page).locator('[data-action="discard-draft"]').click();
+    await (await revealRowAction(page, actions(page).locator('[data-action="discard-draft"]'))).click();
     await expect.poll(() => writes(state).length).toBe(2);
     await expect(page.locator("#formErrorBanner")).toContainText("Noen andre har endret utkastet etter at du åpnet kurset.");
     // Utkastet står fortsatt i skjemaet.
     await expect(page.locator("#title-nb")).toHaveValue("Generativ KI 2027");
   });
 
-  test("published_with_draft: hodet har «Avpubliser», ikke «Publiser», og utkastets knapper kommer rett etter Lagre og Avbryt", async ({ page }) => {
+  test("published_with_draft: hodet har «Avpubliser», ikke «Publiser»; «Publiser utkastet» rett etter Lagre og Avbryt, resten under «Mer»", async ({ page }) => {
     await openBuilder(page, { draft: draftWith(PUBLISHED_ITEMS) });
     const row = actions(page);
     await expect(row.locator('[data-action="unpublish"]')).toHaveCount(1);
     await expect(row.locator('[data-action="publish"]')).toHaveCount(0);
-    // Rekkefølgen: Lagre, Avbryt, Publiser utkastet, Forkast utkast, så de som fantes (Eksporter …).
+    // #1169 skive 2: Lagre, Avbryt, hovedhandlingen (Publiser utkastet, fylt), så «Mer» i fast rekkefølge.
     const ids = await row.locator(".row-actions > button, .row-actions > details > summary").evaluateAll((els) =>
       els.map((el) => (el as HTMLElement).id || (el as HTMLElement).dataset.action || el.textContent?.trim()));
-    expect(ids).toEqual(["formSaveBtn", "formCancelLink", "publishCourseDraftBtn", "discardCourseDraftBtn", "export", "Mer"]);
+    expect(ids).toEqual(["formSaveBtn", "formCancelLink", "publishCourseDraftBtn", "Mer"]);
+    const more = await row.locator(".row-more-menu > button").evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.action));
+    expect(more).toEqual(["duplicate", "export", "discard-draft", "unpublish", "archive"]);
+    await expect(row.locator("#publishCourseDraftBtn")).toHaveClass(/is-primary/);
   });
 
   test("kurslista: et kurs med utkast har «Avpubliser» (ikke «Publiser») og viser «Publisert» + «Nyere utkast»", async ({ page }) => {
@@ -576,11 +600,49 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     const row = page.locator('#coursesTableBody tr[data-row-id="course-1"]');
     await expect(row).toBeVisible();
     await expect(row.locator(".status-badge")).toHaveText("Publisert");
-    await expect(row.locator(".status-chip").first()).toHaveText("Nyere utkast");
+    await expect(row.locator(".status-chip:not(.version-chip)").first()).toHaveText("Nyere utkast");
     await expect(row.locator('[data-action="unpublish"]')).toHaveCount(1);
     await expect(row.locator('[data-action="publish"]')).toHaveCount(0);
     // Kontroll: kurset som ikke er publisert, har «Publiser».
     await expect(page.locator('#coursesTableBody tr[data-row-id="course-2"] [data-action="publish"]')).toHaveCount(1);
+  });
+
+  // QA-porten 2026-11-24 (#1192 punkt 4): velgeren mistet seksjonens tilstand, så en upublisert seksjon lagt til og publisert med
+  // en gang fikk ingen merknad. Merknaden kommer nå fra seksjonsbiblioteket, før noe er lagret.
+  test("en upublisert seksjon lagt til fra velgeren får merknaden med en gang; en publisert seksjon får den ikke", async ({ page }) => {
+    await page.route("**/api/admin/content/sections", (route: Route) =>
+      json(route, 200, {
+        sections: [
+          { id: "sec-ny", title: "Ny seksjon", activeVersionId: null, archivedAt: null },
+          { id: "sec-pub", title: "Publisert seksjon", activeVersionId: "secv-1", archivedAt: null },
+        ],
+      }),
+    );
+    await openBuilder(page);
+    const input = page.locator("#comboboxInput");
+    for (const title of ["Ny seksjon", "Publisert seksjon"]) {
+      await input.click();
+      await input.fill(title);
+      await page.locator("#comboboxDropdown .combobox-option", { hasText: title }).click();
+      await page.locator("#addItemBtn").click();
+    }
+    const ny = page.locator('#moduleList > li[data-ref-id="sec-ny"]');
+    await expect(ny.locator("[data-item-note]")).toHaveText("Ikke publisert ennå. Deltakerne ser den ikke før den er publisert.");
+    await expect(ny).not.toHaveClass(/is-blocked/);
+    await expect(ny).toHaveClass(/has-note/);
+    // Kontroll: den publiserte seksjonen har ingen merknad.
+    await expect(page.locator('#moduleList > li[data-ref-id="sec-pub"] [data-item-note]')).toHaveCount(0);
+
+    // QA 2026-11-24: merknaden står på egen linje under tittelen, ikke som en smal kolonne ved knappene, også på 390 px.
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const title = await ny.locator(".form-row-title").boundingBox();
+      const note = await ny.locator("[data-item-note]").boundingBox();
+      expect(note!.y, `bredde ${width}`).toBeGreaterThanOrEqual(title!.y + title!.height - 1);
+      expect(note!.width, `bredde ${width}`).toBeGreaterThan(title!.width * 0.9);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `bredde ${width}`).toBe(true);
+      await page.screenshot({ path: `test-results/kursbygger-skjult-seksjon-${width}.png`, fullPage: false, clip: undefined });
+    }
   });
 
   test("et element i utkastet som er arkivert, avpublisert eller slettet, merkes med grunnen; publiseringen avvises med navnene", async ({ page }) => {
@@ -590,15 +652,23 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
         { type: "SECTION", id: "sec-b", title: "Seksjon B", unpublished: true },
         { type: "MODULE", id: "mod-gone", title: "", missing: true },
         { type: "MODULE", id: "mod-c", title: "Modul C" },
+        { type: "MODULE", id: "mod-d", title: "Modul D", unpublished: true },
       ]),
     });
     const rows = page.locator("#moduleList > li");
-    await expect(rows).toHaveCount(4);
+    await expect(rows).toHaveCount(5);
     await expect(rows.nth(0).locator("[data-item-problem]")).toHaveText("Arkivert etter at utkastet ble lagret. Ta den ut av utkastet før du publiserer.");
-    await expect(rows.nth(1).locator("[data-item-problem]")).toHaveText("Ikke publisert. Publiser den, eller ta den ut av utkastet før du publiserer.");
+    // #1192 punkt 4: en upublisert SEKSJON stopper ikke publiseringen; den får en merknad om at deltakerne ikke ser den ennå.
+    await expect(rows.nth(1).locator("[data-item-problem]")).toHaveCount(0);
+    await expect(rows.nth(1).locator("[data-item-note]")).toHaveText("Ikke publisert ennå. Deltakerne ser den ikke før den er publisert.");
+    await expect(rows.nth(1)).not.toHaveClass(/is-blocked/);
     await expect(rows.nth(2).locator("[data-item-problem]")).toHaveText("Slettet etter at utkastet ble lagret. Ta den ut av utkastet før du publiserer.");
     await expect(rows.nth(2).locator(".form-row-title")).toHaveText("mod-gone");
     await expect(rows.nth(3).locator("[data-item-problem]")).toHaveCount(0);
+    await expect(rows.nth(3).locator("[data-item-note]")).toHaveCount(0);
+    // Kontroll: en upublisert MODUL stopper fortsatt.
+    await expect(rows.nth(4).locator("[data-item-problem]")).toHaveText("Ikke publisert. Publiser den, eller ta den ut av utkastet før du publiserer.");
+    await expect(rows.nth(4)).toHaveClass(/is-blocked/);
     await expect(rows.nth(0)).toHaveClass(/is-blocked/);
 
     state.failNext.publish = {
@@ -608,15 +678,15 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
         message: "x",
         details: { items: [
           { type: "MODULE", id: "mod-a", title: "Modul A", reason: "archived" },
-          { type: "SECTION", id: "sec-b", title: "{\"nb\":\"Seksjon B\",\"en-GB\":\"Section B\"}", reason: "unpublished" },
           { type: "MODULE", id: "mod-gone", title: null, reason: "missing" },
+          { type: "MODULE", id: "mod-d", title: "{\"nb\":\"Modul D\",\"en-GB\":\"Module D\"}", reason: "unpublished" },
         ] },
       },
     };
     await publishDraftAndConfirm(page);
     const banner = page.locator("#formErrorBanner");
     await expect(banner).toContainText("Ett eller flere elementer i utkastet er arkivert, slettet eller ikke publisert.");
-    await expect(banner).toContainText("Dette må rettes: «Modul A» (arkivert), «Seksjon B» (ikke publisert), «mod-gone» (slettet).");
+    await expect(banner).toContainText("Dette må rettes: «Modul A» (arkivert), «mod-gone» (slettet), «Modul D» (ikke publisert).");
     // Et bilde å se på ved gjennomgang (test-results/ er ikke sporet): merkede rader, banneret, linja og knappene.
     await page.screenshot({ path: "test-results/kursutkast-merkede-elementer.png", fullPage: true });
   });
@@ -628,7 +698,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     await expect(page.locator(".form-page-state .status-badge")).toHaveText("Utkast");
     await expect(page.locator("[data-course-draft-line]")).toHaveCount(0);
     await expect(actions(page).locator('[data-action="publish-draft"]')).toHaveCount(0);
-    await expect(actions(page).locator('[data-action="discard-draft"]')).toBeVisible();
+    await expect(actions(page).locator('[data-action="discard-draft"]')).toHaveCount(1);
     // «Publiser» (kurset) er veien tilbake til utkastet.
     await expect(actions(page).locator('[data-action="publish"]')).toHaveCount(1);
 
@@ -639,7 +709,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     expect(writes(state)[0].path).toBe(`${API}/content`);
 
     page.once("dialog", (dialog) => dialog.accept());
-    await actions(page).locator('[data-action="discard-draft"]').click();
+    await (await revealRowAction(page, actions(page).locator('[data-action="discard-draft"]'))).click();
     await expect.poll(() => writes(state).length).toBe(2);
     expect(writes(state)[1].method).toBe("DELETE");
     await expect(page.locator(".toast__message").first()).toHaveText("Utkastet er forkastet.");
@@ -663,7 +733,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     expect(writes(state)).toHaveLength(0);
 
     page.once("dialog", (dialog) => dialog.accept());
-    await actions(page).locator('[data-action="discard-draft"]').click();
+    await (await revealRowAction(page, actions(page).locator('[data-action="discard-draft"]'))).click();
     await expect.poll(() => writes(state).length).toBe(1);
     const query = new URLSearchParams(writes(state)[0].search);
     expect(writes(state)[0].method).toBe("DELETE");
@@ -679,7 +749,7 @@ test.describe("#1140 skive 2c — kursbyggeren med utkast", () => {
     });
     await expect(page.locator("#title-nb")).toHaveValue("Generativ KI");
     await expect(page.locator(".form-page-state .status-badge")).toHaveText("Publisert");
-    await expect(page.locator(".form-page-state .status-chip").first()).not.toHaveText("Nyere utkast");
+    await expect(page.locator(".form-page-state .status-chip", { hasText: "Nyere utkast" })).toHaveCount(0);
     await expect(page.locator("[data-course-draft-line]")).toHaveCount(0);
     await expect(actions(page).locator('[data-action="discard-draft"]')).toHaveCount(0);
     await expect(page.locator("#formErrorBanner")).toBeHidden();

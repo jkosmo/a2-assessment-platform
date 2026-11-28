@@ -8,7 +8,7 @@ import { z } from "zod";
 import { requireAnyRole } from "../auth/authorization.js";
 import { ADMIN_ONLY } from "../auth/roleSets.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
-import { listCourseThemes, createCourseTheme, updateCourseTheme, deleteCourseTheme } from "../modules/course/index.js";
+import { listCourseThemes, createCourseTheme, updateCourseTheme, deleteCourseTheme, previewCourseThemeDelete } from "../modules/course/index.js";
 
 const adminThemesRouter = Router();
 const adminOnly = requireAnyRole([...ADMIN_ONLY]);
@@ -56,6 +56,16 @@ adminThemesRouter.put("/:themeId", adminOnly, async (request, response, next) =>
       actorId: request.context?.userId,
     });
     response.json({ theme: { id: theme.id, name: theme.name } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #1168: hvor mange kurs som mister temaet, regnet nå (alle kurs, som slettingen; de arkiverte for seg). Forspill til DELETE,
+// så samme vakt.
+adminThemesRouter.get("/:themeId/delete-preview", adminOnly, async (request, response, next) => {
+  try {
+    response.json(await previewCourseThemeDelete(String(request.params.themeId)));
   } catch (error) {
     next(error);
   }

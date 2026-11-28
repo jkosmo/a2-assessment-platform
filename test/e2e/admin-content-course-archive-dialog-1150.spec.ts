@@ -567,11 +567,14 @@ test.describe("#1150 skive 2b — QA-porten", () => {
     await openArchiveFromList(page);
     await page.keyboard.press("Escape");
     const archiveButton = listRow(page).locator('[data-action="archive"]');
-    await expect(archiveButton).toBeFocused();
+    // #1169 skive 3: Arkiver ligger under «Mer». Menyen er lukket når dialogen lukkes, så «Mer» får fokuset (som i modulens og
+    // seksjonens dialoger), ikke en skjult knapp.
+    const moreButton = listRow(page).locator("details.row-more > summary");
+    await expect(moreButton).toBeFocused();
     await clickAction(page, archiveButton);
     await expect(page.locator("#courseArchiveDialog")).toBeVisible();
     await page.locator("#courseArchiveCancelBtn").click();
-    await expect(archiveButton).toBeFocused();
+    await expect(moreButton).toBeFocused();
   });
 
   test("fokus etter Avbryt i gjenopprett-dialogen, fra det åpnede kurset", async ({ page }) => {

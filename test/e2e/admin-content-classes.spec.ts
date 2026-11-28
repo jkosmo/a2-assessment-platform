@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { revealRowAction } from "./admin-content-helpers.js";
 
 // #645/CL-3: browser e2e for the classes (cohort) admin page — runs the real front-end JS against
 // mocked APIs, covering the client wiring (list, create, add student via search, assign course).
@@ -142,9 +143,166 @@ test("classes admin: list, create, add a student via search, and assign a course
   await page.locator("#assignCourseBtn").click();
   await expect.poll(() => coursePosted).toBe(true);
 
-  // #497: the assigned-course chip shows the frist (formatted DD.MM.YYYY, no timezone shift).
+  // #497: the assigned-course chip shows the frist (no timezone shift). #1192: i et datofelt på raden, så den kan endres.
   await expect(page.locator("#courseChips")).toContainText("Arbeidsmiljø");
-  await expect(page.locator("#courseChips")).toContainText("Frist: 17.07.2026");
+  await expect(page.locator('#courseChips [data-course-due="course-1"]')).toHaveValue("2026-07-17");
+});
+
+// #1192: fristen på et kurs klassen alt har, endres på raden. Før var eneste vei å fjerne kurset og legge det til igjen.
+test("#1192: fristen endres på kursraden, lagres med knappen, og en tom dato fjerner fristen", async ({ page }) => {
+  await mockBaseApis(page, ["ADMINISTRATOR"]);
+  const assigned = [
+    { courseId: "c-1", title: "Arbeidsrett", dueAt: "2026-07-17T00:00:00.000Z" as string | null, coursePublished: true, courseArchived: false },
+    { courseId: "c-arch", title: "Gammelt kurs", dueAt: "2026-03-01T00:00:00.000Z" as string | null, coursePublished: true, courseArchived: true },
+  ];
+  const posts: Array<{ courseId: string; dueAt?: string | null }> = [];
+  await page.route("**/api/admin/content/classes/*", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ class: { id: "cls-1", name: "Kull A", isSystem: false, archivedAt: null, lifecycle: "active" } }) }),
+  );
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [{ id: "cls-1", name: "Kull A", kind: "MANUAL", isSystem: false, archivedAt: null, canManage: true, _count: { members: 0, courseAssignments: 2 } }] }) }),
+  );
+  await page.route("**/api/admin/content/classes/*/members", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ members: [] }) }),
+  );
+  await page.route("**/api/admin/content/classes/*/courses", (route: Route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as { courseId: string; dueAt?: string | null };
+      posts.push(body);
+      const row = assigned.find((c) => c.courseId === body.courseId);
+      if (row) row.dueAt = body.dueAt ?? null;
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: assigned }) });
+  });
+  await page.route("**/api/admin/content/courses", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: [] }) }),
+  );
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+
+  await page.goto("/deltakere/klasser");
+  await page.locator('[data-action="open"]').first().click();
+  const due = page.locator('[data-course-due="c-1"]');
+  const save = page.locator('[data-save-due="c-1"]');
+  await expect(due).toHaveValue("2026-07-17");
+  await expect(due).toHaveAccessibleName("Frist for Arbeidsrett");
+  // Uendret dato: ingenting å lagre. Tilbake til den lagrede: knappen av igjen.
+  await expect(save).toBeDisabled();
+  await due.fill("2026-09-01");
+  await expect(save).toBeEnabled();
+  await due.fill("2026-07-17");
+  await expect(save).toBeDisabled();
+  expect(posts).toHaveLength(0);
+
+  // Ny dato, lagret med knappen: én POST med datoen, og raden viser den nye fristen.
+  await due.fill("2026-09-01");
+  await save.click();
+  await expect.poll(() => posts.length).toBe(1);
+  expect(posts[0]).toEqual({ courseId: "c-1", dueAt: "2026-09-01T00:00:00.000Z" });
+  await expect(page.locator(".toast__message", { hasText: "Fristen er lagret." })).toBeVisible();
+  await expect(due).toHaveValue("2026-09-01");
+  await expect(save).toBeDisabled();
+
+  // Tom dato fjerner fristen.
+  await due.fill("");
+  await save.click();
+  await expect.poll(() => posts.length).toBe(2);
+  expect(posts[1]).toEqual({ courseId: "c-1", dueAt: null });
+  await expect(due).toHaveValue("");
+
+  // Et arkivert kurs: serveren nekter å tildele det, så fristen står bare som tekst.
+  await expect(page.locator('[data-course-due="c-arch"]')).toHaveCount(0);
+  await expect(page.locator(".form-row", { hasText: "Gammelt kurs" })).toContainText("Frist: 01.03.2026");
+
+  // Smal skjerm: raden brytes, ingenting stikker ut av sida.
+  await page.setViewportSize({ width: 390, height: 800 });
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  const rowBox = await page.locator(".form-row", { hasText: "Arbeidsrett" }).boundingBox();
+  const saveBox = await save.boundingBox();
+  expect(saveBox!.x + saveBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width + 1);
+  await page.screenshot({ path: "test-results/class-course-deadline-1192-390.png", fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.screenshot({ path: "test-results/class-course-deadline-1192-1280.png", fullPage: true });
+});
+
+// #1192 (produkteier 2026-11-25): et kurs i versjon 2 eller høyere — en ny frist krever den nye versjonen av den som har et eldre
+// kursbevis. Skjermen sier det før lagring, både på raden og ved «Tildel kurs». Kurs i versjon 1: ingen merknad.
+test("#1192: ny frist på et kurs i versjon 2 varsler at eldre kursbevis må ta den nye versjonen; versjon 1 varsler ikke", async ({ page }) => {
+  await mockBaseApis(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/admin/content/classes/*", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ class: { id: "cls-1", name: "Kull A", isSystem: false, archivedAt: null, lifecycle: "active" } }) }),
+  );
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [{ id: "cls-1", name: "Kull A", kind: "MANUAL", isSystem: false, archivedAt: null, canManage: true, _count: { members: 0, courseAssignments: 2 } }] }) }),
+  );
+  await page.route("**/api/admin/content/classes/*/members", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ members: [] }) }),
+  );
+  await page.route("**/api/admin/content/classes/*/courses", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        courses: [
+          { courseId: "c-v2", title: "Arbeidsrett med et ganske langt navn som bryter linja", dueAt: null, coursePublished: true, courseArchived: false, courseVersionMajor: 2 },
+          { courseId: "c-v1", title: "Arbeidsmiljø", dueAt: null, coursePublished: true, courseArchived: false, courseVersionMajor: 1 },
+        ],
+      }),
+    }),
+  );
+  await page.route("**/api/admin/content/courses", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        courses: [
+          { id: "n-v3", title: "{}", displayTitle: "Personvern", archivedAt: null, versionMajor: 3 },
+          { id: "n-v1", title: "{}", displayTitle: "HMS", archivedAt: null, versionMajor: 1 },
+        ],
+      }),
+    }),
+  );
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser");
+  await page.locator('[data-action="open"]').first().click();
+
+  const tekst = "Kurset er i versjon 2. Med denne fristen må de i klassen som har kursbevis for en eldre versjon, ta versjon 2.";
+  const v2 = page.locator(".form-row", { hasText: "Arbeidsrett" });
+  const note = v2.locator("[data-due-note]");
+  await expect(note).toBeHidden();
+  await v2.locator("[data-course-due]").fill("2026-12-01");
+  await expect(note).toBeVisible();
+  await expect(note).toHaveText(tekst);
+  // Et varsel ingen ser er ikke et varsel.
+  await expect(note).toHaveCSS("color", "rgb(122, 75, 0)");
+  // Tom dato fjerner fristen og gjør versjonen frivillig: ingen merknad.
+  await v2.locator("[data-course-due]").fill("");
+  await expect(note).toBeHidden();
+  // Kontroll: versjon 1 har ingen merknad, heller ikke med ny dato.
+  const v1 = page.locator(".form-row", { hasText: "Arbeidsmiljø" });
+  await v1.locator("[data-course-due]").fill("2026-12-01");
+  await expect(v1.locator("[data-save-due]")).toBeEnabled();
+  await expect(v1.locator("[data-due-note]")).toHaveCount(0);
+
+  // «Tildel kurs» med frist: versjon 3 varsler, versjon 1 ikke, og uten dato ikke.
+  const assignNote = page.locator("#assignVersionNote");
+  await page.locator("#courseSelect").selectOption("n-v3");
+  await expect(assignNote).toBeHidden();
+  await page.locator("#dueAtInput").fill("2026-12-01");
+  await expect(assignNote).toBeVisible();
+  await expect(assignNote).toHaveText("Kurset er i versjon 3. Med denne fristen må de i klassen som har kursbevis for en eldre versjon, ta versjon 3.");
+  await page.locator("#courseSelect").selectOption("n-v1");
+  await expect(assignNote).toBeHidden();
+  await page.locator("#courseSelect").selectOption("n-v3");
+  await page.locator("#dueAtInput").fill("");
+  await expect(assignNote).toBeHidden();
+  await expect(page.locator("body")).not.toContainText("{major}");
+
+  await v2.locator("[data-course-due]").fill("2026-12-01");
+  await page.setViewportSize({ width: 360, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: "test-results/class-course-version-note-1192-360.png", fullPage: true });
 });
 
 // #705-family: classes render consistently with the other lifecycle lists — Aktive/Arkiverte filter,
@@ -190,10 +348,10 @@ test("classes admin: Aktive/Arkiverte filter, Type column, and restore action", 
   await expect(body).toContainText("Arkivert");
   await expect(body.locator('[data-action="restore"][data-id="cls-arch"]')).toBeVisible();
 
-  // Restore → confirm dialog → POST /:classId/restore.
-  page.once("dialog", (dialog) => dialog.accept());
+  // Restore → POST /:classId/restore. #1168: uten spørsmål (kursets mønster), meldingen sier hvilken klasse.
   await body.locator('[data-action="restore"][data-id="cls-arch"]').click();
   await expect.poll(() => restoreUrl).toContain("/classes/cls-arch/restore");
+  await expect(page.locator(".toast__message").first()).toContainText("Kull Arkivert");
 });
 
 // #765: the «Deltakere» sub-navigation (Klasser | Manuell behandling | Resultater) role-gates its tabs
@@ -496,11 +654,110 @@ test("arkivert klasse: ingen felt for å legge til deltakere eller tildele kurs,
   await expect(notes.first()).toHaveText("Klassen er arkivert. Gjenopprett den for å legge til deltakere eller tildele kurs.");
   await expect(notes.first()).toBeVisible();
 
-  page.once("dialog", (dialog) => dialog.accept());
+  // #1168: gjenoppretting spør ikke.
   await page.locator('.form-page-actions [data-action="restore"]').click();
   await expect(page.locator("#studentSearch")).toBeVisible();
   await expect(page.locator("#assignCourseBtn")).toBeVisible();
   await expect(page.locator("[data-class-archived-note]")).toHaveCount(0);
+});
+
+// #1168: «Arkiver» og «Slett» på en klasse har sidas dialog (som modulene og seksjonene), ikke nettleserens spørreboks.
+async function classLifecycleCalls(page: Page) {
+  const calls = { archive: 0, del: 0, browserQuestions: [] as string[] };
+  await page.route("**/api/admin/content/classes/*/archive", (route: Route) => {
+    calls.archive += 1;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.route("**/api/admin/content/classes/cls-1", (route: Route) => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    calls.del += 1;
+    return route.fulfill({ status: 204, body: "" });
+  });
+  page.on("dialog", (dialog) => { calls.browserQuestions.push(dialog.message()); void dialog.dismiss(); });
+  return calls;
+}
+
+test("#1168: «Arkiver» i lista: sidas dialog sier hva som skjer med kursene; Avbryt sender ingenting, bekreft arkiverer én gang", async ({ page }) => {
+  await mockOneClass(page, { archivedAt: null });
+  const calls = await classLifecycleCalls(page);
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser");
+  const archive = async () => (await revealRowAction(page, page.locator('[data-action="archive"][data-id="cls-1"]'))).click();
+
+  await archive();
+  const dialog = page.locator("#moduleLifecycleDialog");
+  await expect(dialog).toHaveAttribute("data-module-dialog", "archive");
+  await expect(page.locator("#moduleLifecycleDialogTitle")).toHaveText("Arkivere «Kull 2025»?");
+  await expect(page.locator("#moduleLifecycleDialogText")).toContainText("forsvinner fra Mine kurs; påbegynte og fullførte blir stående, og påminnelsene stopper");
+  await expect(page.locator("#moduleLifecycleDialogConfirmBtn")).toHaveText("Arkiver klassen");
+  await expect(page.locator("#moduleLifecycleDialogCancelBtn")).toBeFocused();
+  await page.locator("#moduleLifecycleDialogCancelBtn").click();
+  expect(calls.archive).toBe(0);
+
+  await archive();
+  await page.locator("#moduleLifecycleDialogConfirmBtn").click();
+  await expect.poll(() => calls.archive).toBe(1);
+  expect(calls.browserQuestions).toEqual([]);
+});
+
+test("#1168: «Slett» på en arkivert klasse i hodet: sidas dialog med rød knapp; Avbryt sender ingenting, bekreft sletter", async ({ page }) => {
+  await mockOneClass(page, { archivedAt: "2026-01-01T00:00:00.000Z" });
+  const calls = await classLifecycleCalls(page);
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser?id=cls-1");
+  const del = async () => (await revealRowAction(page, page.locator('.form-page-actions [data-action="delete"]'))).click();
+
+  await del();
+  await expect(page.locator("#moduleLifecycleDialog")).toHaveAttribute("data-module-dialog", "delete");
+  await expect(page.locator("#moduleLifecycleDialogTitle")).toHaveText("Slette «Kull 2025» for godt?");
+  await expect(page.locator("#moduleLifecycleDialogText")).toHaveText("Medlemslista og kurstildelingene forsvinner. Deltakernes egen fremdrift beholdes. Det kan ikke angres.");
+  await expect(page.locator("#moduleLifecycleDialogConfirmBtn")).toHaveClass(/btn-danger/);
+  await page.locator("#moduleLifecycleDialogCancelBtn").click();
+  expect(calls.del).toBe(0);
+
+  await del();
+  await page.locator("#moduleLifecycleDialogConfirmBtn").click();
+  await expect.poll(() => calls.del).toBe(1);
+  expect(calls.browserQuestions).toEqual([]);
+});
+
+test("#1192: i en arkivert klasse kan fristen ikke endres (serveren nekter), den står som tekst; i en aktiv kan den", async ({ page }) => {
+  await mockOneClass(page, { archivedAt: "2026-01-01T00:00:00.000Z" });
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser?id=cls-1");
+  await expect(page.locator("#courseChips")).toContainText("Arbeidsmiljø");
+  await expect(page.locator("[data-course-due], [data-save-due]")).toHaveCount(0);
+  await expect(page.locator("#courseChips")).toContainText("Ingen frist");
+});
+
+test("#1192 kontroll: i en aktiv klasse har samme kursrad datofeltet", async ({ page }) => {
+  await mockOneClass(page, { archivedAt: null });
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser?id=cls-1");
+  await expect(page.locator('[data-course-due="course-1"]')).toHaveValue("");
+  await expect(page.locator('[data-save-due="course-1"]')).toBeDisabled();
+});
+
+test("#1168: «Gjenopprett» spør ikke, og et dobbeltklikk sender bare én gjenoppretting (QA 2.181.0)", async ({ page }) => {
+  await mockOneClass(page, { archivedAt: "2026-01-01T00:00:00.000Z" });
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let restores = 0;
+  await page.route("**/api/admin/content/classes/*/restore", async (route: Route) => {
+    restores += 1;
+    await gate;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/klasser");
+  await page.locator('.list-filter-btn[data-filter="archived"]').click();
+  const restore = await revealRowAction(page, page.locator('[data-action="restore"][data-id="cls-1"]'));
+  await restore.dblclick();
+  await expect.poll(() => restores).toBe(1);
+  await page.waitForTimeout(300);
+  expect(restores).toBe(1);
+  release();
+  await expect(page.locator(".toast__message").first()).toHaveText("Klassen «Kull 2025» er gjenopprettet.");
 });
 
 test("aktiv klasse: ingen forklaring om arkivering, og feltene står (kontroll)", async ({ page }) => {

@@ -1035,7 +1035,9 @@ describe("#1146 — et kurs som legges til igjen, gir e-post", () => {
       expect(await job(t(0), [c.id])).toMatchObject({ created: 0, reset: 0 });
     });
 
-    it("kursbevis på v1, og kurset lagt til klassen etter v2: e-post, også om hen har lest i kurset", async () => {
+    // #1192 punkt 2 (produkteier, svar C 2026-11-24): med kursbevis på en eldre hovedversjon går e-posten bare når tildelingen
+    // gjør kurset utestående: en frist satt etter den nye hovedversjonen. Uten frist er den nye versjonen frivillig.
+    it("kursbevis på v1, og kurset lagt til klassen etter v2 MED frist: e-post, også om hen har lest i kurset", async () => {
       const t = clock();
       const c = await course();
       const u = await person();
@@ -1045,8 +1047,43 @@ describe("#1146 — et kurs som legges til igjen, gir e-post", () => {
       const section = await prisma.courseItem.findFirstOrThrow({ where: { courseId: c.id, itemType: "SECTION" }, select: { sectionId: true } });
       await prisma.courseSectionRead.create({ data: { userId: u.id, courseId: c.id, sectionId: section.sectionId! } });
       await newMajor(c.id);
-      await assign(classId, c.id);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await assign(classId, c.id, "2030-01-01T00:00:00.000Z");
       expect(await job(t(0), [c.id])).toMatchObject({ created: 1 });
+      // E-posten sier «ny versjon av et kurs du har fullført» (svar C): kurset går ut med `newVersion`.
+      expect(await job(t(26), [c.id])).toMatchObject({ queued: 1 });
+      const send = okSend();
+      await deliverCourseAssignmentDigest(await latestBatch(u.id), { send });
+      expect(send.mock.calls[0]![0].courses).toEqual([expect.objectContaining({ courseId: c.id, newVersion: true })]);
+    });
+
+    it("kursbevis på v1, og kurset lagt til klassen etter v2 UTEN frist: ingen e-post (den nye versjonen er frivillig)", async () => {
+      const t = clock();
+      const c = await course();
+      const u = await person();
+      const classId = await newClass();
+      await addMember(classId, u.id);
+      await certificate(u.id, c.id, 1);
+      await newMajor(c.id);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await assign(classId, c.id);
+      expect(await job(t(0), [c.id])).toMatchObject({ created: 0 });
+    });
+
+    it("kursbevis på v1, i klassen fra før v2, og så settes en ny frist: ingen e-post (en ren fristendring er ikke en ny tildeling)", async () => {
+      const t = clock();
+      const c = await course();
+      const u = await person();
+      const classId = await newClass();
+      await addMember(classId, u.id);
+      await assign(classId, c.id);
+      await certificate(u.id, c.id, 1);
+      await newMajor(c.id);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await assign(classId, c.id, "2030-01-01T00:00:00.000Z");
+      expect(await job(t(0), [c.id])).toMatchObject({ created: 0, reset: 0 });
+      // Kontroll: kurset ER utestående for personen (frist satt etter v2), det sendes bare ingen e-post om det.
+      expect((await prisma.courseGroupAssignment.findFirstOrThrow({ where: { courseId: c.id, classId }, select: { dueSetAt: true } })).dueSetAt).not.toBeNull();
     });
 
     it("kursbevis på kursets hovedversjon: ingen rad, heller ikke når kurset legges til etter v2", async () => {

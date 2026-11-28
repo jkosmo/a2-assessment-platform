@@ -59,7 +59,8 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     await page.goto("/admin-content/sections");
     const knapp = page.locator('[data-action="publish-new"][data-id="sec-ny"]');
     await expect(knapp).toBeVisible();
-    await expect(knapp).toHaveText("Publiser ny versjon");
+    // #1169: samme ord som kurset og modulen.
+    await expect(knapp).toHaveText("Publiser utkastet");
     await expect(page.locator('[data-action="publish-new"][data-id="sec-lik"]')).toHaveCount(0);
     // Den står synlig (ikke under «Mer»): den er rett i raden.
     expect(await knapp.evaluate((el) => Boolean(el.closest("details.row-more")))).toBe(false);
@@ -95,10 +96,11 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     });
 
     await page.goto("/admin-content/sections?id=sec-ny");
-    await expect(page.locator(".status-chip")).toHaveText("Nyere utkast");
+    await expect(page.locator(".status-chip:not(.version-chip)")).toHaveText("Nyere utkast");
     const knapp = page.locator("#sectionPublishNewBtn");
     await expect(knapp).toBeVisible();
-    await expect(knapp).toHaveText("Publiser ny versjon");
+    // #1169: samme ord som kurset og modulen.
+    await expect(knapp).toHaveText("Publiser utkastet");
 
     await knapp.click();
     // #1163: dialogen først.
@@ -106,7 +108,7 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     await expect.poll(() => publiseringer).toBe(1);
     await expect(page.locator(".toast__message")).toContainText("Ny versjon publisert.");
     await expect(page.locator("#sectionPublishNewBtn")).toHaveCount(0);
-    await expect(page.locator(".status-chip")).toHaveCount(0);
+    await expect(page.locator(".status-chip:not(.version-chip)")).toHaveCount(0);
   });
 
   test("knappene i hodet virker også etter at hodet er tegnet på nytt: lagret utkast → «Publiser ny versjon» publiserer; så virker «Avpubliser»", async ({ page }) => {
@@ -138,14 +140,14 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     await page.locator("#markdownInput").fill("Bare bokmål nå.");
     await page.locator("#formSaveBtn").click();
     // Hodet er tegnet på nytt: merket og knappen er der — og knappen virker.
-    await expect(page.locator(".status-chip")).toHaveText("Nyere utkast");
+    await expect(page.locator(".status-chip:not(.version-chip)")).toHaveText("Nyere utkast");
     await page.locator("#sectionPublishNewBtn").click();
     await page.locator("#sectionPublishConfirmBtn").click();
     await expect.poll(() => kall).toEqual(["publish"]);
     await expect(page.locator("#sectionPublishNewBtn")).toHaveCount(0);
     // Hodet er tegnet på nytt igjen: «Avpubliser» virker også.
     page.once("dialog", (d) => d.accept());
-    await page.locator("#sectionLifecycleBtn").click();
+    await (await revealRowAction(page, page.locator("#sectionLifecycleBtn"))).click();
     await expect.poll(() => kall).toEqual(["publish", "unpublish"]);
   });
 
@@ -184,6 +186,6 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     await page.goto("/admin-content/sections?id=sec-lik");
     await expect(page.locator("#formPageTitle")).toBeVisible();
     await expect(page.locator("#sectionPublishNewBtn")).toHaveCount(0);
-    await expect(page.locator(".status-chip")).toHaveCount(0);
+    await expect(page.locator(".status-chip:not(.version-chip)")).toHaveCount(0);
   });
 });

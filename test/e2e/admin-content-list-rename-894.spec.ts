@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { mockCommonApis } from "./admin-content-helpers.js";
+import { mockCommonApis, revealRowAction } from "./admin-content-helpers.js";
 
 // #894: omdøping i lista, og hullene som gjorde at feil språk kunne passere ubemerket.
 //
@@ -40,7 +40,7 @@ test.describe("#894 — omdøping i lista", () => {
     await expect(rad(page, "mod-laast").locator(".lang-gap")).toBeVisible();
     // ⚠️ Men bare mod-ett kan faktisk oversettes, og tallet skal si det.
     await expect(page.getByRole("button", { name: /Oversett det som mangler/ })).toHaveText("Oversett det som mangler (1)");
-    await expect(rad(page, "mod-laast").getByRole("button", { name: "Døp om" })).toHaveCount(0);
+    await expect(rad(page, "mod-laast").locator('[data-action="rename"]')).toHaveCount(0);
   });
 
   test("«Bare de som mangler språk» snevrer inn — den erstatter ikke tilstandsfilteret", async ({ page }) => {
@@ -68,7 +68,7 @@ test.describe("#894 — omdøping i lista", () => {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ module: { id: "mod-ett" } }) });
     });
 
-    await rad(page, "mod-ett").getByRole("button", { name: "Døp om" }).click();
+    await (await revealRowAction(page, rad(page, "mod-ett").locator('[data-action="rename"]'))).click();
     const felt = rad(page, "mod-ett").locator(".row-rename input");
     await expect(felt).toBeFocused();
     await expect(felt).toHaveValue("Risikovurdering");
@@ -86,7 +86,7 @@ test.describe("#894 — omdøping i lista", () => {
       return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
     });
 
-    await rad(page, "mod-ett").getByRole("button", { name: "Døp om" }).click();
+    await (await revealRowAction(page, rad(page, "mod-ett").locator('[data-action="rename"]'))).click();
     const felt = rad(page, "mod-ett").locator(".row-rename input");
     await felt.fill("Noe annet");
     await felt.press("Escape");
@@ -282,7 +282,7 @@ test.describe("#894 — omdøping i seksjonslista", () => {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-to" } }) });
     });
 
-    await rad(page, "sec-to").getByRole("button", { name: "Døp om" }).click();
+    await (await revealRowAction(page, rad(page, "sec-to").locator('[data-action="rename"]'))).click();
     const felt = rad(page, "sec-to").locator(".row-rename input");
     await expect(felt).toHaveValue("Avvikshåndtering");
     await felt.fill("Avvik og korrigering");
@@ -307,7 +307,7 @@ test.describe("#894 — omdøping i seksjonslista", () => {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-ett" } }) });
     });
 
-    await rad(page, "sec-ett").getByRole("button", { name: "Døp om" }).click();
+    await (await revealRowAction(page, rad(page, "sec-ett").locator('[data-action="rename"]'))).click();
     const felt = rad(page, "sec-ett").locator(".row-rename input");
     // Feltet står med den lagrede teksten fordi lista vises på bokmål, og strengen ER bokmål.
     await expect(felt).toHaveValue("Kvalitetssikring");

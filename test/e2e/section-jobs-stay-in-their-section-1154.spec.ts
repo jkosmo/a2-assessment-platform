@@ -280,7 +280,8 @@ test.describe("#1154 — en jobb skriver bare i visningen den startet i", () => 
     });
     await page.goto("/admin-content/sections");
     await aapne(page, "sec-a");
-    await page.locator("#sectionLifecycleBtn").click();
+    // #1169 skive 2: Avpubliser står under «Mer».
+    await (await revealRowAction(page, page.locator("#sectionLifecycleBtn"))).click();
     await expect.poll(() => svar.kall).toBe(1);
     await page.goBack();
     await aapne(page, "sec-b");
@@ -321,12 +322,15 @@ test.describe("#1154 — en jobb skriver bare i visningen den startet i", () => 
       await svar.port;
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-a", activeVersionId: null, archivedAt: "2026-11-13T10:00:00.000Z", hasUnpublishedChanges: false } }) });
     });
-    page.on("dialog", (dialog) => void dialog.accept());
+    // #1168: «Arkiver» spør tjeneren først, og bekreftes i sidas dialog.
+    await page.route("**/api/admin/content/sections/sec-a/archive-preview", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sectionId: "sec-a", archived: false, published: true, uses: [] }) }));
     await page.goto("/admin-content/sections");
     await aapne(page, "sec-a");
     const arkiver = page.locator('.form-page-actions [data-editor-action="archive"]');
     if (!(await arkiver.isVisible())) await page.locator(".form-page-actions details.row-more > summary").click();
     await arkiver.click();
+    await page.locator("#moduleLifecycleDialogConfirmBtn").click();
     await expect.poll(() => svar.kall).toBe(1);
     await page.goBack();
     await aapne(page, "sec-b");

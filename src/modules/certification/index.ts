@@ -18,6 +18,4 @@ export type {
 export {
   certificationRepository,
   createCertificationRepository,
-  isCertificationPassed,
-  CERTIFICATION_PASSED_STATUSES,
 } from "./certificationRepository.js";

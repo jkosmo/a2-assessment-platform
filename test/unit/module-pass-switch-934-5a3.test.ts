@@ -36,6 +36,11 @@ function fakeClient(options: { switchValue?: string; statuses?: Array<{ userId: 
         return options.requirements ?? [];
       },
     },
+    // 28.11.2026: et bestått teller bare i kurs deltakeren ser. Kursene er åpne her (ingen oppslag); regelen for begrensede kurs
+    // står i test/unit/module-credit-visibility.test.ts.
+    course: {
+      findMany: async ({ where }: { where: { id: { in: string[] } } }) => where.id.in.map((id) => ({ id, enrollmentPolicy: "OPEN", archivedAt: null })),
+    },
   };
   return { client: client as never, calls };
 }
@@ -55,7 +60,7 @@ describe("#934 5a-3: bryteren", () => {
 // modulstatusen, uansett hva raden sier. Det er det tellingen av kall under måler.
 describe("#934 5a-3: findModuleProgress", () => {
   it("leser bare beståtte og krav, aldri bryteren eller modulstatus, også når raden sier av. Samme modul kan stå ulikt i to kurs", async () => {
-    const pass = (userId: string, versionMajor: number | null, invalidatedAt: Date | null = null) => ({ userId, moduleId: "m", invalidatedAt, moduleVersion: { versionMajor } });
+    const pass = (userId: string, versionMajor: number | null, invalidatedAt: Date | null = null) => ({ userId, moduleId: "m", invalidatedAt, moduleVersion: { versionMajor }, submission: { submittedAt: new Date(0) } });
     for (const switchValue of [undefined, "off", "on"]) {
       const { client, calls } = fakeClient({
         switchValue,
@@ -75,7 +80,7 @@ describe("#934 5a-3: findModuleProgress", () => {
   });
 
   it("en bestått som teller, vinner, uansett rekkefølge på innleveringene", async () => {
-    const pass = (versionMajor: number) => ({ userId: "u", moduleId: "m", invalidatedAt: null, moduleVersion: { versionMajor } });
+    const pass = (versionMajor: number) => ({ userId: "u", moduleId: "m", invalidatedAt: null, moduleVersion: { versionMajor }, submission: { submittedAt: new Date(0) } });
     for (const passes of [[pass(2), pass(1)], [pass(1), pass(2)]]) {
       const { client } = fakeClient({ requirements: [{ courseId: "c", moduleId: "m", minModuleMajor: 2 }], passes });
       const progress = await findModuleProgress(client, { courses: COURSES });
@@ -85,7 +90,7 @@ describe("#934 5a-3: findModuleProgress", () => {
   });
 
   it("mangler kravet, teller ingenting. Andre moduler i kurset enn dem leseren spør om, er ikke med", async () => {
-    const pass = (moduleId: string) => ({ userId: "u", moduleId, invalidatedAt: null, moduleVersion: { versionMajor: 9 } });
+    const pass = (moduleId: string) => ({ userId: "u", moduleId, invalidatedAt: null, moduleVersion: { versionMajor: 9 }, submission: { submittedAt: new Date(0) } });
     const { client } = fakeClient({ requirements: [], passes: [pass("m"), pass("annen")] });
     const progress = await findModuleProgress(client, { courses: COURSES });
     expect(progress.standing("u", "c", "m")).toBe("REVISED");

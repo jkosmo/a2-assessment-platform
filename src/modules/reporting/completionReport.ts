@@ -7,6 +7,40 @@ import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { normalizeFilters, round2 } from "./csvExport.js";
 import type { ReportFilters } from "./types.js";
 import { moduleIdClause } from "./scope.js";
+import { prisma } from "../../db/prisma.js";
+import { findModuleStanding, type ModuleLevelStanding, type ModuleStanding } from "../course/moduleCredit.js";
+
+// ---------------------------------------------------------------------------
+// #1192 punkt 1 (produkteier 2026-11-24): modulrapportene følger samme regel som kurset. En bestått står til modulen revideres,
+// og et senere forsøk tar den ikke bort. Et pass bare på en eldre hovedversjon av modulen er IKKE bestått («Må ta ny versjon»),
+// og et gammelt bestått-vedtak kan ikke gi det tilbake (planlesingen, Codex HØY 2). Ellers avgjør siste forsøk, som før.
+// Datofilteret velger som før personer med en innlevering i perioden; utfallet er personens ståsted nå
+// (doc/design/PLAN_1192_BESTATT_OG_FRIST.md, 1b). Med ett valgt kurs gjelder kursets krav.
+// ---------------------------------------------------------------------------
+
+/** Statusen for «må ta ny versjon», samme nøkkel som kursrapporten (`results.status.NEEDS_NEW_VERSION`). */
+export const NEEDS_NEW_VERSION = "NEEDS_NEW_VERSION";
+
+/** Ren funksjon: personens utfall på modulen, fra ståstedet (`ModulePass`) og det siste forsøket. */
+export function personModuleOutcome(
+  standing: ModuleStanding | null,
+  submissionStatus: SubmissionStatusType,
+  passFailTotal: boolean | null | undefined,
+): string {
+  if (standing === "PASSED") return "PASSED";
+  const byAttempt = deriveLearnerSubmissionStatus(submissionStatus, passFailTotal);
+  if (standing === "REVISED" && byAttempt === "PASSED") return NEEDS_NEW_VERSION;
+  return byAttempt;
+}
+
+/** Ståstedet for personene og modulene i rapporten. */
+async function standingsFor(filters: ReportFilters, rows: Array<{ userId: string; moduleId: string }>): Promise<ModuleLevelStanding> {
+  return findModuleStanding(prisma, {
+    moduleIds: [...new Set(rows.map((row) => row.moduleId))],
+    userIds: [...new Set(rows.map((row) => row.userId))],
+    courseId: filters.courseId,
+  });
+}
 
 type CompletionRow = {
   moduleId: string;
@@ -30,6 +64,8 @@ type PassRatesRow = {
   passCount: number;
   failCount: number;
   underReviewCount: number;
+  /** #1192 punkt 1: bestått bare en eldre hovedversjon av modulen («Må ta ny versjon»). Ikke med i andelen. */
+  revisedCount: number;
   passRate: number | null;
 };
 
@@ -82,9 +118,19 @@ export async function getCompletionReport(filters: ReportFilters, locale: Suppor
     else latestByPerson.set(personKey, { submission, attempts: 1 });
   }
 
+  // #1192 punkt 1: en gjeldende bestått er fullført, også når et senere forsøk er under vurdering; bare et pass på en eldre
+  // hovedversjon er verken fullført eller under vurdering («Må ta ny versjon»).
+  const standings = await standingsFor(filters, [...latestByPerson.values()].map(({ submission }) => ({ userId: submission.userId, moduleId: submission.module.id })));
   const rowsByModule = new Map<string, CompletionRow>();
   for (const { submission, attempts } of latestByPerson.values()) {
-    if (statusFilter && !statusFilter.has(submission.submissionStatus)) continue;
+    const outcome = personModuleOutcome(
+      standings.standing(submission.userId, submission.module.id),
+      submission.submissionStatus,
+      submission.decisions[0]?.passFailTotal,
+    );
+    const status: string =
+      outcome === "PASSED" ? SubmissionStatus.COMPLETED : outcome === NEEDS_NEW_VERSION ? NEEDS_NEW_VERSION : submission.submissionStatus;
+    if (statusFilter && !statusFilter.has(status)) continue;
     const key = submission.module.id;
     const current = rowsByModule.get(key) ?? {
       moduleId: submission.module.id,
@@ -106,10 +152,10 @@ export async function getCompletionReport(filters: ReportFilters, locale: Suppor
     current.attempts += attempts;
     rowsByModule.set(key, current);
     current.totalSubmissions += 1;
-    if (submission.submissionStatus === SubmissionStatus.COMPLETED) {
+    if (status === SubmissionStatus.COMPLETED) {
       current.completedSubmissions += 1;
     }
-    if (submission.submissionStatus === SubmissionStatus.UNDER_REVIEW) {
+    if (status === SubmissionStatus.UNDER_REVIEW) {
       current.underReviewSubmissions += 1;
     }
   }
@@ -159,24 +205,25 @@ export async function getPassRatesReport(filters: ReportFilters, locale: Support
   const submissions = scope === null ? [] : await reportingRepository.findSubmissionsForPassRatesReport(where);
 
   const outcomeFilter = new Set((filters.statuses ?? []).map((value) => value.toUpperCase()));
-  // ⚠️ Per person, siste forsøk — se getCompletionReport. Et strøket forsøk som er tatt på nytt og
-  // bestått, er ikke en «ikke bestått».
+  // ⚠️ Per person — se getCompletionReport. Et strøket forsøk som er tatt på nytt og bestått, er ikke en «ikke bestått», og
+  // (#1192 punkt 1) et senere stryk tar ikke bort en gjeldende bestått.
   const rowsByModule = new Map<string, PassRatesRow>();
+  const latestPerPerson: Array<(typeof submissions)[number]> = [];
   const counted = new Set<string>();
   for (const submission of submissions) {
     const personKey = `${submission.module.id}|${submission.userId}`;
     if (counted.has(personKey)) continue;
     counted.add(personKey);
+    latestPerPerson.push(submission);
+  }
+  const standings = await standingsFor(filters, latestPerPerson.map((s) => ({ userId: s.userId, moduleId: s.module.id })));
+  for (const submission of latestPerPerson) {
     const latestDecision = submission.decisions[0];
+    // ⚠️ Spør om STATUSEN er avgjort, ikke om det finnes et vedtak (#951): `deriveLearnerSubmissionStatus` gir en erstattet
+    // innlevering sin egen status, ikke det gamle automatiske vedtaket den bærer.
+    const personOutcome = personModuleOutcome(standings.standing(submission.userId, submission.module.id), submission.submissionStatus, latestDecision?.passFailTotal);
     const outcome =
-      // ⚠️ Spør om STATUSEN er avgjort, ikke om det finnes et vedtak (#951). En erstattet
-      // innlevering BÆRER et gammelt automatisk vedtak, så `!latestDecision` er usant for den —
-      // den ville blitt klassifisert som PASS eller FAIL på et resultat ingen sensor så.
-      !isSettledSubmission(submission.submissionStatus) || !latestDecision
-        ? "UNDER_REVIEW"
-        : latestDecision.passFailTotal
-          ? "PASS"
-          : "FAIL";
+      personOutcome === "PASSED" ? "PASS" : personOutcome === "FAILED" ? "FAIL" : personOutcome === NEEDS_NEW_VERSION ? "REVISED" : "UNDER_REVIEW";
 
     if (outcomeFilter.size > 0 && !outcomeFilter.has(outcome)) {
       continue;
@@ -193,6 +240,8 @@ export async function getPassRatesReport(filters: ReportFilters, locale: Support
       failCount: 0,
       underReviewCount: 0,
       passRate: null,
+      // Sist: CSV-kolonnene følger nøkkelrekkefølgen, og et regneark som leser etter posisjon skal ikke få flyttet «passRate».
+      revisedCount: 0,
     };
     current.totalSubmissions += 1;
     if (outcome === "PASS") {
@@ -201,6 +250,9 @@ export async function getPassRatesReport(filters: ReportFilters, locale: Support
     } else if (outcome === "FAIL") {
       current.failCount += 1;
       current.decisionCount += 1;
+    } else if (outcome === "REVISED") {
+      // Bestått en eldre hovedversjon: verken bestått eller strøket, og ikke med i andelen.
+      current.revisedCount += 1;
     } else {
       current.underReviewCount += 1;
     }
@@ -218,6 +270,7 @@ export async function getPassRatesReport(filters: ReportFilters, locale: Support
     passCount: rows.reduce((sum, row) => sum + row.passCount, 0),
     failCount: rows.reduce((sum, row) => sum + row.failCount, 0),
     underReviewCount: rows.reduce((sum, row) => sum + row.underReviewCount, 0),
+    revisedCount: rows.reduce((sum, row) => sum + row.revisedCount, 0),
   };
 
   return {
@@ -260,6 +313,7 @@ export async function getCompletionLearnerReport(
     }
   }
 
+  const standings = await standingsFor(filters, [...latestByUser.values()].map((s) => ({ userId: s.user.id, moduleId: s.module.id })));
   const rows: CompletionLearnerRow[] = Array.from(latestByUser.values()).map((submission) => {
     const latestDecision = submission.decisions[0] ?? null;
     return {
@@ -269,7 +323,7 @@ export async function getCompletionLearnerReport(
       participantDepartment: submission.user.department,
       moduleId: submission.module.id,
       moduleTitle: localizeContentText(locale, submission.module.title) ?? submission.module.title,
-      status: deriveLearnerSubmissionStatus(submission.submissionStatus, latestDecision?.passFailTotal),
+      status: personModuleOutcome(standings.standing(submission.user.id, submission.module.id), submission.submissionStatus, latestDecision?.passFailTotal),
       score: latestDecision?.totalScore ?? null,
       submittedAt: submission.submittedAt.toISOString(),
       decidedAt: latestDecision?.finalisedAt?.toISOString() ?? null,
@@ -285,6 +339,7 @@ export async function getCompletionLearnerReport(
       passed: rows.filter((row) => row.status === "PASSED").length,
       failed: rows.filter((row) => row.status === "FAILED").length,
       underReview: rows.filter((row) => row.status === "UNDER_REVIEW").length,
+      needsNewVersion: rows.filter((row) => row.status === NEEDS_NEW_VERSION).length,
     },
     rows,
   };
@@ -322,6 +377,7 @@ export async function getModuleLearnersReport(
     }
   }
 
+  const standings = await standingsFor(filters, [...latestByUserModule.values()].map((s) => ({ userId: s.user.id, moduleId: s.module.id })));
   const rows: Array<CompletionLearnerRow & { scopeType: "module" }> = Array.from(latestByUserModule.values()).map((submission) => {
     const latestDecision = submission.decisions[0] ?? null;
     return {
@@ -332,7 +388,7 @@ export async function getModuleLearnersReport(
       participantDepartment: submission.user.department,
       moduleId: submission.module.id,
       moduleTitle: localizeContentText(locale, submission.module.title) ?? submission.module.title,
-      status: deriveLearnerSubmissionStatus(submission.submissionStatus, latestDecision?.passFailTotal),
+      status: personModuleOutcome(standings.standing(submission.user.id, submission.module.id), submission.submissionStatus, latestDecision?.passFailTotal),
       score: latestDecision?.totalScore ?? null,
       submittedAt: submission.submittedAt.toISOString(),
       decidedAt: latestDecision?.finalisedAt?.toISOString() ?? null,
@@ -347,6 +403,7 @@ export async function getModuleLearnersReport(
       passed: rows.filter((row) => row.status === "PASSED").length,
       failed: rows.filter((row) => row.status === "FAILED").length,
       underReview: rows.filter((row) => row.status === "UNDER_REVIEW").length,
+      needsNewVersion: rows.filter((row) => row.status === NEEDS_NEW_VERSION).length,
     },
     rows,
   };

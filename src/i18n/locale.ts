@@ -21,7 +21,8 @@ export function normalizeLocale(input: string | undefined | null): SupportedLoca
   }
 
   const lower = cleaned.toLowerCase();
-  if (lower.startsWith("nb")) {
+  // #1191: «no»/«no-NO» er norsk uten målform; bokmål, som klienten (public/static/i18n-locale.js).
+  if (lower.startsWith("nb") || lower === "no" || lower.startsWith("no-")) {
     return "nb";
   }
   if (lower.startsWith("nn")) {
