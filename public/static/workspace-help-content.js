@@ -748,6 +748,41 @@ const workspaceContent = {
       ],
     },
   },
+  // #1171 (2.193.0): tema-siden hadde ingen «?»-hjelp.
+  "admin-content-themes": {
+    title: { "en-GB": "Themes", nb: "Tema", nn: "Tema" },
+    summary: {
+      "en-GB": "Themes group the courses in «My courses». A course can have several themes; you choose them inside the course.",
+      nb: "Tema samler kursene i «Mine kurs». Et kurs kan ha flere tema; du velger dem inne i kurset.",
+      nn: "Tema samlar kursa i «Mine kurs». Eit kurs kan ha fleire tema; du vel dei inne i kurset.",
+    },
+    sections: {
+      "en-GB": [
+        { title: "What to do here", items: [
+          "Only an administrator can change the list. Everyone else in content management can see it.",
+          "New theme: write the name in Bokmål. Nynorsk and English are filled in when you save, if they are empty; you can correct them.",
+          "Delete a theme: the courses that have it only lose the theme. A course without a theme is shown under «Other courses».",
+          "Until one of a participant's courses has a theme, «My courses» lists them as before: courses with a set placement first, then alphabetically.",
+        ] },
+      ],
+      nb: [
+        { title: "Dette gjør du her", items: [
+          "Bare administrator kan endre listen. Alle andre i innholdsforvaltningen kan se den.",
+          "Nytt tema: skriv navnet på bokmål. Nynorsk og engelsk fylles ut når du lagrer, hvis de er tomme; du kan rette dem.",
+          "Slett et tema: kursene som har det, mister bare temaet. Et kurs uten tema vises under «Andre kurs».",
+          "Til et av deltakerens kurs har fått tema, viser «Mine kurs» kursene som før: satt plassering først, så alfabetisk.",
+        ] },
+      ],
+      nn: [
+        { title: "Dette gjer du her", items: [
+          "Berre administrator kan endre lista. Alle andre i innhaldsforvaltinga kan sjå ho.",
+          "Nytt tema: skriv namnet på bokmål. Nynorsk og engelsk blir fylte ut når du lagrar, viss dei er tomme; du kan rette dei.",
+          "Slett eit tema: kursa som har det, mistar berre temaet. Eit kurs utan tema blir vist under «Andre kurs».",
+          "Til eitt av kursa til deltakaren har fått tema, viser «Mine kurs» kursa som før: sett plassering først, så alfabetisk.",
+        ] },
+      ],
+    },
+  },
   "cohort-status": {
     title: { "en-GB": "Status", nb: "Status", nn: "Status" },
     summary: {

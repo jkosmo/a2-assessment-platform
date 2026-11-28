@@ -2193,6 +2193,9 @@ let courseModules = [];
 
 // All available library modules (for the combobox)
 let allLibraryModules = [];
+// #1171 (2.193.0): moduler uten publisert versjon. De tilbys ikke i søket (#440), men søket sier fra når de matcher, i stedet
+// for at modulen bare ikke dukker opp.
+let unpublishedLibraryModules = [];
 
 // All available library sections (for the section picker, #490)
 let allLibrarySections = [];
@@ -2238,7 +2241,7 @@ async function renderDetailView(courseId) {
   }
 
   // Det søket i kursbyggeren kan tilby. Feiler hentingen ved åpning, står lista tom.
-  try { allLibraryModules = await loadPickerModules(); } catch { allLibraryModules = []; }
+  try { ({ live: allLibraryModules, unpublished: unpublishedLibraryModules } = await loadPickerModules()); } catch { allLibraryModules = []; unpublishedLibraryModules = []; }
   try { allLibrarySections = await loadPickerSections(); } catch { allLibrarySections = []; }
   bindPickerRefresh();
 
@@ -3037,9 +3040,35 @@ function moveModule(idx, dir) {
 // ⚠️ «Publisert» = har en live versjon, også når det ligger en nyere, upublisert lagring oppå
 // (`published_with_draft`). Sjekken var `status === "published"`, og en live modul forsvant fra søket i
 // det øyeblikket forfatteren lagret en endring i den (prod 13.11.2026).
+//
+// #1171: det som ikke tilbys, men som søket forklarer: moduler som aldri er publisert (`draft`). Arkiverte nevnes ikke.
 async function loadPickerModules() {
   const libData = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
-  return (libData.modules ?? []).filter(m => isLiveLifecycle(m.lifecycle));
+  const modules = libData.modules ?? [];
+  return {
+    live: modules.filter(m => isLiveLifecycle(m.lifecycle)),
+    unpublished: modules.filter(m => m.lifecycle === "draft"),
+  };
+}
+
+/** #1171: moduler uten publisert versjon som matcher søket (ikke de som alt ligger i kurset). Tom uten søketekst. */
+function unpublishedModuleMatches() {
+  const q = comboboxQuery.trim().toLowerCase();
+  if (!q) return [];
+  const added = new Set(courseModules.filter(m => m.type === "MODULE").map(m => m.refId));
+  return unpublishedLibraryModules
+    .filter(m => !added.has(m.id))
+    .map(m => localizedText(m.title) || m.id)
+    .filter(title => title.toLowerCase().includes(q))
+    .sort((a, b) => a.localeCompare(b, "nb"));
+}
+
+/** #1171: linja under treffene. Ikke et valg (ingen `combobox-option`), så pilene og klikk hopper over den. */
+function unpublishedModulesHintHtml() {
+  const names = unpublishedModuleMatches();
+  if (names.length === 0) return "";
+  const shown = names.slice(0, 3).map(n => `«${n}»`).join(", ") + (names.length > 3 ? " …" : "");
+  return `<div class="combobox-hint" data-unpublished-modules="${names.length}">${escapeHtml(tf("courses.pickerUnpublishedModules", { names: shown }))}</div>`;
 }
 
 // #490/#992: arkiverte seksjoner filtreres bort — samme grep som modul-søsteren over gjør med
@@ -3073,7 +3102,7 @@ async function refreshPickerLibrary() {
   pickerRefreshRunning = true;
   try {
     const [modules, sections] = await Promise.allSettled([loadPickerModules(), loadPickerSections()]);
-    if (modules.status === "fulfilled") allLibraryModules = modules.value;
+    if (modules.status === "fulfilled") ({ live: allLibraryModules, unpublished: unpublishedLibraryModules } = modules.value);
     if (sections.status === "fulfilled") {
       allLibrarySections = sections.value;
       // QA 2026-11-24: merknaden «Ikke publisert ennå» leses fra biblioteket; tegn lista på nytt så den følger en seksjon som er
@@ -3125,7 +3154,7 @@ function updateComboboxDropdown() {
   input.setAttribute("aria-expanded", "true");
 
   if (options.length === 0) {
-    dropdown.innerHTML = `<div class="combobox-empty">${escapeHtml(t(comboboxQuery.trim() ? "courses.noItemsMatch" : "courses.noItemsAvailable"))}</div>`;
+    dropdown.innerHTML = `<div class="combobox-empty">${escapeHtml(t(comboboxQuery.trim() ? "courses.noItemsMatch" : "courses.noItemsAvailable"))}</div>` + unpublishedModulesHintHtml();
     comboboxSelected = null;
     if (addBtn) addBtn.disabled = true;
     return;
@@ -3140,7 +3169,7 @@ function updateComboboxDropdown() {
       <span class="form-row-badge">${courseItemTypeBadge(item.type)}</span>
       ${escapeHtml(item.title)}
       <span class="combobox-option-id">${escapeHtml(item.id)}</span>
-    </div>`).join("");
+    </div>`).join("") + unpublishedModulesHintHtml();
   // #977: skjermleseren følger markeringen via aria-activedescendant; fokus blir i feltet.
   if (comboboxHighlightedIndex >= 0) {
     input.setAttribute("aria-activedescendant", `comboboxOption-${comboboxHighlightedIndex}`);

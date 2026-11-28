@@ -2,6 +2,36 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.193.0 - 2026-11-28
+
+**#1169/#1171 skive 5: det mindre fra #1171** (doc/design/PLAN_1169_1171_HODER_OG_RADER.md, «Skiver», punkt 5). Bare klient.
+
+- **Meldingene (toast) står nederst til høyre,** ikke øverst. Øverst la de seg over handlingsknappene i sidehodet (Lagre, Publiser,
+  «Mer») på 1280 px, og en feilmelding, som ikke forsvinner av seg selv, dekket dem til den ble lukket. Ingenting på sidene står fast
+  nederst. På smal skjerm går meldingen fra kant til kant, også når regionen er åpen som popover (den nullstilte `inset`, så
+  meldingen krympet til teksten). Krysset har fått sin egen bredde: den felles knappestilen ga det en bred boks, og meldingen brøt
+  etter to ord (sett på skjermbildet, rettet samtidig).
+- **Kursbyggerens søk forklarer moduler som ikke er publisert.** De tilbys fortsatt ikke (#440), men matcher søket en modul uten
+  publisert versjon, står det under treffene: «Ikke publisert ennå, og kan ikke legges inn: «…». Publiser modulen først.» Linja er
+  ikke et valg. Arkiverte moduler nevnes ikke. At elementene i lista viser om de er publisert, fantes fra #1140 skive 2c
+  («Ikke publisert ennå» på en seksjon).
+- **«?»-hjelp på tema-siden** (`admin-content-themes` i workspace-help-content.js): hva tema er, at bare administrator endrer lista,
+  oversettingen, sletting og «Andre kurs».
+- **Ny modul åpner fortsatt på Innstillinger** (produkteier 26.11.2026, § 4 punkt 4, som anbefalt): ingen endring.
+- **Tester:** `test/e2e/toast-placement-1171.spec.ts` (6), `test/e2e/course-picker-unpublished-1171.spec.ts` (3), tema-hjelpen i
+  `admin-content-themes.spec.ts` og `workspace-help-contracts`. **Mutasjoner:** 7 av 7 røde (øverst igjen, smal skjerm uten popoveren,
+  krysset, forklaringen bare uten treff, arkiverte med, forklaringen uten søketekst, tema-siden uten hjelp).
+- **Gjennomgang (Claude-agent): GO.** Rettet: krysset har et treffområde på minst 24 × 24 px (det fikk 11 × 18 da bredden ble tatt
+  bort); «ennå» er ute av forklaringen i søket («draft» er også en modul som er avpublisert igjen); tema-hjelpen sier at lista ses av
+  innholdsforvaltningen, og at «Mine kurs» er som før (satt plassering, så alfabetisk) til et av deltakerens kurs har tema. Typesjekken
+  av testene stoppet på `import("/static/toast.js")` i en e2e; stien står nå i en variabel (`npm run build` alene før neste runde).
+- **Kjent, fra før:** `certificate.html` laster `toast.js` uten `toast.css`, så en melding der vises som nettleserens standardboks.
+  Forklaringen i søket leses ikke av skjermleser (som «ingen treff» før). På smal skjerm kan en feilmelding nederst ligge over de
+  siste knappene når siden er rullet helt ned, til den lukkes.
+- **Kjent, fra før:** en melding vises over en modal dialog (toppsjiktet, stage 14.09), men kan ikke klikkes mens dialogen er åpen —
+  dialogen gjør alt utenfor seg inert. En feilmelding lukkes derfor først når dialogen er lukket. På smal skjerm med en høy dialog kan
+  en melding nå ligge over dialogens knapper nederst (før lå den over tittelen); suksessmeldinger forsvinner av seg selv.
+
 ## 2.192.0 - 2026-11-28
 
 **Bestått modul teller bare i kurs deltakeren ser** (produkteier 28.11.2026, doc/DECISIONS.md #1169 punkt 9;

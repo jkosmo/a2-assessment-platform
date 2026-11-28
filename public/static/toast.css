@@ -1,6 +1,9 @@
+/* #1171 (2.193.0): nederst til høyre, ikke øverst. Øverst til høyre la meldingene seg over handlingsknappene i sidehodet
+   (Lagre, Publiser, «Mer») på 1280 px, og en feilmelding (som ikke forsvinner av seg selv) dekket dem til den ble lukket.
+   Ingenting på sidene står fast nederst. */
 .toast-region {
   position: fixed;
-  top: calc(var(--space-2) * 1.25);
+  bottom: calc(var(--space-2) * 1.25 + env(safe-area-inset-bottom, 0px));
   right: calc(var(--space-2) * 1.25);
   display: grid;
   gap: var(--space-1);
@@ -13,7 +16,7 @@
 .toast-region:popover-open {
   display: grid;
   inset: auto;
-  top: calc(var(--space-2) * 1.25);
+  bottom: calc(var(--space-2) * 1.25 + env(safe-area-inset-bottom, 0px));
   right: calc(var(--space-2) * 1.25);
   margin: 0;
   padding: 0;
@@ -73,6 +76,8 @@
 }
 
 .toast__message {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
   font-size: 14px;
   font-weight: 600;
@@ -87,7 +92,13 @@
   color: var(--color-meta);
 }
 
+/* #1171: krysset får sin egen bredde. Den felles knappestilen (bredde, minstehøyde) ga det en bred boks, og meldingen brøt
+   etter to ord. Som `.toast__action` under. */
 .toast__close {
+  flex: none;
+  width: auto;
+  min-width: 24px;
+  min-height: 24px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -106,7 +117,7 @@
 @keyframes toast-enter {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(4px);
   }
 
   to {
@@ -116,7 +127,9 @@
 }
 
 @media (max-width: 900px) {
-  .toast-region {
+  /* Også den åpne popoveren: den nullstiller `inset`, og uten `left` her krympet meldingen til teksten. */
+  .toast-region,
+  .toast-region:popover-open {
     left: var(--space-2);
     right: var(--space-2);
     width: auto;

@@ -288,3 +288,15 @@ test.describe("2.102.0 Tema inne i kurset", () => {
     expect("themeIds" in sent[0]).toBe(false);
   });
 });
+
+// #1171 (2.193.0): tema-siden hadde ingen «?»-hjelp. Nå åpner «?» hjelpen for tema, ikke deltakerhjelpen.
+test("«?» på tema-siden åpner hjelpen for tema", async ({ page }) => {
+  await mockCommonApis(page, { meRoles: ["SUBJECT_MATTER_OWNER"] });
+  await mockThemes(page, EXISTING);
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* standardspråk */ } });
+  await page.goto("/admin-content/themes");
+  await page.locator(".workspace-help-trigger").click();
+  await expect(page.locator("#workspaceHelpTitle")).toHaveText("Tema");
+  await expect(page.locator("#workspaceHelpBody")).toContainText("Bare administrator kan endre listen.");
+  await expect(page.locator("#workspaceHelpBody")).toContainText("«Andre kurs»");
+});
