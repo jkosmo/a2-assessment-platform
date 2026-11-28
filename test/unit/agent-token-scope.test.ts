@@ -63,6 +63,8 @@ const FORBIDDEN: Array<[string, string]> = [
   ["PUT", "/api/admin/content/courses/course_abc/draft"],
   ["DELETE", "/api/admin/content/courses/course_abc/draft"],
   ["POST", "/api/admin/content/courses/course_abc/draft/publish"],
+  // #1169 skive 4c: «Døp om» i kurslista.
+  ["PATCH", "/api/admin/content/courses/course_abc/title"],
   ["POST", "/api/submissions"],
   ["GET", "/api/admin/platform/config"],
 ];

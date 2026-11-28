@@ -2,6 +2,76 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.192.0 - 2026-11-28
+
+**Bestått modul teller bare i kurs deltakeren ser** (produkteier 28.11.2026, doc/DECISIONS.md #1169 punkt 9;
+doc/design/PLAN_MODULER_TELLER_DER_DELTAKEREN_SER.md) **og #1169 skive 4c, «Døp om» for kurs** (punkt 8; PLAN_1169_4B_DUPLISER_KURS.md
+§ 6). Begge planlest av en uavhengig agent før bygging (Codex står på utgiftstaket).
+
+**Bestått modul, synligheten:**
+- **Regelen** står i `findModuleProgress` (moduleCredit.ts), den ene veien til fremdrift i kurs: et bestått teller i et kurs bare
+  når deltakeren ser kurset (åpent, eller begrenset og tildelt; samme regel som lesinger fra #1156, `findLearnersSeeingCourses`),
+  og i et arkivert kurs bare et bestått på en besvarelse **levert** fram til arkiveringen (`Submission.submittedAt`). Ikke
+  `passedAt` (planlesingen, blokker): en sak som ventet ved arkiveringen, kan bli bestått etterpå og skal holde kurset igjen.
+  Ståstedet er `null`, ikke «ta modulen på nytt». Synligheten slås opp i én omgang per kall, bare for begrensede kurs kalleren ikke
+  alt vet om (`knownVisibleCourseIds`/`visibilityComplete`, som for lesinger).
+- **Veiene inn:** kursbevisporten sender det den vet om synligheten til både moduler og seksjoner; workeren etter et bestått
+  (`checkAndIssueCourseCompletions`) hopper over kurs deltakeren ikke ser, som for lesinger; arkiveringens utstedelse regner
+  synligheten for alle kandidatene én gang under låsen; kursdetaljen og «Mine kurs» sier at deltakeren ser kursene. Kursrapporten,
+  «midt i kurset» og slettevakta slår opp. Modulrapportene med kurs valgt er **uendret med vilje** (`visibility: "ignore"`).
+- **Ikke bygget etter full runde:** en regel om at et kurs som aldri har vært publisert, ikke holdes igjen av «fullført uten
+  kursbevis». «Aldri publisert» leses av `publishedAt`/`slug`/kursbevis, og fiksturene uten slug viste at det ikke kan leses sikkert
+  for eldre kurs; en feil der lar et kurs slettes mens noen har fullført uten kursbevis, og det kan ikke rettes. Tvil gir «beholdes».
+  Følgen: en ÅPEN kopi som aldri ble publisert og så arkiveres, holdes igjen av dem som har bestått modulene (en begrenset kopi,
+  standarden, gjør det ikke lenger).
+- **Følgen:** en publisert, begrenset kopi med bare moduler gir ikke lenger kursbevis til alle som har bestått modulene. Mister en
+  deltaker tildelingen til et begrenset kurs, teller beståttene ikke der lenger; utstedte kursbevis står. Et åpent kurs er uendret.
+  Utrullingen utsteder ingen kursbevis.
+- **Før prod:** `npm run maint:count-module-credit-visibility` (bare lesing) teller per begrenset kurs hvor mange rader i
+  rapporten som får færre beståtte, og hvor mange uten kursbevis som har bestått alle modulene før og etter.
+- **Ikke gjort, med vilje (fra planlesingen):** innleverne filtreres ikke på synlighet i kursrapportens deltakere og i «midt i
+  kurset». Rapporten tar dem med for å dekke Entra-klasser (#996, festet i `course-report-audience-969`), og «midt i» teller i den
+  trygge retningen. Følgen er en kjent mangel: i en begrenset kopi står de som har levert på de delte modulene et annet sted, som
+  rader «Pågår» i rapporten og som «midt i» i arkiveringsdialogen (de sto der før også, med en annen status).
+
+**«Døp om» for kurs:**
+- **Tjeneren:** `PATCH /api/admin/content/courses/:courseId/title` (eiervakta) → `renameCourse` (courseDraft.ts), alt under én
+  innholdslås. `{ title, expectedTitle }`: hele språkkartet og den lagrede teksten raden viste. Arbeidstittelen er utkastets når et
+  utkast finnes; er den en annen enn `expectedTitle` (`sameLocalizedText`), `409 course_changed`. Samme navn: ingenting skrives.
+  Publisert kurs → navnet i utkastet (et nytt utkast har bare tittelen og kursets elementer, med `discussionsEnabled`; publiseres
+  det, endres bare navnet, mindre versjon). Upublisert → rett i kurset (`updateCourse` med telleren, i samme transaksjon). Svar
+  `{ renamedIn: "draft" | "course" | "unchanged" }`. Kurslista får `draftTitle` (`findCourseDraftTitles`).
+- **Klienten:** «Døp om» først i «Mer» i kurslista for eieren, ikke for et arkivert kurs; redigering i raden som for modul og
+  seksjon (`list-rename.js`), fra utkastets tittel når et utkast har en. Meldingen sier når navnet ligger i utkastet.
+- **Felles:** `courseItemInputsFromRows` (courseCommands.ts) gjør kursets rader om til elementlista med `discussionsEnabled`, for
+  «Dupliser kurs» og «Døp om». Uten flagget ville en publisering skrevet `?? true` og slått diskusjonen på igjen.
+
+**Tester:** `test/unit/module-credit-visibility.test.ts` (9), `test/m2-module-credit-visibility.test.ts` (7),
+`test/m2-course-rename-1169.test.ts` (11, med trådene), `test/e2e/course-rename-1169.spec.ts` (4). Endret: fiksturene i
+`course-certificate-gate-invariant`, `course-items-accessor` og `module-pass-switch-934-5a3` sier nå kursets `enrollmentPolicy` og
+besvarelsens `submittedAt` (en fikstur som tier om et felt regelen leser, fester standardverdien); «Døp om» i `row-slots-1169`;
+ruta i `m2-content-read-by-producers-1165` og i agent-tokenets liste.
+**Mutasjoner:** 7 av 7 røde for synligheten (sjekken, `passedAt`, arkivgrensen, `REVISED`, modulrapporten, workeren, «aldri
+publisert», tatt ut igjen sammen med regelen); 7 av 7 for «Døp om» (forventet tittel, publisert rett i kurset, `discussionsEnabled`, uendret navn, `===`, og i
+klienten forventet tittel og starttittel). `===` overlevde først: testen sendte den lagrede teksten, så den målte ikke
+sammenligningen. Nå sender den samme tittel i en annen rekkefølge.
+**Kjente mangler:** se «Ikke gjort, med vilje» over. Raden viser kursets publiserte navn også etter en omdøping i utkastet (merket
+«Nyere utkast» sier at noe venter). Som for seksjoner endres bare språket lista viser.
+
+**Rettet (fantes fra før, funnet i planlesingen og QA-porten):** hver lagring av kursets elementer (kursskjemaet, «Publiser
+utkastet», importen) sletter elementene og lager dem på nytt, og en diskusjonstråd på en seksjon eller modul mistet elementet sitt
+(`DiscussionThread.courseItem` er `SetNull`) og havnet på kursets tavle. «Døp om» gjorde det til ett klikk. Nå noterer
+`writeCourseItems` trådene først og gir dem elementet med samme modul eller seksjon tilbake (`relinkItemThreads`), med sitt eget
+`updatedAt`, så rekkefølgen i trådlista står. En tråd på et element som er tatt ut, blir på kursets tavle, som før. Tråder som
+alt er flyttet i prod, flyttes ikke tilbake (de har ikke noe element å gå tilbake til). Det samme i `setCourseModules` (den gamle
+`PUT …/modules` og importens gren for bare moduler; QA-porten, runde 2). Mutasjoner: 3 av 3 røde.
+**Full runde:** grønn bortsett fra to e2e som feiler av og til under last: `participant-module-course-context-1140:233` (kjent) og
+`admin-content-course-draft-1140:612` (velgerens nedtrekk «not stable» under full runde). Den siste: 87/87 i fila ×3 både på
+committet kode og i arbeidstreet, 8/8 alene begge steder.
+**Endret i eldre tester (full runde):** fiksturene i `m2-course-archive-follow-1150`, `m2-course-delete-1152` og
+`m2-archived-retention-1152` lager nå åpne kurs (deltakerne der er ikke tildelt, og et nytt kurs er begrenset), og
+besvarelsene er levert før arkiveringen. Begge deler var stille antakelser fiksturene ikke sa noe om.
+
 ## 2.191.0 - 2026-11-28
 
 **#1169 skive 4b · «Dupliser kurs»** (doc/design/PLAN_1169_4B_DUPLISER_KURS.md; produkteier 26.11.2026, doc/DECISIONS.md punkt 2).

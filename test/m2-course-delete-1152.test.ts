@@ -22,7 +22,8 @@ import { recordFixturePass } from "./support/modulePassFixture.js";
 //
 // Gjennom rutene (supertest). Det ingen rute kan lage, skrives direkte og er merket: en bestått (vedtakssporet), en lesing etter
 // arkiveringen (lesestien slipper ikke inn i et arkivert kurs), en sak som venter, og et utkast som nevner et arkivert element.
-// Beståtte og lesinger skrives ETTER arkiveringen: arkiveringen utsteder ellers beviset selv (#1150 2a-2).
+// Beståtte og lesinger skrives ETTER arkiveringen: arkiveringen utsteder ellers beviset selv (#1150 2a-2). Besvarelsene er likevel
+// datert FØR arkiveringen (`BEFORE_ARCHIVE`, 2.192.0): i et arkivert kurs teller et bestått bare når det er levert fram til da.
 
 const RUN = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
 const L = (text: string) => ({ "en-GB": text, nb: text, nn: text });
@@ -92,8 +93,10 @@ async function apiModule(name: string) {
 type Item = { type: "MODULE"; moduleId: string } | { type: "SECTION"; sectionId: string };
 
 /** Et kurs med elementene. Ikke publisert: et kurs med en upublisert seksjon kan ikke publiseres, og kravet spør ikke om det. */
+// 2.192.0: et bestått teller bare i kurs deltakeren ser. Deltakerne i denne fila er ikke tildelt, så kurset er åpent; et nytt
+// kurs er ellers begrenset (`NEW_COURSE_ENROLLMENT_POLICY`).
 async function apiCourse(name: string, items: Item[]) {
-  const created = await ok(post(`${C}/courses`, { title: L(tag(name)) }), "kurs");
+  const created = await ok(post(`${C}/courses`, { title: L(tag(name)), enrollmentPolicy: "OPEN" }), "kurs");
   const id = created.course.id as string;
   const r = await request(app).put(K(id, "/items")).set(ADMIN).send(await withRevision(id, { items }));
   expect(r.status, show(r)).toBe(204);
@@ -114,11 +117,15 @@ async function user(name: string) {
 const publishedVersion = (moduleId: string) =>
   prisma.moduleVersion.findFirstOrThrow({ where: { moduleId, publishedAt: { not: null } }, orderBy: { createdAt: "desc" }, select: { id: true } });
 
+// 2.192.0: i et arkivert kurs teller et bestått bare når besvarelsen er LEVERT fram til arkiveringen. Fiksturene beskriver det som
+// skjedde før kurset ble arkivert (modulene fulgte kurset inn i arkivet, så ingen kunne levere etterpå): levert for en time siden.
+const BEFORE_ARCHIVE = () => new Date(Date.now() - 60 * 60 * 1000);
+
 /** Bestått, slik vedtakssporet skriver det (innlevering ferdig vurdert, vedtak, ModulePass). Direkte: vedtakssporet. */
 async function pass(userId: string, moduleId: string) {
   const version = await publishedVersion(moduleId);
   const submission = await prisma.submission.create({
-    data: { userId, moduleId, moduleVersionId: version.id, deliveryType: "text", submissionStatus: "COMPLETED" },
+    data: { userId, moduleId, moduleVersionId: version.id, deliveryType: "text", submissionStatus: "COMPLETED", submittedAt: BEFORE_ARCHIVE() },
     select: { id: true },
   });
   const decision = await prisma.assessmentDecision.create({
@@ -142,7 +149,7 @@ async function read(userId: string, courseId: string, sectionId: string) {
  */
 async function submission(userId: string, moduleId: string, status: "SUBMITTED" | "UNDER_REVIEW" | "COMPLETED", bareÅpnet = false) {
   const version = await publishedVersion(moduleId);
-  const created = await prisma.submission.create({ data: { userId, moduleId, moduleVersionId: version.id, deliveryType: "text", submissionStatus: status }, select: { id: true } });
+  const created = await prisma.submission.create({ data: { userId, moduleId, moduleVersionId: version.id, deliveryType: "text", submissionStatus: status, submittedAt: BEFORE_ARCHIVE() }, select: { id: true } });
   if (status === "SUBMITTED" && !bareÅpnet) await prisma.assessmentJob.create({ data: { submissionId: created.id, status: "PENDING" } });
   return created;
 }

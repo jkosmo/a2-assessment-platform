@@ -1,6 +1,6 @@
 # #1169 skive 4b — «Dupliser kurs»
 
-Status: plan 28.11.2026, lest av en uavhengig agent samme dag (ingen blokkere; ti rettelser lagt inn, merket «Planlesing»). Bygget i 2.191.0; «Døp om» for kurs (§ 6) gjenstår. Avgjørelsen er tatt (doc/DECISIONS.md, «Handlinger og merker i hoder og rader», punkt 2):
+Status: plan 28.11.2026, lest av en uavhengig agent samme dag (ingen blokkere; ti rettelser lagt inn, merket «Planlesing»). Bygget i 2.191.0; «Døp om» for kurs (§ 6) bygget i 2.192.0. Avgjørelsen er tatt (doc/DECISIONS.md, «Handlinger og merker i hoder og rader», punkt 2):
 kopien er et **nytt kurs med de samme modulene og seksjonene**, ikke kopier av dem, og tar ikke med klasser, tildelinger eller
 kursbevis. Kartleggingen bak planen: modellen, opprettelsen, de to dupliseringene som finnes (modul, seksjon) og vaktene.
 
@@ -120,13 +120,68 @@ Ikke i agent-tokenets liste (`agentTokenScope.ts`).
 - **Mutasjoner:** at elementene kopieres (ikke tom liste), rekkefølgen, RESTRICTED, ingen slug, eieren, arkivert-vakta,
   transaksjonen (et feilende element lar ingenting stå igjen).
 
-## 6. «Døp om» for kurs (skive 4c, egen plan-linje)
+## 6. «Døp om» for kurs (skive 4c)
 
-Modul og seksjon har «Døp om» i lista. For kurs må det følge #1140: et **publisert** kurs endres gjennom utkastet. Forslaget: for et
-kurs som aldri er publisert, skriver «Døp om» navnet rett (`PUT /courses/:id` med `expectedRevision`); for et publisert kurs legges
-navnet i utkastet (`PUT …/draft`), og meldingen sier at navnet er et utkast til det publiseres — som seksjonen (#1163). Lista mangler
-`contentRevision` og utkastets teller; enten tar lista dem med, eller «Døp om» henter kursdetaljen først. Dette er nok til å trenge
-egen gjennomgang, og bygges etter 4b.
+**Avgjort av produkteier 28.11.2026** («OK»): et publisert kurs får det nye navnet i utkastet, slik seksjonen (#1163) og kursets
+utkast fra #1140. Et kurs som ikke er publisert, får navnet med en gang.
+
+**Tjeneren: én ny rute,** `PATCH /api/admin/content/courses/:courseId/title` (eiervakta `requireContentOwnership`, som `PUT`).
+Kroppen: `{ title: { nb, nn, en-GB }, expectedTitle }`. `title` er HELE språkkartet (lista slår sammen, som for seksjoner);
+`expectedTitle` er den lagrede teksten raden viste i redigeringen. Funksjonen `renameCourse` (courseDraft.ts):
+
+1. Kurset finnes ikke: `404`. Arkivert: `400 course_archived` (`assertNotArchived`).
+2. Arbeidstittelen er utkastets tittel når et utkast finnes, ellers kursets. Er den ikke lik `expectedTitle`, har noen endret navnet
+   siden lista ble lastet: `409 course_changed`, og ingenting er skrevet.
+3. **Publisert kurs:** navnet skrives i utkastet med den vanlige lagringen (`saveCourseDraft`, samme sjekker og revisjonslogg).
+   Finnes et utkast, får det ny tittel, og resten står. Finnes ikke et, lages et med bare `title` og kursets elementer slik de er
+   (utkastet er delvis; visningen fyller resten fra kurset, `courseDraftView`). Når utkastet publiseres, endres bare navnet.
+   `loaded` er det funksjonen leste: `{ draftId, revision }` eller `{ expectedRevision: contentRevision }`, så en lagring imellom gir
+   `409` fra `saveCourseDraft`.
+4. **Ikke publisert:** `updateCourse(courseId, { title }, actor, { expectedRevision: contentRevision })`, som skjemaets lagring.
+   Et upublisert kurs med utkast (avpublisert etter at utkastet ble lagret) avvises av den vanlige vakta (`course_has_draft`),
+   som i skjemaet.
+5. Svaret: `{ renamedIn: "draft" | "course" }`. Revisjonsloggen: `course_draft_saved` eller `course_updated`, som før.
+
+**Lista** får to felt per kurs: `draftTitle` (utkastets tittel, lagret tekst, bare når et utkast har en) og `title` som før.
+Redigeringen starter fra `draftTitle ?? title`, så den som døper om, ser navnet som blir publisert.
+
+**Klienten:** «Døp om» først i «Mer» i kurslista, for eieren, ikke for et arkivert kurs (som modul og seksjon). Samme felles
+redigering i raden (`list-rename.js`, `startOmdoping`): Enter lagrer på språket lista viser, Escape avbryter. Meldingen: i utkastet
+«Navnet er lagret i utkastet. Det vises for deltakerne når du publiserer utkastet.»; ellers den vanlige «Navnet er lagret».
+`409 course_changed` tegner lista på nytt. Ikke i hodet: der endres navnet i skjemaet.
+
+**Etter planlesingen (uavhengig agent 28.11.2026, ingen blokkere):**
+- **Elementene i et nytt utkast bærer `discussionsEnabled`.** Publiseringen skriver `item.discussionsEnabled ?? true`, og
+  rekkefølgen ser ikke på flagget: et utkast med bare id-er ville slått på diskusjonen igjen der den var av, uten varsel. Samme
+  omforming som «Dupliser kurs» bruker, flyttes til én funksjon (`courseItemInputsFromRows`) og brukes begge steder.
+- **Uendret navn skriver ingenting** (som seksjonen): ellers lager Enter på et publisert kurs et utkast med bare tittelen, og
+  kurset står med «Nyere utkast» og stengt for andre lagringer til noen publiserer eller forkaster. Svaret: `renamedIn: "unchanged"`.
+- **Ingen `checkUsable`** ved omdøping. Omdøpingen endrer ikke lista, og publiseringen sjekker alt på nytt. Med sjekken ville et
+  arkivert element eller et slettet tema stoppet omdøpingen. Utkastet valideres med `courseDraftPayloadSchema` før det lagres, og
+  tittelen lagres som språkkart.
+- **Sammenligningen** er `sameLocalizedText(expectedTitle, arbeidstittel)` (courseVersioning.ts), der arbeidstittelen er
+  `localizedTextCodec.serialize(utkast.title)` eller kursets lagrede tittel. Ikke `===`: gamle titler kan være ren tekst eller
+  JSON med en annen rekkefølge. `expectedTitle` er påkrevd. Lista får `draftTitle` fra en ny funksjon i courseDraft.ts (ingen
+  utenfor fila leser `payloadText`, `course-draft-guard`), med samme `serialize`. Et utkast som ikke kan leses, gir ingen
+  `draftTitle`, og omdøpingen svarer `409 course_draft_unreadable`.
+- **Under én lås.** Lesingen, valget (utkast eller kurs) og skrivingen skjer i samme `runContentWrite`: `saveCourseDraft` får en
+  låst variant (`saveCourseDraftLocked(tx, …)`), og `updateCourse` tar transaksjonen (`lockedTx`). Ellers kunne en annen fane
+  publisere kurset imellom, og navnet gått rett ut uten utkast (`publishCourse` øker ikke telleren).
+- **Vakter:** ruta får en rad i `courseRows` (m2-content-read-by-producers-1165) og står i lista over ruter agent-tokenet ikke når
+  (test/unit/agent-token-scope.test.ts).
+
+**Kjente mangler (godtatt):** raden viser kursets publiserte navn, ikke utkastets, også etter omdøpingen (som før for kurs med
+utkast); merket «Nyere utkast» sier at noe venter. Som for seksjoner endres bare språket lista viser; de andre språkene beholder
+det gamle navnet til de oversettes. Et upublisert kurs med utkast (avpublisert etter at utkastet ble lagret) avvises med
+`409 course_has_draft`, som i skjemaet. Eksisterende, ikke fra denne skiva: en publisering skriver elementene på nytt, og tråder
+knyttet til et element flyttes da til kursets tavle (`DiscussionThread.courseItem` er `SetNull`); egen sak.
+
+**Tester:** integrasjon gjennom ruta (upublisert: navnet er skrevet, telleren økt; publisert uten utkast: utkast med bare tittel og
+samme elementer, kurset urørt, publisering endrer bare navnet; publisert med utkast: tittelen byttet, resten av utkastet urørt;
+`expectedTitle` feil: 409, ingenting skrevet; arkivert: 400; en annen produsent: 403; en deltaker: 403). Vaktene: ruta i tabellen
+over kursets skriveruter (`m2-content-read-by-producers-1165`) og i lista over ruter agent-tokenet ikke når. E2e: «Døp om» i
+kurslista for upublisert og publisert kurs (meldingen, kroppen som sendes), Escape, og at en ikke-eier ikke har knappen.
+Mutasjoner: dropp `expectedTitle`-sjekken, skriv rett i kurset for et publisert kurs, la utkastet miste et felt.
 
 ## 7. Veier inn, samtidighet og utrulling
 

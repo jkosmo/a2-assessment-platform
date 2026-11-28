@@ -5,6 +5,7 @@ import { deriveContentLifecycle } from "../modules/content/lifecycle.js";
 import { assertContentOwnership, listManageableContentIds } from "../modules/content/contentOwnershipService.js";
 import { z } from "zod";
 import {
+  courseItemInputsFromRows,
   createCourse,
   duplicateCourse,
   updateCourse,
@@ -51,9 +52,11 @@ import {
   courseDraftPayloadSchema,
   discardCourseDraft,
   findCourseDraft,
+  findCourseDraftTitles,
   findCourseIdsWithDraft,
   publishCourseDraft,
   readCourseDraftPayload,
+  renameCourse,
   saveCourseDraft,
   type CourseDraftPayload,
   type CourseDraftRow,
@@ -247,9 +250,12 @@ adminCoursesRouter.get("/", async (request, response, next) => {
     const themesByCourse = await findLocalizedThemesForCourses(courses.map((c) => c.id), locale);
     // #1140 etappe 2: et publisert kurs med et lagret utkast står som «Publisert» med «Nyere utkast», som en modul.
     const withDraft = await findCourseIdsWithDraft(prisma, courses.map((c) => c.id));
+    // #1169 skive 4c: «Døp om» i lista starter fra navnet som blir publisert (utkastets tittel når et utkast har en).
+    const draftTitles = withDraft.size > 0 ? await findCourseDraftTitles(prisma, [...withDraft]) : new Map<string, string>();
     const items: AdminCourseListItem[] = courses.map((c, i) => ({
       id: c.id,
       title: c.title,
+      ...(draftTitles.has(c.id) ? { draftTitle: draftTitles.get(c.id) } : {}),
       displayTitle: localizeContentText(locale, c.title) ?? c.title,
       description: c.description,
       certificationLevel: c.certificationLevel,
@@ -519,6 +525,34 @@ function courseFieldsFromBody(body: Partial<z.infer<typeof courseBodySchema>>) {
 // #934 skive 4a: kursskjemaet bruker ikke lenger denne for et eksisterende kurs (alt går til `…/content`). En fane
 // fra før utrullingen gjør det, og den sender ikke telleren: `409 course_form_outdated` før noe skrives — ellers
 // ville navnet stått lagret mens elementene ble avvist i neste kall, eller skrevet over en annens endring.
+// #1169 skive 4c (doc/design/PLAN_1169_4B_DUPLISER_KURS.md, § 6): «Døp om» i kurslista. `title` er HELE språkkartet (lista slår
+// sammen); `expectedTitle` er den lagrede teksten raden viste (utkastets tittel når et utkast har en). Et publisert kurs får navnet
+// i utkastet, et upublisert rett i kurset (`renameCourse`, courseDraft.ts).
+const renameCourseBodySchema = z.object({ title: localizedTextPatchSchema, expectedTitle: z.string() }).strict();
+
+adminCoursesRouter.patch("/:courseId/title", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = renameCourseBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  const courseId = request.params.courseId;
+  const actorId = request.context?.userId;
+  try {
+    const result = await renameCourse({
+      courseId,
+      title: parsed.data.title,
+      expectedTitle: parsed.data.expectedTitle,
+      actorId,
+      readItems: async (tx) => courseItemInputsFromRows(await createCourseRepository(tx).findAllCourseItems(courseId)),
+      writeCourse: (tx, title, expectedRevision) => updateCourse(courseId, { title }, actorId, { expectedRevision }, tx),
+    });
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = courseBodySchema.partial().extend({ expectedRevision: expectedRevisionSchema }).safeParse(request.body);
   if (!parsed.success) {

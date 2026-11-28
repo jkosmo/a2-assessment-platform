@@ -73,8 +73,8 @@ const LESERE = {
       + "Deltakersiden, ikke «hvilke kurs bruker elementet».",
   },
   "modules/course/courseCommands.ts": {
-    count: 1,
-    reason: "setCourseModules leser seksjonsradene i ETT kurs for å bevare dem gjennom en omskriving. Kursets eget innhold.",
+    count: 2,
+    reason: "setCourseModules leser seksjonsradene i ETT kurs for å bevare dem gjennom en omskriving; relinkItemThreads (2.192.0) leser ETT kurs' nye rader for å gi trådene elementet tilbake. Kursets eget innhold.",
   },
   "modules/course/courseRepository.ts": {
     count: 9,

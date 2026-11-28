@@ -54,6 +54,15 @@ type CourseRepositoryClient = Pick<
   | "platformConfig"
   | "submission"
   | "$queryRaw"
+  // Planen «bestått modul teller bare i kurs deltakeren ser» (28.11.2026): `findModuleProgress` slår opp synligheten på
+  // denne klienten.
+  | "courseEnrollment"
+  | "courseGroupAssignment"
+  | "classMember"
+  | "roleAssignment"
+  | "discussionThread"
+  | "discussionReply"
+  | "discussionSubscription"
 >;
 
 // #934 skive 3: seksjon → aktiv seksjonsversjon for seksjonene kurset inneholder nå. Øyeblikksbildet en

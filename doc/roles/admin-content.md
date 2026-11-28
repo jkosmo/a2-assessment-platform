@@ -303,12 +303,22 @@ ikke dupliseres.
 
 Fordi innholdet deles, gjelder dette:
 - En endring i en modul eller seksjon gjelder begge kursene.
-- Når kopien er publisert, teller det en deltaker har bestått i modulene, også i kopien — **også når hen ikke er tildelt kopien**.
-  Lesing av seksjoner teller bare når hen ser kopien. Har kopien bare moduler, kan alle som har bestått dem, få kursbevis for
-  kopien med en gang den er publisert.
+- Når kopien er publisert og en deltaker ser den, teller det hen har bestått og lest, også i kopien — hen kan få kursbevis for
+  kopien med en gang. «Ser» betyr at kopien er åpen, eller at hen er tildelt den (fra 2.192.0 også for moduler). Kopien er
+  begrenset fra start; gjør du den åpen, gjelder det alle som har bestått modulene.
 - Så lenge kopien finnes, også som upublisert, er modulene og seksjonene «i bruk» i den. Da kan de ikke avpubliseres eller
   arkiveres, heller ikke av eieren av modulen.
 - Gi kopien et nytt navn før du publiserer den: delingslenka får navnet ved første publisering og endres ikke etterpå.
+
+### 5d. Døp om et kurs i lista (fra 2.192.0, #1169)
+
+«Mer» → **Døp om** i kurslista endrer navnet i raden, på språket lista viser: Enter lagrer, Escape avbryter. Som for moduler og
+seksjoner endres bare det språket; «Oversett» tar de andre.
+- **Et kurs som ikke er publisert,** får det nye navnet med en gang.
+- **Et publisert kurs** får navnet i utkastet. Deltakerne ser det gamle navnet til du publiserer utkastet (kursets hode,
+  «Publiser utkastet»). Har kurset et utkast fra før, er det bare navnet i det som endres. Raden viser det publiserte navnet til da;
+  merket «Nyere utkast» sier at noe venter.
+- Har noen andre endret navnet siden du åpnet lista, lagres ingenting, og lista lastes på nytt.
 
 ### 5a. Andres klasser (fra 2.186.0, #1198)
 

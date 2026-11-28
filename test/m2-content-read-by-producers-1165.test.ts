@@ -202,6 +202,8 @@ type Row = { route: string; call: () => Promise<request.Response> };
 const courseRows: Row[] = [
   { route: "PUT /:courseId", call: async () => other.put(K(courseId), await withRevision(courseId, { title: L("Nytt navn") })) },
   { route: "PUT /:courseId/content", call: async () => other.put(K(courseId, "/content"), await withRevision(courseId, { title: L("Nytt"), items: [] })) },
+  // #1169 skive 4c: «Døp om» i kurslista.
+  { route: "PATCH /:courseId/title", call: () => other.patch(K(courseId, "/title"), { title: L("Nytt navn"), expectedTitle: "" }) },
   { route: "PUT /:courseId/draft", call: () => other.put(K(courseId, "/draft"), { items: [], loaded: { expectedRevision: 0 } }) },
   { route: "DELETE /:courseId/draft", call: () => other.del(K(courseId, "/draft?draftId=x&revision=0")) },
   { route: "POST /:courseId/draft/publish", call: () => other.post(K(courseId, "/draft/publish"), { loaded: { draftId: "x", revision: 0 } }) },

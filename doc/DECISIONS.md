@@ -2070,8 +2070,8 @@ byggenotatet (`PLAN_1148`, «Byggenotat for 4c») og ble lest to ganger, av Code
 - **En lest seksjon teller i alle kurs som inneholder den** (produkteier 13.11.2026), som en bestått modul. Hvert kurs avgjør
   fortsatt om lesingen gjelder for kursets nåværende hovedversjon (#934).
 - **Bare i kurs deltakeren ser** (produkteier 14.11.2026, «ja»): åpne kurs, og begrensede kurs deltakeren er tildelt. Det
-  gjelder fremdriften og kursbeviset. Moduler beholder dagens oppførsel (en bestått teller også i kurs deltakeren ikke ser);
-  spørsmålet for begge tas i #1157. Grunnen: et kursbevis kan ikke trekkes tilbake og holder kurset igjen fra sletting for
+  gjelder fremdriften og kursbeviset. Moduler beholdt først dagens oppførsel; fra 2.192.0 gjelder det samme for dem (produkteier
+  28.11.2026, «Handlinger og merker i hoder og rader», punkt 9). Grunnen: et kursbevis kan ikke trekkes tilbake og holder kurset igjen fra sletting for
   alltid, og utrullingen ville ellers utstedt bevis i bulk i begrensede kurs.
 - **Fremdrift og kursbevis teller på tvers; e-post og synlighet krever aktivitet i kurset selv** (produkteier 14.11.2026,
   «OK»). «Seksjoner 1/9» og kursbeviset regnes på tvers. Vilkår 9 i tildelings-e-posten, «i gang» i den ukentlige e-posten og
@@ -2585,7 +2585,15 @@ Etter prototypen (https://claude.ai/artifact/RuABRhvRBxfQwnzJ2jYMU8) avgjorde pr
 Også fra prototypen, uten spørsmål: merkene står i rekkefølgen «Publisert · v2.1 · Nyere utkast» overalt, og «Mer» åpner mot høyre
 når menyen ellers ville gått ut av skjermen.
 
-**Sak:** #1169 · **Dato:** 2026-11-28 · **Status:** avgjort av produkteier (5–7)
+Etter gjennomgangen av 2.191.0 («Dupliser kurs») avgjorde produkteier 28.11.2026, begge som anbefalt («1: OK 2: OK»):
+
+8. **«Døp om» for et publisert kurs skriver navnet i utkastet**, slik seksjonen (#1163) og kursets utkast (#1140). Et kurs som
+   ikke er publisert, får navnet med en gang. Plan: `doc/design/PLAN_1169_4B_DUPLISER_KURS.md`, § 6.
+9. **Et bestått i en modul teller bare i kurs deltakeren ser**, slik en lest seksjon fra #1156 (se «Lest seksjon teller i alle
+   kurs deltakeren ser»; spørsmålet sto åpent for moduler). Skal være på plass før «Dupliser kurs» går til prod: ellers gir en
+   publisert kopi med bare moduler kursbevis til alle som har bestått dem. Plan: `doc/design/PLAN_MODULER_TELLER_DER_DELTAKEREN_SER.md`.
+
+**Sak:** #1169 · **Dato:** 2026-11-28 · **Status:** avgjort av produkteier (5–9)
 
 ## «Åpen» og «Alle deltakere» er to ting; produsenter leser alle klasser (2026-11-26)
 

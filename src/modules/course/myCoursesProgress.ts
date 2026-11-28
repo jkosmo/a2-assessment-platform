@@ -62,6 +62,8 @@ export async function getMyCoursesProgress({ userId, roles, groupIds, locale }: 
     courseRepository.findModuleProgress({
       userIds: [userId],
       courses: courses.map((course) => ({ courseId: course.id, moduleIds: course.modules.map((m) => m.moduleId) })),
+      // Alle kursene her ser personen (med innloggingen, også Entra-grupper), som for lesingene under.
+      knownVisibleCourseIds: courseIds,
     }),
     // #1156: lesinger fra alle kurs med seksjonen, etter samme regel som porten for kursbevis. Alle kursene her er synlige for
     // personen (over), så en lesing gjort et annet sted teller i dem.

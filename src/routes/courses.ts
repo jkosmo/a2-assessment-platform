@@ -211,7 +211,8 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     const moduleIds = course.modules.filter((cm) => cm.module?.archivedAt == null).map((cm) => cm.moduleId);
     const [moduleProgress, latestSubmissions] = await Promise.all([
       // #934 skive 5a-3: den ene veien til fremdrift i kurs, som porten for kursbevis. Teller og modulstatus leser det samme.
-      courseRepository.findModuleProgress({ userIds: [userId], courses: [{ courseId: course.id, moduleIds }] }),
+      // Ruta har slått fast at deltakeren ser kurset (med innloggingen), som for lesingene under.
+      courseRepository.findModuleProgress({ userIds: [userId], courses: [{ courseId: course.id, moduleIds }], knownVisibleCourseIds: [course.id] }),
       moduleIds.length > 0
         ? queryLatestSubmissionsForModules(userId, moduleIds)
         : Promise.resolve([]),

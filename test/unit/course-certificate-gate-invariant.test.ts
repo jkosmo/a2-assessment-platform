@@ -37,6 +37,9 @@ function createFakeClient(passes: PassRow[], minModuleMajor: number | null = 1) 
     id: COURSE_ID,
     publishedAt: new Date("2026-01-01T00:00:00.000Z"),
     archivedAt: null,
+    // 28.11.2026: et bestått teller bare i kurs deltakeren ser. Kurset er åpent her; regelen for begrensede kurs står i
+    // test/unit/module-credit-visibility.test.ts.
+    enrollmentPolicy: "OPEN",
     versionMajor: 3,
     versionMinor: 2,
     items: [{ moduleId: MODULE_ID, sortOrder: 0, module: { archivedAt: null } }],
@@ -61,7 +64,7 @@ function createFakeClient(passes: PassRow[], minModuleMajor: number | null = 1) 
       findMany: async ({ where }: { where: { userId: { in: string[] }; moduleId: { in: string[] } } }) =>
         passes
           .filter((row) => where.userId.in.includes(row.userId) && where.moduleId.in.includes(row.moduleId))
-          .map((row) => ({ userId: row.userId, moduleId: row.moduleId, invalidatedAt: row.invalidatedAt, moduleVersion: { versionMajor: row.versionMajor } })),
+          .map((row) => ({ userId: row.userId, moduleId: row.moduleId, invalidatedAt: row.invalidatedAt, moduleVersion: { versionMajor: row.versionMajor }, submission: { submittedAt: new Date("2026-02-01T00:00:00.000Z") } })),
     },
     // #1156: lesingene hentes for kursets seksjoner fra alle kurs (sectionReadCredit.ts). Kurset har ingen seksjoner.
     courseSectionRead: {

@@ -40,6 +40,7 @@ import {
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { createListPage } from "/static/list-page.js";
+import { lagretTittelkart, startOmdoping } from "/static/list-rename.js";
 import { createFormPage, formPageTexts } from "/static/form-page.js";
 import { changedFieldTranslations } from "/static/admin-content-localized-copy.js";
 
@@ -1175,9 +1176,11 @@ function getListPage() {
       const publishDraftLink = lifecycle === "published_with_draft"
         ? `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}?publishDraft=1" class="row-action-btn" data-action-link="publish-draft">${escapeHtml(t("courses.draft.publishAction"))}</a>`
         : "";
+      // #1169 skive 4c: «Døp om» først i «Mer», som modul og seksjon. Ikke for et arkivert kurs.
+      const renameBtn = lifecycle === "archived" ? "" : `<button class="row-action-btn" data-action="rename" data-course-id="${cid}">${escapeHtml(t("ui.action.rename"))}</button>`;
       return {
         primary: [openLink, lifecycle === "archived" ? archiveToggle : (live ? publishDraftLink : publishToggle)],
-        more: [duplicateBtn, exportBtn, live ? publishToggle : "", lifecycle === "archived" ? "" : archiveToggle, deleteBtn, cascadeDeleteBtn],
+        more: [renameBtn, duplicateBtn, exportBtn, live ? publishToggle : "", lifecycle === "archived" ? "" : archiveToggle, deleteBtn, cascadeDeleteBtn],
       };
     },
     emptyHtml: () => `
@@ -1190,7 +1193,7 @@ function getListPage() {
     // #1152 skive 4b-2: slettedatoen regnes bare når «Arkiverte» er valgt (produkteier 14.11.2026, etter stage 2.162.0).
     lazyFields: { filter: "archived", fields: ["retention"], load: async () => (await apiFetch("/api/admin/content/courses?includeRetention=1", getHeaders)).courses ?? [] },
     describeError: (err) => apiErrorText(err),
-    onAction: (_action, _id, btn, _item, event) => handleListTableClick(event, btn),
+    onAction: (action, id, btn, item, event) => (action === "rename" ? omdopKursIRad(id, btn, item) : handleListTableClick(event, btn)),
     afterRender: () => {
       document.getElementById("importCoursePackageFile")?.addEventListener("change", handleImportCoursePackageFile);
       document.getElementById("importCoursePackageBtn")?.addEventListener("click", () => {
@@ -1199,6 +1202,41 @@ function getListPage() {
     },
   });
   return listPage;
+}
+
+/**
+ * #1169 skive 4c (doc/design/PLAN_1169_4B_DUPLISER_KURS.md, § 6): døp om kurset i raden, på språket lista viser. Redigeringen
+ * starter fra navnet som blir publisert: utkastets tittel når et utkast har en (`draftTitle`), ellers kursets. HELE språkkartet
+ * sendes, med den lagrede teksten raden viste (`expectedTitle`). Et publisert kurs får navnet i utkastet (tjeneren avgjør).
+ */
+function omdopKursIRad(courseId, btn, item) {
+  const rad = btn?.closest("tr");
+  if (!rad || !item) return;
+  const lagret = typeof item.draftTitle === "string" ? item.draftTitle : item.title;
+  const kart = lagretTittelkart(lagret);
+  startOmdoping({
+    rad,
+    gjeldendeTittel: kart[currentLocale] ?? "",
+    visningsspraak: currentLocale,
+    spraakNavn: localeLabels[currentLocale] ?? currentLocale,
+    tf,
+    onCancel: () => getListPage().renderTable(),
+    onSave: async (nyTittel, spraak) => {
+      try {
+        const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/title`, getHeaders, {
+          method: "PATCH",
+          body: JSON.stringify({ title: { ...kart, [spraak]: nyTittel }, expectedTitle: lagret }),
+        });
+        if (body?.renamedIn === "draft") showToast(t("courses.renameSavedDraft"), "success");
+        else if (body?.renamedIn === "course") showToast(t("ui.rename.saved"), "success");
+        renderListView();
+      } catch (err) {
+        apiErrorToast(err);
+        if (["course_changed", "course_draft_changed", "course_draft_unreadable", "course_has_draft"].includes(apiErrorCode(err))) renderListView();
+        else getListPage().renderTable();
+      }
+    },
+  });
 }
 
 async function renderListView() {
