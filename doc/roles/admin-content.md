@@ -33,6 +33,10 @@ Når et kurs, en modul, en seksjon eller en klasse er åpnet, står handlingene 
 4. **Mer**, med resten i fast rekkefølge: Eksporter · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver · Slett (det som
    gjelder). Modulens hode har ennå ikke Arkiver; den arkiveres fra lista.
 
+I listene (fra 2.189.0) står det samme i hver rad: **Åpne**, hovedhandlingen (Publiser, Publiser utkastet eller Gjenopprett) og
+**Mer** med Døp om · Dupliser · Eksporter · Avpubliser · Arkiver · Slett. «Slett» står også i seksjonslista for en arkivert
+seksjon. Et kurs med et utkast og en modul publiserer du fra hodet når de er åpnet.
+
 ### 1. Opprette ny modul fra bunnen
 
 1. Gå til `/admin-content` → fanen **Moduler**

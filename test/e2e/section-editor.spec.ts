@@ -376,13 +376,15 @@ test.describe("#1046 D3 — sletting av seksjon bor i editoren, bare for arkiver
     return () => deleted;
   }
 
-  test("lista har ingen Slett; den arkiverte seksjonen har det i editoren, med bekreftelse", async ({ page }) => {
+  test("den arkiverte seksjonen har Slett både i lista (#1169) og i editoren, med bekreftelse", async ({ page }) => {
     const bleSlettet = await mockSection(page, "2026-09-02T00:00:00.000Z");
     await page.goto("/admin-content/sections");
     // Lista åpner på «Aktive»; den arkiverte raden ligger under «Arkiverte».
     await page.locator('.list-filter-btn[data-filter="archived"]').click();
     await expect(page.locator("#sectionsTableBody tr")).toHaveCount(1);
-    await expect(page.locator('#sectionsTableBody [data-action="delete"]')).toHaveCount(0);
+    // #1169 skive 3 (produkteier 28.11.2026): «Slett» står under «Mer» i lista også, som for kurs, moduler og klasser (før bare i
+    // editoren, #1046 D3).
+    await expect(page.locator('#sectionsTableBody [data-action="delete"]')).toHaveCount(1);
 
     await page.locator('[data-action="edit"][data-id="sec-del"]').click();
     // #1046 nivå to: Slett ligger i handlingsraden i hodet — under «Mer» når det er flere enn fire.

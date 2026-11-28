@@ -1135,12 +1135,15 @@ function getListPage() {
       // #1165 (produkteier 14.11.2026, «Produsenter bør kunne se hverandres innhold»): den som ikke eier kurset, kan åpne det for å
       // lese (skjemaet er skrivebeskyttet) og eksportere det (lesing, #1031). Bare det hen kan gjøre, står i raden; merket sier
       // at endringene er eiernes.
+      const openLink = `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`;
+      const exportBtn = `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`;
+      // #1169 skive 3 (doc/DECISIONS.md 28.11.2026): raden har hodets regel — Åpne · hovedhandlingen · «Mer» i fast rekkefølge.
       if (!canManage) {
-        return [
-          `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`,
-          `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`,
-          `<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`,
-        ];
+        return {
+          primary: [openLink],
+          more: [exportBtn],
+          after: [`<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`],
+        };
       }
       // #705: samme handlings-rekkefølge som modul/seksjon — Publiser⇄Avpubliser, Arkiver⇄Gjenopprett.
       // Publiser vises bare for et utkast som har innhold (samme krav som canPublishCourse i detaljvisningen).
@@ -1161,14 +1164,13 @@ function getListPage() {
       const cascadeDeleteBtn = isAdministrator() && lifecycle === "archived"
         ? `<button class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>`
         : "";
-      return [
-        `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`,
-        `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`,
-        publishToggle,
-        archiveToggle,
-        deleteBtn,
-        cascadeDeleteBtn,
-      ];
+      // Hovedhandlingen: Publiser (et utkast med innhold) eller Gjenopprett (arkivert). Avpubliser og Arkiver står under «Mer».
+      // «Publiser utkastet» står bare i hodet ennå: den lagrer og spør om versjonen der.
+      const live = isLiveLifecycle(lifecycle);
+      return {
+        primary: [openLink, lifecycle === "archived" ? archiveToggle : (live ? "" : publishToggle)],
+        more: [exportBtn, live ? publishToggle : "", lifecycle === "archived" ? "" : archiveToggle, deleteBtn, cascadeDeleteBtn],
+      };
     },
     emptyHtml: () => `
       <div class="empty-state">
@@ -1452,7 +1454,7 @@ function handleListTableClick(event, btn = event.target.closest("[data-action]")
     return;
   }
   if (btn.dataset.action === "delete") {
-    openDeleteDialog(btn.dataset.courseId, btn.dataset.courseTitle);
+    openDeleteDialog(btn.dataset.courseId, btn.dataset.courseTitle, btn);
     return;
   }
   if (btn.dataset.action === "cascade-delete") {
@@ -1620,10 +1622,15 @@ async function archiveCourseInAdmin(courseId, courseTitle, triggerButton = null)
 }
 
 /** Etter at en dialog er lukket: knappen som åpnet den, virker igjen og får fokuset tilbake (den var slått av da dialogen åpnet). */
+// #1169 skive 3: knappen kan ligge i en lukket «Mer»-meny (raden og hodet); da får «Mer» fokuset, som i modul- og seksjonsdialogene
+// (`focusBack` i module-lifecycle-dialogs.js). Før gikk fokuset til en skjult knapp og forsvant.
 function returnFocusTo(triggerButton) {
   if (!triggerButton) return;
   triggerButton.disabled = false;
-  if (triggerButton.isConnected) triggerButton.focus();
+  if (!triggerButton.isConnected) return;
+  const menu = triggerButton.closest("details.row-more");
+  if (menu && !menu.open) menu.querySelector("summary")?.focus();
+  else triggerButton.focus();
 }
 
 // En tjener uten forhåndsvisning (eldre enn 2.159.0): den enkle bekreftelsen og arkiveringen uten kropp, som før.
@@ -1903,9 +1910,13 @@ function initCourseRestoreDialog() {
 // ---------------------------------------------------------------------------
 
 let pendingDeleteId = null;
+// QA-porten 2.189.0: knappen som åpnet dialogen, får fokuset tilbake når dialogen lukkes uten sletting (Avbryt eller Escape).
+// Den ligger under «Mer» nå, så det er «Mer» som får det (`returnFocusTo`).
+let pendingDeleteTrigger = null;
 
-function openDeleteDialog(courseId, courseTitle) {
+function openDeleteDialog(courseId, courseTitle, trigger = null) {
   pendingDeleteId = courseId;
+  pendingDeleteTrigger = trigger;
   deleteDialogText.textContent = buildCourseDeleteDialogText(courseTitle, tf);
   deleteDialog.showModal();
 }
@@ -3569,6 +3580,12 @@ function initDeleteDialog() {
   deleteCancelBtn?.addEventListener("click", () => {
     deleteDialog.close();
     pendingDeleteId = null;
+  });
+  // `close` kommer både for Avbryt, Escape og etter en sletting; etter slettingen er raden borte, og returnFocusTo gjør ingenting.
+  deleteDialog?.addEventListener("close", () => {
+    const trigger = pendingDeleteTrigger;
+    pendingDeleteTrigger = null;
+    returnFocusTo(trigger);
   });
 }
 

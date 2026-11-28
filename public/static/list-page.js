@@ -25,7 +25,7 @@
 // nås gjennom `onAction`, `onClick` og `afterRender`.
 
 import { escapeHtml } from "./html-escape.js";
-import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
+import { rowActionsHtml, slotActionsHtml, installRowMoreMenus } from "./row-actions.js";
 import { matchesLifecycleFilter } from "./content-status-badge.js";
 import { readViewState, writeViewState } from "./view-state.js";
 
@@ -292,7 +292,11 @@ export function createListPage(config) {
     const rowHtml = (item) => {
       // #1080: kortvisningen på telefon skjuler tabellhodet og leser kolonnenavnet fra cellen.
       const tds = columns.map((col) => `<td${col.className ? ` class="${col.className}"` : ""} data-label="${escapeHtml(col.label || col.srLabel || "")}">${col.render(item, { view, filter: state.filter })}</td>`).join("");
-      const actions = rowActionsHtml(config.actions(item), { moreLabel: texts.more ?? "Mer" });
+      // #1169 skive 3: en side som sender plassene ({ primary, more, after }), får radens faste regel; en liste den gamle.
+      const acts = config.actions(item);
+      const actions = Array.isArray(acts)
+        ? rowActionsHtml(acts, { moreLabel: texts.more ?? "Mer" })
+        : slotActionsHtml(acts, { moreLabel: texts.more ?? "Mer" });
       return `<tr data-row-id="${escapeHtml(config.rowId(item))}"${config.rowAttrs ? ` ${config.rowAttrs(item)}` : ""}>${tds}<td class="col-actions"><div class="row-actions">${actions}</div></td></tr>`;
     };
     // Gruppenavnet er en overskrift i tabellen (h2 under sidas h1), så en skjermleser kan hoppe mellom

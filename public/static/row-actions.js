@@ -34,7 +34,10 @@ export function rowActionsHtml(buttons, options = {}) {
  * · Erstatt fra fil · Forkast utkast · Avpubliser · Arkiver / Gjenopprett · Slett). På smal skjerm (`narrow`) legges verktøyene
  * først i «Mer» i stedet for å stå som egne knapper (de ga fire linjer med knapper på 390 px).
  *
- * @param {{ primary?: Array<string|false|null|undefined>, tools?: Array<string|false|null|undefined>, more?: Array<string|false|null|undefined> }} slots
+ * #1169 skive 3: radene i listene bruker samme regel — `primary` er «Åpne» og hovedhandlingen (uten fyll i en rad), og `after`
+ * er merket «Kun for eier» etter «Mer».
+ *
+ * @param {{ primary?: Array<string|false|null|undefined>, tools?: Array<string|false|null|undefined>, more?: Array<string|false|null|undefined>, after?: Array<string|false|null|undefined> }} slots
  * @param {{ moreLabel?: string, narrow?: boolean }} [options]
  */
 export function slotActionsHtml(slots, options = {}) {
@@ -46,7 +49,7 @@ export function slotActionsHtml(slots, options = {}) {
   const menu = more.length
     ? `<details class="row-more"><summary class="row-action-btn">${moreLabel}</summary><div class="row-more-menu">${more.join("")}</div></details>`
     : "";
-  return primary.join("") + (options.narrow ? "" : tools.join("")) + menu;
+  return primary.join("") + (options.narrow ? "" : tools.join("")) + menu + keep(slots.after).join("");
 }
 
 let installed = false;
@@ -108,6 +111,11 @@ export function installRowMoreMenus(root = document) {
   });
   root.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    for (const open of root.querySelectorAll("details.row-more[open]")) open.removeAttribute("open");
+    for (const open of root.querySelectorAll("details.row-more[open]")) {
+      // QA-porten 2.189.0: stod fokuset på et valg i menyen, ble det liggende i det skjulte innholdet. «Mer» får det.
+      const hadFocus = open.contains(document.activeElement) && !open.querySelector("summary")?.contains(document.activeElement);
+      open.removeAttribute("open");
+      if (hadFocus) open.querySelector("summary")?.focus();
+    }
   });
 }

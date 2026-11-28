@@ -281,20 +281,28 @@ function getListPage() {
       // #1151 skive 3c: en arkivert seksjon kan ikke endres (`section_archived`), og «Dupliser» er ikke lov på et arkivert
       // element (produkteier 13.11). «Åpne» (`sections.edit`) står: redigereren viser den skrivebeskyttet.
       const archived = lifecycle === "archived";
-      return [
-        // Først, så den står synlig og ikke under «Mer»: det er det forfatteren kom for.
-        canManage ? publishNew : "",
-        // #1180: «Åpne» også for den som ikke eier seksjonen, som for kurs og moduler (#1165). Redigereren viser den
-        // skrivebeskyttet; skriverutene er vaktet på tjeneren.
-        `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>`,
-        // #894: å døpe om er ikke å redigere innholdet, og skal ikke koste en tur gjennom editoren.
-        canManage && !archived ? `<button class="row-action-btn" data-action="rename" data-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
-        archived ? "" : `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
-        `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
-        canManage ? publishToggle : "",
-        canManage ? archiveToggle : "",
-        canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`,
-      ];
+      // #1169 skive 3 (doc/DECISIONS.md 28.11.2026): Åpne · hovedhandlingen (Publiser, Publiser utkastet, Gjenopprett) · «Mer» i fast
+      // rekkefølge (Døp om · Dupliser · Eksporter · Avpubliser · Arkiver / Slett). «Slett» står nå også i lista for en arkivert
+      // seksjon, som for kurs, moduler og klasser (før bare i den åpnede seksjonen, #1046 D3).
+      const primaryAction = !canManage ? "" : archived ? archiveToggle : isLive ? publishNew : publishToggle;
+      return {
+        primary: [
+          // #1180: «Åpne» også for den som ikke eier seksjonen, som for kurs og moduler (#1165). Redigereren viser den
+          // skrivebeskyttet; skriverutene er vaktet på tjeneren.
+          `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>`,
+          primaryAction,
+        ],
+        more: [
+          // #894: å døpe om er ikke å redigere innholdet, og skal ikke koste en tur gjennom editoren.
+          canManage && !archived ? `<button class="row-action-btn" data-action="rename" data-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
+          archived ? "" : `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
+          `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
+          canManage && isLive ? publishToggle : "",
+          canManage && !archived ? archiveToggle : "",
+          canManage && archived ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}">${escapeHtml(L("del"))}</button>` : "",
+        ],
+        after: [canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`],
+      };
     },
     load: async () => {
       const data = await apiFetch("/api/admin/content/sections", getHeaders);
@@ -320,6 +328,7 @@ function getListPage() {
       else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
       else if (action === "archive") archiveSectionFromList(id, btn, item);
       else if (action === "restore") sectionLifecycle(id, "restore", "restoredAsDraft", displayTitle(item?.title));
+      else if (action === "delete") deleteSection(id, btn, displayTitle(item?.title));
     },
     afterRender: () => {
       document.getElementById("newSectionBtn")?.addEventListener("click", () => goTo("editor", null));
@@ -868,12 +877,16 @@ async function duplicateSection(sectionId, btn) {
 
 // #1168: sidas egen dialog, ikke nettleserens spørreboks. Den gamle teksten sa at seksjonen «forsvinner fra alle kurs som
 // bruker den»; tjeneren nekter å slette en seksjon som står i et kurs, så den gjør ikke det.
-async function deleteSection(sectionId, btn = null) {
-  if (!await confirmSectionDelete({ title: editorTitle(), t, tf, returnFocusTo: btn })) return;
+// #1169 skive 3: også fra lista; da kommer navnet fra raden (`title`), ellers fra redigereren.
+async function deleteSection(sectionId, btn = null, title = null) {
+  if (!await confirmSectionDelete({ title: title ?? editorTitle(), t, tf, returnFocusTo: btn })) return;
   try {
     await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}`, getHeaders, { method: "DELETE" });
     showToast(L("deleted"));
-    goTo("list");
+    // QA-porten 2.189.0: fra lista står vi alt på lista — tegn den på nytt uten å legge adressen i historikken en gang til
+    // (ellers gjorde første «Tilbake» ingenting).
+    if (detectRoute().view === "list") renderRoute();
+    else goTo("list");
   } catch (err) {
     apiErrorToast(err);
   }

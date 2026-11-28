@@ -244,10 +244,15 @@ function getListPage() {
       const title = escapeHtml(m.title ?? m.id);
       // #459: Avpubliser bare for moduler som er aktivt publisert.
       const isPublished = lifecycle === "published" || lifecycle === "published_with_draft";
-      return [
+      // #1169 skive 3 (doc/DECISIONS.md 28.11.2026): Åpne · hovedhandlingen (Gjenopprett for en arkivert modul) · «Mer» i fast
+      // rekkefølge (Døp om · Dupliser · Eksporter · Avpubliser · Arkiver / Slett). «Publiser» står bare i modulens hode ennå: den
+      // tar med spørsmålene der (ulagrede endringer, bestått som erstattes).
+      const restoreBtn = canManage && isArchived ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.restore"))}</button>` : "";
+      return {
         // #896 S3c: knappen sier hva den gjør — åpner modulen.
         // #1165 (produkteier 14.11.2026): også for den som ikke eier modulen. Modulsida viser den skrivebeskyttet.
-        `<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`,
+        primary: [`<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`, restoreBtn],
+        more: [
         // #894: omdøping er en langt vanligere handling enn innholdsredigering, og krever ingen av
         // trinnene rundt. Egen knapp, ikke klikk på navnet — et klikk i raden åpner elementet.
         // #1151 skive 3c: ikke på en arkivert modul. Tjeneren avviser omdøpingen (`module_archived`), og «Dupliser» er
@@ -257,13 +262,12 @@ function getListPage() {
         isArchived ? "" : `<button class="row-action-btn" data-action="duplicate" data-module-id="${id}">${escapeHtml(t("ui.action.duplicate"))}</button>`,
         `<button class="row-action-btn" data-action="export" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.export"))}</button>`,
         canManage && isPublished ? `<button class="row-action-btn" data-action="unpublish" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.unpublish"))}</button>` : "",
+        canManage && !isArchived ? `<button class="row-action-btn" data-action="archive" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.archive"))}</button>` : "",
         // #705-UX: Slett vises kun for arkiverte moduler (terminal steg etter arkivering).
-        canManage ? (isArchived
-          ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.restore"))}</button>`
-          : `<button class="row-action-btn" data-action="archive" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.archive"))}</button>`) : "",
         canManage && isArchived ? `<button class="row-action-btn destructive" data-action="delete" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
-        canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("library.ownerOnlyHint"))}">${escapeHtml(t("ui.ownerOnly"))}</span>`,
-      ];
+        ],
+        after: [canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("library.ownerOnlyHint"))}">${escapeHtml(t("ui.ownerOnly"))}</span>`],
+      };
     },
     emptyHtml: () => `
       <div class="empty-state">

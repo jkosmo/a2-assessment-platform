@@ -2,6 +2,38 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.189.0 - 2026-11-28
+
+**#1169 skive 3 · Radene har hodets regel** (doc/DECISIONS.md, produkteier 26. og 28.11.2026; prototypen
+https://claude.ai/artifact/RuABRhvRBxfQwnzJ2jYMU8). Bare klienten.
+
+- **Regelen** (`list-page.js` tar `{ primary, more, after }`, `slotActionsHtml`): **Åpne** · hovedhandlingen for tilstanden
+  (Publiser, Publiser utkastet, Gjenopprett) · **Mer** i fast rekkefølge (Døp om · Dupliser · Eksporter · Avpubliser · Arkiver /
+  Slett) · «Kun for eier». Hovedhandlingen er ikke fylt i en rad (prototypen): en fylt knapp i hver rad ville ikke skilt noe ut.
+  Før viste raden de tre første handlingene og resten under «Mer» først når det var flere enn fire.
+- **Kurs, modul, seksjon og klasse.** En klasse leseren ikke eier, har ingen «Mer» (ingenting å vise der).
+- **«Slett» i seksjonslista** for en arkivert seksjon, som for kurs, moduler og klasser (før bare i den åpnede seksjonen, #1046
+  D3). Bekreftelsen nevner seksjonen ved radens navn. «Slett seksjon» heter «Slett», som ellers.
+- **Fokus etter en dialog:** ligger knappen som åpnet dialogen i en lukket «Mer», får «Mer» fokuset (kursets `returnFocusTo`,
+  som `focusBack` i modul- og seksjonsdialogene). Før gikk fokuset til en skjult knapp og forsvant.
+- **Flyttet til skive 4:** «Publiser» i modullista og «Publiser utkastet» i kurslista. Begge trenger publiseringsflyten fra
+  hodet (ulagrede endringer, bestått som erstattes, versjonsspørsmålet); publiser fra det åpnede elementet til da.
+- **Endret i eldre tester:** handlinger som nå ligger under «Mer», åpnes med `revealRowAction` eller telles
+  (`admin-content-list-rename-894`, `list-mobile-labels-1080`, `section-draft-1163`, `admin-content-workspaces`,
+  `content-owner-surfaces`, `form-page-asks-once-1155`); fokusen etter dialogen går til «Mer»
+  (`admin-content-course-archive-dialog-1150`); «lista har ingen Slett» er snudd (`section-editor`);
+  `list-fits-frame-1084` måler ikke lenger 1024 px som for bredt (raden er smalere nå; 800 px står) og teller to synlige knapper,
+  ikke fire.
+- **QA-porten (GO):** tre funn rettet, alle rundt den nye «Mer»-stien. Kursets slettedialog fikk ikke knappen som åpnet den, så
+  fokuset forsvant etter Avbryt/Escape (nå tilbake til «Mer»). Sletting fra seksjonslista la lista i historikken en gang til, så
+  første «Tilbake» gjorde ingenting (nå tegnes lista på nytt). Escape fra et valg i «Mer» lukket menyen, men lot fokuset stå i det
+  skjulte (nå får «Mer» det). Rotårsak: samme for alle tre — en handling flyttet inn i en lukket meny, og det som skjer ETTER
+  handlingen (fokus, historikk), ble ikke fulgt. Med i sjekken for skive 4.
+- **Tester:** `test/e2e/row-slots-1169.spec.ts` (9).
+- **Mutasjoner:** 11 av 11 røde (de tre QA-rettelsene, Publiser under «Mer» i kurslista, «Kun for eier» borte, ingen Slett i seksjonslista,
+  slettedialogen uten radens navn, «Mer» for en annens klasse, «Publiser utkastet» ikke ved Åpne, fokus til en skjult knapp,
+  `after` tegnes ikke).
+
 ## 2.188.0 - 2026-11-28
 
 **#1169 skive 2 · Hodene har faste plasser** (doc/DECISIONS.md, produkteier 26. og 28.11.2026; prototypen

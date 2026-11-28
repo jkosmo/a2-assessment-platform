@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { revealRowAction } from "./admin-content-helpers.js";
 
 // #1163 skive 1: «Lagre» på en seksjon lager et utkast; «Publiser» (med en dialog som sier hvilke kurs som får den nye
 // teksten) er det eneste deltakerne ser. Redigereren lagrer i ÉTT kall (`PUT …/sections/:id`) med det fanen lastet, og viser
@@ -151,7 +152,7 @@ test.describe("#1163 — lista sender det den så", () => {
     });
     await page.goto("/admin-content/sections");
     const raden = page.locator('tr[data-row-id="sec-1"]');
-    await raden.getByRole("button", { name: "Døp om" }).click();
+    await (await revealRowAction(page, raden.locator('[data-action="rename"]'))).click();
     const felt = raden.locator(".row-rename input");
     await felt.fill("Tilbud: nye prompter");
     await felt.press("Enter");

@@ -121,22 +121,24 @@ function getListPage() {
       const id = escapeHtml(c.id);
       // #1198: alle produsenter kan lese alle klasser, så «Åpne» står også for en klasse leseren ikke eier (den åpnes
       // skrivebeskyttet). Før sto bare «Kun for eier», uten vei inn.
+      const openBtn = `<button class="row-action-btn" data-action="open" data-id="${id}">${escapeHtml(tNav("ui.action.open"))}</button>`;
+      // #1169 skive 3 (doc/DECISIONS.md 28.11.2026): Åpne · Gjenopprett (arkivert) · «Mer» med Arkiver / Slett. En klasse leseren
+      // ikke eier, har ingenting under «Mer» (ingen kopi eller eksport av klasser), så der står ingen «Mer» (punkt 5).
       if (!canManage) {
-        return [
-          `<button class="row-action-btn" data-action="open" data-id="${id}">${escapeHtml(tNav("ui.action.open"))}</button>`,
-          `<span class="row-readonly-note" title="${escapeHtml(tNav("classes.ownerOnlyHint"))}">${escapeHtml(tNav("ui.ownerOnly"))}</span>`,
-        ];
+        return {
+          primary: [openBtn],
+          after: [`<span class="row-readonly-note" title="${escapeHtml(tNav("classes.ownerOnlyHint"))}">${escapeHtml(tNav("ui.ownerOnly"))}</span>`],
+        };
       }
       const archived = lifecycleOf(c) === "archived";
       const name = escapeHtml(c.name);
-      // #1046 D3: Åpne · Arkiver, og på arkiverte rader Gjenopprett · Slett.
-      return [
-        `<button class="row-action-btn" data-action="open" data-id="${id}">${escapeHtml(tNav("ui.action.open"))}</button>`,
-        c.isSystem ? "" : archived
-          ? `<button class="row-action-btn" data-action="restore" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.restore"))}</button>`
-          : `<button class="row-action-btn" data-action="archive" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.archive"))}</button>`,
-        !c.isSystem && archived ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.delete"))}</button>` : "",
-      ];
+      return {
+        primary: [openBtn, !c.isSystem && archived ? `<button class="row-action-btn" data-action="restore" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.restore"))}</button>` : ""],
+        more: [
+          !c.isSystem && !archived ? `<button class="row-action-btn" data-action="archive" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.archive"))}</button>` : "",
+          !c.isSystem && archived ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.delete"))}</button>` : "",
+        ],
+      };
     },
     load: async () => (await apiFetch("/api/admin/content/classes", getHeaders)).classes ?? [],
     describeError: (err) => apiErrorText(err),

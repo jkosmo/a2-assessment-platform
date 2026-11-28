@@ -121,8 +121,9 @@ test("seksjon-liste: lifecycle hidden for canManage:false (Åpne stays, #1180), 
   // says «Kun for eier» like the course list (#1029). #1180: «Åpne» stays too; the editor shows the section read-only.
   await expect(page.locator('[data-action="edit"][data-id="sec-theirs"]')).toBeVisible();
   await expect(page.locator('[data-action="unpublish"][data-id="sec-theirs"]')).toHaveCount(0);
-  await expect(page.locator('[data-action="duplicate"][data-id="sec-theirs"]')).toBeVisible();
-  await expect(page.locator('[data-action="export"][data-id="sec-theirs"]')).toBeVisible();
+  // #1169 skive 3: Dupliser og Eksporter står under «Mer».
+  await expect(page.locator('[data-action="duplicate"][data-id="sec-theirs"]')).toHaveCount(1);
+  await expect(page.locator('[data-action="export"][data-id="sec-theirs"]')).toHaveCount(1);
   await expect(page.locator(".row-readonly-note")).toHaveCount(1);
   await expect(page.locator(".row-readonly-note")).toHaveText("Kun for eier");
 });

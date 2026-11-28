@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { revealRowAction } from "./admin-content-helpers.js";
 
 // #1155 (QA-porten 2.157.2): når spør skjemasida før ulagret arbeid går tapt?
 //
@@ -393,7 +394,7 @@ test.describe("#1155 — klasser", () => {
     });
     await page.goto("/deltakere/klasser");
     await expect(page.locator("#classesTableBody")).toContainText("Kull 2026");
-    await page.locator('[data-action="archive"][data-id="cls-1"]').click();
+    await (await revealRowAction(page, page.locator('[data-action="archive"][data-id="cls-1"]'))).click();
     // #1168: bekreftes i sidas dialog, ikke nettleserens spørreboks.
     await page.locator("#moduleLifecycleDialogConfirmBtn").click();
     await expect.poll(() => svar.kall).toBe(1);
